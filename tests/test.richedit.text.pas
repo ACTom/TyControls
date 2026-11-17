@@ -134,7 +134,6 @@ type
     procedure TestLazySourceLookupMissesEditedParagraphs;
     procedure TestIntegritySeesLazyPiecesOutOfOrder;
     procedure TestAProviderCannotChangeTheText;
-    // fix wave W11 (R56)
     procedure TestASpanPutsTheLazyPiecesBack;
   end;
 
@@ -2454,7 +2453,7 @@ begin
   AssertEquals('integrity', '', FText.CheckIntegrity);
 end;
 
-{ R56: what an insert splits or decodes, taken before it (PieceSpan), comes back when the
+{ what an insert splits or decodes, taken before it (PieceSpan), comes back when the
   insert is undone (RestoreSpan): the lazy paragraph is lazy again, from its own source, and
   so is the empty lazy paragraph the load appended last (which has no piece); a span put on a
   text that is not the one it was taken from is refused. }

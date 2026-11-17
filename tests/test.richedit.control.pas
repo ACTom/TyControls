@@ -1,6 +1,6 @@
 unit test.richedit.control;
 
-{ TTyRichEdit, the viewer (Task 9a): loading and saving through the control, scrolling on the
+{ TTyRichEdit, the viewer: loading and saving through the control, scrolling on the
   height index (only what is seen is laid out, the view stays anchored while estimates are
   corrected), partial invalidation, painting only what the clip meets, pictures left for the
   background, zoom, wrap, Lines, the theme keys.
@@ -25,7 +25,7 @@ uses
   tyControls.RichEdit, test.richedit.layoutdevice, test.devicescale.support;
 
 type
-  { A layouter whose resampling can be made to fail (a test seam of W2's). }
+  { A layouter whose resampling can be made to fail (a test seam). }
   TProbeLayouter = class(TTyRichLayouter)
   protected
     function ScaleImage(AImage: TBGRABitmap; AWidth, AHeight: Integer): TBGRABitmap; override;
@@ -72,12 +72,12 @@ type
     function TurnDriver: TTyRichTurnDriver; override;
     function SchedulingClosed: Boolean; override;
   public
-    { W8: the idle handler registered and removed, the idle step entered (every probe). }
+    { the idle handler registered and removed, the idle step entered (every probe). }
     class var Watches, Unwatches, IdleEntries: Integer;
-    { W8: the timer driver (what Cocoa and the unnamed widgetsets get) on this widgetset;
+    { the timer driver (what Cocoa and the unnamed widgetsets get) on this widgetset;
       queuing raises; the application shut down for scheduling. }
     ForceTimer, FailPost, ClosedApp: Boolean;
-    { W8 (L-6): a clock of the test's (FakeClock on), advanced by ClockStep at every reading. }
+    { a clock of the test's (FakeClock on), advanced by ClockStep at every reading. }
     FakeClock: Boolean;
     ClockNow: QWord;
     ClockStep: Integer;
@@ -88,24 +88,24 @@ type
   protected
     function SliceBytes: Int64; override;
   public
-    { W9: the slice sizes asked of the loader while LogSlices is on. }
+    { the slice sizes asked of the loader while LogSlices is on. }
     LogSlices: Boolean;
     SliceLog: array of Int64;
-    { W9: a clock of a file that indexes FakeRate bytes a millisecond (0: off): it reads
+    { a clock of a file that indexes FakeRate bytes a millisecond (0: off): it reads
       ClockNow plus the load's bytes indexed over FakeRate; StallMs is added to ClockNow at
       the StallReadings-th reading from now (0: never). }
     FakeRate: Int64;
     StallMs, StallReadings: Integer;
-    { W9: the backstop timer, its tick run by hand, the turns run. }
+    { the backstop timer, its tick run by hand, the turns run. }
     function BackstopOf: TTimer;
     procedure BackstopNow;
     function Turns: Int64;
   public
-    { W6: Invalidate's calls (what PointerStateChanged asks for), the temporary cursors
+    { Invalidate's calls (what PointerStateChanged asks for), the temporary cursors
       MouseMove set. }
     Invalidates: Integer;
     TempCursors: array of TCursor;
-    { W7: the calls queued to the application (the background turn, the selection report) and
+    { the calls queued to the application (the background turn, the selection report) and
       taken off it; counted for every probe, also one already freed. }
     class var Posts, Removes: Integer;
     procedure Invalidate; override;
@@ -127,21 +127,21 @@ type
     ClipText: string;
     ClipWrites, Waits, WaitEnds, MenuShows: Integer;
     FailClip: Boolean;
-    { Task 10c: what a paste reads - the copy's two flavours above, a picture and an HTML
+    { what a paste reads - the copy's two flavours above, a picture and an HTML
       flavour (which the control never asks for) - and how often each was asked for. }
     ClipPicture: TBytes;
     ClipPictureKind: TTyRichImageKind;
     ClipHtml: string;
     FlavourAsks, RtfReads, PictureReads, TextReads, HtmlReads: Integer;
-    { W14: a second picture format, tried after the first (V-M3). }
+    { a second picture format, tried after the first. }
     ClipPicture2: TBytes;
     ClipPictureKind2: TTyRichImageKind;
-    { W14 (V-M5): FromFormats - the flavours are the control's own answer from the format
+    { FromFormats - the flavours are the control's own answer from the format
       list ClipFormats (one enumeration, FormatAsks counted) instead of the fields above. }
     FromFormats: Boolean;
     ClipFormats: TTyRichClipFormats;
     FormatAsks: Integer;
-    { W14 (V-M8): the RTF read as this document instead of by the engine's reader (nil:
+    { the RTF read as this document instead of by the engine's reader (nil:
       the reader's; the probe hands it over once). }
     RtfSource: TTyRichDocument;
     RtfSourceEnds: Boolean;
@@ -244,34 +244,27 @@ type
     procedure SurfaceSequence(AScale: Integer);
     function PictureDoc(ACount: Integer): Integer;
     function SurfaceCount(const AColor: TBGRAPixel): Integer;
-    // 9b
     procedure SelChanged(Sender: TObject);
     { A client point inside the character at APos (on its line, left of its middle). }
     function At(APos: TTyRichPos): TPoint;
     procedure LoadRtfText(const S: string);
     procedure Click(const P: TPoint; AShift: TShiftState = []);
-    // W4
     procedure EditInLastStep(Sender: TObject; ADone, ATotal: Int64; var ACancel: Boolean);
-    // W6
     procedure InsertInLastStep(Sender: TObject; ADone, ATotal: Int64; var ACancel: Boolean);
     procedure CheckCaretInside(const AWhat: string);
     procedure EndAndClickCase(AScale: Integer; ARtl: Boolean);
     procedure RunAtScaleTwo(const AWhat: string; ACase: TRunMethod);
-    // W7
     procedure RaiseOnce(Sender: TObject; ADone, ATotal: Int64; var ACancel: Boolean);
     function HandleForm: TForm;
     procedure LoadW7Plain(AExpectLoading: Boolean = True);
     procedure LoadW7Table(ARows, AInRow: Integer);
-    // W8
     procedure SlowHandler(Sender: TObject; ADone, ATotal: Int64; var ACancel: Boolean);
     procedure LoadW8Big(AParas: Integer);
   private
-    // W9
     FLoadEnds: Integer;
     FDocNotice: TTyRichChangeEvent;
     procedure CountLoadEnds(Sender: TObject; const AChange: TTyRichChange);
     function TurnSizes: string;
-    // W10
     procedure RaiseOnLoadEnd(Sender: TObject; const AChange: TTyRichChange);
     function BarMaxWanted: Integer;
   protected
@@ -300,7 +293,6 @@ type
     procedure TestADeferredPaintLeavesPicturesForLater;
     procedure TestKeysAndWheelScrollAndZoom;
     procedure TestReadOnlyStaysOnAndCodeStillChanges;
-    // 9a2: the review of 9a
     procedure TestAShortWrappedDocumentSettlesItsScrollBar;
     procedure TestAChangeWhileTheViewIsInvalidIsPainted;
     procedure TestALayoutThatMovesTheViewRepaintsIt;
@@ -325,14 +317,13 @@ type
     procedure TestAChangeInARowDropsItsPendingPicture;
     procedure TestAFallbackFontChangeLaysTheViewOutAgain;
     procedure TestHugeBlocksKeepTheArithmeticInRange;
-    // R40
+    // the bytes before the RTF
     procedure TestTheBytesBeforeTheRtfAreKept;
-    // R39
+    // the kept surface
     procedure TestTheSurfaceEqualsAFullRedraw;
     procedure TestAScrollPaintsOnlyWhatItExposes;
     procedure TestTheSurfaceIsTheClientsSize;
     procedure TestDeviceScaleTwo;
-    // fix wave W3
     procedure TestASlicedLoadShowsTheFilesNumbers;
     // 9a3: the second review of the viewer
     procedure TestLinesLoadAndATextInsideAnUpdate;
@@ -354,7 +345,7 @@ type
     procedure TestAParagraphInsertedAndRemovedOnScreen;
     procedure TestDetectFormatOnShortInput;
     procedure TestALoadThatRaisesKeepsTheOldDocument;
-    // 9b: the caret and the selection
+    // the caret and the selection
     procedure TestEndAndAClickPastALineEndStayOnThatLine;
     procedure TestLeftAndRightStepOverWhatIsOneUnit;
     procedure TestUpAndDownKeepTheWishedXAndCrossATable;
@@ -372,18 +363,16 @@ type
     procedure TestAClickOnAnObjectSelectsIt;
     procedure TestTheCursorAndARightClick;
     procedure TestOneSelectionEventPerAction;
-    // 9b: copying, the menu, the input method
+    // copying, the menu, the input method
     procedure TestCopyPutsRtfAndPlainText;
     procedure TestThePlainTextRules;
     procedure TestAnEmptySelectionCopiesNothing;
     procedure TestAHugeCopyShowsTheWaitCursor;
     procedure TestTheMenuOfAViewer;
     procedure TestTheImeIsToldTheViewerIsReadOnly;
-    // fix wave W4
     procedure TestACommandFromTheLastStepsProgressIsAnEdit;
     procedure TestAPlainCopyOfALazyRtfLeavesNothingParsed;
     procedure TestARefusedRtfFlavourCopiesTheTextAlone;
-    // fix wave W5
     procedure TestThePlainTextCountsCharactersAsTheStorage;
     procedure TestACopyInsideACellOfANestedRowHasBothFlavours;
     procedure TestAHugeLengthGivesTheTextToTheEnd;
@@ -391,7 +380,7 @@ type
     procedure TestACopyWhileLoadingAndAfterACancel;
     procedure TestTheRowBeforeIsHeldWhileTheNextIsCompared;
     procedure TestABigTableReadInPartsCopiesAsAWhole;
-    // fix wave W6: the caret and the selection after their review
+    // the caret and the selection after their review
     procedure TestTheCaretAtALineEndAtScaleTwoAndRightToLeft;
     procedure TestAPressOnAnObjectKeepsItSelected;
     procedure TestDownLeavesATallPictureAndATallRow;
@@ -415,7 +404,7 @@ type
     procedure TestAStateLeavingTheLayerPathRepaints;
     procedure TestAStateFontIsALayoutChange;
     procedure TestAHoverAsksForARepaint;
-    // fix wave W7: what the real window found, the re-reviews' items
+    // what the real window found
     procedure TestTheLoadRunsInQueuedTurns;
     procedure TestAStepThatRaisesDoesNotStrandTheLoad;
     procedure TestASnapReportsOutsideThePaintAndTheQuery;
@@ -428,7 +417,6 @@ type
     procedure TestTheExtentIsTheContentNotTheWrapWidth;
     procedure TestTheColumnSurvivesAZoomWhereItCanScroll;
     procedure TestAJumpLaysOutOnlyTheViewItArrivesAt;
-    // fix wave W8
     procedure TestTheDriverIsChosenPerWidgetset;
     procedure TestSchedulingThatFailsEndsTheLoadQuietly;
     procedure TestAPaintSkippedInAnUpdateWithoutAChange;
@@ -436,11 +424,9 @@ type
     procedure TestTheCursorForgetsThePaddingOnLeaving;
     procedure TestASliceBelowTheViewLaysOutNothing;
     procedure TestASlowFileGetsSmallerSlices;
-    // fix wave W9
     procedure TestAStallCostsOneHalving;
     procedure TestTheBackstopRunsATurnOnlyWhenTheIdleStepIsStarved;
     procedure TestASlicesCostDoesNotGrowWithTheDocument;
-    // fix wave W10
     procedure TestTheLoadsTurnsSetTheBarOncePerInterval;
     procedure TestAnOwedLoadEndRaisesFromItsEntryPoint;
     // on the component palette
@@ -2015,7 +2001,7 @@ begin
   end;
 end;
 
-{ R35: a paint while scrolling decodes no picture: it leaves an empty box and the picture to
+{ a paint while scrolling decodes no picture: it leaves an empty box and the picture to
   the background work, which makes it ready and invalidates only its box. Pictures in the
   blocks laid out ahead of the view wait there too. }
 procedure TTyRichEditControlTest.TestADeferredPaintLeavesPicturesForLater;
@@ -2107,7 +2093,7 @@ begin
     AssertFalse('nothing left', FRich.Step);
     FRich.PaintPart(canvasBmp.Canvas, Rect(0, 0, 400, 300), True);
     AssertEquals('drawn now, nothing left over', 0, FRich.Pending);
-    { A zoom keeps the decoded pictures (9a3, H2-M7): an enlargement is drawn from the kept
+    { A zoom keeps the decoded pictures (9a3): an enlargement is drawn from the kept
       image at once - nothing waits, nothing is decoded again. (A reduction, whose image the
       layouter let go, waits at its new size: TestAPictureComesBackAfterAZoomThereAndBack.) }
     decodes := FRich.Layouter.PictureDecodes;
@@ -2172,8 +2158,6 @@ begin
     FRich.Document.Execute(TTyRichInsertText.Create(0, 'more ')));
   AssertEquals('changed', 'more text', FRich.Lines[0]);
 end;
-
-{ ---- Task 9a2: the review of 9a (reviewB-H1) ---- }
 
 procedure TTyRichEditControlTest.SetLinesOf(ACount: Integer; const APrefix: string);
 var
@@ -2260,7 +2244,7 @@ procedure TTyRichEditControlTest.NoFallback(Sender: TObject; const ABaseFont: st
 begin
 end;
 
-{ H-C1: five paragraphs of 60 words - one line each by the estimate, taller than the view
+{ five paragraphs of 60 words - one line each by the estimate, taller than the view
   laid out. The bar comes and stays; a second pass does nothing. A document that fits has
   none; one that fits only without the bar settles without it. }
 procedure TTyRichEditControlTest.TestAShortWrappedDocumentSettlesItsScrollBar;
@@ -2353,7 +2337,7 @@ begin
   AssertEquals('nothing laid out', 0, FRich.LaidParas);
 end;
 
-{ H-I1: a change made while the view waits for its next layout is painted too. }
+{ a change made while the view waits for its next layout is painted too. }
 procedure TTyRichEditControlTest.TestAChangeWhileTheViewIsInvalidIsPainted;
 var
   f: TTyCharFormat;
@@ -2384,7 +2368,7 @@ begin
   AssertTrue('what moved down is painted again', Covered(r5));
 end;
 
-{ H-I2: the end's pull-up moves every block: the whole text area is painted again. }
+{ the end's pull-up moves every block: the whole text area is painted again. }
 procedure TTyRichEditControlTest.TestALayoutThatMovesTheViewRepaintsIt;
 var
   sl: TStringList;
@@ -2416,7 +2400,7 @@ begin
   AssertTrue('the whole text area is painted again', Covered(FRich.Area));
 end;
 
-{ H-I3: one change of 20,000 paragraphs into the view, and a load step that appends many
+{ one change of 20,000 paragraphs into the view, and a load step that appends many
   below a short first slice, lay out no more than the view and two screens. }
 procedure TTyRichEditControlTest.TestAChangeOfManyParagraphsLaysOutOnlyTheView;
 var
@@ -2463,7 +2447,7 @@ begin
   AssertTrue(Format('laid out in the step: %d', [FRich.LaidParas]), FRich.LaidParas <= 3 * n + 2);
 end;
 
-{ H-I4: an item of a numbered list loses its number: the items after it, numbered again by the
+{ an item of a numbered list loses its number: the items after it, numbered again by the
   layouter, are laid out again and painted. }
 procedure TTyRichEditControlTest.TestNumbersAfterAChangedItemAreRepainted;
 var
@@ -2489,7 +2473,7 @@ begin
     AssertFalse(Format('block %d is current', [k]), FRich.VisibleBlocks[k].Layout.Stale);
 end;
 
-{ H-I5: the queries lay the view out first; ScrollToEnd puts the anchor where the end is. }
+{ the queries lay the view out first; ScrollToEnd puts the anchor where the end is. }
 procedure TTyRichEditControlTest.TestQueriesSettleTheViewFirst;
 var
   a, b, c: TTyRichPos;
@@ -2548,7 +2532,7 @@ begin
   AssertEquals('ScrollY is the laid out view''s', FRich.ScrollY, y0);
 end;
 
-{ H-I6: a progress handler that replaces the content is refused; one that cancels stops the
+{ a progress handler that replaces the content is refused; one that cancels stops the
   load cleanly; a save's handler cannot replace the content either. }
 procedure TTyRichEditControlTest.TestProgressHandlersCannotReplaceTheContent;
 var
@@ -2660,7 +2644,7 @@ begin
   end;
 end;
 
-{ H-I7 / H-M10: a picture that cannot be reduced, an enlargement, one reduced and then zoomed:
+{ a picture that cannot be reduced, an enlargement, one reduced and then zoomed:
   each queued at most once a size, and nothing waits afterwards. One picture in two places
   has both its boxes painted when it is ready. }
 procedure TTyRichEditControlTest.TestAPictureIsQueuedOnceAndEveryBoxRepainted;
@@ -2719,7 +2703,7 @@ begin
   end;
 end;
 
-{ H-I8: a write-protected target is refused before anything is written; a save keeps the
+{ a write-protected target is refused before anything is written; a save keeps the
   target's attributes and alternate streams (Windows: ReplaceFileW). The Unix path (mode,
   owner, rename) is compile-checked only. }
 procedure TTyRichEditControlTest.TestASaveKeepsWhatTheTargetWas;
@@ -2777,7 +2761,7 @@ begin
 end;
 {$ENDIF}
 
-{ H-I9: a file another handle holds open for writing (a log being written) loads. }
+{ a file another handle holds open for writing (a log being written) loads. }
 procedure TTyRichEditControlTest.TestAFileOpenForWritingLoads;
 var
   path: string;
@@ -2810,7 +2794,7 @@ begin
   end;
 end;
 
-{ H-I10: TabStop and Cursor have the constructor's values as defaults. }
+{ TabStop and Cursor have the constructor's values as defaults. }
 procedure TTyRichEditControlTest.TestPublishedDefaultsAreTheConstructedValues;
 var
   a, b: TTyRichEdit;
@@ -2845,7 +2829,7 @@ begin
   for i := 0 to High(AList) do AssertEquals(Format('line %d', [i]), AList[i], FRich.Lines[i]);
 end;
 
-{ H-I11: no lines and one empty line are told apart. }
+{ no lines and one empty line are told apart. }
 procedure TTyRichEditControlTest.TestLinesTellNoLinesFromOneEmptyLine;
 var
   a, b: TTyRichEdit;
@@ -2889,7 +2873,7 @@ begin
   end;
 end;
 
-{ H-M1: FinishLoading reports its progress in slices, and a cancel there acts. }
+{ FinishLoading reports its progress in slices, and a cancel there acts. }
 procedure TTyRichEditControlTest.TestFinishLoadingGoesInSlices;
 var
   b: TBytes;
@@ -2924,7 +2908,7 @@ begin
   AssertTrue('incomplete', FRich.Incomplete);
 end;
 
-{ H-M2: a wheel notch on a document that fits, a scroll up at the top: nothing happens. }
+{ a wheel notch on a document that fits, a scroll up at the top: nothing happens. }
 procedure TTyRichEditControlTest.TestScrollingAgainstAnEndDoesNothing;
 begin
   FRich.Lines.Text := 'one'#10'two'#10'three';
@@ -2941,7 +2925,7 @@ begin
   AssertEquals('at the top', Int64(0), FRich.ScrollY);
 end;
 
-{ H-M3: a zoom keeps the same share of the top block above the view. }
+{ a zoom keeps the same share of the top block above the view. }
 procedure TTyRichEditControlTest.TestAZoomKeepsThePartOfTheBlockAtTheTop;
 var
   sl: TStringList;
@@ -2974,7 +2958,7 @@ begin
     Abs(FRich.TopOffset - off * h2 div h) <= 1);
 end;
 
-{ H-M4: a scroll of a hundred screens is a jump: only around its target is laid out. }
+{ a scroll of a hundred screens is a jump: only around its target is laid out. }
 procedure TTyRichEditControlTest.TestAFarScrollIsAJump;
 var
   n: Integer;
@@ -2990,7 +2974,7 @@ begin
     FRich.TopParagraph > 90 * n);
 end;
 
-{ H-M6: saving to a stream changes nothing; saving an RTF document as text is an export. }
+{ saving to a stream changes nothing; saving an RTF document as text is an export. }
 procedure TTyRichEditControlTest.TestSavingAsTextIsAnExport;
 var
   path: string;
@@ -3015,7 +2999,7 @@ begin
   AssertFalse('as RTF: saved', FRich.Modified);
 end;
 
-{ H-M7: a save that cannot create its file says which file it was to write. }
+{ a save that cannot create its file says which file it was to write. }
 procedure TTyRichEditControlTest.TestASaveThatCannotWriteNamesTheTarget;
 var
   msg: string;
@@ -3032,7 +3016,7 @@ begin
   AssertFalse('no temporary name in it', Pos('.tmp', msg) > 0);
 end;
 
-{ H-M9: a layout that raises in the middle of a pass leaves no reference behind. }
+{ a layout that raises in the middle of a pass leaves no reference behind. }
 procedure TTyRichEditControlTest.TestALayoutThatRaisesKeepsNoReference;
 var
   raised: Boolean;
@@ -3064,7 +3048,7 @@ begin
   AssertTrue('the view comes back', FRich.VisibleBlockCount > 0);
 end;
 
-{ H-M11: no OnChange while a form file is read; AddStrings is one undo step. }
+{ no OnChange while a form file is read; AddStrings is one undo step. }
 procedure TTyRichEditControlTest.TestStreamingRaisesNoChangeAndABatchIsOneStep;
 var
   a, b: TTyRichEdit;
@@ -3103,7 +3087,7 @@ begin
   AssertFalse('nothing more to undo', FRich.Document.CanUndo);
 end;
 
-{ H-M12: the control's own StyleOverride tokens reach the selection, object and placeholder. }
+{ the control's own StyleOverride tokens reach the selection, object and placeholder. }
 procedure TTyRichEditControlTest.TestStyleOverrideTokensReachTheParts;
 var
   st: TTyRichPaintStyle;
@@ -3125,7 +3109,7 @@ begin
   for i := 0 to High(ABytes) do Result := Result + LowerCase(IntToHex(ABytes[i], 2));
 end;
 
-{ H-M13: a change in a row's later paragraph drops the row's waiting picture. }
+{ a change in a row's later paragraph drops the row's waiting picture. }
 procedure TTyRichEditControlTest.TestAChangeInARowDropsItsPendingPicture;
 var
   rtf: string;
@@ -3159,7 +3143,7 @@ begin
   AssertEquals('the row''s picture no longer waits', 0, FRich.Pending);
 end;
 
-{ W1r-O1: another fallback font: the view is laid out again like after a font change. }
+{ another fallback font: the view is laid out again like after a font change. }
 procedure TTyRichEditControlTest.TestAFallbackFontChangeLaysTheViewOutAgain;
 begin
   SetLinesOf(200, 'Line ');
@@ -3179,7 +3163,7 @@ begin
   AssertTrue('laid out again', FRich.LaidParas > 0);
 end;
 
-{ W1r-O2: blocks of CRichMaxBlockPx: tops and positions past an Integer's range. }
+{ blocks of CRichMaxBlockPx: tops and positions past an Integer's range. }
 procedure TTyRichEditControlTest.TestHugeBlocksKeepTheArithmeticInRange;
 var
   sl: TStringList;
@@ -3233,7 +3217,7 @@ begin
     (pos <= t.ParaStart(2) + t.ParaLength(2)));
 end;
 
-{ R40: the bytes before the RTF signature (a UTF-8 BOM, blank lines, spaces) are the file's:
+{ the bytes before the RTF signature (a UTF-8 BOM, blank lines, spaces) are the file's:
   saved back as they were, to a stream and over the file, after an edit too; rfRtf takes such a
   file as rfAuto does; a text file's BOM is the text reader's and is written once. }
 procedure TTyRichEditControlTest.TestTheBytesBeforeTheRtfAreKept;
@@ -3328,7 +3312,7 @@ begin
   end;
 end;
 
-{ ---- R39: the kept surface ---- }
+{ ---- the kept surface ---- }
 
 { The surface as it is, drawn again from nothing at the same position: the same pixels. }
 procedure TTyRichEditControlTest.CheckSurface(const AWhat: string);
@@ -3413,7 +3397,7 @@ end;
 { The sequence, at device scale AScale (forced for the canvas and restored by TearDown): every
   move of rows, dirty band and exposed strip is in raster pixels there. Besides the 9a2 steps:
   a picture made ready, a part invalidated and a scroll in one paint, the end's pull-up after
-  a deletion, a resize, a zoom there and back, right to left (H2-I5, H2-M11). }
+  a deletion, a resize, a zoom there and back, right to left. }
 procedure TTyRichEditControlTest.SurfaceSequence(AScale: Integer);
 var
   st: TBytesStream;
@@ -3661,8 +3645,6 @@ begin
   end;
 end;
 
-{ ---- fix wave W3 ---- }
-
 function ReadFixtureFile(const AName: string): TBytes;
 var
   f: TFileStream;
@@ -3694,7 +3676,7 @@ begin
   Result := Length(B);
 end;
 
-{ W2r-I1: the list Word saved (word-list.rtf), loaded in small slices (a first slice of two
+{ the list Word saved (word-list.rtf), loaded in small slices (a first slice of two
   paragraphs, steps of 256 bytes): the slices the load appends are no edits, so every
   numbered item shows the number Word showed (word-list.markers.txt) in every slice - not
   the walk's count, which restarts after each body paragraph. }
@@ -3762,9 +3744,9 @@ end;
 
 { ---- 9a3: the second review of the viewer ---- }
 
-{ H2-I1: Lines.LoadFromStream, Lines.LoadFromFile and a Text inside BeginUpdate .. EndUpdate
+{ Lines.LoadFromStream, Lines.LoadFromFile and a Text inside BeginUpdate .. EndUpdate
   replace the content once, at EndUpdate (the document refuses a replacement inside its own
-  update); a batch of Adds is still one undo step (H-M11). }
+  update); a batch of Adds is still one undo step. }
 procedure TTyRichEditControlTest.TestLinesLoadAndATextInsideAnUpdate;
 var
   st: TStringStream;
@@ -3839,7 +3821,7 @@ begin
   end;
 end;
 
-{ H-I7 / H2-I2 / H2-M7: a reduced picture after a zoom in and back, and after a PPI there and
+{ a reduced picture after a zoom in and back, and after a PPI there and
   back, is queued again at the old size and shown (the layouter let that size go); a zoom
   keeps the decoded pictures and drops what waited at the old size. }
 procedure TTyRichEditControlTest.TestAPictureComesBackAfterAZoomThereAndBack;
@@ -3890,7 +3872,7 @@ begin
   AssertEquals('the zoom kept the decoded picture', 1, FRich.Layouter.PictureCacheCount);
 end;
 
-{ H2-M4: a PreparePicture that raises a fatal error (the layouter lets it through) is tried
+{ a PreparePicture that raises a fatal error (the layouter lets it through) is tried
   once, not once a paint; a layout parameter change tries it again. }
 procedure TTyRichEditControlTest.TestAPreparationThatRaisesIsTriedOnce;
 var
@@ -3929,7 +3911,7 @@ begin
   AssertEquals('nothing waits', 0, FRich.Pending);
 end;
 
-{ H2-I3: an empty document's surface is the frame the painter draws with no text clip, pixel
+{ an empty document's surface is the frame the painter draws with no text clip, pixel
   for pixel: the text clip never covers what the frame inks - a focus ring (wider than the
   border + 1 at 120 dpi), one with an offset, a corner radius larger than the padding. }
 procedure TTyRichEditControlTest.TestTheTextNeverCoversTheFrame;
@@ -3973,7 +3955,7 @@ begin
     end;
 end;
 
-{ H2-I4 / H2-M5: InvalidateContent is clipped to the text: a block cut by the view's top edge,
+{ InvalidateContent is clipped to the text: a block cut by the view's top edge,
   the caret rectangle of its line and that of a line held above the view draw no frame and
   only what is on screen of them; a far rectangle at scale 4 does nothing. }
 procedure TTyRichEditControlTest.TestContentIsClippedToTheText;
@@ -4023,13 +4005,13 @@ begin
   AssertEquals('far away: no block', 0, FRich.BlockPaints);
 end;
 
-{ H2-I5: the pixel sequence at device scale 2. }
+{ the pixel sequence at device scale 2. }
 procedure TTyRichEditControlTest.TestTheSurfaceEqualsAFullRedrawAtScaleTwo;
 begin
   SurfaceSequence(2);
 end;
 
-{ H2-M1: a wider ring, a ring's offset, a larger radius: the frame is drawn again. }
+{ a wider ring, a ring's offset, a larger radius: the frame is drawn again. }
 procedure TTyRichEditControlTest.TestTheFrameSignatureHoldsWhatTheFrameIsDrawnFrom;
 begin
   SetLinesOf(50, 'Line ');
@@ -4049,7 +4031,7 @@ begin
   AssertEquals('nothing changed: no frame', 0, FRich.FramePaints);
 end;
 
-{ H2-M2: a press and a release on a theme whose pressed look is the normal one paint nothing;
+{ a press and a release on a theme whose pressed look is the normal one paint nothing;
   a hover that changes the border paints the frame. }
 procedure TTyRichEditControlTest.TestAPressThatLooksTheSameDrawsNothing;
 begin
@@ -4072,7 +4054,7 @@ begin
   AssertEquals('a hover that changes the border: the frame', 1, FRich.FramePaints);
 end;
 
-{ H2-M3: a block that raises while the surface is drawn leaves it to be drawn whole by the
+{ a block that raises while the surface is drawn leaves it to be drawn whole by the
   next paint, never stale. }
 procedure TTyRichEditControlTest.TestADrawingThatRaisesLeavesNothingStale;
 var
@@ -4095,7 +4077,7 @@ begin
   CheckSurface('after a paint that raised');
 end;
 
-{ H2-M6: the paint that lays out a scroll invalidates nothing (it blits the text itself); a
+{ the paint that lays out a scroll invalidates nothing (it blits the text itself); a
   paint of part of the window still asks for the rest. }
 procedure TTyRichEditControlTest.TestAPaintThatLaysOutAScrollInvalidatesNothing;
 var
@@ -4122,7 +4104,8 @@ begin
   AssertTrue('a part: the rest is asked for', Length(FRich.Invalidated) > 0);
 end;
 
-{ H2-M8: a zoom then a scroll before the paint keeps H-M3's share as a zoom, a paint and the
+{ a zoom then a scroll before the paint keeps the anchor's share of its block as a zoom, a
+  paint and the
   scroll do; a horizontal position keeps its fraction of the extent through a zoom. }
 procedure TTyRichEditControlTest.TestAZoomThenAScrollKeepsTheShareAndTheColumn;
 var
@@ -4203,7 +4186,7 @@ begin
   GWidgetSetReady := True;
 end;
 
-{ H2-M11: a real handle, on a form that is never shown (made as test.base makes one): a turn of
+{ a real handle, on a form that is never shown (made as test.base makes one): a turn of
   the background work is queued only with it, InvalidateContent reaches the window's
   invalidation, the handle's destruction releases the surface and takes the turn off the
   queue, and the next paint draws the surface again in full. }
@@ -4251,7 +4234,7 @@ begin
   end;
 end;
 
-{ H-M8: one timer turn does at most CRichIdleMaxSteps pieces whatever the clock says: with the
+{ one timer turn does at most CRichIdleMaxSteps pieces whatever the clock says: with the
   clock standing still, five pictures take two turns. }
 procedure TTyRichEditControlTest.TestOneTimerTurnStopsAtItsCap;
 begin
@@ -4265,7 +4248,7 @@ begin
   AssertEquals('the next does the rest', 0, FRich.Pending);
 end;
 
-{ H-I12: PositionRect settles the view after a scroll before a paint; a position held above the
+{ PositionRect settles the view after a scroll before a paint; a position held above the
   view has its rectangle there (unclipped); one in no held block has none. }
 procedure TTyRichEditControlTest.TestPositionRectSettlesAndSaysWhereItIs;
 var
@@ -4296,7 +4279,7 @@ begin
   AssertTrue('in no held block: empty', (r1.Right = r1.Left) and (r1.Bottom = r1.Top));
 end;
 
-{ H-I12: right to left the vertical bar is on the left; the text area, the hit test and the
+{ right to left the vertical bar is on the left; the text area, the hit test and the
   painted text start right of it. }
 procedure TTyRichEditControlTest.TestARightToLeftControlPutsItsBarLeft;
 var
@@ -4331,7 +4314,7 @@ begin
     [inkX, a.Left]), inkX >= a.Left);
 end;
 
-{ H-I12: a change that takes in the anchor's paragraph puts the view at the change's start and
+{ a change that takes in the anchor's paragraph puts the view at the change's start and
   paints it again. }
 procedure TTyRichEditControlTest.TestAChangeThatSwallowsTheAnchor;
 var
@@ -4360,7 +4343,7 @@ begin
   Fail('no block on top');
 end;
 
-{ H-I12: a paragraph inserted and removed on screen with a valid view: the rectangles, the
+{ a paragraph inserted and removed on screen with a valid view: the rectangles, the
   held blocks' indexes and tops, the heights written, and only from the change down painted. }
 procedure TTyRichEditControlTest.TestAParagraphInsertedAndRemovedOnScreen;
 var
@@ -4425,7 +4408,7 @@ begin
   AssertTrue('a view held', k > 0);
 end;
 
-{ H-I12: DetectFormat on nothing and on 1 to 5 bytes; the position is left where it was; an
+{ DetectFormat on nothing and on 1 to 5 bytes; the position is left where it was; an
   empty stream loads as no lines. }
 procedure TTyRichEditControlTest.TestDetectFormatOnShortInput;
 
@@ -4481,7 +4464,7 @@ begin
   Result := inherited Read(Buffer, Count);
 end;
 
-{ H-I12: a load that raises (a missing file, a stream that fails half way, as text and as RTF)
+{ a load that raises (a missing file, a stream that fails half way, as text and as RTF)
   leaves the old document, its SourceFile and SourceFormat, and a view that works. }
 procedure TTyRichEditControlTest.TestALoadThatRaisesKeepsTheOldDocument;
 var
@@ -4530,7 +4513,7 @@ begin
   end;
 end;
 
-{ ---- 9b: the caret and the selection ---- }
+{ ---- the caret and the selection ---- }
 
 { A character as UTF-8, from its number (this file stays ASCII). }
 function Utf8Of(ACode: Cardinal): RawByteString;
@@ -4582,15 +4565,15 @@ begin
   FRich.ReleaseAt(P.X, P.Y);
 end;
 
-{ W1's affinity carried by the control: End puts the caret at the end of the line it is on (a
-  wrapped line's end is also the next line's start), a click past a line's end does too, and
-  Home after End stays on that line - Latin, Chinese and justified text. }
+{ The caret's line affinity carried by the control: End puts the caret at the end of the line
+  it is on (a wrapped line's end is also the next line's start), a click past a line's end
+  does too, and Home after End stays on that line - Latin, Chinese and justified text. }
 procedure TTyRichEditControlTest.TestEndAndAClickPastALineEndStayOnThatLine;
 begin
   EndAndClickCase(1, False);
 end;
 
-{ S-I1: the caret is where it is drawn - inside the text, also at the end of a line that
+{ the caret is where it is drawn - inside the text, also at the end of a line that
   reaches the right edge; the input method is told that rectangle, and the blink paints that
   rectangle again (drawn, then blinked off). }
 procedure TTyRichEditControlTest.CheckCaretInside(const AWhat: string);
@@ -4624,10 +4607,11 @@ begin
   end;
 end;
 
-{ W1's affinity carried by the control: End puts the caret at the end of the line it is on (a
-  wrapped line's end is also the next line's start), a click past a line's end does too, and
-  Home after End stays on that line - Latin, Chinese, justified and centred text; the caret
-  is drawn inside the text at every such end, and at a right-aligned line's (S-I1). At device
+{ The caret's line affinity carried by the control: End puts the caret at the end of the line
+  it is on (a wrapped line's end is also the next line's start), a click past a line's end
+  does too, and Home after End stays on that line - Latin, Chinese, justified and centred
+  text; the caret
+  is drawn inside the text at every such end, and at a right-aligned line's. At device
   scale AScale, right to left when ARtl (the bar on the left). }
 procedure TTyRichEditControlTest.EndAndClickCase(AScale: Integer; ARtl: Boolean);
 var
@@ -5107,7 +5091,7 @@ end;
   parent's focus navigation); Tab, Enter, Esc go on to the form. }
 procedure TTyRichEditControlTest.TestTheViewerTakesItsKeysAndLeavesTheRest;
 begin
-  // the viewer's keys (Task 10a: an editor takes Enter)
+  // the viewer's keys (an editor takes Enter)
   FRich.ReadOnly := True;
   FRich.Lines.Text := 'abc';
   FRich.UpdateView;
@@ -5428,7 +5412,7 @@ var
   acts: ITyTextEditActions;
   pm: TPopupMenu;
 begin
-  // the viewer's menu (Task 10a: ReadOnly is False by default)
+  // the viewer's menu (ReadOnly is False by default)
   FRich.ReadOnly := True;
   FRich.Lines.Text := 'menu text';
   acts := FRich as ITyTextEditActions;
@@ -5471,7 +5455,7 @@ begin
   FRich.Lines.Text := 'ime text';
   FRich.UpdateView;
   ime := FRich as ITyImeEditable;
-  // an editor since Task 10a: the viewer is ReadOnly (10b: the input method is told so)
+  // an editor; the viewer is ReadOnly (the input method is told so)
   AssertFalse('an editor: not read-only', ime.ImeIsReadOnly);
   FRich.ReadOnly := True;
   AssertTrue('read-only', ime.ImeIsReadOnly);
@@ -5486,8 +5470,6 @@ begin
   ime.ImeSessionEnd;
   AssertEquals('the text as it was', 'ime text', FRich.Lines[0]);
 end;
-
-{ ---- fix wave W4 ---- }
 
 type
   // How many paragraph values a document holds.
@@ -5589,7 +5571,7 @@ begin
     FLastStepEdits := -1;
 end;
 
-{ W3r-M1: a change is the load's own only while a step runs AND the document still loads. A
+{ a change is the load's own only while a step runs AND the document still loads. A
   command run from the progress handler of the LAST step - the document no longer loads there -
   is an edit: a format change of the body paragraph after item "1." of Word's list lowers the
   trust, so item "2." below it is counted (after a body paragraph: "1."), while "1." above it
@@ -5643,7 +5625,7 @@ begin
   AssertEquals('below it: counted, as after any edit', '1.', Marker(2));
 end;
 
-{ R42: the plain text of a copy of a lazily read RTF that holds tables comes from one walk: the
+{ the plain text of a copy of a lazily read RTF that holds tables comes from one walk: the
   walk decodes each paragraph, and its cell comes from that decode (a value of the moment).
   The document parses no paragraph for it - it keeps no more values after the copy than before
   (the ends, which the copy reads to know its range, read first) - and the load parses an
@@ -5715,7 +5697,7 @@ begin
   AssertTrue(Format('the fixtures (%d)', [files]), files >= 12);
 end;
 
-{ 9b-C6: a range the RTF writer refuses - a part of a paragraph and a changed row that holds a
+{ a range the RTF writer refuses - a part of a paragraph and a changed row that holds a
   nested table - is copied as its text with an empty RTF flavour: nothing raises out of the
   copy, and the wait cursor it showed is taken back. (The row is set the way a reader sets one.) }
 procedure TTyRichEditControlTest.TestARefusedRtfFlavourCopiesTheTextAlone;
@@ -5769,15 +5751,13 @@ begin
   AssertTrue('no RTF flavour', FRich.ClipRtf = '');
   AssertEquals('the wait cursor', 1, FRich.Waits);
   AssertEquals('and back', 1, FRich.WaitEnds);
-  // W5: inside the one cell "b" no row is written - both flavours
+  // inside the one cell "b" no row is written - both flavours
   FRich.SelStart := d.Text.ParaStart(2);
   FRich.SelLength := 1;
   FRich.CopyToClipboard;
   AssertEquals('inside one cell: the text', 'b', FRich.ClipText);
   AssertEquals('inside one cell: an RTF flavour', 1, Pos('{\rtf1', FRich.ClipRtf));
 end;
-
-{ ---- fix wave W5 ---- }
 
 { A copy's RTF flavour read whole; nil for none. }
 function ReadClipRtf(const ARtf: RawByteString): TTyRichDocument;
@@ -5832,7 +5812,7 @@ begin
   end;
 end;
 
-{ W5 C-I2: the plain text counts characters by the text storage's rule (strict UTF-8: an
+{ the plain text counts characters by the text storage's rule (strict UTF-8: an
   overlong form, a surrogate written in UTF-8 as CESU-8 does, a sequence above U+10FFFF are
   bytes of their own), so it cuts where the selection is - and where the RTF flavour cuts. }
 procedure TTyRichEditControlTest.TestThePlainTextCountsCharactersAsTheStorage;
@@ -5896,7 +5876,7 @@ begin
   Check('a valid one', Utf8Of($4E2D), 1, True);
 end;
 
-{ W5 C-M1: Word's table with a nested one, unchanged: a selection inside a cell of the row
+{ Word's table with a nested one, unchanged: a selection inside a cell of the row
   that holds the nested table copies both flavours (no row is written), and the RTF reads back
   as its text. }
 procedure TTyRichEditControlTest.TestACopyInsideACellOfANestedRowHasBothFlavours;
@@ -5936,7 +5916,7 @@ begin
   AssertTrue(Format('paragraphs in such a row (%d)', [met]), met >= 2);
 end;
 
-{ W5 C-M3: a length past the end - High(Int64) the furthest - gives the text to the end. }
+{ a length past the end - High(Int64) the furthest - gives the text to the end. }
 procedure TTyRichEditControlTest.TestAHugeLengthGivesTheTextToTheEnd;
 begin
   FRich.Lines.Text := 'ab'#10'cd';
@@ -5945,7 +5925,7 @@ begin
   AssertEquals('from the end: nothing', '', FRich.RangeText(FRich.Document.Text.Length, High(Int64)));
 end;
 
-{ W5 C-M4: a cell the model left without a paragraph (its only one deleted) keeps its tab in
+{ a cell the model left without a paragraph (its only one deleted) keeps its tab in
   the plain text - before the row's first paragraph and after its last, as between two. }
 procedure TTyRichEditControlTest.TestCellsWithoutAParagraphGiveTheirTabs;
 const
@@ -6011,10 +5991,10 @@ begin
   end;
 end;
 
-{ W5 C-M5: a copy while the load is still going on, and after it was cancelled (Incomplete):
+{ a copy while the load is still going on, and after it was cancelled (Incomplete):
   Select All takes the last paragraph appended so far, which has no separator in the text yet:
-  the text ends without a line break (R45), the RTF with that paragraph's \par (R64, fix wave
-  W14: a last paragraph taken whole is a paragraph with its format); a paragraph taken with its
+  the text ends without a line break, the RTF with that paragraph's \par (a last
+  paragraph taken whole is a paragraph with its format); a paragraph taken with its
   separator ends with both. }
 procedure TTyRichEditControlTest.TestACopyWhileLoadingAndAfterACancel;
 var
@@ -6036,7 +6016,7 @@ var
     AssertEquals(AWhat + ': the text is SelText', FRich.SelText, FRich.ClipText);
     AssertTrue(AWhat + ': all - no line break at the end',
       Copy(FRich.ClipText, Length(FRich.ClipText) - Length(LineEnding) + 1, MaxInt) <> LineEnding);
-    // (the last paragraph taken whole: the RTF ends it with \par all the same - R64)
+    // (the last paragraph taken whole: the RTF ends it with \par all the same)
     AssertTrue(AWhat + ': all - a paragraph''s end in the RTF', ClipRtfEndsWithBreak(FRich.ClipRtf));
     b := ReadClipRtf(FRich.ClipRtf);
     try
@@ -6115,12 +6095,12 @@ begin
     SetMemoryManager(GPoisonOld);
 end;
 
-{ W5 C-X1: the plain text compares a paragraph's cell with the one before it after the walk
+{ the plain text compares a paragraph's cell with the one before it after the walk
   let the value of the moment of that one go - and with it, when its interval went too, the
   table its cell is in: the copy holds that table meanwhile. Freed memory is filled with a
   pattern during the copy (a test's release), so a cell read after its table was freed reads
   no row it had - the text would part the row's cells by line breaks, or the read would fault.
-  The file is the R42 test's: more intervals than the load keeps, rows in all of them. }
+  The file has more intervals than the load keeps, rows in all of them. }
 procedure TTyRichEditControlTest.TestTheRowBeforeIsHeldWhileTheNextIsCompared;
 var
   b: TBytes;
@@ -6164,7 +6144,7 @@ begin
   AssertSameText('the whole parse''s text, with freed memory filled', whole, lazy);
 end;
 
-{ W5 C-X2: a table of more than a megabyte read on demand is parsed in parts, a table object
+{ a table of more than a megabyte read on demand is parsed in parts, a table object
   for each interval's stretch of it (the parts are cut where the index scan took a snapshot,
   which is never inside a row). The plain text of all of it, and of a range across the seam
   of two parts, is the whole parse's; the range's RTF reads back as that text. Rows whose first
@@ -6272,9 +6252,7 @@ begin
   AssertSameText('the range, as the whole parse gives it', FRich.SelText, wholeRange);
 end;
 
-{ ---- fix wave W6 ---- }
-
-{ S-I2 / S-M3: a press on a picture selects it, and it stays selected while the pointer moves
+{ a press on a picture selects it, and it stays selected while the pointer moves
   on it - its left half or its right half; a drag out of it extends from it; a double click on
   its right half selects it (the object under the pointer is the word). }
 procedure TTyRichEditControlTest.TestAPressOnAnObjectKeepsItSelected;
@@ -6329,7 +6307,7 @@ begin
   AssertEquals('double click on the right half: its character', Int64(1), FRich.SelLength);
 end;
 
-{ S-I3: Down out of a paragraph whose picture is taller than two views (the block after it is
+{ Down out of a paragraph whose picture is taller than two views (the block after it is
   not held), and out of a row whose short cell stands beside two screens of text; Up back
   into the picture's paragraph; PgDn across the picture. }
 procedure TTyRichEditControlTest.TestDownLeavesATallPictureAndATallRow;
@@ -6380,7 +6358,7 @@ begin
   AssertTrue('and shows the caret', (r.Bottom > r.Top) and (r.Top >= a.Top) and (r.Bottom <= a.Bottom));
 end;
 
-{ S-I4: a cut paragraph (one longer than CRichMaxParaLayoutChars - the cap has no seam: a real
+{ a cut paragraph (one longer than CRichMaxParaLayoutChars - the cap has no seam: a real
   one) - a word step never ends in its hidden tail: Ctrl+Right at the cut goes to the next
   paragraph, Ctrl+Left from there to the cut, Shift+Ctrl+Right stops at the cut (a copy takes
   no tail) and then goes on to the next paragraph; End and a click past the end stay at the
@@ -6460,7 +6438,7 @@ begin
   AssertEquals(AWhat + ': still at scale 2', 2, FRich.Scale);
 end;
 
-{ S-I5: the caret and selection tests that turn on hit points and pixels, laid out at device
+{ the caret and selection tests that turn on hit points and pixels, laid out at device
   scale 2 (the forced scale is restored in TearDown). }
 procedure TTyRichEditControlTest.TestTheCaretTestsAtScaleTwo;
 begin
@@ -6477,7 +6455,7 @@ begin
   RunAtScaleTwo('across', @TestTheCaretIsScrolledAcross);
 end;
 
-{ S-I5: PgDn scrolls a page and the caret keeps its x and its place in the view; Shift extends;
+{ PgDn scrolls a page and the caret keeps its x and its place in the view; Shift extends;
   where the view cannot move (an end) the caret goes the page itself, to the last or first
   line. }
 procedure TTyRichEditControlTest.TestPageUpAndPageDownMoveTheCaret;
@@ -6523,7 +6501,7 @@ begin
   AssertEquals('PgUp at the top: the first line', 0, t.ParaOfPos(FRich.CaretIndex));
 end;
 
-{ S-I5: the caret is scrolled into view across, with no wrapping and in page mode. }
+{ the caret is scrolled into view across, with no wrapping and in page mode. }
 procedure TTyRichEditControlTest.TestTheCaretIsScrolledAcross;
 var
   s: string;
@@ -6557,7 +6535,7 @@ begin
   AssertEquals('page mode, Home: back', 0, FRich.ScrollX);
 end;
 
-{ S-I5: the caret set into a cell of a row far below the view (not held) is scrolled to and
+{ the caret set into a cell of a row far below the view (not held) is scrolled to and
   shown in its column. }
 procedure TTyRichEditControlTest.TestTheCaretOfACellInARowNotHeld;
 var
@@ -6583,7 +6561,7 @@ begin
   AssertEquals('where PositionRect says', FRich.PositionRect(pos).Top, r.Top);
 end;
 
-{ S-I5: OnSelectionChange for a document change that moved the caret, none for one that did
+{ OnSelectionChange for a document change that moved the caret, none for one that did
   not. }
 procedure TTyRichEditControlTest.TestADocumentChangeReportsTheSelectionIfItMoved;
 var
@@ -6607,7 +6585,7 @@ begin
   AssertEquals('nor what follows', 1, FSelChanges);
 end;
 
-{ S-I5 / S-M1: Ctrl+Left / Right across paragraphs; Ctrl+Right at a cell's end passes the
+{ Ctrl+Left / Right across paragraphs; Ctrl+Right at a cell's end passes the
   cell merged away after it, as Right does. }
 procedure TTyRichEditControlTest.TestWordStepsAcrossParagraphsAndCells;
 begin
@@ -6631,7 +6609,7 @@ begin
   AssertEquals('and back', Int64(0), FRich.CaretIndex);
 end;
 
-{ S-I5: a line ended by U+000B ends before it: End stops there (no affinity), Home on the
+{ a line ended by U+000B ends before it: End stops there (no affinity), Home on the
   next line goes to the place after it. }
 procedure TTyRichEditControlTest.TestHomeAndEndOnALineEndedByALineBreak;
 begin
@@ -6649,11 +6627,11 @@ begin
   AssertEquals('End of the last line', Int64(7), FRich.CaretIndex);
 end;
 
-{ S-I5 / S-M2, on a handle of a form never shown: a drag's move outside the text starts the
+{ On a handle of a form never shown: a drag's move outside the text starts the
   drag timer (its firing is not run); the blink timer is made on entering and goes with the
   window; MouseMove sets the temporary cursor (the arrow over the padding, the I-beam over the
   text), and the control's Cursor - what LCL-Win32 shows on the window's set-cursor message -
-  answers the same (W7 K-8: GetCursor), while the Cursor set is the I-beam; it streams as set. }
+  answers the same (GetCursor), while the Cursor set is the I-beam; it streams as set. }
 procedure TTyRichEditControlTest.TestTheTimersAndTheCursorOnAHandle;
 var
   F: TForm;
@@ -6717,7 +6695,7 @@ begin
   end;
 end;
 
-{ S-M4: Shift+End on a wrapped line, then Right: the selection collapses onto the caret, which
+{ Shift+End on a wrapped line, then Right: the selection collapses onto the caret, which
   stays at that line's end. }
 procedure TTyRichEditControlTest.TestACollapseOntoTheCaretKeepsItsLine;
 var
@@ -6745,7 +6723,7 @@ begin
   AssertEquals('on that line', top, FRich.CaretClientRect.Top);
 end;
 
-{ S-M5: a zoom forgets the wished x: Down after it goes from where the caret is drawn now. }
+{ a zoom forgets the wished x: Down after it goes from where the caret is drawn now. }
 procedure TTyRichEditControlTest.TestAZoomForgetsTheWishedX;
 var
   t: TTyRichText;
@@ -6767,7 +6745,7 @@ begin
     [FRich.CaretClientRect.Left, x, cw]), Abs(FRich.CaretClientRect.Left - x) <= cw);
 end;
 
-{ S-M7: SelLength := High(Int64) is "to the end", -High(Int64) "to the start". }
+{ SelLength := High(Int64) is "to the end", -High(Int64) "to the start". }
 procedure TTyRichEditControlTest.TestAHugeSelLengthGoesToTheEnd;
 begin
   FRich.Lines.Text := 'abcdef';
@@ -6782,7 +6760,7 @@ begin
   AssertEquals('all before', Int64(3), FRich.SelLength);
 end;
 
-{ S-M8: the public pair answers a wrapped line's end both ways: a point past the line's end is
+{ the public pair answers a wrapped line's end both ways: a point past the line's end is
   that place at the line's end; its rectangle is on that line with the flag, on the next
   line's start without. }
 procedure TTyRichEditControlTest.TestThePublicQueriesCarryTheAffinity;
@@ -6814,7 +6792,7 @@ begin
   AssertFalse('no line''s end there', atEnd);
 end;
 
-{ S-M10: a deletion that leaves the caret inside a cluster (before a combining mark): after the
+{ a deletion that leaves the caret inside a cluster (before a combining mark): after the
   next paint the caret is on a caret place, reported. }
 procedure TTyRichEditControlTest.TestAChangeLeavesTheCaretOnACaretPlace;
 begin
@@ -6828,7 +6806,7 @@ begin
   AssertEquals('the change moved it: reported', 1, FSelChanges);
   PaintAll(True);
   AssertEquals('after the paint: the cluster''s start', Int64(0), FRich.CaretIndex);
-  // W7 K-10: not from inside the paint - by the queued call, after it
+  // not from inside the paint - by the queued call, after it
   AssertEquals('no handler inside the paint', 1, FSelChanges);
   RunQueuedCalls;
   AssertEquals('reported once more', 2, FSelChanges);
@@ -6844,7 +6822,7 @@ begin
   AssertEquals('after a query: the cluster''s start', Int64(0), FRich.CaretIndex);
 end;
 
-{ S-M11: between Lines.BeginUpdate and EndUpdate, after paragraphs were removed, a paint shows
+{ between Lines.BeginUpdate and EndUpdate, after paragraphs were removed, a paint shows
   the kept surface as it is (nothing laid out or drawn), a blink does nothing, and nothing
   raises; after EndUpdate the view is right. }
 procedure TTyRichEditControlTest.TestAPaintAndABlinkInsideAnUpdate;
@@ -6898,7 +6876,7 @@ begin
   else FLastStepEdits := -1;
 end;
 
-{ S-X1: a command run from the last load step's progress handler (the document no longer
+{ a command run from the last load step's progress handler (the document no longer
   loads there) is an edit for the caret and the change report too: the caret moves as for any
   edit, and the change is reported; the slices themselves move nothing and report nothing. }
 procedure TTyRichEditControlTest.TestAnEditFromTheLastStepMovesTheCaret;
@@ -6946,7 +6924,7 @@ begin
 end;
 {$ENDIF}
 
-{ H2-M9: the replace call made to fail (the seam TyRichReplaceFileW). For a reason other than
+{ the replace call made to fail (the seam TyRichReplaceFileW). For a reason other than
   access or sharing (a volume without ReplaceFileW) the plain replace saves: the new content
   is there, no temporary file is left. For access or sharing: the control's own refusal, the
   target untouched, nothing left. The Unix order (owner, then mode) is compile-checked only. }
@@ -7000,7 +6978,7 @@ begin
 end;
 {$ENDIF}
 
-{ A3-M1: a hover whose look takes the layer path (an opacity): leaving it asks for a repaint,
+{ a hover whose look takes the layer path (an opacity): leaving it asks for a repaint,
   and the paint draws the normal look whole. }
 procedure TTyRichEditControlTest.TestAStateLeavingTheLayerPathRepaints;
 begin
@@ -7018,7 +6996,7 @@ begin
   AssertEquals('the normal look drawn whole', 1, FRich.FramePaints);
 end;
 
-{ A3-M2: a state that changes the font asks for a repaint, and the paint lays the text out in
+{ a state that changes the font asks for a repaint, and the paint lays the text out in
   that font. Both states name a font, so only the value differs (not which properties are
   present); a family, not a size: a size also moves what is given in em (padding), which the
   signature holds anyway, and would not show whether the font itself is in it. }
@@ -7050,7 +7028,7 @@ begin
   if h0 = 0 then Fail('no block before');
 end;
 
-{ A3-M3: PointerStateChanged asks for the window's repaint when the look changes - a hover that
+{ PointerStateChanged asks for the window's repaint when the look changes - a hover that
   changes the border, on entering and on leaving - and not for a press that looks the same. }
 procedure TTyRichEditControlTest.TestAHoverAsksForARepaint;
 begin
@@ -7068,8 +7046,6 @@ begin
   FRich.Hover(False);
   AssertTrue('leaving: a repaint asked for', FRich.Invalidates > 0);
 end;
-
-{ ---- fix wave W7 ---- }
 
 { A small RTF table: a paragraph, ARows rows of three cells (rN a, rN b in bold, rN c), a
   paragraph after it. AInRow: the offset inside row AInRow after its second cell's end and
@@ -7138,7 +7114,7 @@ begin
   if AExpectLoading then AssertTrue('loading', FRich.Loading);
 end;
 
-{ K-1 / R49 (L-1): on this widgetset (win32) the load runs one turn per pass of the
+{ on this widgetset (win32) the load runs one turn per pass of the
   application's loop, scheduled from its idle step. A start registers the idle handler once
   and queues the first turn; a turn with work left queues nothing of its own and leaves the
   one registration; the idle step queues exactly one call, and a second idle step before it
@@ -7146,7 +7122,7 @@ end;
   gone. A cancel, a new content, the handle's destruction and the destructor take the idle
   handler and the queued call away: running the idle handlers and the queue by hand then
   enters the control nowhere. (The loop itself - input, paints and timers between two turns -
-  is the real-loop probe's and the smoke's to see.) }
+  is for a run in a real message loop to see.) }
 procedure TTyRichEditControlTest.TestTheLoadRunsInQueuedTurns;
 var
   F: TForm;
@@ -7269,7 +7245,7 @@ begin
   end;
 end;
 
-{ R49: the driver is chosen per widgetset by one function; the timer driver (Cocoa and every
+{ the driver is chosen per widgetset by one function; the timer driver (Cocoa and every
   widgetset not named) runs here when forced: a start enables the timer, a turn with work left
   keeps it on and queues and registers nothing, the end disables it; the window's going frees
   it. }
@@ -7329,7 +7305,7 @@ begin
   if Assigned(FDocNotice) then FDocNotice(Sender, AChange);
 end;
 
-{ L-2, N-5: a queue that will not take a call raises nothing out of the load, a turn or the idle
+{ a queue that will not take a call raises nothing out of the load, a turn or the idle
   step, and leaves nothing registered. Outside a shutdown (in practice: out of memory) the load
   then ends as a cancel ends it - not Loading, Incomplete, the load's own notice once - rather
   than staying Loading with nothing to drive it. An application closed for scheduling (being
@@ -7407,7 +7383,7 @@ begin
   end;
 end;
 
-{ L-3: a window paint inside an update that ends with nothing to report (it was skipped: the
+{ a window paint inside an update that ends with nothing to report (it was skipped: the
   view was behind) is made good when the update ends - the text window is invalidated once; an
   update with no paint inside it invalidates nothing. }
 procedure TTyRichEditControlTest.TestAPaintSkippedInAnUpdateWithoutAChange;
@@ -7435,7 +7411,7 @@ begin
   AssertEquals('no paint inside: nothing invalidated', 0, Length(FRich.Invalidated));
 end;
 
-{ L-4: SelectAll, SelStart :=, SelLength := and CaretIndex := between BeginUpdate and EndUpdate,
+{ SelectAll, SelStart :=, SelLength := and CaretIndex := between BeginUpdate and EndUpdate,
   after paragraphs were removed, raise nothing and ask the layout nothing; after EndUpdate the
   selection is inside the document and painted. }
 procedure TTyRichEditControlTest.TestTheSelectionSettersWaitForAnUpdate;
@@ -7501,7 +7477,7 @@ begin
   CheckSurface('after the selection set in an update');
 end;
 
-{ L-5: the pointer leaving the control forgets that it was over the padding: the I-beam is
+{ the pointer leaving the control forgets that it was over the padding: the I-beam is
   answered until a move over the padding says otherwise. }
 procedure TTyRichEditControlTest.TestTheCursorForgetsThePaddingOnLeaving;
 var
@@ -7546,7 +7522,7 @@ begin
   AssertTrue('loading', FRich.Loading);
 end;
 
-{ L-6: the slices a load appends below the view cost no layout and no settled query in its
+{ the slices a load appends below the view cost no layout and no settled query in its
   turns (on a handle of a form never shown); the scroll bar still follows - its range is the
   document's at the end. }
 procedure TTyRichEditControlTest.TestASliceBelowTheViewLaysOutNothing;
@@ -7611,7 +7587,7 @@ begin
   end;
 end;
 
-{ L-6, N-3: a load's turns start at the smallest slice and double it while they are fast (a
+{ a load's turns start at the smallest slice and double it while they are fast (a
   clock that stands); a step by hand is not a turn (StepBytes), the synchronous first slice of
   the load asks no size; a file that indexes slowly keeps the small slices, its first turn
   too, and the turn stays under the budget; the progress handler's time is not the file's. }
@@ -7664,7 +7640,7 @@ begin
   end;
 end;
 
-{ N-4: one stalled turn (500 ms by the clock) halves the slice once, and fast turns bring it back
+{ one stalled turn (500 ms by the clock) halves the slice once, and fast turns bring it back
   to StepBytes; a steady slow rate settles - the size goes down a step a turn until its turns
   sit under the budget, and stays there (no flip-flop). }
 procedure TTyRichEditControlTest.TestAStallCostsOneHalving;
@@ -7717,7 +7693,7 @@ begin
   end;
 end;
 
-{ N-2: on the idle-driven widgetsets a slow timer runs beside the idle handler while there is
+{ on the idle-driven widgetsets a slow timer runs beside the idle handler while there is
   work (CRichBackstopMs, made with the first start). Its tick (run by hand) runs no turn when a
   turn ran since its last tick; when none did (the idle step starved: an Application.OnIdle
   that sets Done := False) it runs exactly one, taking the queued call off first so that the
@@ -7804,7 +7780,7 @@ begin
   end;
 end;
 
-{ N-7 (L-6): a slice appended below the view asks the view nothing (no layout, no settle) and
+{ a slice appended below the view asks the view nothing (no layout, no settle) and
   walks the height tree a bounded number of times, the same at 10,000 paragraphs as at 800,000:
   nothing per slice is proportional to the document (bound: 16 visits a slice, an empirical
   one - see CRichSliceVisitBound). Each document is read in its synchronous
@@ -7888,7 +7864,7 @@ begin
   end;
 end;
 
-{ K-4: after a turn whose step raised (here: the load's progress handler, once) the driver stays
+{ after a turn whose step raised (here: the load's progress handler, once) the driver stays
   on (the idle step goes on queuing turns), and the load runs to its end. }
 procedure TTyRichEditControlTest.TestAStepThatRaisesDoesNotStrandTheLoad;
 var
@@ -7926,7 +7902,7 @@ begin
   end;
 end;
 
-{ K-10: a snap (a change left the caret inside a cluster) calls no handler where it runs: a
+{ a snap (a change left the caret inside a cluster) calls no handler where it runs: a
   paint and a public query only queue the report, which the queued call makes once; a key
   reports once, at its end; the destructor with the report queued reports nothing. }
 procedure TTyRichEditControlTest.TestASnapReportsOutsideThePaintAndTheQuery;
@@ -7994,7 +7970,7 @@ begin
   FRich := NewProbe;
 end;
 
-{ K-9: between Lines.BeginUpdate and EndUpdate, after paragraphs were removed, input that needs
+{ between Lines.BeginUpdate and EndUpdate, after paragraphs were removed, input that needs
   the layout does nothing (a viewer's key is still taken), the queries answer "not available",
   nothing raises and nothing is laid out; a replacement that keeps the length and the
   paragraph count (what a heuristic on those missed) is held back as well. }
@@ -8071,7 +8047,7 @@ begin
     (AOuter.Right >= AInner.Right) and (AOuter.Bottom >= AInner.Bottom);
 end;
 
-{ K-11: a window paint inside the document's update draws nothing new, and the window counts it
+{ a window paint inside the document's update draws nothing new, and the window counts it
   as done: when the update ends, the window is asked to paint the text window again - here
   with no block held before (a control first painted inside an update). An update with no
   paint inside it asks for nothing more than its change. }
@@ -8103,7 +8079,7 @@ begin
   AssertEquals('no skipped paint: no extra invalidation', 0, Length(FRich.Invalidated));
 end;
 
-{ K-6: Word's list (word-list.rtf) cancelled after its first slice, whose last paragraph is the
+{ Word's list (word-list.rtf) cancelled after its first slice, whose last paragraph is the
   item "2." after a body paragraph: the cancel's notice is the load's own - the item keeps the
   file's number (the walk would count "1."), no OnChange, the caret stays. }
 procedure TTyRichEditControlTest.TestACancelNoticeIsTheLoadsOwn;
@@ -8135,7 +8111,7 @@ begin
   end;
 end;
 
-{ K-7 (with K-5): a partial row at the end of a loading and of a cancelled document. What a user
+{ A partial row at the end of a loading and of a cancelled document. What a user
   gets from a copy is the file's whole row, the cells not in the text yet empty: the text has
   a tab for each of them, the RTF the row with those cells empty - the two flavours agree. }
 procedure TTyRichEditControlTest.TestAPartialRowCopiesAsTheFilesRow;
@@ -8182,7 +8158,7 @@ begin
   Check('cancelled', 'r3 a'#9'r3 b'#9 + LineEnding, ['r3 a', 'r3 b', '']);
 end;
 
-{ K-5, the control: a row shown at the end of a loading document with only its first cell is
+{ The control: a row shown at the end of a loading document with only its first cell is
   laid out again, whole, when its other cells arrive - the slice's change starts at the
   paragraph that was last (the row's first cell), which the view hears. }
 procedure TTyRichEditControlTest.TestARowShownWhileLoadingIsLaidOutWhole;
@@ -8231,7 +8207,7 @@ begin
   CheckSurface('the row laid out again');
 end;
 
-{ K-12: a press on either half of a picture and a 1 px move keep the anchor at the picture's
+{ a press on either half of a picture and a 1 px move keep the anchor at the picture's
   start: a Shift+click after it then keeps the picture in the selection. }
 procedure TTyRichEditControlTest.TestAPressedObjectKeepsItsAnchor;
 var
@@ -8261,9 +8237,9 @@ begin
   end;
 end;
 
-{ K-2: in window-wrap mode the horizontal extent is the widest content that does not wrap, never
+{ in window-wrap mode the horizontal extent is the widest content that does not wrap, never
   the wrap width: text that wraps to the window shows no horizontal bar at any zoom, also after
-  200 -> 50 -> 100 (the smoke's sequence); a row wider than the window brings the bar, its
+  200 -> 50 -> 100; a row wider than the window brings the bar, its
   extent follows the zoom up and down and comes back to its first value; page mode scrolls over
   the page's width. }
 procedure TTyRichEditControlTest.TestTheExtentIsTheContentNotTheWrapWidth;
@@ -8335,7 +8311,7 @@ begin
   FRich.WrapMode := rwmWindow;
 end;
 
-{ K-2 / H2-M8: a horizontal position survives a zoom at the same fraction (of the extent: the
+{ a horizontal position survives a zoom at the same fraction (of the extent: the
   same column stays at the left edge) where there is still something to scroll, and is 0
   where there is not. }
 procedure TTyRichEditControlTest.TestTheColumnSurvivesAZoomWhereItCanScroll;
@@ -8362,7 +8338,7 @@ begin
   AssertEquals('nothing to scroll: 0', 0, FRich.ScrollX);
 end;
 
-{ K-3: what a jump costs in a document of 1,000,000 lines, by counters (no clock): block
+{ what a jump costs in a document of 1,000,000 lines, by counters (no clock): block
   layouts asked for (and new ones), tree node visits, for Ctrl+End, Ctrl+Home and PgDn, the key
   and the paint after it. A jump lays out the screen it arrives at with the screen the view holds
   above and below it (what LayoutView holds); the counts are written out for the report. }
@@ -8425,14 +8401,14 @@ begin
   Measure('PgUp at the end', VK_PRIOR, []);
 end;
 
-{ W10: the range the vertical bar ought to have now: the document's height less a page (a bar
+{ the range the vertical bar ought to have now: the document's height less a page (a bar
   unit is a pixel here: the document is far below ScrollBarLimit). }
 function TTyRichEditControlTest.BarMaxWanted: Integer;
 begin
   Result := FRich.Document.Text.TotalHeight div FRich.Scale - FRich.VBar.PageSize;
 end;
 
-{ P-1: while a load runs, the range its own turns give the vertical bar reaches the bar at most
+{ while a load runs, the range its own turns give the vertical bar reaches the bar at most
   once per CRichLoadBarsMs (100) of the turns' clock: the first turn's at once; the next turns'
   within the interval not (the document grows, the bar's Max stands); the first turn after it
   again, and the interval runs from there. What is not the load's own slice reaches the bar at
@@ -8515,7 +8491,7 @@ begin
   end;
 end;
 
-{ P-2: a load whose next turn cannot be scheduled ends as a cancel ends it, under no handler of
+{ a load whose next turn cannot be scheduled ends as a cancel ends it, under no handler of
   the control's: an exception from a user's change handler in that end reaches the caller of
   the entry point that ran it - LoadFromStream, when the load's first turn could not be queued;
   the idle step, when the end was owed from InitializeWnd (a window made for a load running

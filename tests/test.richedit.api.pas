@@ -1,9 +1,9 @@
 unit test.richedit.api;
 
-{ TTyRichEdit's format API (Task 11a): the Delphi-style façade (SelAttributes, DefAttributes,
+{ TTyRichEdit's format API: the Delphi-style façade (SelAttributes, DefAttributes,
   Paragraph, PlainText) and the RichMemo-style one (SetTextAttributes .. SaveRichText), both
   thin layers over the engine's commands; the pending typing format; Modified with its saved
-  point; the user's actions against the document API (R66); the events.
+  point; the user's actions against the document API; the events.
 
   Headless, on the edit suite's probe (TEditProbe: the test device, the clipboard double, the
   counters). No window, no clipboard, no input method, no message loop. Every bound is a
@@ -56,7 +56,7 @@ type
     procedure SetUp; override;
     procedure TearDown; override;
   published
-    // the brief's
+    // both façades
     procedure TestBothFacadesGoThroughCommands;
     procedure TestSelAttributesReflectsMixedSelection;
     // one per rule
@@ -85,7 +85,7 @@ type
     procedure TestTheEventsArePublished;
     procedure TestTheWaitCursorOverTheThreshold;
     procedure TestAWriteLeavesTheViewWhereItIs;
-    // fix wave W17
+    // the idioms of ported code, the user's actions and the edit blocks
     procedure TestPlainTextIsOneState;
     procedure TestTheSaveRuleWithoutAFormat;
     procedure TestALinesLoadInsideAnUpdate;
@@ -107,7 +107,7 @@ type
     procedure TestCanUndoAnswersForTheUser;
     procedure TestADescendantsApiDoor;
     procedure TestThePendingFormatWithAPastedPicture;
-    // fix wave W18
+    // an asked PlainText, the edit blocks, what is written back and the limits
     procedure TestAnAskedPlainTextHoldsForEveryLoad;
     procedure TestAStoredPlainTextHoldsForEveryLoad;
     procedure TestABlockDoesNotChangeWhatAWriteDoes;
@@ -139,7 +139,7 @@ type
     procedure ModChanged(Sender: TObject);
   end;
 
-  // a toolbar that writes back what it read (TestAWriteOfWhatIsThereIsNoStep, the review's B11)
+  // a toolbar that writes back what it read (TestAWriteOfWhatIsThereIsNoStep)
   TToolbarEcho = class
   public
     Rich: TTyCustomRichEdit;
@@ -444,7 +444,7 @@ begin
   ResetEvents;
 end;
 
-{ ---- the brief's ---- }
+{ ---- both façades ---- }
 
 { The same format set through either façade gives equal documents; each is one command
   (TTyRichSetCharFormat / TTyRichSetParaFormat) of the history, and undone gives the document
@@ -555,7 +555,7 @@ var
   f: TTyCharFormat;
   ca: TTyRichConsistentAttributes;
 begin
-  // the brief's: bold and regular
+  // bold and regular
   SetText('abcdef');
   f := TyDefaultCharFormat;
   f.Style := [fsBold];
@@ -657,7 +657,7 @@ begin
   CheckOthers('Name', []);
   MixedRuns;
   Sel(0, 6);
-  // (not the base's size: text without one of its own would keep none - G-M2)
+  // (not the base's size: text without one of its own would keep none)
   FRich.SelAttributes.Size := 11;
   for i := 0 to 5 do AssertEquals('the size everywhere', 22, Fmt(i).SizeHalfPt);
   AssertEquals('read back', 11, FRich.SelAttributes.Size);
@@ -1076,7 +1076,7 @@ begin
   AssertEquals('assigned', 'Courier New', FRich.Font.Name);
 end;
 
-{ PlainText both ways (R65): only a load and the property set it; Lines.Text, SelText leave
+{ PlainText both ways: only a load and the property set it; Lines.Text, SelText leave
   it; True - the saves without a format write text, the loads read text when it was set by
   code; False - by the file; setting it strips nothing. }
 procedure TTyRichEditApiTest.TestPlainTextBothWaysWithLoadAndSave;
@@ -1161,8 +1161,8 @@ begin
   AssertEquals('an explicit format wins', '{' + BS + 'rtf1', Copy(StrOf(FileBytes(path)), 1, 6));
 end;
 
-{ A plain-text document pastes text only and makes a paragraph of Shift+Enter (R60); a rich
-  one filled through Lines pastes RTF (R65: the probe seam W13 needed is gone). }
+{ A plain-text document pastes text only and makes a paragraph of Shift+Enter; a rich
+  one filled through Lines pastes RTF (setting Lines leaves PlainText as it is). }
 procedure TTyRichEditApiTest.TestPlainTextAndThePaste;
 const
   Bold = '{' + BS + 'rtf1' + BS + 'ansi{' + BS + 'b bold}}';
@@ -1325,7 +1325,7 @@ end;
 
 { ---- commands, the history, the events ---- }
 
-{ A format write is one step; its undo puts the selection back as it was before the step (R55),
+{ A format write is one step; its undo puts the selection back as it was before the step,
   its redo where the write left it. }
 procedure TTyRichEditApiTest.TestAFormatWriteIsOneStepThatPutsTheSelectionBack;
 begin
@@ -1359,7 +1359,8 @@ begin
   AssertEquals('the format still there', 40, Fmt(0).SizeHalfPt);
 end;
 
-{ R56 for format commands: a paragraph of a lazily read RTF formatted (through either façade)
+{ An edit undone saves the file as it was, for format commands too: a paragraph of a lazily
+  read RTF formatted (through either façade)
   and undone is saved as the file's bytes. }
 procedure TTyRichEditApiTest.TestALazyParagraphFormattedAndUndoneSavesTheFile;
 
@@ -1402,7 +1403,7 @@ begin
 end;
 
 { One OnChange per write, OnSelectionChange only when the selection changed; ReadOnly does not
-  stop a write (R53) and the write raises nothing. }
+  stop a write and the write raises nothing. }
 procedure TTyRichEditApiTest.TestOneChangeAndNoSelectionChange;
 begin
   SetText('abcdef'#10'gh');
@@ -1536,7 +1537,7 @@ begin
   AssertEquals('undone: the selection whole', len, FRich.SelLength);
 end;
 
-{ Modified through the control (R59): a write makes it True, an undo back to the saved point
+{ Modified through the control: a write makes it True, an undo back to the saved point
   False, a redo True; a save as RTF sets the point; SaveToStream does not; OnModifiedChange at
   each turn and OnChange never for Modified alone. }
 procedure TTyRichEditApiTest.TestTheSavedPointThroughTheControl;
@@ -1578,7 +1579,7 @@ begin
   AssertTrue('cleared away from it: for good', FRich.Modified);
 end;
 
-{ R66: the user's actions do nothing on a read-only (or disabled) control and raise nothing;
+{ the user's actions do nothing on a read-only (or disabled) control and raise nothing;
   CopyToClipboard and SelectAll work; the document API edits a read-only control. }
 procedure TTyRichEditApiTest.TestTheUserActionsRespectReadOnly;
 var
@@ -1785,7 +1786,8 @@ begin
 end;
 
 { The view after a format write that changes heights repaints what changed and moves the
-  kept surface below it as an edit does (W11's routine): pixel equal to a full redraw, at
+  kept surface below it as an edit does (the one routine that moves the kept surface): pixel
+  equal to a full redraw, at
   device scale 1 and 2. }
 procedure TTyRichEditApiTest.TestTheRepaintAfterAHeightChange;
 begin
@@ -1793,8 +1795,8 @@ begin
   RepaintCase(2);
 end;
 
-{ The events' final shape: published on TTyRichEdit with the names and types the brief gives
-  (OnFindProgress is 11b's), PlainText published. }
+{ The events' final shape: published on TTyRichEdit with their final names and types
+  (OnFindProgress is the find's), PlainText published. }
 procedure TTyRichEditApiTest.TestTheEventsArePublished;
 
   procedure Has(const AName, AType: string);
@@ -1862,8 +1864,6 @@ begin
   AssertTrue('written', fsBold in Fmt(FRich.Document.Text.ParaStart(150)).Style);
 end;
 
-{ ---- fix wave W17 ---- }
-
 procedure WriteFileBytes(const APath: string; const B: TBytes);
 var
   f: TFileStream;
@@ -1883,7 +1883,7 @@ begin
   if AStream.Size > 0 then Move(AStream.Memory^, Result[1], AStream.Size);
 end;
 
-{ R69: one state, one rule - the review's three sequences (I-2). }
+{ one state, one rule - three sequences. }
 procedure TTyRichEditApiTest.TestPlainTextIsOneState;
 var
   st: TMemoryStream;
@@ -1945,7 +1945,7 @@ begin
   AssertEquals('(i) read as RTF, not as its source', 'Paragraph 0 of the file.', FRich.Lines[0]);
 end;
 
-{ R69's rule for a save without a format: asked text / made by a load / rich, each saved under
+{ The rule for a save without a format: asked text / made by a load / rich, each saved under
   .rtf, under .txt, under a name without an extension and to a stream. }
 procedure TTyRichEditApiTest.TestTheSaveRuleWithoutAFormat;
 const
@@ -2031,7 +2031,7 @@ begin
     end;
 end;
 
-{ F-M8: Lines.LoadFromFile / LoadFromStream inside Lines.BeginUpdate .. EndUpdate is the
+{ Lines.LoadFromFile / LoadFromStream inside Lines.BeginUpdate .. EndUpdate is the
   control's load, put off to the update's end - an RTF file is read as RTF. }
 procedure TTyRichEditApiTest.TestALinesLoadInsideAnUpdate;
 var
@@ -2095,7 +2095,7 @@ begin
   AssertEquals('the load', 'Paragraph 0 of the file.', FRich.Lines[0]);
 end;
 
-{ R70: Delphi's "default" idioms write the engine's "none of its own" - nothing of the base or
+{ Delphi's "default" idioms write the engine's "none of its own" - nothing of the base or
   the theme is frozen into the content or the file. }
 procedure TTyRichEditApiTest.TestDelphisDefaultIdiomsWriteNoneOfTheirOwn;
 var
@@ -2203,13 +2203,14 @@ begin
   FRich.DefAttributes.Color := clWindowText;
   AssertEquals('the base automatic again', clDefault, FRich.DefAttributes.Color);
   AssertEquals('...the control''s font', clDefault, FRich.Font.Color);
-  // a negative Height (a TFont's character height) is its absolute value (F-M12)
+  // a negative Height (a TFont's character height) is its absolute value
   Sel(0, 3);
   FRich.SelAttributes.Height := -16;
   AssertEquals('Height -16 at 96: 12 pt', 24, Fmt(0).SizeHalfPt);
 end;
 
-{ R70 for the RichMemo façade: a TFont, the colours of TFontParams, SetRangeColor. }
+{ The default values mean "none of its own" through the RichMemo façade too: a TFont, the
+  colours of TFontParams, SetRangeColor. }
 procedure TTyRichEditApiTest.TestTheDefaultIdiomsThroughRichMemo;
 var
   fnt: TFont;
@@ -2246,7 +2247,7 @@ begin
   AssertEquals('SetRangeParams: automatic', clDefault, Fmt(8).Color);
 end;
 
-{ F-M10: an assignment to DefAttributes leaves out what the base cannot hold; only the direct
+{ an assignment to DefAttributes leaves out what the base cannot hold; only the direct
   writes of BackColor and Subscript raise. }
 procedure TTyRichEditApiTest.TestAnAssignToTheBaseLeavesWhatItCannotHold;
 var
@@ -2277,7 +2278,7 @@ begin
   AssertTrue('a direct write of Subscript raises', raised);
 end;
 
-{ F-I4: Delphi's names and meanings - TAlignment, the four one-style Booleans, Subscript,
+{ Delphi's names and meanings - TAlignment, the four one-style Booleans, Subscript,
   Paragraph.ConsistentAttributes. }
 procedure TTyRichEditApiTest.TestTheDelphiSurfaceAsTheVcl;
 var
@@ -2348,7 +2349,7 @@ begin
     [cpaAlignment, cpaNumbering, cpaFirstIndent, cpaLeftIndent, cpaRightIndent, cpaTabStops]);
 end;
 
-{ F-I4: TabCount := N then Tab[0..N-1] - the one tab idiom that works in Delphi; a read past the
+{ TabCount := N then Tab[0..N-1] - the one tab idiom that works in Delphi; a read past the
   count gives 0; the file gets the stops in order of position, none at 0. }
 procedure TTyRichEditApiTest.TestDelphisTabIdiom;
 var
@@ -2381,7 +2382,7 @@ begin
   AssertEquals('...and no stop at 0', 0, Pos(BS + 'tx0', s));
 end;
 
-{ F-M5 / F-I4: nsBullet / nsNone compile and mean Delphi's; on gives a paragraph without an
+{ nsBullet / nsNone compile and mean Delphi's; on gives a paragraph without an
   indent WordPad's hanging indent, off takes it back: the plain format again. }
 procedure TTyRichEditApiTest.TestNumberingAsDelphiAndWordPad;
 var
@@ -2411,8 +2412,8 @@ begin
   AssertEquals('RichMemo off on a plain paragraph: nothing', plain, FRich.Document.ParaFormatOf(0));
 end;
 
-{ F-M1: an indent write over paragraphs that differ moves the one meaning written in each and
-  keeps the other (the review's B2). }
+{ an indent write over paragraphs that differ moves the one meaning written in each and
+  keeps the other. }
 procedure TTyRichEditApiTest.TestIndentWritesKeepEachParagraphsOwn;
 var
   f: TTyParaFormat;
@@ -2452,7 +2453,7 @@ begin
   AssertEquals('the rest as it was', 40, PFmt(1).LeftIndent);
 end;
 
-{ F-M4: RichMemo's scale (single 1.2), its constants, 0 leaves the spacing alone, and the read
+{ RichMemo's scale (single 1.2), its constants, 0 leaves the spacing alone, and the read
   of an exact spacing written back leaves it as it was. }
 procedure TTyRichEditApiTest.TestRichMemosMetricOnItsScale;
 var
@@ -2489,7 +2490,7 @@ begin
   AssertTrue('less than 0: left alone', PFmt(0).LineSpacing = lsExact);
 end;
 
-{ F-M6: a selection from a paragraph's end over the next paragraph reads the first character a
+{ a selection from a paragraph's end over the next paragraph reads the first character a
   write formats - and agrees with ConsistentAttributes. }
 procedure TTyRichEditApiTest.TestTheReadIsTheFirstCharacterTheWriteFormats;
 begin
@@ -2507,7 +2508,7 @@ begin
     FRich.SelAttributes.Bold);
 end;
 
-{ F-M3: RichMemo's statement is Style + Add - Remove: a style in both sets ends up off. }
+{ RichMemo's statement is Style + Add - Remove: a style in both sets ends up off. }
 procedure TTyRichEditApiTest.TestAStyleInBothSetsGoes;
 begin
   SetText('abc');
@@ -2517,7 +2518,7 @@ begin
   AssertTrue('the other kept', fsItalic in Fmt(1).Style);
 end;
 
-{ F-M4: the RichMemo methods provided now. }
+{ the RichMemo methods provided now. }
 procedure TTyRichEditApiTest.TestTheSmallerRichMemoMethods;
 var
   rs, rl, ps, pl: TTyRichPos;
@@ -2582,7 +2583,7 @@ begin
   AssertTrue('a bar tab is a left stop', PFmt(0).Tabs[0].Align = ttaLeft);
 end;
 
-{ F-I1: ConsistentAttributes is remembered for (selection, content) and bounded by its budget -
+{ ConsistentAttributes is remembered for (selection, content) and bounded by its budget -
   counts of what a read parses on a lazily read file, never a time. }
 procedure TTyRichEditApiTest.TestConsistentAttributesIsBoundedAndRemembered;
 var
@@ -2684,8 +2685,8 @@ begin
     Rich.SelAttributes.Bold := Rich.SelAttributes.Bold;
 end;
 
-{ F-M2: a write of the value the text already has is no undo step, no OnChange, not
-  Modified (the review's B3 and B11); a range wholly inside a nested-table row is none
+{ a write of the value the text already has is no undo step, no OnChange, not
+  Modified; a range wholly inside a nested-table row is none
   either. }
 procedure TTyRichEditApiTest.TestAWriteOfWhatIsThereIsNoStep;
 var
@@ -2698,7 +2699,7 @@ begin
   FRich.Modified := False;
   depth := FRich.Document.UndoDepth;
   ResetEvents;
-  // B3: bold over bold
+  // bold over bold
   FRich.SelAttributes.Bold := True;
   FRich.SelAttributes.Style := [fsBold];
   FRich.Paragraph.Alignment := taLeftJustify;
@@ -2706,7 +2707,7 @@ begin
   AssertEquals('no OnChange', 0, FChanges);
   AssertFalse('not Modified', FRich.Modified);
   AssertEquals('no OnModifiedChange', 0, FModChanges);
-  // B11: a toolbar that writes back in OnSelectionChange; three selection changes
+  // a toolbar that writes back in OnSelectionChange; three selection changes
   echo := TToolbarEcho.Create;
   try
     echo.Rich := FRich;
@@ -2742,7 +2743,7 @@ begin
   Fail('the fixture has a nested row');
 end;
 
-{ F-M7: OnModifiedChange comes after the edit's own reports - the caret placed, OnChange made;
+{ OnModifiedChange comes after the edit's own reports - the caret placed, OnChange made;
   a handler that loads a document is not taken for the edit. }
 procedure TTyRichEditApiTest.TestOnModifiedChangeAfterTheEdit;
 var
@@ -2780,7 +2781,7 @@ begin
   end;
 end;
 
-{ F-M9: BeginEdit .. EndEdit make several writes one undo step, whose undo puts back the
+{ BeginEdit .. EndEdit make several writes one undo step, whose undo puts back the
   selection there was at BeginEdit; one OnChange. }
 procedure TTyRichEditApiTest.TestBeginEditMakesOneStep;
 var
@@ -2826,7 +2827,7 @@ begin
   end;
 end;
 
-{ F-M11: CanUndo / CanRedo answer for the user, as CanPaste. }
+{ CanUndo / CanRedo answer for the user, as CanPaste. }
 procedure TTyRichEditApiTest.TestCanUndoAnswersForTheUser;
 begin
   SetText('abc');
@@ -2844,7 +2845,7 @@ begin
   FRich.ReadOnly := False;
 end;
 
-{ F-M16: a descendant's door of the API kind - not refused by ReadOnly, the selection kept. }
+{ a descendant's door of the API kind - not refused by ReadOnly, the selection kept. }
 procedure TTyRichEditApiTest.TestADescendantsApiDoor;
 var
   f: TTyCharFormat;
@@ -2866,7 +2867,7 @@ begin
   AssertEquals('...its length', 2, FRich.SelLength);
 end;
 
-{ F-M15: a picture pasted with a pending format takes it, once. }
+{ a picture pasted with a pending format takes it, once. }
 procedure TTyRichEditApiTest.TestThePendingFormatWithAPastedPicture;
 var
   pic: TBGRABitmap;
@@ -2898,10 +2899,8 @@ begin
   AssertFalse('the text before it is not', fsBold in Fmt(0).Style);
 end;
 
-{ ---- fix wave W18 ---- }
-
-{ G-I1: PlainText := True asked by code holds for every load after it, not for the first only
-  (R65 / R69): a load the asked True read as text decided nothing from its file. It ends with
+{ PlainText := True asked by code holds for every load after it, not for the first only
+  - a load the asked True read as text decided nothing from its file. It ends with
   PlainText := False or with a load whose format came from elsewhere (an explicit format). }
 procedure TTyRichEditApiTest.TestAnAskedPlainTextHoldsForEveryLoad;
 var
@@ -2962,7 +2961,8 @@ begin
   AssertFalse('rich', FRich.PlainText);
 end;
 
-{ G-I1 through the form file: a control whose PlainText was stored True loads two files in a
+{ An asked PlainText through the form file: a control whose PlainText was stored True loads
+  two files in a
   row as text. }
 procedure TTyRichEditApiTest.TestAStoredPlainTextHoldsForEveryLoad;
 var
@@ -2993,7 +2993,7 @@ begin
   end;
 end;
 
-{ G-I2: a block groups writes into one undo step; it does not change what each write does.
+{ a block groups writes into one undo step; it does not change what each write does.
   The same lines of code, run outside a block, inside one and inside nested ones, give the
   same document and the same selection; the block reports once and puts the selection back
   (before: the outermost BeginEdit's; after: the outermost EndEdit's). }
@@ -3005,7 +3005,7 @@ const
   begin
     case ACase of
       0: begin
-           // the re-review's first sequence
+           // two writes in a row: the second goes behind the first
            FRich.SelStart := 1;
            FRich.SelText := 'Hello';
            if AMode = 2 then FRich.BeginEdit;
@@ -3081,7 +3081,7 @@ begin
     nested := RunCase(k, 2);
     AssertEquals('case ' + IntToStr(k) + ': nested blocks as outside', outside, nested);
   end;
-  // the re-review's words, exactly
+  // the first sequence in words
   SetText('abc');
   FRich.BeginEdit;
   try
@@ -3395,7 +3395,7 @@ begin
   AssertFalse('rich', FRich.PlainText);
 end;
 
-{ G-I2: a block an exception leaves through try .. finally EndEdit is one step with what was
+{ a block an exception leaves through try .. finally EndEdit is one step with what was
   done before it, and the selection is where those writes left it. }
 procedure TTyRichEditApiTest.TestABlockLeftByAnException;
 var
@@ -3427,8 +3427,8 @@ begin
   AssertEquals('the caret at BeginEdit', 3, FRich.SelStart);
 end;
 
-{ G-M2: Size / Name written back as read leave text without a size / name of its own without
-  one, run by run - over a selection however large (the re-review's 400,001 lines, past the
+{ Size / Name written back as read leave text without a size / name of its own without
+  one, run by run - over a selection however large (400,001 lines, past the
   consistency budget): no step, not Modified, and a later DefAttributes.Size still reaches
   every line. Text whose own size differs takes the value. }
 procedure TTyRichEditApiTest.TestTheShownSizeWrittenBackIsExact;
@@ -3480,8 +3480,8 @@ begin
   AssertEquals('typed: no size of its own', 0, Fmt(6).SizeHalfPt);
 end;
 
-{ G-M6: NumberingStart, the start Numbering writes, LineSpacingRule and LineSpacing change
-  the one thing written and leave the others as each paragraph has them (F-M1's rule). }
+{ NumberingStart, the start Numbering writes, LineSpacingRule and LineSpacing change
+  the one thing written and leave the others as each paragraph has them. }
 procedure TTyRichEditApiTest.TestListAndSpacingWritesKeepEachParagraphsOwn;
 var
   f: TTyParaFormat;
@@ -3537,7 +3537,7 @@ begin
   AssertEquals('...no height', 0, PFmt(1).LineSpacingValue);
 end;
 
-{ G-M8: Tab[i] := at or past CTyMaxTabStops (Delphi's MAX_TAB_STOPS, 32) is ignored, as the
+{ Tab[i] := at or past CTyMaxTabStops (Delphi's MAX_TAB_STOPS, 32) is ignored, as the
   VCL raises nothing for it; below the limit it writes as before. }
 procedure TTyRichEditApiTest.TestATabPastTheLimitIsIgnored;
 var
@@ -3554,7 +3554,7 @@ begin
   AssertEquals('...no step', depth, FRich.Document.UndoDepth);
 end;
 
-{ G-M9: a new content inside BeginEdit .. EndEdit is refused with the control's exception and
+{ a new content inside BeginEdit .. EndEdit is refused with the control's exception and
   a message that says why, before anything changes (a missing file is not even opened); the
   block goes on and ends as it would. }
 procedure TTyRichEditApiTest.TestANewContentInsideABlockIsRefused;
@@ -3604,7 +3604,7 @@ begin
   AssertEquals('the block one step', 'before', FRich.Lines[0]);
 end;
 
-{ G-M10: Lines.LoadFromFile inside Lines.BeginUpdate .. EndUpdate reads nothing before
+{ Lines.LoadFromFile inside Lines.BeginUpdate .. EndUpdate reads nothing before
   EndUpdate: the file as it is then is loaded (changed meanwhile: the new bytes; gone
   meanwhile: the load raises there, as LoadFromFile would). A stream is read at once. }
 procedure TTyRichEditApiTest.TestALinesFileLoadReadsAtTheUpdatesEnd;
@@ -3644,7 +3644,7 @@ begin
   AssertEquals('...the content stays', 'before', FRich.Lines[0]);
 end;
 
-{ G-M1: the consistency walk's budget is in units of work - runs looked at, a paragraph at
+{ the consistency walk's budget is in units of work - runs looked at, a paragraph at
   least one: 40 resident paragraphs of 20 runs each are 800 units, past a budget of 100 (a
   lower bound), though only 40 paragraphs; the walk does no more than the budget. The
   paragraphs' walk counts a paragraph a unit. }

@@ -1,6 +1,6 @@
 unit test.richedit.paste;
 
-{ TTyRichEdit pasting (Task 10c): RTF first, then a picture, then plain text, as one undoable
+{ TTyRichEdit pasting: RTF first, then a picture, then plain text, as one undoable
   command through the door of every user edit (ReadOnly, the input method, the refusals), the
   RTF read by the engine's own reader and inserted as a fragment (TTyRichInsertFragment), a
   picture as one picture object stored as PNG, plain text as paragraphs in the caret's
@@ -37,11 +37,11 @@ type
     procedure SelChanged(Sender: TObject);
     procedure PasteWhileSaving(Sender: TObject; ADone, ATotal: Int64; var ACancel: Boolean);
     procedure ResetEvents;
-    // G-M5: TestATiffChainThatLoopsIsReadOnce's overlapping directories at distinct offsets
+    // TestATiffChainThatLoopsIsReadOnce's overlapping directories at distinct offsets
     procedure OverlappingDirectories;
     procedure LoadRtf(const S: RawByteString);
     procedure LoadBytes(const B: TBytes);
-    { A document typed in (set as lines: rich, R65); APlain - a plain text document (R60). }
+    { A document typed in (set as lines: rich); APlain - a plain text document. }
     procedure SetText(const S: string; APlain: Boolean = False);
     procedure Clip(const ARtf: RawByteString; const AText: string; const APicture: TBytes = nil;
       AKind: TTyRichImageKind = rikPng);
@@ -53,7 +53,6 @@ type
     procedure SetUp; override;
     procedure TearDown; override;
   published
-    // the brief's
     procedure TestPastePrefersRtfThenPictureThenText;
     // one per rule
     procedure TestAFlavourThatCannotBeUsedFallsThrough;
@@ -77,9 +76,7 @@ type
     procedure TestCanPasteReadsNothing;
     procedure TestAOneLinePasteInALargeDocumentTouchesOneParagraph;
     procedure TestTheWaitCursorOverTheThreshold;
-    // fix wave W13 (R60)
     procedure TestAPlainTextDocumentPastesTextOnly;
-    // fix wave W14
     procedure TestAPasteIntoAnotherFileLeavesTheSourcesNumbersBehind;
     procedure TestAPasteIntoANewOrAWordPadDocumentKeepsAFieldsChinese;
     procedure TestAPasteInsideOneFileKeepsEverything;
@@ -94,7 +91,6 @@ type
     procedure TestRowsOverWholeRowsAreRefused;
     procedure TestAReaderThatFailsOrRunsOutOfMemory;
     procedure TestAPasteIntoAFileAddsToItsHeaderWhatItNeeds;
-    // fix wave W16
     procedure TestTwoWordPadFilesWhoseTablesArePrefixesKeepAFieldsChinese;
     procedure TestAFieldsBareBytesBetweenCodePagesAndDefaultFonts;
     procedure TestAPasteInsideOneEditedFileAndAWordNamingAnAddedFont;
@@ -103,7 +99,6 @@ type
     procedure TestTheLastLinesTextAlonePastesInline;
     procedure TestATiffsEveryDirectoryAndADibsColourTable;
     procedure TestEveryFixturesRangesPasteAcrossDocuments;
-    // fix wave W17 (the re-review of W16)
     procedure TestATiffChainThatLoopsIsReadOnce;
     procedure TestColourZeroIsNeverForeign;
     procedure TestAPicturesAltTextInAnotherCodePage;
@@ -366,7 +361,7 @@ begin
 end;
 
 { The cell of A's paragraph AK, unless a row of its table that the copy R takes holds a nested
-  table: such a table is pasted as its paragraphs (R63). }
+  table: such a table is pasted as its paragraphs. }
 function PastedCell(A: TTyRichDocument; const R: TTyRichCopyRange; AK: Integer): TTyRichCell;
 var
   i: Integer;
@@ -445,7 +440,7 @@ begin
       end;
     end;
     // a paragraph pasted with its mark has its own format (Word's rule) - the document's last
-    // paragraph taken whole too: the copy ends it with \par (R64)
+    // paragraph taken whole too: the copy ends it with \par
     if (k < R.LastPara) or R.LastWhole then
       if not SamePara(A.Formats.ParaFormat(A.ParaFormatOf(k)), B.Formats.ParaFormat(B.ParaFormatOf(bk)),
         ASaved) then
@@ -589,7 +584,7 @@ begin
 end;
 
 const
-  // the review's probe C: the source's f1 a Chinese font, colour 1 red, colour 2 blue, style 3
+  // the source's f1 a Chinese font, colour 1 red, colour 2 blue, style 3
   // and character style 5; a field whose result is Chinese in f1
   SrcIdx = '{' + BS + 'rtf1' + BS + 'ansi' + BS + 'ansicpg1252' + BS + 'deff0{' + BS + 'fonttbl{' +
     BS + 'f0' + BS + 'fswiss' + BS + 'fcharset0 Arial;}{' + BS + 'f1' + BS + 'fnil' + BS +
@@ -651,7 +646,7 @@ begin
   end;
 end;
 
-{ R62 (W14 V-C1): pasted into a file whose header tables are not the source's, what the reader
+{ Pasted into a file whose header tables are not the source's, what the reader
   kept by number - styles, shading, border, underline and cell colours, a field's result in a
   numbered font - is left out or made again: the saved file holds none of the source's
   numbers, and the field's Chinese reads back as Chinese. The target's own paragraphs go out
@@ -714,7 +709,7 @@ end;
 
 { A copy out of the very file pasted back into it: the tables agree, and what the copy keeps
   names only the file's own entries - the style, the shading and the field's own bytes go in
-  and out as they are (W16: the filter runs, light, and leaves all of it). }
+  and out as they are (the filter runs, light, and leaves all of it). }
 procedure TTyRichEditPasteTest.TestAPasteInsideOneFileKeepsEverything;
 const
   Field = '{' + BS + 'field{' + BS + '*' + BS + 'fldinst HYPERLINK "http://x"}{' + BS + 'fldrslt' +
@@ -854,7 +849,7 @@ end;
 { TyRichRtfTablesAgree: the same header (and one whose font and colour tables were added to at
   their ends, as a copy's) agrees; a font's name or charset, a colour, the style sheet, a list
   table, the ANSI code page, the default font told apart - and a document with no file agrees
-  with nothing. Agreeing one-way is no licence to keep everything (W16, R62 corrected): the
+  with nothing. Agreeing one-way is no licence to keep everything: the
   filter still runs, and leaves behind a font and a colour the target's file does not
   define. }
 procedure TTyRichEditPasteTest.TestTheTablesAgreeOnlyWhereEveryTableDoes;
@@ -923,7 +918,7 @@ begin
     b.Free;
   end;
   { \deff1: the source's is SimSun, the target's file has none - its \plain text is decoded
-    otherwise (W16 X-M1) }
+    otherwise }
   a := LoadDoc(RawBytes('{' + BS + 'rtf1' + BS + 'ansi' + BS + 'ansicpg1252' + BS + 'deff1' + Fonts +
     '}' + Colors + '}' + Styles + Body), True);
   b := LoadDoc(RawBytes('{' + BS + 'rtf1' + BS + 'ansi' + BS + 'ansicpg1252' + BS + 'deff1{' + BS +
@@ -964,7 +959,7 @@ begin
   end;
 end;
 
-{ RTF written with ` for each backslash (the sources of the W16 tests read as RTF). }
+{ RTF written with ` for each backslash (the sources of the tests below read as RTF). }
 function Esc(const S: RawByteString): RawByteString;
 var
   i: Integer;
@@ -976,7 +971,7 @@ begin
 end;
 
 const
-  // the re-review's probe P (W16 X-C1): two WordPad-like files, no style sheet, no list table;
+  // two WordPad-like files, no style sheet, no list table;
   // the target's font table a prefix of the source's; the source's link reads 中文 in its f1
   WpTgtP = '{`rtf1`ansi`ansicpg936`deff0`nouicompat`deflang1033{`fonttbl{`f0`fnil`fcharset0 Calibri;}}' +
     '{`*`generator Riched20 10.0.19041}`viewkind4`uc1 ' +
@@ -1041,7 +1036,7 @@ begin
   end;
 end;
 
-{ W16 X-C1 (R62 corrected; the re-review's P2 and P3): two different WordPad files whose
+{ Two different WordPad files whose
   tables "agree" one-way - the target's font table is a prefix of the source's - are not one
   file: the source's link in its \f1 is made again, and reads back as 中文 - on a Western
   system (P3: the target's f1 would be nothing, its text ÖÐÎÄ) and after the user gave a
@@ -1058,7 +1053,7 @@ begin
   CheckChineseField(Self, 'P2', Esc(WpSrcP), tgt2, True);
 end;
 
-{ W16 X-M1: a field's result of bare \'xx bytes - no index word in the field - is decoded by
+{ a field's result of bare \'xx bytes - no index word in the field - is decoded by
   the source's code page (its font has no charset), or after \plain by its default font. Into
   a file of another code page or default font such bytes are another text: the field is made
   again from what it showed. }
@@ -1098,7 +1093,7 @@ begin
     'HYPERLINK "http://z"}{`fldrslt`plain `''d6`''d0`''ce`''c4}} c`par}'), TgtIdx, False);
 end;
 
-{ W16 X-C1 (2): a copy out of the file's own document after an edit gave a paragraph a font
+{ A copy out of the file's own document after an edit gave a paragraph a font
   and a colour the file's header does not have (the copy's header adds them at the ends of
   its tables, and that paragraph is written from the model): pasted back, everything that
   names the file's own entries stays - the style, the shading, a field's bytes - and the new
@@ -1177,7 +1172,7 @@ begin
   end;
 end;
 
-{ W16 X-M3: one index word of each header table the reader keeps words of - font, colour,
+{ one index word of each header table the reader keeps words of - font, colour,
   style (a cell paragraph's table style \yts), list override, revision author (a paragraph's,
   a row's, a move's, a cell's), file, paragraph group, XML namespace, page description,
   protection user - names a table entry; numbers of their own do not. Pasted into another
@@ -1219,7 +1214,7 @@ begin
   end;
 end;
 
-{ W16 X-M4: a field made again keeps the pictures of its result (a linked image, a picture
+{ a field made again keeps the pictures of its result (a linked image, a picture
   with a hyperlink): after its text, as they are - one that is the whole result, and one
   after text with its shape and non-shape forms. }
 procedure TTyRichEditPasteTest.TestAFieldMadeAgainKeepsItsResultsPictures;
@@ -1257,7 +1252,7 @@ begin
   end;
 end;
 
-{ W16 X-M2 (R67): the text of a document's last line copied alone (Home, Shift+End) pastes
+{ the text of a document's last line copied alone (Home, Shift+End) pastes
   inline into the middle of a line, as the text of any other line does - no paragraph break,
   the target's paragraph keeps its format; a copy that begins in the line before, or all of a
   one-paragraph document, ends with the last paragraph's mark and brings its format. }
@@ -1321,7 +1316,7 @@ begin
   end;
 end;
 
-{ W14 V-I1 (R63): every sample that holds a row with a nested table, copied whole and pasted
+{ every sample that holds a row with a nested table, copied whole and pasted
   into a document read from RTF and into a new one: the table goes in as paragraphs that can
   be edited, the document saves, and read back holds all the text. }
 procedure TTyRichEditPasteTest.TestTheNestedSamplesPasteAsParagraphsThatSave;
@@ -1393,7 +1388,7 @@ begin
   AssertTrue('samples with a nested table', found >= 2);
 end;
 
-{ W14 V-I2 (R64, the review's probe L): Ctrl+A, Ctrl+C, a new document, Ctrl+V gives the
+{ Ctrl+A, Ctrl+C, a new document, Ctrl+V gives the
   document back - the last paragraph with its format (a right-aligned signature with its
   indent, a last list item, a one-paragraph centred document) and one empty paragraph after
   it, as Word and WordPad do. Made here, and read from a file without a last \par. }
@@ -1878,7 +1873,7 @@ begin
 end;
 
 { Every refusal: loading, after a cancelled load, while saving, in a row that holds a nested
-  table, a selection across cells (R57), at a too-long paragraph's cut. EditRefused once with
+  table, a selection across cells, at a too-long paragraph's cut. EditRefused once with
   the control's reason, nothing changed, nothing raised. }
 procedure TTyRichEditPasteTest.TestEveryRefusalOfAPaste;
 var
@@ -2116,7 +2111,7 @@ begin
   FRich.PasteFromClipboard;
   for i := 1 to 3 do AssertTrue(Format('a selection in a cell: paragraph %d in it', [i]), d.CellAt(i) = c);
   AssertEquals('one table, one row', 1, c.Table.RowCount);
-  // the whole row selected: rows over it are refused (W14 V-M7: TestRowsOverWholeRowsAreRefused)
+  // the whole row selected: rows over it are refused (TestRowsOverWholeRowsAreRefused)
 end;
 
 { No document-level thing comes along (page, defaults); a run with no font of its own is
@@ -2149,7 +2144,7 @@ end;
   middle of a paragraph of another, read back as the range. }
 const
   // what TestEveryFixturesRangesPasteBackAsTheRange makes with the samples of the tree: 520
-  // ranges, each pasted into an empty document and into a paragraph (W14; a sample added
+  // ranges, each pasted into an empty document and into a paragraph (a sample added
   // only raises it)
   PasteFloor = 1040;
 
@@ -2201,7 +2196,7 @@ var
         Length(ParaText(b, parts)) - 4, 5), '56789'));
       AssertEquals(AWhat + ': then the paragraph after', 'after', ParaText(b, parts + 1));
       Inc(pastes);
-      // a file with a paste in it saves (R63: never a row it cannot write)
+      // a file with a paste in it saves (never a row it cannot write)
       SaveOut(b);
     finally
       b.Free;
@@ -2344,7 +2339,7 @@ begin
   Result := '';
 end;
 
-{ W16 X-M8: every sample's ranges pasted the way the control pastes between documents -
+{ every sample's ranges pasted the way the control pastes between documents -
   through TyRichFragmentFilterFor - both ways. Into a second document read from the same file
   (two windows on one file): nothing is left out, the document saves byte for byte as the
   paste without a filter. Into a file of other tables: a filter; the text and what is
@@ -2701,7 +2696,7 @@ begin
   FRich.PasteFromClipboard;
   AssertEquals('Windows Western', Shown('[abc' + U($C4) + U($E3) + 'd]'), Shown(Para(0)));
   FRich.TextCodePage := 0;
-  // a byte order mark at the start is no character (W14 V-M11)
+  // a byte order mark at the start is no character
   SetText('[]');
   FRich.SelStart := 1;
   Clip('', #$EF#$BB#$BF'bom');
@@ -2811,7 +2806,7 @@ begin
   AssertEquals('failed: put back', 3, FRich.WaitEnds);
 end;
 
-{ R60 (fix wave W13, Q-X1): in a plain text document - where formats and pictures cannot be
+{ in a plain text document - where formats and pictures cannot be
   saved - a paste takes text only. RTF and text: the text (the RTF not even read); RTF alone:
   its text, as plain paragraphs (no format, no object, a table's cells each a paragraph); a
   picture alone: refused through OnEditRefused, nothing read; an explicit RTF or picture from
@@ -2912,8 +2907,8 @@ begin
   Result := AnsiChar(V and $FF) + AnsiChar((V shr 8) and $FF);
 end;
 
-{ W14 V-M2, V-M11 (c): an uncompressed DIB whose header promises more pixel bytes than there
-  are is no image (the review's: a 40-byte header alone of 100 x 100; 5792 x 5792 with 16 bytes
+{ An uncompressed DIB whose header promises more pixel bytes than there
+  are is no image (a 40-byte header alone of 100 x 100; 5792 x 5792 with 16 bytes
   of pixels); a JPEG's and a TIFF's size are read from their headers before anything is
   decoded (65,535 x 65,535 in a few bytes: too large at once); a PNG is kept to its IEND. }
 procedure TTyRichEditPasteTest.TestAPictureHeaderMustBeBackedAndItsSizeIsAskedFirst;
@@ -2974,7 +2969,7 @@ begin
     Bytes32LE(0) + Bytes32LE(0) + Bytes32LE(0) + Bytes32LE(0) + Bytes32LE(AUsed) + Bytes32LE(0);
 end;
 
-{ W16 X-M7, X-M9: a TIFF's size is asked of every directory the decoder may take (it decodes
+{ a TIFF's size is asked of every directory the decoder may take (it decodes
   the largest): a second one of 65535 x 65535, or of 8000 x 8000, is too large before anything
   is decoded; a chain that goes round, or points past the bytes, does not decode. A DIB of more
   than 8 bits whose biClrUsed says a colour table is there needs its bytes too, and its pixels
@@ -3014,7 +3009,7 @@ begin
   end;
 end;
 
-{ W14 V-M3, V-M4: a "PNG" that does not decode is followed by the next picture format (the
+{ a "PNG" that does not decode is followed by the next picture format (the
   DIB); a picture in a cell is made as wide as the cell's text area - its width less the row's
   half gaps on both sides - not the cell's whole width. }
 procedure TTyRichEditPasteTest.TestTheNextPictureFormatIsTriedAndACellsRoomIsItsTextArea;
@@ -3047,7 +3042,7 @@ begin
   AssertEquals('the cell''s text area wide', 784, TTyRichPicture(o).WidthTwips);
 end;
 
-{ W14 V-M5, V-M6: CanPaste asks the clipboard for its formats once (one enumeration answers RTF,
+{ CanPaste asks the clipboard for its formats once (one enumeration answers RTF,
   picture and text); LCL's own picture format (what this application copied through LCL) is a
   picture flavour. }
 procedure TTyRichEditPasteTest.TestCanPasteEnumeratesTheClipboardOnce;
@@ -3075,7 +3070,7 @@ begin
   end;
 end;
 
-{ W14 V-M7: until Task 12 pastes cells, a paste of rows over a selection of whole rows is
+{ until table editing pastes cells, a paste of rows over a selection of whole rows is
   refused as a selection across cells is (the rows would go into the next row's first cell);
   plain content over whole rows goes in as typing over them does. }
 procedure TTyRichEditPasteTest.TestRowsOverWholeRowsAreRefused;
@@ -3109,7 +3104,7 @@ begin
   AssertTrue('pasted', Pos('xy', d.Text.GetText(0, d.Text.Length)) > 0);
 end;
 
-{ W14 V-M8: what is pasted is read before the document changes. A source the reader cannot
+{ what is pasted is read before the document changes. A source the reader cannot
   read to its end is that flavour's failure - the text goes in instead; one that runs out of
   memory is refused with the control's own reason, the document untouched, the wait cursor
   put back. }
@@ -3138,7 +3133,7 @@ begin
   FRich.SetCopyWait(High(Int64) div 2);
 end;
 
-{ W14 V-M9: pasted into a file, saved: the header gains exactly the font and the colour the
+{ pasted into a file, saved: the header gains exactly the font and the colour the
   pasted text needs, at the ends of its tables; the paragraphs the paste did not touch go out
   as their bytes. }
 procedure TTyRichEditPasteTest.TestAPasteIntoAFileAddsToItsHeaderWhatItNeeds;
@@ -3179,9 +3174,7 @@ begin
   end;
 end;
 
-{ ---- fix wave W17 ---- }
-
-{ F-Y1: a directory whose next-directory offset is its own, of 65,535 entries (786,434 bytes):
+{ a directory whose next-directory offset is its own, of 65,535 entries (786,434 bytes):
   read once, then the chain ends as "does not decode" - counted, never timed. }
 procedure TTyRichEditPasteTest.TestATiffChainThatLoopsIsReadOnce;
 var
@@ -3219,7 +3212,7 @@ begin
   OverlappingDirectories;
 end;
 
-{ G-M5 (rereviewC-W17 Minor 5): directories that overlap at DISTINCT offsets are never
+{ Directories that overlap at DISTINCT offsets are never
   "visited twice" - only the bound on the entries read in all ends them. Directory k lies at
   8 + 12k with 60,000 + k entries (one 12-byte grid), its next pointer in the cell after its
   last entry pointing at directory k + 1; 5,000 of them in about 840 KB would read 312
@@ -3275,7 +3268,7 @@ begin
     [TyRichTiffEntriesRead - e0, len]), TyRichTiffEntriesRead - e0 <= len div 12 + 2);
 end;
 
-{ F-Y2: a copy inside one file that has no colour table keeps a field holding \cf0 or
+{ a copy inside one file that has no colour table keeps a field holding \cf0 or
   \highlight0 (colour 0 is "auto", in every file) byte for byte. }
 procedure TTyRichEditPasteTest.TestColourZeroIsNeverForeign;
 const
@@ -3300,7 +3293,7 @@ begin
   end;
 end;
 
-{ F-Y3: the re-review's bytes - a picture whose \picprop holds Chinese alternative text in
+{ A picture whose \picprop holds Chinese alternative text in
   \ansicpg936, pasted into a \ansicpg1252 file: alone, and as the result of a field made
   again. Its image comes along, the text that would read as other characters does not. }
 procedure TTyRichEditPasteTest.TestAPicturesAltTextInAnotherCodePage;
@@ -3358,7 +3351,7 @@ begin
 end;
 
 type
-  // the filter's allocation failing (F-Y4)
+  // the filter's allocation failing
   TFilterFailProbe = class(TEditProbe)
   protected
     function MakeFragmentFilter(ASource: TTyRichDocument): TTyRichFragmentFilter; override;
@@ -3387,7 +3380,7 @@ begin
   inherited Destroy;
 end;
 
-{ F-Y4: the filter is made before the command takes the source over; when making it fails
+{ the filter is made before the command takes the source over; when making it fails
   (out of memory) the source is freed and the paste refused, nothing changed. }
 procedure TTyRichEditPasteTest.TestTheFilterFailingFreesTheSource;
 var
@@ -3413,9 +3406,9 @@ begin
   AssertEquals('the source freed', 1, TCountedLoader.Freed);
 end;
 
-{ F-Y5: a document that ends with an empty centred paragraph: Select All, copy, paste into a
+{ a document that ends with an empty centred paragraph: Select All, copy, paste into a
   new document gives that paragraph back with its format - 'abc' (right-aligned), '' (centred)
-  and then the one empty paragraph a paste of whole paragraphs leaves (R64): three; a selection
+  and then the one empty paragraph a paste of whole paragraphs leaves: three; a selection
   that ends before the last separator is as it was. The two flavours agree. }
 procedure TTyRichEditPasteTest.TestAnEmptyLastParagraphIsCopied;
 var

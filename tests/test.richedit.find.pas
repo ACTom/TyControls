@@ -32,7 +32,6 @@ type
     procedure CheckEveryWord(const AName: string; const ABytes: TBytes; ARtf: Boolean;
       AEncoding: TTyTextEncoding = teAuto);
   published
-    // the brief's
     procedure TestFindInsideUnparsedRtf;
     // the filter: every fixture, and every form of a character the reader takes
     procedure TestTheFilterNeverLosesAHit;
@@ -376,7 +375,7 @@ begin
         w := '';
         for k := i to j - 1 do w := w + U([text[k]]);
         words.Add(w);
-        { (M10) and a phrase: the word, the spaces or punctuation after it, the next word - a
+        { and a phrase: the word, the spaces or punctuation after it, the next word - a
           needle with characters that are no word goes through the filter too }
         g := j;
         while (g < Length(text)) and (g - j < 3) and (TyRichWordClass(text[g]) = 0) and
@@ -455,8 +454,6 @@ begin
     full.Free;
   end;
 end;
-
-{ ---- the brief's ---- }
 
 { A 5 MB RTF, opened and searched at once for a word that is only in its last paragraph (and
   split there by formatting groups): found, and only the interval of the hit was parsed. }

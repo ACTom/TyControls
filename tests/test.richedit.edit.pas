@@ -1,6 +1,6 @@
 unit test.richedit.edit;
 
-{ TTyRichEdit as an editor by keyboard (Task 10a): typing, Backspace, Delete, Enter, Shift+Enter,
+{ TTyRichEdit as an editor by keyboard: typing, Backspace, Delete, Enter, Shift+Enter,
   Tab, undo and redo, cut - every edit a command of the document, the caret placed by the edit,
   one OnChange and one OnSelectionChange per key, ReadOnly a viewer, the engine's refusals
   told and never raised to the user, and what one keystroke costs in a document of two
@@ -42,11 +42,10 @@ type
     { One character typed (UTF8KeyPress, as LCL delivers it). }
     procedure Key8(const AChar: RawByteString);
     procedure Leave;
-    { A command of the application's own through the door of a user's edit (RunUserEdit; fix
-      wave W13, the door W15's). }
+    { A command of the application's own through the door of a user's edit (RunUserEdit). }
     function RunUser(ACmd: TTyRichCommand): Boolean;
   public
-    { Fix wave W15: RunUserEdit's calls, counted (every user's edit comes through it). }
+    { RunUserEdit's calls, counted (every user's edit comes through it). }
     UserEdits: Integer;
     UserCmd: TTyRichCommand;
     function TakeUserCmd(var APlace: TTyRichEditPlace): TTyRichCommand;
@@ -64,7 +63,7 @@ type
     // a save's progress handler that types (TestEveryRefusalThroughAKey)
     FSaveCalls, FSaveRefused, FSaveRaised: Integer;
     FSaveCancelAt: Integer;
-    // OnEditRefused (fix wave W11): calls, and what the handler does
+    // OnEditRefused: calls, and what the handler does
     FRefusedEvents: Integer;
     FRefusedEdits: Boolean;
     procedure Changed(Sender: TObject);
@@ -84,18 +83,16 @@ type
     function CharFormatAt(APos: TTyRichPos): TTyCharFormat;
     function TempDir: string;
     procedure KeystrokeCase(AScale: Integer);
-    // fix wave W11
     procedure ScaledProbe(AScale: Integer);
     procedure SetVariedLines(ACount: Integer; const ALong: string = ''; ALongAt: Integer = -1);
     procedure EdgeCases(AScale: Integer);
     procedure RefusedEdits(Sender: TObject; const AReason: string);
-    // fix wave W13: an OnEditRefused that loads a document
+    // an OnEditRefused that loads a document
     procedure LoadOnRefusal(Sender: TObject; const AReason: string);
   protected
     procedure SetUp; override;
     procedure TearDown; override;
   published
-    // the brief's
     procedure TestTypingIsOneMergedCommand;
     procedure TestEnterInheritsParagraphFormat;
     procedure TestEnterOnAnEmptyListItemLeavesTheList;
@@ -125,7 +122,6 @@ type
     procedure TestTheControlsFontStyleReachesTheText;
     procedure TestANewDocumentIsSavedWithItsFontAndPage;
     procedure TestATextSaveReportsProgressAndCanBeCancelled;
-    // fix wave W11
     procedure TestTheSurfaceAfterAnEditAtTheViewsBottomIsAFullRedraw;
     procedure TestUndoPutsTheSelectionBackAsItWas;
     procedure TestATypingMistakeUndoneSavesTheFile;
@@ -136,12 +132,10 @@ type
     procedure TestTheMenuReadOnlyAndCtrlTabOfAnEditor;
     procedure TestListItemsAndJoinsByKey;
     procedure TestShiftEnterInATextDocumentMakesAParagraph;
-    // fix wave W13
     procedure TestARefusalAcrossCellsIsToldOutsideTheReadScope;
     procedure TestWholeRowsAtTheTextsEndAreRefused;
     procedure TestACutCopiesWhatItRemoves;
     procedure TestARefusedCommandIsToldItsOwnReason;
-    // fix wave W14 (V-M9)
     procedure TestPastesAndTheirUndoKeepTheSurfaceRight;
   end;
 
@@ -535,8 +529,6 @@ begin
   Result := FTemp;
 end;
 
-{ ---- the brief's tests ---- }
-
 { Typing is one command that the engine merges: every character - a space and a Chinese one
   too - in one undo step; undo takes the run back, redo puts it in again, the caret behind it. }
 procedure TTyRichEditEditTest.TestTypingIsOneMergedCommand;
@@ -706,7 +698,7 @@ begin
   // code is not stopped
   FRich.SelText := 'Q';
   AssertEquals('SelText from code', 'xQc', FRich.Lines[0]);
-  // Undo is a user's action (R66): nothing on a viewer; the document's own is code's
+  // Undo is a user's action: nothing on a viewer; the document's own is code's
   FRich.Undo;
   AssertEquals('Undo, a user''s action: nothing', 'xQc', FRich.Lines[0]);
   FRich.Document.Undo;
@@ -1351,7 +1343,7 @@ begin
   ResetEvents;
   Chars('x');
   AssertEquals('at the caret: refused once', 1, FRich.Refused);
-  // E-M3: the control's own reason, never the engine's sentence
+  // the control's own reason, never the engine's sentence
   AssertEquals('this range cannot be edited', rsRichEditRefusedRange, FRich.LastReason);
   AssertEquals('the caret stays', Int64(2), FRich.CaretIndex);
   FRich.SelStart := 1;
@@ -1489,7 +1481,7 @@ end;
 
 { Tables: a key does not cross a cell's edge (Backspace at a cell's start and Delete at its
   end do nothing, as in Word and WordPad); a selection across cells is not deleted or typed
-  over by a key (R57: refused and told, until Task 12) - the engine would leave a cell with no
+  over by a key (refused and told, until table editing) - the engine would leave a cell with no
   paragraph. }
 procedure TTyRichEditEditTest.TestADeletionAcrossCellsLeavesAValidDocument;
 var
@@ -1522,7 +1514,7 @@ begin
   AssertEquals('nothing changed', before, FRich.Lines.Text);
   AssertEquals('nothing on the history', 0, d.UndoDepth);
   AssertEquals('nothing refused', 0, FRich.Refused);
-  // across the cells: refused (R57, until Task 12) - told, nothing changed
+  // across the cells: refused (until table editing) - told, nothing changed
   FRich.SelStart := t.ParaStart(k0) + 1;
   FRich.SelLength := t.ParaStart(k1) + 1 - (t.ParaStart(k0) + 1);
   ResetEvents;
@@ -1607,7 +1599,7 @@ end;
 
 { ---- the parked items ---- }
 
-{ The control's Font.Style reaches the text with no style of its own (review H1, Minor 12):
+{ The control's Font.Style reaches the text with no style of its own:
   the layouter's base style, the fonts the text is measured in (bold, italic), and what is
   drawn (underline, strike-through). }
 procedure TTyRichEditEditTest.TestTheControlsFontStyleReachesTheText;
@@ -1678,7 +1670,7 @@ begin
   finally
     st.Free;
   end;
-  // A4 (R54)
+  // A4
   AssertTrue('the page: ' + s, Pos(BS + 'paperw11906' + BS + 'paperh16838' + BS + 'margl1800' +
     BS + 'margr1800' + BS + 'margt1440' + BS + 'margb1440', s) > 0);
   AssertTrue('the font as f0: ' + s, Pos('{' + BS + 'f0' + BS + 'fnil' + BS + 'fcharset0 ' +
@@ -1756,8 +1748,6 @@ begin
   FRich.OnSaveProgress := nil;
 end;
 
-{ ---- fix wave W11 ---- }
-
 procedure TTyRichEditEditTest.ScaledProbe(AScale: Integer);
 begin
   FreeAndNil(FRich);
@@ -1770,7 +1760,7 @@ end;
 
 { Lines of different lengths ('Line i' and up to twelve x): the test device draws every
   character as the same box, so a line left on the surface where another one belongs differs
-  from it only when their lengths do (review C-10a, Important 1). ALong in place of line
+  from it only when their lengths do. ALong in place of line
   ALongAt. }
 procedure TTyRichEditEditTest.SetVariedLines(ACount: Integer; const ALong: string;
   ALongAt: Integer);
@@ -1923,9 +1913,9 @@ begin
   CheckSurface(what + ': and its undo');
 end;
 
-{ E-I1: whatever an edit's surface move leaves without valid pixels is drawn - nothing below
+{ whatever an edit's surface move leaves without valid pixels is drawn - nothing below
   the changed blocks is taken for good unless it was moved from valid pixels or drawn again:
-  the review's four cases (Backspace at the start of the bottom line; a wrapped bottom
+  four cases (Backspace at the start of the bottom line; a wrapped bottom
   paragraph losing a line; Ctrl+Z of an Enter on the bottom line; Delete of a selection that
   ends beyond the held blocks), the growing direction at the bottom edge, a paragraph taller
   than the view, the last paragraph, the view pulled up - each the surface of a full redraw,
@@ -1936,7 +1926,7 @@ begin
   EdgeCases(2);
 end;
 
-{ E-I2 (R55 a, measured in msftedit): undo puts the caret and the selection back as they were
+{ As measured in Windows' rich edit: undo puts the caret and the selection back as they were
   before the action, redo leaves a plain caret where the action left it - an undone Backspace
   has the caret after the character, an undone Delete before it, undone typing (a merged run
   too) where it began, an undone deletion or typing over a selection the selection again; an
@@ -2007,7 +1997,7 @@ begin
   FRich.Redo;
   CheckSel('redone: behind its last character', 8, 0, 8);
   FRich.Undo;
-  // the review's sequence: Enter, Backspace, Ctrl+Z, a character - two paragraphs
+  // a sequence: Enter, Backspace, Ctrl+Z, a character - two paragraphs
   SetText('hello world');
   d := FRich.Document;
   FRich.SelStart := 5;
@@ -2051,7 +2041,7 @@ begin
   CheckSel('redone: at the end of all of it', 9, 0, 9);
 end;
 
-{ E-M1 (R56) through keys: typed by mistake, Ctrl+Z, saved - the file, byte for byte: a
+{ Through keys: typed by mistake, Ctrl+Z, saved - the file, byte for byte: a
   character, Enter, Backspace, a run of typing, in a Word file and a WordPad one. }
 procedure TTyRichEditEditTest.TestATypingMistakeUndoneSavesTheFile;
 
@@ -2120,7 +2110,7 @@ begin
   Check('wp-zh-plain.rtf');
 end;
 
-{ E-M2: Lines[i] := S is never half done - a text the engine refuses (one that ends inside a
+{ Lines[i] := S is never half done - a text the engine refuses (one that ends inside a
   UTF-8 sequence: an ANSI 'cafe' with its accent, assigned by mistake) raises, and the line,
   the history, Modified and OnChange are as they were; a good text replaces the line, one
   step. }
@@ -2165,7 +2155,7 @@ begin
   FRich.Document.Execute(TTyRichInsertText.Create(0, 'h'));
 end;
 
-{ E-M3, E-M5, E-M9: what OnEditRefused is told is one of the control's own reasons, never the
+{ what OnEditRefused is told is one of the control's own reasons, never the
   engine's sentence; it is raised once the edit is over - a handler that edits gets its own
   OnChange; and from code the engine's refusal raises with its reason in the package's words. }
 procedure TTyRichEditEditTest.TestARefusalIsToldInTheControlsWordsAfterTheEdit;
@@ -2193,7 +2183,7 @@ begin
   AssertEquals('one undo step: the handler''s', 1, d.UndoDepth);
   FRefusedEdits := False;
   FRich.ForcedFormat := -1;
-  // the review's case: a paragraph and its separator typed over where a fixed row follows
+  // a paragraph and its separator typed over where a fixed row follows
   LoadBytes(FixtureFile('word-table-merged.rtf'));
   FRich.FinishLoading;
   FRich.UpdateView;
@@ -2240,7 +2230,7 @@ begin
   FRich.OnEditRefused := nil;
 end;
 
-{ E-M4 (R57), until Task 12: a selection that begins before a table and ends where its first
+{ Until table editing: a selection that begins before a table and ends where its first
   row starts keeps its last separator when typed over or deleted (the paragraph before the
   table stays, Word's way); whole rows, from a row's start to a row's end, a key deletes - and
   the engine leaves a document that is whole, lays out, saves and reads back as it is. }
@@ -2327,7 +2317,7 @@ begin
   AssertEquals('the row back', before, FRich.Lines.Text);
 end;
 
-{ E-M6 and E-M9: at the cut of a paragraph too long to lay out whole (CRichMaxParaLayoutChars
+{ at the cut of a paragraph too long to lay out whole (CRichMaxParaLayoutChars
   - the cap has no seam: a real one) typing is refused and told rather than going in unseen;
   before the cut it goes in; an edit from code there leaves the caret at the cut, never in
   the hidden tail; Delete at the cut and Backspace after a cut paragraph do nothing. }
@@ -2367,7 +2357,7 @@ begin
   AssertEquals('no change', 0, FChanges);
 end;
 
-{ E-M9: the menu of an editor - undo, redo and cut offered and acting, none of them with
+{ the menu of an editor - undo, redo and cut offered and acting, none of them with
   ReadOnly; ReadOnly set ends the run of typing; Ctrl+Tab types a tab only with WantTabs (the
   memo's way). }
 procedure TTyRichEditEditTest.TestTheMenuReadOnlyAndCtrlTabOfAnEditor;
@@ -2420,7 +2410,7 @@ begin
   AssertEquals('a tab typed', 'abcdxy' + #9, FRich.Lines[0]);
 end;
 
-{ E-M10 (R55 c, d): Enter on an empty list item makes the item itself a plain paragraph -
+{ Enter on an empty list item makes the item itself a plain paragraph -
   nothing added - its start indent and hanging offset 0, its right indent and alignment kept,
   one undo step; Backspace at the start of an item (empty or not) first takes only its
   numbering (the same reset, the caret stays, one step; a redo leaves the caret there), the
@@ -2534,7 +2524,7 @@ begin
   AssertTrue('the first empty: the second''s format', FormatOf(0).Align = paraRight);
 end;
 
-{ E-M11: in a plain text document (set as text, read from a text file) Shift+Enter makes a
+{ in a plain text document (set as text, read from a text file) Shift+Enter makes a
   paragraph, as Enter - a text file has no line break inside a line, and a stored U+000B
   would be saved as the byte 0B. }
 procedure TTyRichEditEditTest.TestShiftEnterInATextDocumentMakesAParagraph;
@@ -2542,7 +2532,7 @@ var
   d: TTyRichDocument;
   st: TBytesStream;
 begin
-  // text set as lines is a rich document (R65): a line break
+  // text set as lines is a rich document: a line break
   SetText('ab');
   d := FRich.Document;
   FRich.SelStart := 1;
@@ -2569,8 +2559,6 @@ begin
   FRich.KeyResult(VK_RETURN, [ssShift]);
   AssertEquals('a text file: a paragraph too', 3, d.Text.ParaCount);
 end;
-
-{ ---- fix wave W13 ---- }
 
 type
   // a command of an application's own whose CanExecute refuses (not a fixed row)
@@ -2600,7 +2588,7 @@ begin
   FRich.Lines.Text := 'loaded by the handler';
 end;
 
-{ Q-M5: the across-cells refusal is told after the read scope closed: a handler that loads a
+{ the across-cells refusal is told after the read scope closed: a handler that loads a
   document there loads it (before: ETyRichModel out of the key). }
 procedure TTyRichEditEditTest.TestARefusalAcrossCellsIsToldOutsideTheReadScope;
 var
@@ -2631,8 +2619,9 @@ begin
   AssertEquals('the handler loaded its document', 'loaded by the handler', Trim(FRich.Lines.Text));
 end;
 
-{ Q-M6: whole rows of a table that ends the text (made by code: no RTF file ends inside a
-  table) are refused until Task 12 - its last paragraph has no separator to go with it, and the
+{ whole rows of a table that ends the text (made by code: no RTF file ends inside a
+  table) are refused until table editing - its last paragraph has no separator to go with it,
+  and the
   engine would leave the row's other cells with none. The first row of the same table is whole
   rows the engine deletes cleanly. }
 procedure TTyRichEditEditTest.TestWholeRowsAtTheTextsEndAreRefused;
@@ -2678,7 +2667,7 @@ begin
   AssertEquals('the text is whole', '', t.CheckIntegrity);
 end;
 
-{ Q-M10: when R57 keeps the paragraph end before a table (a selection from the text before it
+{ when the table rule keeps the paragraph end before a table (a selection from the text before it
   to the start of its first row), a cut puts on the clipboard what it removes - without that
   separator; a selection that is only that separator removes nothing and copies nothing. }
 procedure TTyRichEditEditTest.TestACutCopiesWhatItRemoves;
@@ -2719,7 +2708,7 @@ begin
   AssertTrue('before the table still', d.CellAt(kt - 1) = nil);
 end;
 
-{ Q-O2: a command whose CanExecute refuses for a reason of its own (a command of Task 11, of an
+{ a command whose CanExecute refuses for a reason of its own (a format command, a command of an
   application) is told as a range that cannot be edited - not as a row with a nested table,
   which stays the reason of the engine's own text commands. }
 procedure TTyRichEditEditTest.TestARefusedCommandIsToldItsOwnReason;
@@ -2732,7 +2721,7 @@ begin
   AssertEquals('nothing changed', 'abc', FRich.Lines[0]);
 end;
 
-{ W14 V-M9: pastes that change the heights of the view's paragraphs - several paragraphs of
+{ pastes that change the heights of the view's paragraphs - several paragraphs of
   other sizes into the view's middle, lines of text, a picture -, their undo and redo: the kept
   surface equals a full redraw after each, at device scale 1 and 2. }
 procedure TTyRichEditEditTest.TestPastesAndTheirUndoKeepTheSurfaceRight;

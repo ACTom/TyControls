@@ -32,7 +32,7 @@ type
       const ARuns: TTyRunArray);
   end;
 
-  { A program's own command, written the way spec 5.2 means: it inserts a signature block
+  { A program's own command, written the way a program adds one: it inserts a signature block
     and sets it in italics through the protected methods, and has no undo code at all. }
   TSignatureCommand = class(TTyRichCommand)
   private
@@ -90,10 +90,10 @@ type
     procedure TestHistoryGoesBeforeTheValues;
     procedure TestMaxUndoBytesDropsTheOldest;
     procedure TestFormatOverTheWholeDocumentWalksLeaves;
-    // Task 10a
+    // the editor's commands
     procedure TestAnInsertThatCutsASequenceIsRefused;
     procedure TestClearUndoDropsTheHistory;
-    // Task 10c: a fragment of another document
+    // a fragment of another document
     procedure TestAFragmentMeetsTheParagraphAtItsPlace;
     procedure TestAFragmentsRowsAreRowsOutsideATableAndTextInOne;
     procedure TestAFragmentBringsNoDocumentLevelThing;
@@ -105,19 +105,19 @@ type
     procedure TestAFragmentReadsTheTargetInOneScope;
     procedure TestAPastedFirstParagraphTakesNoMarker;
     procedure TestReadingAFragmentOfUntrustedBytes;
-    // Task 11a: the saved point (R59)
+    // the saved point
     procedure TestTheSavedPointFollowsUndoAndRedo;
     procedure TestTheSavedPointGoesWithItsStep;
     procedure TestModifiedSetFromCodeAndAnEditOutsideTheHistory;
-    // fix wave W16
+    // the objects the history counts
     procedure TestAPictureTwoStepsHoldCountsInEach;
     procedure TestTheObjectCountTakesOnePass;
     procedure TestATableMadeAgainIsLetGoWhenItsRowsFail;
-    // fix wave W17
+    // relative indents, objects counted once, a write that changes nothing
     procedure TestTheRelativeIndentFields;
     procedure TestEachObjectCountsOnce;
     procedure TestAFormatWriteThatChangesNothingIsNoStep;
-    // fix wave W18
+    // what a merge of typing walks and counts
     procedure TestAMergedKeystrokeGathersNoObjects;
     procedure TestAMergeCountsTheObjectsItBrings;
     procedure TestKeepNoneLeavesRunsWithoutTheirOwn;
@@ -377,7 +377,7 @@ begin
   end;
 end;
 
-{ ---- the brief's tests ---- }
+{ ---- every built-in command ---- }
 
 procedure TTyRichCommandsTest.TestEveryBuiltInCommandUndoesExactly;
 var
@@ -957,7 +957,7 @@ begin
   SetCodePage(Result, CP_UTF8, False);
 end;
 
-{ Task 10a (rereviewB-W45, out of scope 3): the storage counts characters per piece, a reader
+{ The storage counts characters per piece, a reader
   of a paragraph per paragraph; an insert that ends inside a UTF-8 sequence, or starts with a
   byte that continues one, would be counted two ways once the next insert joins it. The
   insert command raises before anything changes; whole characters (an invalid byte inside
@@ -1043,7 +1043,7 @@ begin
   end;
 end;
 
-{ ---- Task 10c: a fragment of another document ---- }
+{ ---- a fragment of another document ---- }
 
 function RtfDoc(const S: UTF8String): TTyRichDocument;
 var
@@ -1448,7 +1448,7 @@ begin
   end;
 end;
 
-{ W14 V-I1 (R63): a table one of whose rows holds a nested table is pasted as its paragraphs,
+{ a table one of whose rows holds a nested table is pasted as its paragraphs,
   plain: into a document read from RTF and into a new one, the pasted text can be edited, the
   document saved, and read back it holds all the text. }
 procedure TTyRichCommandsTest.TestATableWithANestedRowGoesInAsParagraphs;
@@ -1525,7 +1525,7 @@ begin
   Result := TTyRichPicture.Create(rpfPng, b, 1440, 1440);
 end;
 
-{ W14 V-M1: the history's memory bound sees the objects its steps keep alive - a picture
+{ the history's memory bound sees the objects its steps keep alive - a picture
   inserted, one a fragment brings, one a deletion's record holds the last reference of (a
   picture of the file) - and drops old steps for them. }
 procedure TTyRichCommandsTest.TestTheHistoryCountsTheObjectsItKeeps;
@@ -1540,7 +1540,7 @@ begin
     AssertTrue(d.Execute(TTyRichInsertObject.Create(1, BigPicture(MB))));
     AssertTrue(Format('an inserted picture counts (%d)', [d.HistoryBytes]), d.HistoryBytes >= MB);
     // deleted: the insert's step keeps it, and the deletion's record holds it too - one
-    // object, counted once (R72)
+    // object, counted once
     AssertTrue(d.Execute(TTyRichDelete.Create(1, 1)));
     AssertTrue(Format('counted once for both steps (%d)', [d.HistoryBytes]),
       (d.HistoryBytes >= MB) and (d.HistoryBytes < 2 * MB));
@@ -1566,7 +1566,7 @@ begin
   end;
 end;
 
-{ W14 V-M11 (a): a redo of a paste puts back what the first run inserted - the add buffer
+{ A redo of a paste puts back what the first run inserted - the add buffer
   (it only grows) gets the fragment's text once, not once more per redo. }
 procedure TTyRichCommandsTest.TestARedoOfAPasteCopiesNoText;
 var
@@ -1615,7 +1615,7 @@ begin
   if DocumentBusy(Target) then Inc(Busy);
 end;
 
-{ W14 V-M10: the fragment reads the target's cell at the place and uses it to its end: one read
+{ the fragment reads the target's cell at the place and uses it to its end: one read
   scope of the target over all of it (a caller that makes a fragment ahead of a command on a
   document read on demand). }
 procedure TTyRichCommandsTest.TestAFragmentReadsTheTargetInOneScope;
@@ -1641,7 +1641,7 @@ begin
   end;
 end;
 
-{ W14 V-M11 (d): the paragraph that takes the pasted first paragraph's format takes none of
+{ The paragraph that takes the pasted first paragraph's format takes none of
   the file's list marker text it had. }
 procedure TTyRichCommandsTest.TestAPastedFirstParagraphTakesNoMarker;
 var
@@ -1725,7 +1725,7 @@ begin
   end;
 end;
 
-{ ---- Task 11a: the saved point (R59) ---- }
+{ ---- the saved point ---- }
 
 procedure TTyRichCommandsTest.ModChanged(Sender: TObject);
 begin
@@ -1879,11 +1879,12 @@ begin
   end;
 end;
 
-{ W16 X-M5, as R72 counts: a picture of the document (its insert's step gone), a letter typed
-  in its paragraph (that record keeps the paragraph's old value, which holds the picture),
+{ The history counts each object once: a picture of the document (its insert's step gone),
+  a letter typed in its paragraph (that record keeps the paragraph's old value, which holds
+  the picture),
   then the picture deleted (that record holds it too): the history counts it - once for the
-  two steps -, so twenty such 1 MB pictures under a 3 MB bound drop old steps - before W16,
-  neither counted it and 40 steps kept 20 MB. }
+  two steps -, so twenty such 1 MB pictures under a 3 MB bound drop old steps - had neither
+  counted it, 40 steps would have kept 20 MB. }
 procedure TTyRichCommandsTest.TestAPictureTwoStepsHoldCountsInEach;
 const
   MB = 1024 * 1024;
@@ -1917,7 +1918,7 @@ begin
   end;
 end;
 
-{ W16 X-M6: the history's count of the objects a step keeps takes one pass - a document of N
+{ the history's count of the objects a step keeps takes one pass - a document of N
   fields deleted whole looks at each of them once (HistoryObjectVisits), 2N fields twice as
   many: no lookup per object. }
 procedure TTyRichCommandsTest.TestTheObjectCountTakesOnePass;
@@ -1981,7 +1982,7 @@ begin
   Result := AObj;
 end;
 
-{ W16 X-M9: a table the fragment makes again for its target is let go when making its rows
+{ a table the fragment makes again for its target is let go when making its rows
   fails (its second row's format raises): a hundred such pastes leave no memory behind,
   and the document is what it was. }
 procedure TTyRichCommandsTest.TestATableMadeAgainIsLetGoWhenItsRowsFail;
@@ -2028,7 +2029,7 @@ begin
   end;
 end;
 
-{ F-M1 / F-M5 (W17): the paragraph mask's relative fields move one indent meaning per
+{ the paragraph mask's relative fields move one indent meaning per
   paragraph, from each paragraph's own values, and keep the other. }
 procedure TTyRichCommandsTest.TestTheRelativeIndentFields;
 var
@@ -2116,7 +2117,7 @@ begin
   end;
 end;
 
-{ R72 (F-X1): each distinct object counts once toward the history's bytes, however many steps
+{ each distinct object counts once toward the history's bytes, however many steps
   hold it; it leaves the sum when the last step holding it goes. }
 procedure TTyRichCommandsTest.TestEachObjectCountsOnce;
 const
@@ -2192,7 +2193,7 @@ begin
   end;
 end;
 
-{ F-M2 (W17): a format command that changed no value is not kept - no undo step, no change
+{ a format command that changed no value is not kept - no undo step, no change
   reported, Modified and the redo steps untouched (a range wholly inside a row that holds a
   nested table: the API suite). }
 procedure TTyRichCommandsTest.TestAFormatWriteThatChangesNothingIsNoStep;
@@ -2235,9 +2236,7 @@ begin
   end;
 end;
 
-{ ---- fix wave W18 ---- }
-
-{ G-M3: a keystroke merged into a run of typing costs the history no walk of the objects its
+{ a keystroke merged into a run of typing costs the history no walk of the objects its
   paragraph holds (each merged record keeps the paragraph's old value with all of them): the
   values it brings share the key of one the step holds already. Counted, not timed:
   HistoryObjectVisits over the last keys of a long run is 0, the history's bytes stay those
@@ -2290,7 +2289,7 @@ begin
   end;
 end;
 
-{ G-M3: a merge counts what the merged command brings that the step does not hold yet - a key
+{ a merge counts what the merged command brings that the step does not hold yet - a key
   typed into another paragraph with a picture of its own (code may merge typing anywhere)
   adds that picture; it leaves the count with the step. }
 procedure TTyRichCommandsTest.TestAMergeCountsTheObjectsItBrings;
@@ -2335,7 +2334,7 @@ begin
   end;
 end;
 
-{ G-M2 in the engine: AKeepNone leaves a run that has no name / size of its own without one,
+{ In the engine: AKeepNone leaves a run that has no name / size of its own without one,
   writes the value to the others, and a write that leaves everything as it was is no step. }
 procedure TTyRichCommandsTest.TestKeepNoneLeavesRunsWithoutTheirOwn;
 var

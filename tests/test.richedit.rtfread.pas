@@ -28,7 +28,6 @@ type
     procedure CheckParas(const AMsg: string; ADoc: TTyRichDocument;
       const ALines: array of UTF8String);
   published
-    // the brief
     procedure TestWordPadChineseSamplesDecode;
     procedure TestFormatsOfStyleSample;
     procedure TestBig5AndShiftJis;
@@ -49,18 +48,15 @@ type
     procedure TestDefaultsAndPage;
     procedure TestTruncatedFilesLoadWhatIsThere;
     procedure TestMalformedInput;
-    // for the on-demand reader (Task 6)
+    // for the on-demand reader
     procedure TestCountingAgreesAndResumesFromASnapshot;
     // what the real WordPad and Word files showed
     procedure TestGb18030AsTheFileCodePage;
-    // the review of batch A
     procedure TestALaterUnknownWordReplacesTheEarlierOne;
     procedure TestARowThatHoldsANestedTableIsMarked;
     procedure TestThemeFontEntriesAreRead;
     procedure TestAListAsRichEditWritesItLeavesNothingBeside;
-    // fix wave W2
     procedure TestTheFilesListMarkersAreKept;
-    // fix wave W14
     procedure TestALastParagraphWithoutParHasItsProperties;
   end;
 
@@ -366,8 +362,6 @@ begin
   AssertEquals(AMsg + ': paragraphs', Length(ALines), ADoc.Text.ParaCount);
   AssertEquals(AMsg + ': integrity', '', ADoc.Text.CheckIntegrity);
 end;
-
-{ ---- the brief ---- }
 
 procedure TTyRtfReadTest.TestWordPadChineseSamplesDecode;
 var
@@ -1715,8 +1709,6 @@ begin
   end;
 end;
 
-{ ---- the review of batch A ---- }
-
 { An Extra list's fragments, one after the other with | between them. }
 function Joined(const A: TTyOpaqueAttrs): RawByteString;
 var
@@ -1758,7 +1750,7 @@ begin
   finally
     d.Free;
   end;
-  // the reviewer's file: plain WordPad-style paragraphs, no group, no \plain
+  // plain WordPad-style paragraphs, no group, no \plain
   src := '{\rtf1\ansi\ansicpg936\deff0{\fonttbl{\f0\fnil\fcharset134 SimSun;}}'#13#10 +
     '\pard\f0\fs24 ';
   for i := 0 to 299 do
@@ -2123,8 +2115,6 @@ begin
   end;
 end;
 
-{ ---- fix wave W2 ---- }
-
 function HexOf(const S: RawByteString): string;
 var
   i: Integer;
@@ -2226,7 +2216,7 @@ begin
   end;
 end;
 
-{ W14 V-I2 (R64): a last paragraph that the document's closing brace ends (no \par after it)
+{ a last paragraph that the document's closing brace ends (no \par after it)
   has the paragraph and character properties in effect before that brace - as Word and
   WordPad read it -, read whole and read on demand alike: alignment and indent, a list item,
   a paragraph after a table, a cell of a row the file never ends; an empty document's one

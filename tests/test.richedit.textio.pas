@@ -67,7 +67,7 @@ type
     FChanges: array of TTyRichChange;
     FRuns: array of TTyRichByteRun;
     FRunCount: Integer;
-    // Task 10a: a save's progress calls
+    // a save's progress calls
     FTicks: array of Int64;
     FTickTotal: Int64;
     FCancelAt: Integer;
@@ -103,9 +103,7 @@ type
     procedure TestACharacterTheCodePageLacksIsAQuestionMark;
     procedure TestCodePageTablesArePinned;
     procedure TestASaveInProgressRefusesEdits;
-    // fix wave W9
     procedure TestTheConverterIsAskedOncePerSequence;
-    // Task 10a
     procedure TestATextSaveReportsProgressAndCanBeCancelled;
   end;
 
@@ -692,7 +690,7 @@ begin
     AssertTrue('the default id is that format',
       d.Formats.CharFormat(d.DefaultCharFormatId).Equals(TyDefaultCharFormat));
     AssertEquals('plain text shows in it', d.DefaultCharFormatId, d.RunsOf(0)[0].Format);
-    // A4 (R54)
+    // A4
     AssertEquals('paper width', 11906, d.PaperWidth);
     AssertEquals('paper height', 16838, d.PaperHeight);
     AssertEquals('left margin', 1800, d.MarginLeft);
@@ -1252,7 +1250,7 @@ begin
   end;
 end;
 
-{ W9 (N-1): what a code page's table does not hold is asked of its converter once per table,
+{ what a code page's table does not hold is asked of its converter once per table,
   and the answer is what the converter gave. Raw UTF-8 under a GBK font is the case that made
   a load ten times slower: U+2001 is E2 80 81 in UTF-8, GBK reads E2 80 as a pair, then 81 as
   a lead byte whose trail, the next character '3', GBK does not map - 81 33 asked 10,000
@@ -1343,8 +1341,6 @@ begin
   AssertEquals('81 33 is still no character', 0, Integer(TyRichCodePageChar(t, $81, $33)));
 end;
 
-{ ---- Task 10a ---- }
-
 function TTyRichTextIOTest.SaveTick(ADone, ATotal: Int64): Boolean;
 begin
   SetLength(FTicks, Length(FTicks) + 1);
@@ -1353,7 +1349,7 @@ begin
   Result := (FCancelAt = 0) or (Length(FTicks) < FCancelAt);
 end;
 
-{ A big text's save reports its progress as the RTF writer's does (review H1): about every
+{ A big text's save reports its progress as the RTF writer's does: about every
   256 KB, in characters of the whole, rising, never once all is written - also inside one
   paragraph of a megabyte, which goes out in steps that end where a character starts (a
   UTF-16 save of it is the same bytes as without the steps). False from the callback cancels

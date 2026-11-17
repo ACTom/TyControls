@@ -57,7 +57,6 @@ type
     procedure SetUp; override;
     procedure TearDown; override;
   published
-    // the brief's
     procedure TestReplaceAllIsOneUndoStepAndCancels;
     // the synchronous calls
     procedure TestFindTextIsDelphis;
@@ -357,8 +356,6 @@ begin
     sb.Free;
   end;
 end;
-
-{ ---- the brief's ---- }
 
 { A replace in the background cancelled midway: what it replaced so far stays, as ONE undo step
   - which takes it all back, and puts the selection back. }

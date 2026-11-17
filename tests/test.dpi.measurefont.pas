@@ -1204,11 +1204,11 @@ const
       will be drawn at, and the size the host leaves on it is read back. Nothing is measured
       with that font. }
     (Name: 'tyControls.TreeView.pas'; Count: 1),
-    { The rich edit's DefAttributes.Size (Task 11a): the application's value for the control's
+    { The rich edit's DefAttributes.Size: the application's value for the control's
       own Font, as Delphi's DefAttributes writes it - the base the text is shown in, which the
       theme's resolve reads; nothing is measured with it there. }
     (Name: 'tyControls.RichEdit.pas'; Count: 1),
-    { The rich edit's SelAttributes.AssignTo(TFont) (Task 11a, named so in W17): fills the
+    { The rich edit's SelAttributes.AssignTo(TFont): fills the
       application's TFont - a font dialog's, say - with the selection's size; nothing is
       measured with that font here. }
     (Name: 'tyControls.RichEdit.Attrs.pas'; Count: 1));

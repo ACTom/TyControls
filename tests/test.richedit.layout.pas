@@ -55,7 +55,6 @@ type
     procedure SetUp; override;
     procedure TearDown; override;
   published
-    // the plan's list
     procedure TestCjkBreaksBetweenCharactersButNotBeforeClosingPunctuation;
     procedure TestLatinBreaksAtSpacesAndForcesLongWords;
     procedure TestMissingGlyphFallsBack;
@@ -63,7 +62,6 @@ type
     procedure TestOnlyVisibleParagraphsAreMeasured;
     procedure TestCacheInvalidatesOnlyTheEditedParagraph;
     procedure TestCaretAndPointAgree;
-    // the controller's
     procedure TestTabsAdvanceToExplicitAndDefaultStops;
     procedure TestAlignmentsPlaceALine;
     procedure TestLineAndParagraphSpacing;
@@ -83,12 +81,12 @@ type
     procedure TestSuperscriptShiftsWithoutGrowingTheLineMoreThanItNeeds;
     procedure TestObjectsAreBoxes;
     procedure TestSelectionRectsCoverTheRangeLineByLine;
-    // 8b: list markers
+    // list markers
     procedure TestListMarkersAreLaidOutAheadOfTheFirstLine;
     procedure TestListNumbersCountTheItemsOfOneLevel;
     procedure TestAlphaAndRomanNumbersPastTheirRanges;
     procedure TestTheNumberingWalkIsCappedAndRemembered;
-    // 8b: table rows
+    // table rows
     procedure TestTableCellsLayOutAndRowHeightIsTheTallest;
     procedure TestARowIsAsTallAsItsFormatDemands;
     procedure TestPositionsRunAcrossTheCellsOfARow;
@@ -96,12 +94,12 @@ type
     procedure TestMergedCellsAreShownMerged;
     procedure TestARowInALazyDocumentSurvivesEviction;
     procedure TestTheRowFormatIsRead;
-    // 8b: pictures
+    // pictures
     procedure TestPicturesAreDecodedWhenDrawnAndKept;
     procedure TestThePictureCacheIsBoundedByBytes;
     procedure TestPicturesThatCannotBeShownArePlaceholders;
     procedure TestTheWordPadPictureShowsItsBitmap;
-    // 8b: painting
+    // painting
     procedure TestPaintDrawsOnlyWhatMeetsTheClip;
     procedure TestPaintSelectionKeepsTheGlyphsInPlace;
     procedure TestPaintedSelectionDoesNotMoveGlyphsOnTheRealDevice;
@@ -109,7 +107,6 @@ type
     procedure TestPaintTabLeadersAndTheMarker;
     procedure TestPaintARowsContentsThenItsLines;
     procedure TestPaintDecodesOnlyThePicturesItDraws;
-    // the review's findings (fix wave W1)
     procedure TestADecimalTabFindsThePointInALaterPiece;
     procedure TestAPointAtALineEndGivesACaretThere;
     procedure TestAJustifiedLineKeepsAFewFragments;
@@ -124,23 +121,22 @@ type
     procedure TestTheCmapReaderBoundsItsCounts;
     procedure TestTheMeasureCacheIsBoundedByBytes;
     procedure TestChangesInsideAndAcrossCachedParagraphsAreFollowed;
-    // fix wave W2: rows
+    // rows
     procedure TestWordsBorderlessCellsHaveNoLines;
     procedure TestDeclaredLinesAreDrawnOnceAndNotLost;
     procedure TestARowIsPlacedAndBoundedAsItsFormatSays;
     procedure TestAnExactRowShowsAndAnswersOnlyItsBox;
     procedure TestPaintLeavesTheClipAndHidesMergedAwayText;
-    // fix wave W2: pictures
+    // pictures
     procedure TestOneScreensPicturesNeverEvictEachOther;
     procedure TestPictureSizesAreBoundedBeforeAnythingIsAllocated;
     procedure TestAPreparedPictureIsReady;
     procedure TestPictureCacheDetails;
-    // fix wave W2: lists
+    // lists
     procedure TestWordListsShowTheFilesNumbers;
     procedure TestACappedWalkAnchorsOnARememberedNumber;
     procedure TestTheMarkerGoesWithTheFirstLine;
     procedure TestBulletsForEveryLevel;
-    // fix wave W3
     procedure TestACutParagraphIsCachedByWhatItShows;
     procedure TestShownCharsAndTheLastCaretPlace;
     procedure TestPromotionsKeepTheMeasureCacheBounded;
@@ -153,7 +149,6 @@ type
     procedure TestACellWithAPixelLeftHasNoRoom;
     procedure TestRowsOfTwoTableObjectsShareTheirLine;
     procedure TestWordsOwnListShowsWordsMarkers;
-    // fix wave W12
     procedure TestPositionsBehindACompositionAreTheDocuments;
     procedure TestACompositionInARowKeepsTheRowsPositions;
   end;
@@ -671,8 +666,6 @@ begin
   Fail(Format('no fragment holds position %d', [APos]));
 end;
 
-{ ---- the plan's list ---- }
-
 { A narrow paragraph of Chinese with its punctuation: it breaks between the characters, and
   no line starts with ， or 。 (the kinsoku table). At 50 px (two and a half characters) the
   lines are worked out: 中 / 文， / 标 / 点。 - each punctuation mark stays with the character
@@ -775,7 +768,7 @@ var
   i: Integer;
   plan: TStringList;
 begin
-  // the plan's lists
+  // each platform's fallback fonts, in the order the layout is to try them
   plan := TStringList.Create;
   try
     {$IF DEFINED(MSWINDOWS)}
@@ -838,7 +831,7 @@ begin
   s := '';
   for i := 1 to 40 do s := s + 'aaaa ';
   d := NewDoc(s);
-  // a Letter page, whatever a new document's default (A4 since W11)
+  // a Letter page, whatever a new document's default (A4)
   TBuilderAccess.SetPage(d, 12240, 15840, 1800, 1800);
   // "aaaa " is 45 px: four words fit 200 px (the fourth's space hangs), a fifth would end at 220
   AssertEquals('window width as given', 200, TyRichLayoutWidth(rwmWindow, 200, d, 96, 1));
@@ -945,7 +938,7 @@ end;
 
 { The caret at every caret place, its middle handed back to PosAtPoint, gives that place -
   on wrapped lines of mixed Latin, CJK, punctuation, a combining sequence and an emoji, left
-  aligned and justified. (Bidirectional text is not laid out: spec 6.1.) }
+  aligned and justified. (Bidirectional text is not laid out.) }
 procedure TTyRichLayoutTest.TestCaretAndPointAgree;
 var
   d: TTyRichDocument;
@@ -985,8 +978,6 @@ begin
     AssertTrue('checked them all', checked > 200);
   end;
 end;
-
-{ ---- the controller's ---- }
 
 { Default stops every 720 twips (48 px); explicit stops left, right, centre and decimal; past
   the last explicit stop the defaults again; the leader is on the tab's fragment. }
@@ -1812,7 +1803,7 @@ begin
   AssertEquals('nothing selected', 0, Length(L.SelectionRects(5, 5)));
 end;
 
-{ ---- 8b: list markers ---- }
+{ ---- list markers ---- }
 
 { A list paragraph gets a marker the layout makes - not in the text, no position - as WordPad
   places it: at the first line's indent (left 720 + first -360 twips = 24 px), the text at the
@@ -2040,7 +2031,7 @@ begin
   AssertEquals('and 50,000', '10.', L.Marker.Text);
 end;
 
-{ ---- 8b: table rows ---- }
+{ ---- table rows ---- }
 
 { A row is one block: the paragraphs of all its cells, each cell's laid out by itself at the
   cell's width less the half gap on either side (a table made here: 108 twips, 7 px; a line of
@@ -2405,7 +2396,7 @@ begin
   AssertEquals('a thin one', 10, r.Cells[1].BorderWidth[rcsLeft]);
 end;
 
-{ ---- 8b: pictures ---- }
+{ ---- pictures ---- }
 
 { A picture is decoded the first time it is drawn - never at layout - and kept: drawn again,
   it is not decoded again; drawn at another size it is scaled once to that size and the
@@ -2644,7 +2635,7 @@ begin
   end;
 end;
 
-{ ---- 8b: painting ---- }
+{ ---- painting ---- }
 
 { Each text fragment is drawn once, as measured, at its measured place (the device's draw log:
   text, X, baseline); only the lines a clip meets are drawn, and on a line only the fragments
@@ -3020,8 +3011,6 @@ begin
   end;
 end;
 
-{ ---- the review's findings (fix wave W1) ---- }
-
 { A decimal tab puts the point at its stop also when the point is not in the number's first
   piece: after a space ("1 234.5", a thousands separator) and after a break opportunity
   ("中12.5"). The line's merged fragment is measured up to the point as one string. }
@@ -3079,7 +3068,7 @@ begin
   pf.Align := paraJustify;
   SetPara(d, 2, [pffAlign], pf);
   SetPara(d, 3, [pffAlign], pf);
-  // the review's two cases
+  // two cases
   L := Lay(d, 0, 120);
   q := L.PosAtPoint(119, 5, atEnd);
   AssertEquals('past "hello world ": its end', 12, q);
@@ -3268,7 +3257,7 @@ end;
 
 { The layouter lays out the document it was given: a second document switches it (the cache
   emptied, each shows its own text, back and forth); and a document freed and another made
-  at the same address shows the new one's text once it is set - the review's sequence. }
+  at the same address shows the new one's text once it is set. }
 procedure TTyRichLayoutTest.TestTheDocumentIsToldNotRecognisedByItsAddress;
 var
   x, y, a, b: TTyRichDocument;
@@ -3416,13 +3405,13 @@ begin
     Result := Result + 'w' + Format('%.5d', [i]) + U($4E2D) + ' ';
 end;
 
-{ R38: a paragraph of 300,000 characters is laid out as far as CRichMaxParaLayoutChars - with the
+{ a paragraph of 300,000 characters is laid out as far as CRichMaxParaLayoutChars - with the
   measure calls, the characters measured and the bytes kept of a 100,000-character one, and
   only about the cap read of it - and a line under it says how many are not shown. Positions
   past the cut show at the cut; the notice has none; a selection covers what is shown; the
   document keeps the whole paragraph. The cut is at a cluster's start. The text varies (no two
   words alike), so a build that read or measured past the cut would cost more. The notice is
-  part of the block's width (W3, Minor 3). }
+  part of the block's width. }
 procedure TTyRichLayoutTest.TestAGiantParagraphIsLaidOutUpToTheCap;
 var
   p100, p300: UTF8String;
@@ -3505,7 +3494,7 @@ begin
   AssertEquals('the 100,000 read whole', 100000, read[0]);
   AssertTrue(Format('of the 300,000 decoded: %d', [read[1]]),
     read[1] <= CRichMaxParaLayoutChars + 1);
-  { W3r-M3: and fetched - the bytes copied out of the document are those of the first cap + 1
+  { and fetched - the bytes copied out of the document are those of the first cap + 1
     characters (the 300,000 begins with the 100,000: their bytes, and one character more) }
   AssertEquals('the 100,000 fetched whole', Length(p100), fetched[0]);
   AssertTrue(Format('of the 300,000 fetched: %d bytes, the first 100,000 characters %d',
@@ -3860,7 +3849,7 @@ begin
   AssertEquals('the one before stays', 'para2', TTyParaLayout(FLayouter.CachedLayout(2)).Text);
 end;
 
-{ ---- fix wave W2: rows ---- }
+{ ---- rows ---- }
 
 function CountPx(ABmp: TBGRABitmap; const APx: TBGRAPixel): Integer;
 var
@@ -4110,7 +4099,7 @@ begin
   end;
 end;
 
-{ ---- fix wave W2: pictures ---- }
+{ ---- pictures, again ---- }
 
 procedure ReleaseSkipped(const A: TTyRichSkippedPictures);
 var
@@ -4450,7 +4439,7 @@ begin
   end;
 end;
 
-{ ---- fix wave W2: lists ---- }
+{ ---- lists ---- }
 
 { A Word list interrupted by ordinary paragraphs: the items share \ls1 and the file says 1, 2,
   3 in their {\listtext}; that is what is shown, loaded on demand and loaded whole. A change
@@ -4609,8 +4598,6 @@ begin
   AssertEquals('High(Integer)', U($25E6), TyRichListMarkerText(lkBullet, High(Integer), 0));
 end;
 
-{ ---- fix wave W3 ---- }
-
 { ACount characters: four letters and a space, again and again. }
 function Words(ACount: Integer): RawByteString;
 var
@@ -4661,7 +4648,7 @@ begin
     end;
 end;
 
-{ W1r-I1: a cut paragraph longer than CLayoutCacheChars counts in the cache as what it shows,
+{ a cut paragraph longer than CLayoutCacheChars counts in the cache as what it shows,
   so it stays cached beside its neighbours: laid out alternately with them, all three are hits
   the second time. }
 procedure TTyRichLayoutTest.TestACutParagraphIsCachedByWhatItShows;
@@ -4687,7 +4674,7 @@ begin
   AssertEquals('three hits', hits + 3, FLayouter.CacheHits);
 end;
 
-{ W1r-M1: ShownChars is the characters laid out - a separator counts when it was - and a row
+{ ShownChars is the characters laid out - a separator counts when it was - and a row
   holding one paragraph says what the paragraph says; LastCaretPos is the last caret place: a
   paragraph's length, a cut paragraph's cut, a row's last shown cell's last paragraph's. }
 procedure TTyRichLayoutTest.TestShownCharsAndTheLastCaretPlace;
@@ -4735,7 +4722,7 @@ begin
   AssertEquals('its last caret place is the cut', CRichMaxParaLayoutChars, R.LastCaretPos);
 end;
 
-{ W1r-M4: an entry brought forward from the older half is checked against the bound as a miss
+{ an entry brought forward from the older half is checked against the bound as a miss
   is. The newer half filled to just under its mark, then every entry of the older half used
   again: the cache never holds more than CRichMeasureCacheBytes and two entries. }
 procedure TTyRichLayoutTest.TestPromotionsKeepTheMeasureCacheBounded;
@@ -4784,7 +4771,7 @@ begin
   end;
 end;
 
-{ W1r-M5: a line that does not wrap with more pictures of the clamped width (32,767 px) than
+{ a line that does not wrap with more pictures of the clamped width (32,767 px) than
   MaxInt holds - 70,000 of them - stops at CRichMaxBlockPx: no fragment goes negative or back,
   the width stays in range. }
 procedure TTyRichLayoutTest.TestAnUnwrappedLineOfHugeObjectsStopsAtTheCeiling;
@@ -4834,7 +4821,7 @@ begin
   AssertTrue('the caret at the end too', L.CaretRect(N).Left >= CRichMaxBlockPx);
 end;
 
-{ W1r-M8: a space that carries a mark is text, and still parts two words: a line may break
+{ a space that carries a mark is text, and still parts two words: a line may break
   after it (not before). A justified line stretched between its characters finds the same
   places for its segments. }
 procedure TTyRichLayoutTest.TestASpaceCarryingAMarkStillPartsWords;
@@ -4861,7 +4848,7 @@ begin
   AssertEquals('e: 50 and all of it', 55, L.CaretRect(8).Left);
 end;
 
-{ W2r-I1: the slices a lazy load appends (DocumentChanged with AFromLoad, as the control
+{ the slices a lazy load appends (DocumentChanged with AFromLoad, as the control
   forwards them while it steps the load) keep the file's list markers; an edit after them does
   not. The real thing: hand-word-list.rtf begun with a first slice of two paragraphs and
   stepped 64 bytes at a time. }
@@ -4923,7 +4910,7 @@ begin
   AssertEquals('below it: counted after a body paragraph', '1.', Lay(d, 3, 1000).Marker.Text);
 end;
 
-{ W2r-I2, W3r-M2: a \trqc or \trqr row is placed by its alignment alone - Word ignores \trleft
+{ a \trqc or \trqr row is placed by its alignment alone - Word ignores \trleft
   for it - and never left of 0: one wider than the layout width starts at 0, where the control's
   scroll reaches its first column, and its right end is in the block's width; a narrow one whose
   \trleft lies right of its centred place is centred all the same, one whose \trleft would put
@@ -4965,7 +4952,7 @@ begin
   AssertEquals('left-aligned: at \trleft', 300, R.Cells[0].Left);
 end;
 
-{ W2r-M1: a header whose sizes do not fit an Integer is no picture - the product of two 32-bit
+{ a header whose sizes do not fit an Integer is no picture - the product of two 32-bit
   sizes is never formed, the decoder never sees the bytes - however large the budget. }
 procedure TTyRichLayoutTest.TestHeaderSizesPastIntegerAreNoPicture;
 var
@@ -5003,7 +4990,7 @@ begin
   end;
 end;
 
-{ W2r-M2: a row's bottom line depends on the row below, so a change there drops the cached row
+{ a row's bottom line depends on the row below, so a change there drops the cached row
   just above too (by Invalidate as by a document change); a change further down does not. }
 procedure TTyRichLayoutTest.TestARowFollowsTheRowBelow;
 var
@@ -5035,7 +5022,7 @@ begin
   AssertTrue('the first stays', FLayouter.CachedLayout(0) = TTyBlockLayout(R0));
 end;
 
-{ W2r-M3: a cell whose gaps leave less than CRichMinCellTextPx inside has no room for text,
+{ a cell whose gaps leave less than CRichMinCellTextPx inside has no room for text,
   whatever the parity of its width: 97 px with gaps of 48 on either side keeps one pixel, which
   is no room - one line, no height. }
 procedure TTyRichLayoutTest.TestACellWithAPixelLeftHasNoRoom;
@@ -5054,7 +5041,7 @@ begin
   AssertEquals('no height', 1, R.Height);
 end;
 
-{ W2r-O1: two table objects one after the other (as a long table of a document parsed on
+{ two table objects one after the other (as a long table of a document parsed on
   demand is, one object per parsed stretch) share the line between their rows like any two
   rows: the upper one does not close itself when a row follows, the lower one draws it. }
 procedure TTyRichLayoutTest.TestRowsOfTwoTableObjectsShareTheirLine;
@@ -5083,7 +5070,7 @@ begin
     R1.Height - 1, R0.Height);
 end;
 
-{ W2r-M5: the list Word saved (word-list.rtf: numbered headings interrupted by body paragraphs,
+{ the list Word saved (word-list.rtf: numbered headings interrupted by body paragraphs,
   a second level, a bulleted list) shows Word's own markers on its numbered items - loaded on
   demand, whole, and in slices as the control loads a file - and a bullet on its bullets. }
 procedure TTyRichLayoutTest.TestWordsOwnListShowsWordsMarkers;
@@ -5155,8 +5142,6 @@ begin
   Check('loaded in slices', 10);
 end;
 
-{ ---- fix wave W12 ---- }
-
 { The two layouts' answers for document position APos of the composed one (ALayout, the
   composition of ALen characters at document position AAt) and the same place of the typed
   one (ARef, the text with the composition typed in): equal once the typed one's positions
@@ -5211,7 +5196,7 @@ begin
     TAssert.AssertTrue(Format('%s: rectangle %d', [AWhat, i]), EqualRect(A[i], B[i]));
 end;
 
-{ J-I3: a composition shown in a paragraph (TTyRichLayouter.SetComposition): the paragraph
+{ a composition shown in a paragraph (TTyRichLayouter.SetComposition): the paragraph
   layout's public position API speaks the document's positions both ways - behind the
   composition CaretRect, PosAtPoint, NextCaretPos, LineBounds and SelectionRects answer as the
   same places of the text with the composition typed in (laid out by a layouter of its own),
@@ -5261,7 +5246,7 @@ begin
   end;
 end;
 
-{ J-I3: a composition in a cell of a row - the row adds its cells' paragraphs by the
+{ a composition in a cell of a row - the row adds its cells' paragraphs by the
   document's length, so every position in that cell behind the composition and in the cells
   after it answers as the same place of the row with the composition typed in, taken back;
   the composition's caret is in its cell (the cell's offset applied); a composition that wraps

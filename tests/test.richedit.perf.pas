@@ -3,7 +3,7 @@ unit test.richedit.perf;
 { TTyRichEditPerfTest: the one suite that asserts the wall clock (the gate runs it alone, in its
   serial list). The acceptance lines are the design's - a 100 MB txt and a 100 MB RTF show
   their first screen in 1 s and any scroll position in 100 ms, a keystroke paints in 30 ms;
-  Task 16's bench measures them on the user's machine - and the thresholds here are three
+  a bench run measures them on the user's machine - and the thresholds here are three
   times them: 3 s, 300 ms and 90 ms.
 
   How it paints: the control with no window, painted by PaintArea into an off-screen bitmap
@@ -79,7 +79,7 @@ const
   CRoomNeeded = Int64(600) * 1024 * 1024;
   CFirstScreenMs = 3000;
   CScrollMs = 300;
-  // the design's 30 ms from a key to its paint, three times (Task 10a)
+  // the design's 30 ms from a key to its paint, three times
   CKeystrokeMs = 90;
 
 type

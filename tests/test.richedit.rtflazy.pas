@@ -39,7 +39,7 @@ type
     procedure CheckLazyAgainstFull(const AMsg: string; const ABytes: TBytes;
       ARandomOrder: Boolean);
     procedure CheckIndex(const AMsg: string; const ABytes: TBytes);
-    // W4: a walk that asks for values, checked against the whole parse
+    // a walk that asks for values, checked against the whole parse
     procedure CheckWalkValues(const AMsg: string; const ABytes: TBytes);
     procedure WalkValue(AIndex: Integer; AData: Pointer; AText: PByte; ALen: PtrInt;
       var AContinue: Boolean);
@@ -48,7 +48,6 @@ type
     FWalkMsg: string;
     FWalked: Integer;
   published
-    // the brief
     procedure TestLazyAndFullParseAgree;
     procedure TestOpeningParsesOnlyWhatIsShown;
     procedure TestAnEditAtTheEndOfALazyDocumentRewritesOnlyThatParagraph;
@@ -61,7 +60,6 @@ type
     procedure TestABigTableIsSplitIntoLockedParts;
     procedure TestScrollingThroughEverythingStaysBounded;
     procedure TestDeletedUnparsedParagraphsComeBackOnUndo;
-    // the review of batch A
     procedure TestWordPadsOwnWritingStaysBounded;
     procedure TestTablesOneAfterAnotherDoNotChain;
     procedure TestReadingInsideATableWhileItLoads;
@@ -73,14 +71,10 @@ type
     procedure TestARowWithANestedTableIsSavedAsItWas;
     procedure TestTheFullLoadIsOneParseThatStays;
     procedure TestDeletedParagraphsUndoneAfterTheirIntervalWentAreStillTheFilesOwn;
-    // fix wave W4
     procedure TestAWalkWithValuesGivesTheParseAndSetsNothing;
-    // fix wave W7
     procedure TestARowReadWhileItLoadsStaysOneRow;
-    // fix wave W11
     procedure TestAnEditUndoneInsideAParagraphGivesTheFileBack;
     procedure TestAnUndoneInsertKeepsTheEditNotTheParagraph;
-    // fix wave W13
     procedure TestUndoAndRedoCopyAParagraphOnce;
     procedure TestRandomEditsUndoneAndRedone;
     procedure TestAPlainParagraphUndoneAfterItsIntervalWentIsTheFilesOwn;
@@ -561,8 +555,6 @@ begin
     mf.Free;
   end;
 end;
-
-{ ---- the brief ---- }
 
 procedure TTyRtfLazyTest.TestLazyAndFullParseAgree;
 var
@@ -1158,8 +1150,6 @@ begin
     full.Free;
   end;
 end;
-
-{ ---- the review of batch A ---- }
 
 { WordPad's files, as large ones: it writes character properties as bare words and resets
   none (the table sample toggles LANG and KERNING in every screenful). The parse state must
@@ -2231,8 +2221,6 @@ begin
   end;
 end;
 
-{ ---- fix wave W4 ---- }
-
 { One step of the walk: the value the walk hands out for an unparsed paragraph is what the
   whole parse gives it - its format, runs, cell and marker text - read from the value alone. }
 procedure TTyRtfLazyTest.WalkValue(AIndex: Integer; AData: Pointer; AText: PByte; ALen: PtrInt;
@@ -2327,7 +2315,7 @@ begin
   end;
 end;
 
-{ R42: WalkParaTexts with AValues hands each unparsed paragraph of a lazily read RTF the value
+{ WalkParaTexts with AValues hands each unparsed paragraph of a lazily read RTF the value
   the parse that decoded it gives - for every sample, tables (some across a snapshot boundary,
   in WordPad's writing too) and a file with more intervals than the load lets pile up, so that
   intervals go during the walk - and leaves nothing parsed. }
@@ -2352,7 +2340,7 @@ begin
   CheckWalkValues('re-zh-mixed x 3 MB', Generate('re-zh-mixed.rtf', 3 * MB));
 end;
 
-{ W7 (K-5): the first slice ends inside a row, so the text ends with the row's first cell and
+{ the first slice ends inside a row, so the text ends with the row's first cell and
   its other cells are not appended yet. That cell is read (its interval is parsed: the row's
   other cells are records the text does not hold), the load goes on, and then a paragraph
   after the row in the same interval is read, which parses the interval again. The row's
@@ -2457,8 +2445,6 @@ begin
     full.Free;
   end;
 end;
-
-{ ---- fix wave W11 (R56) ---- }
 
 function SaveOf(ADoc: TTyRichDocument): TBytes;
 var
@@ -2601,7 +2587,7 @@ begin
   end;
 end;
 
-{ Q-M7 (fix wave W13): an undo gives a paragraph its lazy piece back (W11), and the next edit of
+{ an undo gives a paragraph its lazy piece back, and the next edit of
   it - a redo, or the same character typed again - takes the copy of its text the add buffer
   already holds, not a new one: a thousand cycles of each in a paragraph of 100,000 characters
   cost what the edits cost (a few bytes each; the copy alone is 100,003), and the file comes
@@ -2657,11 +2643,11 @@ begin
   end;
 end;
 
-{ Q-M7: random commands - typing that merges, Enter and pastes with breaks, deletions across
+{ random commands - typing that merges, Enter and pastes with breaks, deletions across
   paragraphs and cells, paragraph formats, update blocks, the run broken, reads that churn the
   loader, undo and redo, some runs with a small MaxUndoBytes and ClearUndo - on fixtures with
   and without tables and on a file of plain paragraphs that ends with the empty lazy one
-  (the re-review's probe, smaller; a fixed seed). After every undo the text is the one before
+  (a fixed seed). After every undo the text is the one before
   the step, after every redo the one after it, the index is whole after every command, and
   with everything undone (no step dropped) the save is the file. }
 procedure TTyRtfLazyTest.TestRandomEditsUndoneAndRedone;
@@ -2857,7 +2843,7 @@ type
   TBuildAccess = class(TTyRichDocBuilder)
   end;
 
-{ Q-O1 (fix wave W13): R56 in a big file. A plain paragraph (the value all plain parsed
+{ An edit undone gives the file back, in a big file. A plain paragraph (the value all plain parsed
   paragraphs share) typed in, or deleted, whose interval the loader let go before the undo, is
   the file's own again after it: saved byte for byte as the file - at the start, in the middle
   and at the end of a file of several megabytes read with a small residency; saved at once

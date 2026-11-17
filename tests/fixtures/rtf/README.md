@@ -24,7 +24,7 @@ runs on, Windows 10 19044) reads from the same files. It agrees everywhere excep
 - `hand-split-dbcs.rtf`, paragraphs 1 to 3: RichEdit pairs the lead byte with whatever byte comes
   next, a brace included, and shows nonsense. We join the halves. Paragraph 4 is RichEdit's own
   reading: `x?Ðy`.
-- `hand-end-nopar.rtf` and `hand-end-inrow.rtf` were added later (fix wave W16) and their
+- `hand-end-nopar.rtf` and `hand-end-inrow.rtf` were added later and their
   expected texts are ours. RichEdit reads `hand-end-nopar.rtf` as we do (the Windows-only test
   that has it read every sample checks the paragraphs). It shows `hand-end-inrow.rtf` (as that test
   saves it, its first paragraph rewritten) as the first paragraph alone: the row that is never

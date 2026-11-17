@@ -49,7 +49,6 @@ type
     procedure CheckRichEditReads(const AMsg: string; ADoc: TTyRichDocument);
     procedure CheckRange(const AMsg: string; ADoc: TTyRichDocument; AFrom, ALen: TTyRichPos);
   published
-    // the brief
     procedure TestOpenSaveIsByteIdentical;
     procedure TestOwnFilesRoundTrip;
     procedure TestChineseIsWrittenAsUnicodeEscapes;
@@ -64,7 +63,6 @@ type
     procedure TestSavingAnUnchangedBigDocumentCopiesRanges;
     procedure TestTheLastParagraphWithoutATerminator;
     procedure TestRefusesWhatItCannotSave;
-    // the review
     procedure TestKeptBlocksGoBackUnderTheirOwnUc;
     procedure TestAChangedRowWithANestedTableIsNotWritten;
     procedure TestOnlyTheEditedRowIsRewrittenAfterItsIntervalWent;
@@ -74,26 +72,21 @@ type
     procedure TestACellWithNoParagraphKeepsItsPlace;
     procedure TestSavingFromTheModelWalksTheParagraphs;
     procedure TestASaveReportsItsProgressAndCanBeCancelled;
-    // sweep B0
     procedure TestASaveInProgressRefusesEdits;
     procedure TestNoProgressCallAfterTheLastByte;
     procedure TestNewFontsTakeNoNumberTheBodyUses;
-    // 9b: a range (a copy's RTF)
+    // a range (a copy's RTF)
     procedure TestEveryFixturesRangesReadBackAsTheirText;
     procedure TestARangeWithoutItsSeparatorWritesNoPar;
     procedure TestRowsAreCopiedWhole;
     procedure TestAKeptRegionGoesOutAsTheFilesBytes;
     procedure TestAnEmptyRangeAndADocumentOfOurOwn;
-    // fix wave W5
     procedure TestARangeFromAParagraphsEndTakesNoObject;
     procedure TestAHugeLengthCopiesToTheEnd;
     procedure TestTheFilesOpenLastParagraphFollowedIsNotItsBytes;
     procedure TestARangeWhileLoadingAndAfterACancel;
-    // fix wave W17 (F-Y5)
     procedure TestAnEmptyLastParagraphIsTakenWhole;
-    // fix wave W18 (G-M4)
     procedure TestANegativeTabStopIsWrittenBack;
-    // Task 10a
     procedure TestADocumentOfOursNamesItsFontAndPage;
   end;
 
@@ -910,8 +903,6 @@ begin
     end;
   end;
 end;
-
-{ ---- the brief ---- }
 
 procedure TTyRtfWriteTest.TestOpenSaveIsByteIdentical;
 var
@@ -2491,7 +2482,7 @@ begin
     AssertTrue('still modified: the caller says when it is saved', d.Modified);
     AssertEquals('the history stays', depth, d.UndoDepth);
     // a paragraph deleted and brought back is the file's own again, and so is one whose
-    // typed text was undone (R56: the undo gives the paragraph its lazy piece back)
+    // typed text was undone (the undo gives the paragraph its lazy piece back)
     d.Undo;
     d.Execute(TTyRichDelete.Create(d.Text.ParaStart(2), d.Text.ParaLength(2) + 1));
     d.Undo;
@@ -2513,8 +2504,6 @@ begin
     d.Free;
   end;
 end;
-
-{ ---- the review ---- }
 
 { A memory manager for a piece of code under test: a block that is resized always moves,
   and what is given back is filled with garbage first. Memory used after it was let go of
@@ -4045,7 +4034,7 @@ begin
   Check('a passed-over group', '\pard\f0\fs24 {\*\tyunknown {\f12\fs40\afs44 hidden}}after\par ', 13);
 end;
 
-{ ---- 9b: a range, the RTF a copy puts on the clipboard ---- }
+{ ---- a range, the RTF a copy puts on the clipboard ---- }
 
 function RangeOut(ADoc: TTyRichDocument; AFrom, ALen: TTyRichPos;
   out AInfo: TTyRtfWriteInfo): TBytes;
@@ -4305,11 +4294,11 @@ begin
     AssertTrue('and centred', PosRaw('\qc', body) > 0);
     CheckRange('with its separator', d, 0, d.Text.ParaLength(0) + 1);
     { the document's last paragraph's text alone, in a document of two: a part, as the text
-      of any other line (R67) }
+      of any other line }
     o := RangeOut(d, d.Text.ParaStart(1), d.Text.ParaLength(1), info);
     AssertFalse('the last line''s text alone: no paragraph''s end', RtfEndsWithBreak(o));
     CheckRange('the last line''s text alone', d, d.Text.ParaStart(1), d.Text.ParaLength(1));
-    // begun in the line before: the last paragraph whole, with its \par (R64)
+    // begun in the line before: the last paragraph whole, with its \par
     o := RangeOut(d, d.Text.ParaStart(1) - 2, d.Text.ParaLength(1) + 2, info);
     AssertTrue('begun before it: a paragraph''s end', RtfEndsWithBreak(o));
     CheckRange('begun before it', d, d.Text.ParaStart(1) - 2, d.Text.ParaLength(1) + 2);
@@ -4449,8 +4438,6 @@ begin
   end;
 end;
 
-{ ---- fix wave W5 ---- }
-
 { Whether the range's RTF ends with a paragraph's end - what pasting it adds after what it
   holds: a group with a letter put in before the closing brace reads back as a paragraph of
   its own after a \par, and joins the last paragraph without one. }
@@ -4475,7 +4462,7 @@ begin
   end;
 end;
 
-{ W5 C-I1: a range that starts at the end of a paragraph whose last character is a picture
+{ a range that starts at the end of a paragraph whose last character is a picture
   takes no picture - its separator alone, and on into the next paragraph. }
 procedure TTyRtfWriteTest.TestARangeFromAParagraphsEndTakesNoObject;
 const
@@ -4519,7 +4506,7 @@ begin
   end;
 end;
 
-{ W5 C-M3: a length past the end - High(Int64) the furthest - copies to the end (the sum is
+{ a length past the end - High(Int64) the furthest - copies to the end (the sum is
   not formed before the length is clamped). }
 procedure TTyRtfWriteTest.TestAHugeLengthCopiesToTheEnd;
 var
@@ -4549,7 +4536,7 @@ begin
   end;
 end;
 
-{ W5 C-M4: the file's last paragraph has no terminator; once a paragraph is added after it, a
+{ the file's last paragraph has no terminator; once a paragraph is added after it, a
   range that takes it with its separator writes it from the model (with its \par), as a save
   does - its bytes alone would run into what follows on paste. Unchanged and still the last,
   it goes as its bytes. }
@@ -4585,7 +4572,7 @@ begin
     d.Free;
   end;
   // still the last and taken whole: its bytes have no \par, so it goes from the model with
-  // one (R64: a range that takes the document's last paragraph whole ends it with \par)
+  // one (a range that takes the document's last paragraph whole ends it with \par)
   d := LoadDoc(BytesOf('{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}\pard A\par\pard B}'), False);
   try
     o := RangeOut(d, 0, d.Text.Length, info);
@@ -4597,7 +4584,7 @@ begin
   end;
 end;
 
-{ W5 C-M5: ranges of a document whose load is still going on, and of one whose load was
+{ ranges of a document whose load is still going on, and of one whose load was
   cancelled (Incomplete), read back as what they took. The last paragraph appended so far has
   no separator in the text - nothing follows it yet -, so a range to its end ends with no
   paragraph's end in the RTF either (as the plain text has none); one that takes a paragraph's
@@ -4626,9 +4613,9 @@ var
     CheckRange(AWhat + ': all', d, 0, t.Length);
     o := RangeOut(d, 0, t.Length, info);
     AssertTrue(AWhat + ': all - the file''s bytes for most', info.VerbatimParas > 0);
-    // (the last appended so far taken whole: ended with its \par, R64)
+    // (the last appended so far taken whole: ended with its \par)
     AssertTrue(AWhat + ': all - a paragraph''s end after the last', RtfEndsWithBreak(o));
-    // (the last one's text alone: a part, R67; begun in the one before: whole, R64)
+    // (the last one's text alone: a part; begun in the one before: whole)
     o := RangeOut(d, t.ParaStart(n - 1), t.ParaLength(n - 1), info);
     AssertFalse(AWhat + ': the last paragraph''s text - no paragraph''s end', RtfEndsWithBreak(o));
     CheckRange(AWhat + ': the last paragraph''s text', d, t.ParaStart(n - 1), t.ParaLength(n - 1));
@@ -4684,9 +4671,7 @@ begin
   end;
 end;
 
-{ ---- Task 10a ---- }
-
-{ The Word check (wordcheck-report.md): a document that was not read from RTF - a new one, a
+{ A check against Word: a document that was not read from RTF - a new one, a
   text file - was written with no font and no page, so Word showed it in Times New Roman on
   its own paper. Now its header names the page (the model's: WordPad's Letter and margins, an
   inch above and below), and the view's font (BaseFontName) as \f0 for the text that names
@@ -4695,7 +4680,7 @@ end;
   (byte fidelity). }
 procedure TTyRtfWriteTest.TestADocumentOfOursNamesItsFontAndPage;
 const
-  // A4 (R54)
+  // A4
   Page = BS + 'paperw11906' + BS + 'paperh16838' + BS + 'margl1800' + BS + 'margr1800' + BS +
     'margt1440' + BS + 'margb1440';
 var
@@ -4752,7 +4737,7 @@ begin
   end;
 end;
 
-{ F-Y5: a range that reaches the document's end through the separator before an empty last
+{ a range that reaches the document's end through the separator before an empty last
   paragraph takes that paragraph whole - with its format, ended by \par; one that ends before
   that separator does not. Written and read back, both are what they took. }
 procedure TTyRtfWriteTest.TestAnEmptyLastParagraphIsTakenWhole;
@@ -4802,7 +4787,7 @@ begin
   end;
 end;
 
-{ G-M4: a file's stop left of the margin (\tx-300, legal with a negative indent) is written
+{ a file's stop left of the margin (\tx-300, legal with a negative indent) is written
   when its paragraph is rewritten from the model; only a stop at exactly 0 (TabCount's
   placeholder) is left out. The stops go in position order. }
 procedure TTyRtfWriteTest.TestANegativeTabStopIsWrittenBack;

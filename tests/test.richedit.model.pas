@@ -61,7 +61,7 @@ type
   private
     FChanges: array of TTyRichChange;
     FUpdatingSeen: string;   // what Updating said in the last OnChange
-    // W8: OnUpdatingEnd, one "e<changes heard so far><Updating T/F>" per edge
+    // OnUpdatingEnd, one "e<changes heard so far><Updating T/F>" per edge
     FEdges: string;
     // a document a save's callback or stream tries to load into, and what came of it
     FLoadDoc: TTyRichDocument;
@@ -105,12 +105,9 @@ type
     procedure TestTableIndexesAndEmptyTablesAreRefused;
     procedure TestARowThatHoldsANestedTableStaysAsItIs;
     procedure TestAValueIsReadWithoutALookup;
-    // fix wave W2
     procedure TestALoadIsRefusedWhileSavingOrReading;
     procedure TestTheFilesListTextFollowsItsParagraph;
-    // fix wave W7
     procedure TestUpdatingWhileChangesAreHeldBack;
-    // fix wave W8
     procedure TestUpdatingEndsWithAnEdge;
   end;
 
@@ -1160,7 +1157,7 @@ var
 begin
   d := TDocAccess.Create;
   try
-    // A4 (R54)
+    // A4
     AssertEquals('paper width', 11906, d.PaperWidth);
     AssertEquals('paper height', 16838, d.PaperHeight);
     AssertEquals('left margin', 1800, d.MarginLeft);
@@ -1684,7 +1681,7 @@ begin
   inherited DoUndo(ADoc);
 end;
 
-{ W7 (K-9): Updating is True exactly while the document holds its changes back - inside
+{ Updating is True exactly while the document holds its changes back - inside
   BeginUpdate .. the outermost EndUpdate and while a command or its undo runs - and False
   again in the OnChange that reports them. }
 procedure TTyRichModelTest.TestUpdatingWhileChangesAreHeldBack;
@@ -1723,7 +1720,7 @@ begin
   end;
 end;
 
-{ W8 (L-3): Updating's edge. OnUpdatingEnd comes once where Updating turns False - the
+{ Updating's edge. OnUpdatingEnd comes once where Updating turns False - the
   outermost EndUpdate, the end of a command's, an undo's or a redo's run - after the change's
   report, and also when there was nothing to report; never inside an update or a run. }
 procedure TTyRichModelTest.TestUpdatingEndsWithAnEdge;

@@ -1,6 +1,6 @@
 unit test.richedit.ime;
 
-{ TTyRichEdit and an input method (Task 10b): a composition is shown in the text where it goes
+{ TTyRichEdit and an input method: a composition is shown in the text where it goes
   in - laid out with its paragraph, underlined, its caret where the input method says - and is
   not the document's until it is committed, as one insert through the typing path; what ends a
   composition; the rectangle the input method is told; read-only and the engine's refusals;
@@ -37,7 +37,7 @@ type
     procedure FillPaintStyle(var AStyle: TTyRichPaintStyle); override;
     procedure DestroyWnd; override;
   public
-    { Fix wave W12. Late: the input method is told (ImeEndOnWidgetset True) and answers later
+    { Late: the input method is told (ImeEndOnWidgetset True) and answers later
       - nothing while it is told. SetContexts / SetContextL: the default handling of
       WM_IME_SETCONTEXT, how often and the lParam handed on. TearDownTalk: the window's
       destruction (DestroyWnd, from LCL's destructor after the control's own body) first gets
@@ -52,7 +52,7 @@ type
       way win32's does (its result through WM_IME_COMPOSITION, then WM_IME_ENDCOMPOSITION). }
     Ends, EndCommits: Integer;
     Answer: Boolean;
-    { Fix wave W13: what the input method answers, when not what was shown (pinyin shown,
+    { What the input method answers, when not what was shown (pinyin shown,
       hanzi committed); '' - what was shown. }
     AnswerWith: UnicodeString;
     { ImePlaceCandidates: how often, the last rectangle. }
@@ -73,7 +73,7 @@ type
     { DoExit alone (CM_EXIT without the window's kill-focus before it). }
     procedure ExitOnly;
   public
-    { Fix wave W15: a descendant's own command through the door of a user's edit
+    { A descendant's own command through the door of a user's edit
       (RunUserEdit) - the selection wrapped in brackets. DoorMode: 0 the place left to the
       door (behind what changed), 1 the text inside the brackets selected (anchor and caret
       given), 2 no command, 3 a command whose CanExecute refuses. What the maker saw when the
@@ -94,10 +94,10 @@ type
     FSaveCalls, FSaveRefusedAt: Integer;
     procedure Changed(Sender: TObject);
     procedure SelChanged(Sender: TObject);
-    // fix wave W11: key-press handlers that clear characters
+    // key-press handlers that clear characters
     procedure ClearUtf8(Sender: TObject; var UTF8Key: TUTF8Char);
     procedure ClearKey(Sender: TObject; var Key: Char);
-    // fix wave W13: key-press events counted (none may come while the control goes)
+    // key-press events counted (none may come while the control goes)
     procedure CountUtf8(Sender: TObject; var UTF8Key: TUTF8Char);
     procedure CountKey(Sender: TObject; var Key: Char);
     // a form's key preview that counts and keeps 'b' out
@@ -121,7 +121,6 @@ type
     procedure SetUp; override;
     procedure TearDown; override;
   published
-    // the brief's
     procedure TestImeCompositionIsNotInHistory;
     // one per requirement
     procedure TestTheCompositionIsLaidOutInlineAndUnderlined;
@@ -145,10 +144,8 @@ type
     procedure TestCocoasBridgeDrivesIt;
     procedure TestACodeEditMovesTheComposition;
     procedure TestAnUpdateInALargeDocumentTouchesOneParagraph;
-    // fix wave W11
     procedure TestAWin32CommitPassesTheKeyPressEvents;
     procedure TestACompositionPastTheRightEdgeIsScrolledTo;
-    // fix wave W12
     procedure TestTheWindowLosingTheFocusEndsIt;
     procedure TestTheCaretOrTheClauseAloneMoves;
     procedure TestTheSystemsCompositionWindowIsKeptAway;
@@ -164,13 +161,11 @@ type
     procedure TestTheCaretToldFollowsAZoomAndAWrapChange;
     procedure TestACompositionBelowTheBottomEdgeIsScrolledTo;
     procedure TestACompositionInATableCell;
-    // fix wave W13
     procedure TestAPressIsPlacedOnWhatTheUserSaw;
     procedure TestAPressAfterScrollingAwayStaysThere;
     procedure TestReadOnlyChangedWhileFocusedTellsTheContext;
     procedure TestThePublicActionsCommitTheCompositionFirst;
     procedure TestAWin32CommitPassesTheFormsKeyPreview;
-    // fix wave W15
     procedure TestAPressOnAPictureComposedOverSelectsNoObject;
     procedure TestADescendantsCommandIsAWholeUsersEdit;
     procedure TestEveryUsersEditComesThroughTheOneDoor;
@@ -656,8 +651,6 @@ begin
   end;
 end;
 
-{ ---- the brief's test ---- }
-
 { The history does not change while composing - no command, no undo step, nothing to undo
   that was not there - and the commit is one step more, which undo takes back whole. A commit
   merges with the typing before it, as the memo's (its commit is typing); one with a line
@@ -1118,7 +1111,7 @@ begin
     AssertEquals('told to drop it', 1, FRich.Ends);
     AssertEquals('nothing went in', 'abc', FRich.Lines[0]);
     AssertEquals('nothing shown', -1, FRich.Layouter.Composition.Para);
-    { The control freed while composing, with its window (fix wave W12, J-I2): the input
+    { The control freed while composing, with its window: the input
       method is told to drop the composition once, while the document is there; what LCL's
       destructor still delivers to the window after the control's own body freed the document
       (the input method's messages, the focus taken away, CM_EXIT, Cocoa's bridge) does
@@ -1132,7 +1125,7 @@ begin
     TImeProbe.AllCommits := 0;
     TImeProbe.TearDownTalks := 0;
     FRich.TearDownTalk := True;
-    { Q-M2 (fix wave W13): a result the window gets while the control goes raises no key-press
+    { a result the window gets while the control goes raises no key-press
       event - the handlers would read a control whose document is gone. }
     FRich.OnUTF8KeyPress := @CountUtf8;
     FRich.OnKeyPress := @CountKey;
@@ -1516,7 +1509,7 @@ begin
 end;
 
 { A composition update in the middle of two million lines lays out and paints its paragraph
-  (and what reaches into its band): the counts of a keystroke (10a), nothing proportional to
+  (and what reaches into its band): the counts of a keystroke, nothing proportional to
   the document. }
 procedure TTyRichEditImeTest.TestAnUpdateInALargeDocumentTouchesOneParagraph;
 var
@@ -1565,8 +1558,6 @@ begin
     'tree nodes, %d characters measured', [BigLines, n, FRich.Device.MeasuredChars]));
 end;
 
-{ ---- fix wave W11 ---- }
-
 var
   GCleared: UTF8String;   // what the key-press handlers clear ('' none, '*' every character)
 
@@ -1596,7 +1587,7 @@ begin
   if UTF8Key = 'b' then UTF8Key := '';
 end;
 
-{ E-X2: on win32 a committed composition passes the key-press events a typed character passes,
+{ on win32 a committed composition passes the key-press events a typed character passes,
   character by character, as the memo's commits do there: a handler that clears a character
   keeps it out of the one insert (one undo step); one that clears them all leaves nothing - no
   insert, no undo step, no OnChange. }
@@ -1654,7 +1645,7 @@ begin
   FRich.OnKeyPress := nil;
 end;
 
-{ E-X3: with no wrapping, a composition that grows past the right edge is followed as the caret
+{ with no wrapping, a composition that grows past the right edge is followed as the caret
   is (the least scroll across): its caret stays in the text, and so does the rectangle the
   input method is told. }
 procedure TTyRichEditImeTest.TestACompositionPastTheRightEdgeIsScrolledTo;
@@ -1679,8 +1670,6 @@ begin
   AssertTrue('the candidate window there', EqualRect(r, FRich.LastPlace));
   FRich.CancelComposition;
 end;
-
-{ ---- fix wave W12 ---- }
 
 const
   TableRtf = '{' + BS + 'rtf1' + BS + 'ansi{' + BS + 'fonttbl{' + BS + 'f0 Arial;}}' + BS + 'f0' +
@@ -1707,7 +1696,7 @@ begin
   AProbe.Msg(WM_IME_COMPOSITION, GCS_COMPSTR or GCS_CURSORPOS or GCS_COMPATTR);
 end;
 
-{ J-I1: on win32 the composition ends where the window loses the focus (LM_KILLFOCUS), before
+{ on win32 the composition ends where the window loses the focus (LM_KILLFOCUS), before
   the input context serves another window: the input method is told to commit and its result
   comes here, before anything later; CM_EXIT's DoExit ends nothing a second time - and on win32
   ends nothing at all (it comes too late, and never for another form or program). }
@@ -1749,7 +1738,7 @@ begin
   FRich.CancelComposition;
 end;
 
-{ J-M1: the input method's caret and its clause are read from a message that says only they
+{ the input method's caret and its clause are read from a message that says only they
   changed - the drawn caret and the thick underline follow. lParam 0: what the context holds
   is read (an emptied composition: nothing drawn, still composing). }
 procedure TTyRichEditImeTest.TestTheCaretOrTheClauseAloneMoves;
@@ -1788,7 +1777,7 @@ begin
   AssertEquals('nothing went in', 'ab', FRich.Lines[0]);
 end;
 
-{ J-M2: WM_IME_SETCONTEXT when the window gets the context - the default handling is handed
+{ WM_IME_SETCONTEXT when the window gets the context - the default handling is handed
   the flags without ISC_SHOWUICOMPOSITIONWINDOW (the composition is the control's), the rest
   as they came; read-only, or the context going: as it came (LCL's own way). }
 procedure TTyRichEditImeTest.TestTheSystemsCompositionWindowIsKeptAway;
@@ -1802,13 +1791,13 @@ begin
   AssertEquals('the context going: as it came', 0, FRich.Msg(WM_IME_SETCONTEXT, ISC_SHOWUIALL, 0));
   AssertEquals('not handed on here', 0, FRich.SetContexts);
   FRich.ReadOnly := True;
-  // (set while focused, the context was told once there - Q-M3's test)
+  // (set while focused, the context was told once there)
   FRich.SetContexts := 0;
   AssertEquals('read-only: as it came', 0, FRich.Msg(WM_IME_SETCONTEXT, ISC_SHOWUIALL, 1));
   AssertEquals('read-only: not handed on here', 0, FRich.SetContexts);
 end;
 
-{ J-M3: disabled while composing cancels it, as ReadOnly does (the input method told to drop
+{ disabled while composing cancels it, as ReadOnly does (the input method told to drop
   it, nothing goes in, nothing drawn); the end message always drops what the control shows -
   also when the control answers as read-only (a parent disabled: IsEnabled False). }
 procedure TTyRichEditImeTest.TestDisablingCancelsAndTheEndAlwaysDrops;
@@ -1847,9 +1836,9 @@ begin
   end;
 end;
 
-{ J-M4: a user's edit or action while composing ends the composition first (committed where it
+{ a user's edit or action while composing ends the composition first (committed where it
   was shown, as a press does) and then acts on the document the user sees - Ctrl+A, Ctrl+Z,
-  Ctrl+X, the menu's Cut; the review's case: with the composition at the document's end,
+  Ctrl+X, the menu's Cut; and with the composition at the document's end,
   Ctrl+A then the input method's (late) result does not replace the document. }
 procedure TTyRichEditImeTest.TestAUsersEditCommitsTheCompositionFirst;
 var
@@ -1865,7 +1854,7 @@ begin
   AssertFalse('Ctrl+A: ended', FRich.Composing);
   AssertEquals('Ctrl+A: committed first', 'HelloXY', FRich.Lines[0]);
   AssertEquals('then all selected', Int64(7), FRich.SelLength);
-  // the review's case: an input method that answers later
+  // an input method that answers later
   FRich.SelStart := 7;
   FRich.Late := True;
   ComposeByMessages(FRich, 'QQ');
@@ -1920,7 +1909,7 @@ begin
   AssertEquals('the selection when it began replaced, not all', 'Hello QQ', FRich.Lines[0]);
 end;
 
-{ J-M5: the commit is typing - the one routine: it is refused where a typed character is (a
+{ the commit is typing - the one routine: it is refused where a typed character is (a
   selection across cells; the cut of a long paragraph), keeps the paragraph end before a table
   as typing does, and goes in in the format its composition was shown in; a composition does
   not begin where a typed character would be refused. }
@@ -2022,7 +2011,7 @@ begin
   AssertEquals('committed in the format it was shown in', plain, RunAt(d, 0, 3).Format);
 end;
 
-{ J-M6: Cocoa - the control ends the bridge's composition itself (the window losing the focus
+{ Cocoa - the control ends the bridge's composition itself (the window losing the focus
   by code, a cancel from code) while Cocoa's session goes on: the marked text that session
   still sends, and its end, go nowhere - the text is in the document once. }
 procedure TTyRichEditImeTest.TestCocoasSessionAfterTheControlEndedIt;
@@ -2063,7 +2052,7 @@ begin
   AssertEquals('the next session commits', 'aniz' + 'b', FRich.Lines[0]);
 end;
 
-{ J-M7: Cocoa's base is taken after the composition began - its settle puts a caret a change
+{ Cocoa's base is taken after the composition began - its settle puts a caret a change
   left inside a cluster on a caret place, and the bridge then asks the caret's index. }
 procedure TTyRichEditImeTest.TestCocoasBaseIsTakenAfterTheSnap;
 var
@@ -2086,7 +2075,7 @@ begin
   ime.ImeSessionEnd;
 end;
 
-{ J-M8: a press when the input method answers its commit later: the late result goes in where
+{ a press when the input method answers its commit later: the late result goes in where
   the composition was shown, and the caret stays where the press put it (moved with the
   text). The memo's win32 composition is the system's: its commit, typed as WM_CHAR, goes in
   at the caret wherever it is then - here the composition was shown in the text, and its text
@@ -2104,7 +2093,7 @@ begin
   FRich.SelStart := 2;
   FRich.Late := True;
   ComposeByMessages(FRich, 'XY');
-  // (where the press goes: on 'f' as it is shown - behind the composition, Q-I1)
+  // (where the press goes: on 'f' as it is shown - behind the composition)
   r := FRich.PositionRect(5);
   FRich.PressAt(r.Left, (r.Top + r.Bottom) div 2);
   FRich.ReleaseAt(r.Left, (r.Top + r.Bottom) div 2);
@@ -2134,7 +2123,7 @@ begin
   AssertEquals('after the next start: at the caret', 'abXYcdRef', FRich.Lines[0]);
 end;
 
-{ J-M9: a commit keeps out what typing keeps out - DEL and the C1 controls too (tab, LF and
+{ a commit keeps out what typing keeps out - DEL and the C1 controls too (tab, LF and
   U+000B are an input method's). }
 procedure TTyRichEditImeTest.TestACommitTakesNoControlCharacter;
 begin
@@ -2150,7 +2139,7 @@ begin
   FRich.CancelComposition;
 end;
 
-{ J-M10: a composition at a list paragraph's start leaves the marker in the paragraph's own
+{ a composition at a list paragraph's start leaves the marker in the paragraph's own
   format; one in a paragraph near the length cap does not count toward it (no cut notice
   while composing). }
 procedure TTyRichEditImeTest.TestTheMarkerAndTheCapIgnoreTheComposition;
@@ -2213,7 +2202,7 @@ begin
   FRich.CancelComposition;
 end;
 
-{ J-M11: a message with a result AND a new composition (what Microsoft Pinyin sends when one
+{ a message with a result AND a new composition (what Microsoft Pinyin sends when one
   types on after a commit): the result once, the new composition after it; the end before the
   result (the order some input methods use); a composition at a paragraph's start, in an empty
   paragraph and before an object. }
@@ -2299,7 +2288,7 @@ begin
   AssertTrue('the object after it', RunAt(d, 0, 3).Obj <> nil);
 end;
 
-{ J-M11: a zoom and a change of the wrap mode while composing - the rectangle the input
+{ a zoom and a change of the wrap mode while composing - the rectangle the input
   method is told follows: where the caret of the same text typed there is. }
 procedure TTyRichEditImeTest.TestTheCaretToldFollowsAZoomAndAWrapChange;
 
@@ -2362,7 +2351,7 @@ begin
   FRich.CancelComposition;
 end;
 
-{ J-M12: a composition that wraps below the view's bottom edge is scrolled to as the caret
+{ a composition that wraps below the view's bottom edge is scrolled to as the caret
   is: its caret, and the rectangle the input method is told, stay in the text. }
 procedure TTyRichEditImeTest.TestACompositionBelowTheBottomEdgeIsScrolledTo;
 var
@@ -2403,7 +2392,7 @@ begin
   FRich.CancelComposition;
 end;
 
-{ J-I3: a composition in a table cell - the cell's text after it moves, a composition that
+{ a composition in a table cell - the cell's text after it moves, a composition that
   wraps makes the row taller (and its cancel puts it back), the other cell answers as before,
   and the rectangle the input method is told is in the composing cell. }
 procedure TTyRichEditImeTest.TestACompositionInATableCell;
@@ -2474,14 +2463,14 @@ begin
   FRich.CancelComposition;
 end;
 
-{ Q-I1 (fix wave W13): a press while composing is placed on what the user saw - the text with
+{ a press while composing is placed on what the user saw - the text with
   the composition in it - and its place goes through the commit the press causes: the caret
   ends before the character that was clicked, in the text as it is after the commit; a press on
   the composition ends behind what went in, one before it before what went in. So with an
   input method that answers at once and with one that answers late, with a result as wide as
   what was shown and with one that is not (pinyin shown, hanzi committed), for a left and a
   right press. A late result changes the text and puts the press's caret back: one OnChange,
-  one OnSelectionChange (Q-M1). }
+  one OnSelectionChange. }
 procedure TTyRichEditImeTest.TestAPressIsPlacedOnWhatTheUserSaw;
 
   procedure Away;
@@ -2577,7 +2566,7 @@ begin
       end;
 end;
 
-{ Q-I1: compose, scroll the composition far out of view, press in the text shown: the caret is
+{ compose, scroll the composition far out of view, press in the text shown: the caret is
   where the press was (the commit went in far above) and the view stays where it is - the
   commit a press causes does not scroll, nor does a late result. }
 procedure TTyRichEditImeTest.TestAPressAfterScrollingAwayStaysThere;
@@ -2627,7 +2616,7 @@ begin
   end;
 end;
 
-{ Q-M3: ReadOnly changed while the control keeps the focus tells the input context at once
+{ ReadOnly changed while the control keeps the focus tells the input context at once
   whether the system's composition window is wanted - as the window's activation tells it, with
   what the activation asked to show: read-only, the system's window shows what is typed;
   editable again, the composition is in the text. Unfocused: nothing (the next activation tells
@@ -2658,10 +2647,10 @@ begin
   AssertEquals('unfocused: nothing told', n, FRich.SetContexts);
 end;
 
-{ Q-M4: the public methods that are a user's actions in an application's hands (an action
+{ the public methods that are a user's actions in an application's hands (an action
   list's shortcut, a toolbar button that never takes the focus) end a composition first, as
   their keys do: Undo, Redo, CutToClipboard (PasteFromClipboard: the paste suite). SelectAll from
-  code does not (J-M4's test). }
+  code does not. }
 procedure TTyRichEditImeTest.TestThePublicActionsCommitTheCompositionFirst;
 var
   writes: Integer;
@@ -2693,7 +2682,7 @@ begin
   AssertEquals('nothing copied', writes, FRich.ClipWrites);
 end;
 
-{ Q-M9: on win32 a committed character passes a form's key preview as a typed one does (LCL's
+{ on win32 a committed character passes a form's key preview as a typed one does (LCL's
   DoUTF8KeyPress asks each parent form with KeyPreview before the control): the form's
   OnUTF8KeyPress sees each committed character and one it clears stays out. Without KeyPreview
   the form is not asked. }
@@ -2732,8 +2721,6 @@ begin
   end;
 end;
 
-{ ---- fix wave W15 ---- }
-
 { A picture of 600 x 300 twips (40 x 20 pixels at 96 dpi), as a PNG. }
 function NewPicture: TTyRichPicture;
 var
@@ -2754,7 +2741,7 @@ begin
   end;
 end;
 
-{ Minor 1 of the W13 re-review: a press on a picture while composing - the object under the
+{ A press on a picture while composing - the object under the
   press is carried through the commit as a position. A picture selected and then composed over
   is gone once the commit replaced the selection: the press selects no object (before: the
   character behind what went in was selected as if it were the picture, and the next key
@@ -2851,7 +2838,7 @@ begin
       PictureCase(over, late);
 end;
 
-{ Minor 2 of the W13 re-review: a descendant's own command through RunUserEdit is a whole
+{ A descendant's own command through RunUserEdit is a whole
   user's edit - ReadOnly asked, a composition ended before the command is made, a document that
   takes no edit refused with its reason, the selection before it put back by its undo and the
   one after it by its redo, the caret where the descendant says (or behind what changed), one
@@ -2963,7 +2950,7 @@ begin
     a.Bottom]), (r.Bottom > r.Top) and (r.Top >= a.Top) and (r.Bottom <= a.Bottom));
 end;
 
-{ Minor 2: the control's own user's edits - a typed character, Backspace, Delete, Enter, Tab,
+{ The control's own user's edits - a typed character, Backspace, Delete, Enter, Tab,
   Shift+Enter, Ctrl+X, the menu's Cut, a paste, an input method's commit, Enter on an empty list
   item - come through the same door (RunUserEdit: no second path); an edit from code (SelText
   :=) does not. }
