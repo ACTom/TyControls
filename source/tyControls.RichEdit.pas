@@ -6525,23 +6525,42 @@ end;
 procedure TTyCustomRichEdit.ApiCharFormat(AStart, ALen: TTyRichPos; AMask: TTyCharFormatMask;
   const AValue: TTyCharFormat);
 var
-  f: TTyCharFormat;
+  f, base: TTyCharFormat;
+  keep, m: TTyCharFormatMask;
 begin
   if AMask = [] then Exit;
+  { A name or a size written that is the one text without a name / size of its own is shown
+    in (the base's: what Name and Size read there, so what a toolbar writes back): such text
+    shows it already and keeps none of its own - the base's value is not frozen into it, a
+    later DefAttributes change still reaches it. Decided run by run by the engine
+    (AKeepNone), so it holds over any selection, however large (G-M2). }
+  keep := [];
+  if AMask * [cffFontName, cffSize] <> [] then
+  begin
+    base := BaseCharFormat;
+    if (cffFontName in AMask) and (AValue.FontName <> '') and (AValue.FontName = base.FontName) then
+      Include(keep, cffFontName);
+    if (cffSize in AMask) and (AValue.SizeHalfPt > 0) and (AValue.SizeHalfPt = base.SizeHalfPt) then
+      Include(keep, cffSize);
+  end;
   if ALen <= 0 then
   begin
     { Nothing selected at the caret: the format the next typed text gets (no command, no
       undo step, no OnChange), merged over what it would get now. }
     if (AStart = FCaret) and not HasSelection then
     begin
-      f := TyMergeCharFormat(FDoc.Formats.CharFormat(TypingFormat), AMask, AValue);
+      f := FDoc.Formats.CharFormat(TypingFormat);
+      m := AMask;
+      if (cffFontName in keep) and (f.FontName = '') then Exclude(m, cffFontName);
+      if (cffSize in keep) and (f.SizeHalfPt <= 0) then Exclude(m, cffSize);
+      f := TyMergeCharFormat(f, m, AValue);
       FPendingFmt := FDoc.Formats.InternChar(f);
       FPendingAt := FCaret;
       FHasPendingFmt := True;
     end;
     Exit;
   end;
-  RunApiEdit(TTyRichSetCharFormat.Create(TyRichRange(AStart, ALen), AMask, AValue), ALen);
+  RunApiEdit(TTyRichSetCharFormat.Create(TyRichRange(AStart, ALen), AMask, AValue, keep), ALen);
 end;
 
 procedure TTyCustomRichEdit.ApiParaFormat(AStart, ALen: TTyRichPos; AMask: TTyParaFormatMask;

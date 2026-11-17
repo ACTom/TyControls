@@ -117,6 +117,10 @@ type
     procedure TestTheRelativeIndentFields;
     procedure TestEachObjectCountsOnce;
     procedure TestAFormatWriteThatChangesNothingIsNoStep;
+    // fix wave W18
+    procedure TestAMergedKeystrokeGathersNoObjects;
+    procedure TestAMergeCountsTheObjectsItBrings;
+    procedure TestKeepNoneLeavesRunsWithoutTheirOwn;
   end;
 
 implementation
@@ -2226,6 +2230,166 @@ begin
     d.EndUpdate;
     AssertEquals('an empty block: no step', 0, d.UndoDepth);
     AssertEquals('...and redo still there', depth, d.RedoDepth);
+  finally
+    d.Free;
+  end;
+end;
+
+{ ---- fix wave W18 ---- }
+
+{ G-M3: a keystroke merged into a run of typing costs the history no walk of the objects its
+  paragraph holds (each merged record keeps the paragraph's old value with all of them): the
+  values it brings share the key of one the step holds already. Counted, not timed:
+  HistoryObjectVisits over the last keys of a long run is 0, the history's bytes stay those
+  of one hold, and an undo of the merged step walks the objects once, not once a record. }
+procedure TTyRichCommandsTest.TestAMergedKeystrokeGathersNoObjects;
+const
+  Objects = 1000;
+  Keys = 300;
+var
+  d: TTyRichDocument;
+  i: Integer;
+  v, bytes1: Int64;
+begin
+  d := NewDoc('ab');
+  try
+    d.BeginUpdate;
+    for i := 1 to Objects do
+      AssertTrue(d.Execute(TTyRichInsertObject.Create(1,
+        TTyRichOpaque.Create('{\field{\*\fldinst PAGE}{\fldrslt 1}}', '1'))));
+    d.EndUpdate;
+    d.ClearUndo;
+    d.HistoryObjectVisits := 0;
+    AssertTrue(d.Execute(TTyRichInsertText.Create(d.Text.Length, 'x', TyRichInheritFormat, True)));
+    AssertEquals('the first key: a step of its own, its objects walked once', Objects,
+      d.HistoryObjectVisits);
+    bytes1 := d.HistoryBytes;
+    for i := 2 to Keys - 10 do
+      AssertTrue(d.Execute(TTyRichInsertText.Create(d.Text.Length, 'x', TyRichInheritFormat, True)));
+    d.HistoryObjectVisits := 0;
+    for i := 1 to 10 do
+      AssertTrue(d.Execute(TTyRichInsertText.Create(d.Text.Length, 'x', TyRichInheritFormat, True)));
+    v := d.HistoryObjectVisits;
+    AssertEquals('one merged step', 1, d.UndoDepth);
+    AssertEquals('the last ten merged keys walk no object', 0, v);
+    // the objects still counted once: the step's own bytes grew, no object came twice
+    AssertTrue(Format('the objects once (%d after one key, %d after %d)', [bytes1, d.HistoryBytes, Keys]),
+      d.HistoryBytes - bytes1 < Int64(Keys) * 1024);
+    // the undo makes it a redo step: its objects walked once, not once a record
+    d.HistoryObjectVisits := 0;
+    d.Undo;
+    AssertEquals('undone whole', 2 + Objects, d.Text.Length);
+    AssertTrue(Format('the undo walks them once (%d)', [d.HistoryObjectVisits]),
+      d.HistoryObjectVisits <= Objects);
+    d.Redo;
+    AssertEquals('redone', 2 + Objects + Keys, d.Text.Length);
+    d.ClearUndo;
+    AssertEquals('ClearUndo: nothing', 0, d.HistoryBytes);
+  finally
+    d.Free;
+  end;
+end;
+
+{ G-M3: a merge counts what the merged command brings that the step does not hold yet - a key
+  typed into another paragraph with a picture of its own (code may merge typing anywhere)
+  adds that picture; it leaves the count with the step. }
+procedure TTyRichCommandsTest.TestAMergeCountsTheObjectsItBrings;
+const
+  MB = 1024 * 1024;
+var
+  d: TTyRichDocument;
+  b: Int64;
+begin
+  d := NewDoc('ab'#10'cd');
+  try
+    AssertTrue(d.Execute(TTyRichInsertObject.Create(1, BigPicture(MB))));
+    AssertTrue(d.Execute(TTyRichInsertObject.Create(d.Text.Length - 1, BigPicture(2 * MB))));
+    d.ClearUndo;
+    d.MaxUndoBytes := 0;
+    // typing in the first paragraph: its picture (1 MB)
+    AssertTrue(d.Execute(TTyRichInsertText.Create(0, 'x', TyRichInheritFormat, True)));
+    b := d.HistoryBytes;
+    AssertTrue(Format('one key: the first picture (%d)', [b]), (b >= MB) and (b < MB + MB div 2));
+    // merged: another key there brings nothing new
+    AssertTrue(d.Execute(TTyRichInsertText.Create(1, 'x', TyRichInheritFormat, True)));
+    AssertTrue(Format('a key beside it: the same (%d)', [d.HistoryBytes]), d.HistoryBytes - b < 64 * 1024);
+    // merged: a key in the second paragraph brings its picture
+    AssertTrue(d.Execute(TTyRichInsertText.Create(d.Text.Length, 'y', TyRichInheritFormat, True)));
+    AssertEquals('still one step', 1, d.UndoDepth);
+    AssertTrue(Format('a key in the other paragraph: both pictures (%d)', [d.HistoryBytes]),
+      (d.HistoryBytes >= 3 * MB) and (d.HistoryBytes < 3 * MB + MB div 2));
+    // and once more there: nothing new, and its picture is not walked again
+    b := d.HistoryBytes;
+    d.HistoryObjectVisits := 0;
+    AssertTrue(d.Execute(TTyRichInsertText.Create(d.Text.Length, 'y', TyRichInheritFormat, True)));
+    AssertTrue(Format('again: the same (%d)', [d.HistoryBytes]), d.HistoryBytes - b < 64 * 1024);
+    AssertEquals('...nothing walked: the step knows that value''s objects', 0, d.HistoryObjectVisits);
+    // undone, the step's records go (a redo runs it again): both leave the count
+    d.Undo;
+    AssertTrue(Format('let go with the step''s records (%d)', [d.HistoryBytes]), d.HistoryBytes < MB);
+    d.Redo;
+    AssertTrue(Format('redone: a fresh step holds both (%d)', [d.HistoryBytes]),
+      (d.HistoryBytes >= 3 * MB) and (d.HistoryBytes < 3 * MB + MB div 2));
+  finally
+    d.Free;
+  end;
+end;
+
+{ G-M2 in the engine: AKeepNone leaves a run that has no name / size of its own without one,
+  writes the value to the others, and a write that leaves everything as it was is no step. }
+procedure TTyRichCommandsTest.TestKeepNoneLeavesRunsWithoutTheirOwn;
+var
+  d: TTyRichDocument;
+  f, g: TTyCharFormat;
+
+  function RawAt(APos: TTyRichPos): TTyCharFormat;
+  var
+    runs: TTyRunArray;
+    p, i, k: Integer;
+    o: TTyRichPos;
+  begin
+    p := d.Text.ParaOfPos(APos);
+    o := APos - d.Text.ParaStart(p);
+    runs := d.RunsOf(p);
+    k := 0;
+    for i := 0 to High(runs) do
+      if runs[i].Start <= o then k := i;
+    Result := d.Formats.CharFormat(runs[k].Format);
+  end;
+
+begin
+  d := NewDoc('abcdef'#10'ghi');
+  try
+    // 'cd' 14 pt and Courier of their own, 'ef' 12 pt of its own
+    f := TyDefaultCharFormat;
+    f.SizeHalfPt := 28;
+    f.FontName := 'Courier New';
+    AssertTrue(d.Execute(TTyRichSetCharFormat.Create(TyRichRange(2, 2), [cffSize, cffFontName], f)));
+    f.SizeHalfPt := 24;
+    AssertTrue(d.Execute(TTyRichSetCharFormat.Create(TyRichRange(4, 2), [cffSize], f)));
+    d.ClearUndo;
+    // 12 pt over everything, keeping none where there is none: only 'cd' changes
+    g := TyDefaultCharFormat;
+    g.SizeHalfPt := 24;
+    AssertTrue(d.Execute(TTyRichSetCharFormat.Create(TyRichRange(0, d.Text.Length), [cffSize], g,
+      [cffSize])));
+    AssertEquals('a step', 1, d.UndoDepth);
+    AssertEquals('ab: still none', 0, RawAt(0).SizeHalfPt);
+    AssertEquals('cd: 12 pt now', 24, RawAt(2).SizeHalfPt);
+    AssertEquals('ef: its own 12 pt', 24, RawAt(4).SizeHalfPt);
+    AssertEquals('ghi: still none', 0, RawAt(7).SizeHalfPt);
+    // again: nothing left to change - no step
+    AssertTrue(d.Execute(TTyRichSetCharFormat.Create(TyRichRange(0, d.Text.Length), [cffSize], g,
+      [cffSize])));
+    AssertEquals('nothing to change: no step', 1, d.UndoDepth);
+    // the name the same way; without AKeepNone the runs with none take it
+    g.FontName := 'Arial';
+    AssertTrue(d.Execute(TTyRichSetCharFormat.Create(TyRichRange(0, 3), [cffFontName], g,
+      [cffFontName])));
+    AssertEquals('ab: no name still', '', RawAt(0).FontName);
+    AssertEquals('c: Arial', 'Arial', RawAt(2).FontName);
+    AssertTrue(d.Execute(TTyRichSetCharFormat.Create(TyRichRange(0, 3), [cffFontName], g)));
+    AssertEquals('without it: ab takes it', 'Arial', RawAt(0).FontName);
   finally
     d.Free;
   end;

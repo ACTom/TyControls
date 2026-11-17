@@ -112,6 +112,7 @@ type
     procedure TestAStoredPlainTextHoldsForEveryLoad;
     procedure TestABlockDoesNotChangeWhatAWriteDoes;
     procedure TestABlockLeftByAnException;
+    procedure TestTheShownSizeWrittenBackIsExact;
   end;
 
   // the control's protected test seams (the consistency budget, the API's door)
@@ -646,9 +647,10 @@ begin
   CheckOthers('Name', []);
   MixedRuns;
   Sel(0, 6);
-  FRich.SelAttributes.Size := 9;
-  for i := 0 to 5 do AssertEquals('the size everywhere', 18, Fmt(i).SizeHalfPt);
-  AssertEquals('read back', 9, FRich.SelAttributes.Size);
+  // (not the base's size: text without one of its own would keep none - G-M2)
+  FRich.SelAttributes.Size := 11;
+  for i := 0 to 5 do AssertEquals('the size everywhere', 22, Fmt(i).SizeHalfPt);
+  AssertEquals('read back', 11, FRich.SelAttributes.Size);
   CheckOthers('Size', [cffSize]);
   MixedRuns;
   Sel(0, 6);
@@ -3152,6 +3154,59 @@ begin
   FRich.Undo;
   AssertEquals('undone at once', 'abc', FRich.Lines[0]);
   AssertEquals('the caret at BeginEdit', 3, FRich.SelStart);
+end;
+
+{ G-M2: Size / Name written back as read leave text without a size / name of its own without
+  one, run by run - over a selection however large (the re-review's 400,001 lines, past the
+  consistency budget): no step, not Modified, and a later DefAttributes.Size still reaches
+  every line. Text whose own size differs takes the value. }
+procedure TTyRichEditApiTest.TestTheShownSizeWrittenBackIsExact;
+var
+  sl: TStringList;
+  i, depth, base: Integer;
+  n: TTyRichPos;
+begin
+  sl := TStringList.Create;
+  try
+    for i := 0 to 400000 do sl.Add('line ' + IntToStr(i));
+    SetText(sl.Text);
+  finally
+    sl.Free;
+  end;
+  FRich.Modified := False;
+  depth := FRich.Document.UndoDepth;
+  base := FRich.DefAttributes.Size;
+  n := FRich.Document.Text.Length;
+  Sel(0, n);
+  AssertTrue('past the budget: the walk is cut', FRich.SelAttributes.ConsistentAttributes = []);
+  FRich.SelAttributes.Size := FRich.SelAttributes.Size;
+  FRich.SelAttributes.Name := FRich.SelAttributes.Name;
+  AssertEquals('no step', depth, FRich.Document.UndoDepth);
+  AssertFalse('not Modified', FRich.Modified);
+  AssertEquals('...no OnChange', 0, FChanges);
+  AssertEquals('the last line: no size of its own', 0, Fmt(n - 1).SizeHalfPt);
+  FRich.DefAttributes.Size := base + 4;
+  Sel(n - 1, 1);
+  AssertEquals('DefAttributes reaches the last line', base + 4, FRich.SelAttributes.Size);
+  Sel(0, 1);
+  AssertEquals('...and the first', base + 4, FRich.SelAttributes.Size);
+  // text with a size of its own that differs takes the value; the rest keeps none
+  SetText('abc'#10'def');
+  base := FRich.DefAttributes.Size;
+  Sel(1, 1);
+  FRich.SelAttributes.Size := base + 6;
+  depth := FRich.Document.UndoDepth;
+  Sel(0, 7);
+  FRich.SelAttributes.Size := base;
+  AssertEquals('b changed: one step', depth + 1, FRich.Document.UndoDepth);
+  AssertEquals('b: the base size of its own now', base * 2, Fmt(1).SizeHalfPt);
+  AssertEquals('a: none still', 0, Fmt(0).SizeHalfPt);
+  AssertEquals('d: none still', 0, Fmt(4).SizeHalfPt);
+  // nothing is selected: the typing format keeps none too
+  FRich.SelStart := 6;
+  FRich.SelAttributes.Size := base;
+  Chars('x');
+  AssertEquals('typed: no size of its own', 0, Fmt(6).SizeHalfPt);
 end;
 
 initialization

@@ -106,10 +106,13 @@ type
     procedure Assign(Source: TPersistent); override;
     { The font's name - read: the one the text is shown in (the base's for text without a
       name of its own); written: a name LCL takes for its default font ('default', '';
-      IsFontNameDefault) is "none of its own" - the text follows the base (R70). }
+      IsFontNameDefault) is "none of its own" - the text follows the base (R70); the name
+      the base shows leaves the text that has none of its own without one (it shows it
+      already: G-M2), and is written to the rest. }
     property Name: TFontName read GetName write SetName;
     { Points (the engine's half points: a read of 10.5 pt says 10, as Delphi's) - read: the
-      size the text is shown in; written 0: none of its own. }
+      size the text is shown in; written 0: none of its own; written the base's size, text
+      without a size of its own keeps none (as Name). }
     property Size: Integer read GetSize write SetSize;
     { Pixels at the control's PPI: Size * PPI / 72, as Delphi's; a negative height (a
       TFont's character height) is taken as its absolute value. }
@@ -560,8 +563,9 @@ procedure TTyRichTextAttributes.SetName(const AValue: TFontName);
 var
   f: TTyCharFormat;
 begin
-  // what the text shows already (a toolbar writing back what it read): nothing to write
-  if not IsBase and (AValue = GetName) and (caFace in GetConsistentAttributes) then Exit;
+  { Written back as read (a toolbar echoing OnSelectionChange) over text without a name of
+    its own, the base's name is not frozen into it: the control's write leaves such text
+    without one wherever the name written is the one it shows (G-M2, run by run). }
   f := TyDefaultCharFormat;
   f.FontName := TyRichFontNameIn(AValue);
   SetFormat([cffFontName], f);
@@ -578,11 +582,11 @@ var
 begin
   f := TyDefaultCharFormat;
   if AValue < 0 then AValue := 0;
-  { Name and Size read what the text is shown in: written back unchanged over text that all
-    shows it (a toolbar echoing OnSelectionChange), they would freeze the base's value into
-    text that has none of its own - the text shows it already: nothing to write (F-M2). }
-  if not IsBase and (AValue = GetSize) and (GetFormat.SizeHalfPt = AValue * 2) and
-    (caSize in GetConsistentAttributes) then Exit;
+  { Name and Size read what the text is shown in: written back unchanged (a toolbar echoing
+    OnSelectionChange) they would freeze the base's value into text that has none of its
+    own. The control's write leaves such text without one wherever the size written is the
+    one it shows - run by run, over any selection (G-M2); text whose own size differs takes
+    it, and a selection where nothing is left to change is no step (F-M2). }
   f.SizeHalfPt := AValue * 2;
   SetFormat([cffSize], f);
 end;

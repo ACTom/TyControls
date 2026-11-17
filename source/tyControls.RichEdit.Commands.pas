@@ -54,17 +54,20 @@ type
     function Description: string; override;
   end;
 
-  { Sets the AMask fields of the characters in ARange (the others keep theirs). }
+  { Sets the AMask fields of the characters in ARange (the others keep theirs). AKeepNone:
+    of the name and the size, those a character with none of its own keeps none of
+    (TTyRichDocument.ApplyCharFormat). }
   TTyRichSetCharFormat = class(TTyRichCommand)
   private
     FRange: TTyRichRange;
     FMask: TTyCharFormatMask;
     FValue: TTyCharFormat;
+    FKeepNone: TTyCharFormatMask;
   protected
     procedure DoExecute(ADoc: TTyRichDocument); override;
   public
     constructor Create(const ARange: TTyRichRange; AMask: TTyCharFormatMask;
-      const AValue: TTyCharFormat);
+      const AValue: TTyCharFormat; AKeepNone: TTyCharFormatMask = []);
     function Description: string; override;
   end;
 
@@ -283,17 +286,18 @@ end;
 { ---- TTyRichSetCharFormat ---- }
 
 constructor TTyRichSetCharFormat.Create(const ARange: TTyRichRange; AMask: TTyCharFormatMask;
-  const AValue: TTyCharFormat);
+  const AValue: TTyCharFormat; AKeepNone: TTyCharFormatMask);
 begin
   inherited Create;
   FRange := ARange;
   FMask := AMask;
   FValue := AValue;
+  FKeepNone := AKeepNone;
 end;
 
 procedure TTyRichSetCharFormat.DoExecute(ADoc: TTyRichDocument);
 begin
-  ApplyCharFormat(ADoc, FRange.Pos, FRange.Len, FMask, FValue);
+  ApplyCharFormat(ADoc, FRange.Pos, FRange.Len, FMask, FValue, FKeepNone);
 end;
 
 function TTyRichSetCharFormat.Description: string;
