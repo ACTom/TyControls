@@ -930,6 +930,15 @@ begin
   FRich.SelStart := 1;
   FRich.SelLength := 3;
   Refused('across cells', rsRichEditRefusedCells);
+  // at the cut of a paragraph too long to lay out whole: nothing goes in unseen
+  SetText(StringOfChar('a', CRichMaxParaLayoutChars) + LineEnding + 'b');
+  d := FRich.Document;
+  FRich.SelStart := CRichMaxParaLayoutChars;
+  Refused('at a long paragraph''s cut', rsRichEditRefusedLongPara);
+  FRich.SelStart := 10;
+  ResetEvents;
+  FRich.PasteFromClipboard;
+  AssertEquals('before the cut it goes in', Int64(CRichMaxParaLayoutChars + 4), d.Text.ParaLength(0));
 end;
 
 { ReadOnly: no paste by any door (the keys taken all the same), the clipboard not even read,
@@ -1058,6 +1067,16 @@ begin
   FRich.PasteFromClipboard;
   for i := 1 to 3 do AssertTrue(Format('a selection in a cell: paragraph %d in it', [i]), d.CellAt(i) = c);
   AssertEquals('one table, one row', 1, c.Table.RowCount);
+  // the whole row selected and replaced: it lay in a table - the rows come as text
+  LoadRtf(Target);
+  d := FRich.Document;
+  FRich.SelStart := d.Text.ParaStart(1);
+  FRich.SelLength := d.Text.ParaStart(2) - d.Text.ParaStart(1);
+  FRich.PasteFromClipboard;
+  AssertEquals('whole row: no refusal', 0, FRich.Refused);
+  for i := 0 to d.Text.ParaCount - 1 do
+    AssertTrue(Format('whole row replaced: paragraph %d in no table', [i]), d.CellAt(i) = nil);
+  AssertEquals('whole row replaced: the text', 'r1', Para(1));
 end;
 
 { No document-level thing comes along (page, defaults); a run with no font of its own is
