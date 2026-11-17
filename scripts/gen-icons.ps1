@@ -13,7 +13,7 @@ $classes = @(
   'TTyLabel','TTyEdit','TTyNumericEdit','TTyCurrencyEdit','TTyMaskEdit','TTyURLEdit','TTyComboEdit','TTyTrackEdit','TTyColorBox','TTyColorComboBox','TTyMRUComboBox','TTyComboBoxEx','TTyOfficeListBox','TTyOfficeComboBox','TTyColorGrid','TTyLColorPicker','TTyHSColorPicker','TTyAdvancedListBox','TTyAdvancedComboBox','TTyCheckComboBox','TTyValueListEditor','TTyPropertyGrid','TTyCalculator','TTyCalcEdit','TTyCalcCurrencyEdit','TTyColorListBox','TTyFontComboBox','TTyFontListBox','TTyFontSizeComboBox','TTyCheckListBox','TTyCheckBox','TTyRadioButton',
   'TTyComboBox','TTyToggleSwitch','TTyTrackBar','TTyRangeTrackBar','TTyMultiTrackBar','TTyGradientTrackBar','TTyProgressBar','TTyGauge','TTyCircularProgress','TTyActivityIndicator','TTyActivityBar','TTyMeter','TTyLevelMeter','TTyDial','TTyAnalogClock','TTySparkline','TTyRating','TTyGearDial','TTyGearActivityIndicator','TTyUpDown','TTyLinkLabel','TTyShadowLabel','TTyGlowLabel','TTyListBox',
   'TTyPageControl','TTyTabSheet','TTyTabSet','TTyGroupBox','TTyPanel','TTyScrollBar','TTySpinEdit','TTyFloatSpinEdit',
-  'TTyMemo','TTyTerminalView','TTyTitleBar','TTyMenuBar','TTyStyleController','TTyPopupMenu','TTyImagesMenu','TTyMenuEx',
+  'TTyMemo','TTyRichEdit','TTyTerminalView','TTyTitleBar','TTyMenuBar','TTyStyleController','TTyPopupMenu','TTyImagesMenu','TTyMenuEx',
   'TTyNativeStyler','TTyHint','TTyBalloonHint',
   'TTyIconFont','TTyLucideIconFont','TTyLucideImageList','TTyCharImage','TTyGlyphImageList','TTyImage','TTyImageCollection','TTyVirtualImageList',
   'TTySplitter','TTyStatusBar','TTyToolBar','TTyToolButton','TTyToolSeparator',

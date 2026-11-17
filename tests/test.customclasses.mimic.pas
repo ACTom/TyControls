@@ -46,7 +46,7 @@ uses
   tyControls.Popover, tyControls.PreviewBox, tyControls.ProgressBar, tyControls.PropertyGrid,
   tyControls.RadioGroup, tyControls.Rating, tyControls.RelativePanel, tyControls.Ribbon,
   tyControls.RibbonAppMenu, tyControls.RibbonBackstage, tyControls.RibbonGallery,
-  tyControls.RibbonQuickAccess, tyControls.ScrollBar, tyControls.ScrollBox,
+  tyControls.RibbonQuickAccess, tyControls.RichEdit, tyControls.ScrollBar, tyControls.ScrollBox,
   tyControls.ScrollContent, tyControls.ScrollPanel, tyControls.Segmented, tyControls.ShadowLabel,
   tyControls.Shape, tyControls.ShellComboBox, tyControls.ShellListView, tyControls.ShellTreeView,
   tyControls.SizeBox, tyControls.Sparkline, tyControls.SpinEdit, tyControls.Splitter,
@@ -8554,6 +8554,78 @@ type
     property Anchors;
   end;
 
+  TGenRichEdit = class(TTyCustomRichEdit)
+  published
+    property Version;
+    property Align;
+    property Anchors;
+    property BorderSpacing;
+    property Constraints;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property ParentShowHint;
+    property PopupMenu;
+    property TabOrder;
+    property TabStop;
+    property Action;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property WrapMode;
+    property Zoom;
+    property ReadOnly;
+    property WantTabs;
+    property TextEncoding;
+    property TextCodePage;
+    property ScrollBarAutoHide;
+    property PlainText;
+    property OnChange;
+    property OnSelectionChange;
+    property OnModifiedChange;
+    property OnZoomChange;
+    property OnEditRefused;
+    property OnLoadProgress;
+    property OnSaveProgress;
+    property OnFindProgress;
+    property OnFindDone;
+    property OnReplaceDone;
+    property OnFallbackFont;
+    property OnClick;
+    property OnDblClick;
+    property OnEnter;
+    property OnExit;
+    property OnKeyDown;
+    property OnKeyUp;
+    property OnKeyPress;
+    property OnUTF8KeyPress;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnMouseWheel;
+    property OnMouseWheelUp;
+    property OnMouseWheelDown;
+    property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property OnShowHint;
+    property OnPaint;
+    property OnEditingDone;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
+  end;
+
   TGenScrollBar = class(TTyCustomScrollBar)
   published
     property Version;
@@ -11489,7 +11561,7 @@ type
 
 const
   { (mimic, final class) }
-  CGenMimics: array[0..185, 0..1] of TClass = (
+  CGenMimics: array[0..186, 0..1] of TClass = (
     (TGenAboutDialog, TTyAboutDialog),
     (TGenAccordion, TTyAccordion),
     (TGenActivityBar, TTyActivityBar),
@@ -11631,6 +11703,7 @@ const
     (TGenRibbonGroup, TTyRibbonGroup),
     (TGenRibbonPage, TTyRibbonPage),
     (TGenRibbonQuickAccess, TTyRibbonQuickAccess),
+    (TGenRichEdit, TTyRichEdit),
     (TGenScrollBar, TTyScrollBar),
     (TGenScrollBox, TTyScrollBox),
     (TGenScrollContent, TTyScrollContent),

@@ -50,6 +50,7 @@ uses
   tyControls.OfficeListBox, tyControls.PageControl, tyControls.Pagination, tyControls.PaintPanel,
   tyControls.Panel, tyControls.Popover, tyControls.PreviewBox, tyControls.ProgressBar,
   tyControls.PropertyGrid, tyControls.RadioGroup, tyControls.Rating, tyControls.RelativePanel,
+  tyControls.RichEdit,
   tyControls.Ribbon, tyControls.RibbonAppMenu, tyControls.RibbonBackstage, tyControls.RibbonGallery,
   tyControls.RibbonQuickAccess, tyControls.ScrollBar, tyControls.ScrollBox, tyControls.ScrollPanel,
   tyControls.Segmented, tyControls.ShadowLabel, tyControls.Shape, tyControls.ShellComboBox,
@@ -62,7 +63,7 @@ uses
   tyControls.TyLabel, tyControls.UpDown, tyControls.URLEdit, tyControls.ValueListEditor;
 
 const
-  Palette: array[0..196] of TComponentClass = (
+  Palette: array[0..197] of TComponentClass = (
     TTyAboutDialog, TTyAccordion, TTyActivityBar, TTyActivityIndicator,
     TTyAdvancedComboBox, TTyAdvancedListBox, TTyAlert, TTyAnalogClock,
     TTyArrow, TTyBadge, TTyBalloonHint, TTyBevel,
@@ -99,6 +100,7 @@ const
     TTyProgressBar, TTyProgressDialog, TTyPropertyGrid, TTyRadioButton,
     TTyRadioGroup, TTyRangeTrackBar, TTyRating, TTyRelativePanel,
     TTyReplaceDialog, TTyRibbon, TTyRibbonAppMenu, TTyRibbonBackstage,
+    TTyRichEdit,
     TTyRibbonGallery, TTyRibbonGroup, TTyRibbonPage, TTyRibbonQuickAccess,
     TTySaveDialog, TTySavePictureDialog, TTySavePreviewDialog, TTyScrollBar,
     TTyScrollBox, TTyScrollPanel, TTySegmented, TTySelectPathDialog,

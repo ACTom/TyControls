@@ -48,7 +48,8 @@ uses
   tyControls.TrackBar, tyControls.MultiTrackBar, tyControls.GroupBox, tyControls.PageControl,
   tyControls.TabSheet,
   tyControls.SpinEdit, tyControls.FloatSpinEdit,
-  tyControls.Memo, tyControls.Terminal, tyControls.Menu, tyControls.NativeStyler,
+  tyControls.Memo, tyControls.RichEdit, tyControls.Terminal, tyControls.Menu,
+  tyControls.NativeStyler,
   tyControls.Splitter, tyControls.StatusBar, tyControls.ToolBar,
   tyControls.Calendar, tyControls.DateTimePicker, tyControls.TabSet,
   tyControls.TreeView, tyControls.Dialogs, tyControls.Dialogs.SelectPath,
@@ -149,7 +150,7 @@ begin
   RegisterComponents('TyControls Edits',
     [TTyEdit, TTyNumericEdit, TTyCurrencyEdit, TTyMaskEdit, TTyURLEdit, TTyComboEdit,
      TTyTrackEdit, TTyCalcEdit, TTyCalcCurrencyEdit, TTyCalculator,
-     TTyMemo, TTyTerminalView, TTySpinEdit, TTyFloatSpinEdit, TTyUpDown]);
+     TTyMemo, TTyRichEdit, TTyTerminalView, TTySpinEdit, TTyFloatSpinEdit, TTyUpDown]);
   // Checks / radios / switches + their groups.
   RegisterComponents('TyControls Choices',
     [TTyCheckBox, TTyRadioButton, TTyToggleSwitch, TTyRadioGroup, TTyCheckGroup, TTySegmented]);

@@ -111,6 +111,9 @@ type
     procedure Invalidate; override;
     procedure SetTempCursor(Value: TCursor); override;
     procedure Enter;
+    { The control as the form designer has it (csDesigning), and a character typed there. }
+    procedure MakeDesigning;
+    procedure TypeChar(const AChar: TUTF8Char);
     function BlinkTimerOf: TTimer;
     function DragTimerOf: TTimer;
     function TurnQueued: Boolean;
@@ -440,6 +443,9 @@ type
     // fix wave W10
     procedure TestTheLoadsTurnsSetTheBarOncePerInterval;
     procedure TestAnOwedLoadEndRaisesFromItsEntryPoint;
+    // on the component palette
+    procedure TestInTheDesignerNothingRunsAndNothingIsTyped;
+    procedure TestAFormFileHoldsNoContentAndItsSettingsRoundTrip;
   end;
 
 implementation
@@ -448,6 +454,13 @@ uses
   LCLIntf, LCLPlatformDef, InterfaceBase, tyControls.StrConsts;
 
 type
+  { TTyRichEdit does not publish Lines; a descendant that does stores only what was set as
+    lines. The form-file tests of Lines run on one. }
+  TLinesRichEdit = class(TTyRichEdit)
+  published
+    property Lines;
+  end;
+
   // the application's queue of asynchronous calls, run without pumping any message
   TAppQueue = class(TApplication)
   end;
@@ -1128,6 +1141,19 @@ end;
 procedure TRichProbe.Enter;
 begin
   DoEnter;
+end;
+
+procedure TRichProbe.MakeDesigning;
+begin
+  SetDesigning(True, False);
+end;
+
+procedure TRichProbe.TypeChar(const AChar: TUTF8Char);
+var
+  k: TUTF8Char;
+begin
+  k := AChar;
+  UTF8KeyPress(k);
 end;
 
 function TRichProbe.BlinkTimerOf: TTimer;
@@ -1866,8 +1892,8 @@ var
   st: TBytesStream;
   text: string;
 begin
-  a := TTyRichEdit.Create(nil);
-  b := TTyRichEdit.Create(nil);
+  a := TLinesRichEdit.Create(nil);
+  b := TLinesRichEdit.Create(nil);
   ms := TMemoryStream.Create;
   txt := TMemoryStream.Create;
   try
@@ -1905,7 +1931,8 @@ begin
     ms.Position := 0;
     ObjectBinaryToText(ms, txt);
     SetString(text, PChar(txt.Memory), txt.Size);
-    AssertFalse('nor no lines', Pos('Lines', text) > 0);
+    // (the class's own name has the word in it: the property's, here)
+    AssertFalse('nor no lines', (Pos('Lines.Strings', text) > 0) or (Pos(' Lines =', text) > 0));
   finally
     txt.Free;
     ms.Free;
@@ -2844,8 +2871,8 @@ begin
   CheckClearAdd(['a', '']);
   CheckClearAdd(['']);
   CheckClearAdd(['', '', 'c', '']);
-  a := TTyRichEdit.Create(nil);
-  b := TTyRichEdit.Create(nil);
+  a := TLinesRichEdit.Create(nil);
+  b := TLinesRichEdit.Create(nil);
   ms := TMemoryStream.Create;
   try
     a.Lines.Add('');
@@ -3044,8 +3071,8 @@ var
   ms: TMemoryStream;
   sl: TStringList;
 begin
-  a := TTyRichEdit.Create(nil);
-  b := TTyRichEdit.Create(nil);
+  a := TLinesRichEdit.Create(nil);
+  b := TLinesRichEdit.Create(nil);
   ms := TMemoryStream.Create;
   try
     a.Lines.Text := 'first'#13#10'second';
@@ -8550,6 +8577,131 @@ begin
     FRich.Document.OnChange := FDocNotice;
     FRich.FailPost := False;
     FRich.Parent := nil;
+    F.Free;
+  end;
+end;
+
+{ The control in the form designer (csDesigning, on a window): entering it starts no caret
+  blink, a key, a typed character and a press edit, move and select nothing, a drag starts no
+  timer, and a load that has work left for the background (what code could do there) queues
+  no turn, registers no idle handler and makes no timer - a form file holds no content, so
+  nothing there loads. A composition is a read-only one's. }
+procedure TTyRichEditControlTest.TestInTheDesignerNothingRunsAndNothingIsTyped;
+var
+  F: TForm;
+  watches, posts: Integer;
+  text: string;
+begin
+  FRich.MakeDesigning;
+  F := HandleForm;
+  try
+    AssertTrue('designing', csDesigning in FRich.ComponentState);
+    FRich.Lines.Text := 'abc'#13#10'def';
+    FRich.SelStart := 1;
+    text := FRich.Text;
+    watches := TRichProbe.Watches;
+    posts := TRichProbe.Posts;
+    FRich.Enter;
+    AssertTrue('entering: no blink timer', FRich.BlinkTimerOf = nil);
+    AssertEquals('Delete: the key is the designer''s', VK_DELETE, FRich.KeyResult(VK_DELETE, []));
+    AssertEquals('Right: the same', VK_RIGHT, FRich.KeyResult(VK_RIGHT, []));
+    AssertEquals('Ctrl+A: the same', VK_A, FRich.KeyResult(VK_A, [ssCtrl]));
+    FRich.TypeChar('x');
+    AssertEquals('nothing typed or deleted', text, FRich.Text);
+    AssertEquals('the caret did not move', 1, FRich.SelStart);
+    AssertEquals('nothing selected', 0, FRich.SelLength);
+    FRich.PressAt(20, 20);
+    AssertFalse('a press starts no drag', FRich.DragOn);
+    FRich.MoveAt(20, FRich.Height + 5);
+    AssertTrue('no drag timer', FRich.DragTimerOf = nil);
+    FRich.ReleaseAt(20, FRich.Height + 5);
+    AssertEquals('the press placed nothing', 1, FRich.SelStart);
+    AssertTrue('a composition is a read-only one''s', FRich.ImeIsReadOnly);
+    // a change from code leaves the caret before a combining mark: the query snaps it, and
+    // the report a running application gets later is not queued here
+    FRich.Lines.Text := 'aXY' + Utf8Of($301) + 'z';
+    FRich.UpdateView;
+    FRich.SelStart := 2;
+    AssertTrue(FRich.Document.Execute(TTyRichDelete.Create(1, 2)));
+    FRich.PositionRect(0);
+    AssertEquals('the caret was snapped', Int64(0), FRich.CaretIndex);
+    AssertFalse('no selection report queued', FRich.ReportQueued);
+    AssertEquals('nothing queued', posts, TRichProbe.Posts);
+    LoadW7Plain(True);
+    AssertFalse('a load: no turn queued', FRich.TurnQueued);
+    AssertEquals('no idle handler', watches, TRichProbe.Watches);
+    AssertEquals('nothing queued at all', posts, TRichProbe.Posts);
+    AssertTrue('no turn timer', FRich.TimerOf = nil);
+    AssertTrue('no backstop timer', FRich.BackstopOf = nil);
+    FRich.FinishLoading;
+    AssertFalse('read to the end by code', FRich.Loading);
+    AssertEquals('still nothing queued', posts, TRichProbe.Posts);
+  finally
+    FRich.Parent := nil;
+    F.Free;
+  end;
+end;
+
+{ What a form file holds: a fresh control writes only its bounds (and TabOrder on a parent);
+  content set through Lines or Text is not written (Lines is not published); PlainText,
+  ReadOnly, Zoom, WantTabs and WrapMode set before any document exists round-trip. }
+procedure TTyRichEditControlTest.TestAFormFileHoldsNoContentAndItsSettingsRoundTrip;
+const
+  Allowed: array[0..4] of string = ('Left', 'Top', 'Width', 'Height', 'TabOrder');
+var
+  F: TForm;
+  a, b: TTyRichEdit;
+  ms: TMemoryStream;
+  sl: TStringList;
+  i, k, eq: Integer;
+  name: string;
+  ok: Boolean;
+begin
+  NeedWidgetSet;
+  F := TForm.CreateNew(nil);
+  a := TTyRichEdit.Create(F);
+  b := TTyRichEdit.Create(nil);
+  ms := TMemoryStream.Create;
+  sl := TStringList.Create;
+  try
+    a.Parent := F;
+    AssertEquals('the default width', 320, a.Width);
+    AssertEquals('the default height', 240, a.Height);
+    sl.Text := FormText(a);
+    for i := 0 to sl.Count - 1 do
+    begin
+      eq := Pos(' = ', sl[i]);
+      if eq = 0 then Continue;
+      name := Trim(Copy(sl[i], 1, eq - 1));
+      ok := False;
+      for k := 0 to High(Allowed) do
+        if name = Allowed[k] then ok := True;
+      AssertTrue('a fresh control writes ' + name, ok);
+    end;
+    a.Lines.Text := 'first'#13#10'second';
+    a.SelStart := 2;
+    AssertFalse('no content in the form file: Lines', Pos('Lines', FormText(a)) > 0);
+    AssertFalse('...nor the text', Pos('first', FormText(a)) > 0);
+    a.PlainText := True;
+    a.ReadOnly := True;
+    a.Zoom := 150;
+    a.WantTabs := True;
+    a.WrapMode := rwmNone;
+    ms.WriteComponent(a);
+    ms.Position := 0;
+    ms.ReadComponent(b);
+    AssertTrue('PlainText', b.PlainText);
+    AssertTrue('ReadOnly', b.ReadOnly);
+    AssertEquals('Zoom', 150, b.Zoom);
+    AssertTrue('WantTabs', b.WantTabs);
+    AssertEquals('WrapMode', Ord(rwmNone), Ord(b.WrapMode));
+    AssertEquals('read back without content', 0, b.Document.Text.Length);
+    AssertFalse('nothing to undo', b.Document.CanUndo);
+    AssertFalse('not modified', b.Modified);
+  finally
+    sl.Free;
+    ms.Free;
+    b.Free;
     F.Free;
   end;
 end;

@@ -2000,13 +2000,19 @@ type
     property Zoom: Integer read FZoom write SetZoom default 100;
     { The user's editing, only: with True no key, no menu item, no input method and no paste
       (PasteFromClipboard, as TTyMemo's) changes the document - setting it cancels a
-      composition; the caret, the selection and copying work as in a viewer. Code is not stopped by it, as TMemo.ReadOnly does not stop
-      Lines.Add: the document's commands (Document.Execute), Lines, SelText, CutToClipboard,
-      Undo and Redo change the document with ReadOnly True. }
+      composition; the caret, the selection and copying work as in a viewer. Code is not
+      stopped by it, as TMemo.ReadOnly does not stop Lines.Add: the document's commands
+      (Document.Execute), Lines, SelText, Text, the format API and the replace methods change
+      the document with ReadOnly True. The user's actions called by code (CutToClipboard,
+      PasteFromClipboard, ClearSelection, Undo, Redo) do nothing, as Delphi's. }
     property ReadOnly: Boolean read FReadOnly write SetReadOnly default False;
     { True: Tab inserts a tab character (Shift+Tab and Ctrl+Tab too, as the memo). False (the
       default, as the memo): Tab is left to the form, which moves the focus. }
     property WantTabs: Boolean read FWantTabs write FWantTabs default False;
+    { Not published by TTyRichEdit: a rich document cannot live in a form file as lines
+      without its formats, so a form stores no content; an application sets the text or
+      loads a file at run time. A descendant that publishes it stores only what was set as
+      lines (in the designer or by code), never a file loaded at run time. }
     property Lines: TStrings read GetLines write SetLines stored IsLinesStored;
     { A txt file is read in this encoding (teAuto: found out) and, for teAnsi, code page. }
     property TextEncoding: TTyTextEncoding read FTextEncoding write FTextEncoding default teAuto;
@@ -2038,6 +2044,8 @@ type
     property Cursor default crIBeam;
   end;
 
+  { The palette's rich edit. Lines is not published (see TTyCustomRichEdit.Lines): a fresh
+    control in a form file is its bounds and TabOrder only. }
   TTyRichEdit = class(TTyCustomRichEdit)
   published
     property Version;
@@ -2053,10 +2061,13 @@ type
     property PopupMenu;
     property TabOrder;
     property TabStop;
+    property Action;
+    property DragMode;
+    property DragKind;
+    property DragCursor;
     property StyleClass;
     property StyleOverride;
     property Controller;
-    property Lines;
     property WrapMode;
     property Zoom;
     property ReadOnly;
@@ -2093,8 +2104,18 @@ type
     property OnMouseWheelUp;
     property OnMouseWheelDown;
     property OnMouseWheelHorz;
+    property OnMouseWheelLeft;
+    property OnMouseWheelRight;
     property OnContextPopup;
     property OnResize;
+    property OnChangeBounds;
+    property OnShowHint;
+    property OnPaint;
+    property OnEditingDone;
+    property OnDragOver;
+    property OnDragDrop;
+    property OnStartDrag;
+    property OnEndDrag;
   end;
 
 { The name a copy's RTF goes to the clipboard under, by widgetset (as the picture names are):
@@ -3943,7 +3964,8 @@ end;
 
 procedure TTyCustomRichEdit.StartBlink;
 begin
-  if not HandleAllocated then Exit;
+  // (in the form designer no caret is drawn: no timer either)
+  if not HandleAllocated or (csDesigning in ComponentState) then Exit;
   if FBlinkTimer = nil then
   begin
     FBlinkTimer := TTimer.Create(nil);
@@ -4018,7 +4040,8 @@ var
   atEnd, pre: Boolean;
   clicks: Integer;
 begin
-  if not IsEnabled then Exit;
+  // (in the form designer a press selects the control, not text: no caret, no drag)
+  if not IsEnabled or (csDesigning in ComponentState) then Exit;
   { A press while composing is placed on what the user saw: the text with the composition in
     it (the hit test answers the document's positions behind it), taken before the
     composition ends. A point on the composition is its place, behind it. The object under
@@ -4213,6 +4236,7 @@ end;
 
 procedure TTyCustomRichEdit.StartDragTimer;
 begin
+  // (no drag begins in the form designer: MouseDown takes no press there)
   if not HandleAllocated then Exit;
   if FDragTimer = nil then
   begin
@@ -7065,7 +7089,7 @@ procedure TTyCustomRichEdit.UTF8KeyPress(var UTF8Key: TUTF8Char);
 var
   imeFull: string;
 begin
-  if not IsEnabled then Exit;
+  if not IsEnabled or (csDesigning in ComponentState) then Exit;
   { GTK3: the backend cut an input method's commit to a TUTF8Char on its way here; the whole
     of it is still pending in the widgetset - that goes in instead, as one commit (the memo's
     way; '' on every other widgetset and when nothing was cut). }
@@ -7368,7 +7392,8 @@ end;
 
 function TTyCustomRichEdit.ImeIsReadOnly: Boolean;
 begin
-  Result := FReadOnly or not IsEnabled;
+  // (in the form designer nothing is typed: a composition there goes as a read-only one's)
+  Result := FReadOnly or not IsEnabled or (csDesigning in ComponentState);
 end;
 
 function TTyCustomRichEdit.ImeCaretBoundClient: TRect;
@@ -9940,8 +9965,10 @@ var
   first: Boolean;
 begin
   // a turn only for a control on screen: one without a window waits for FinishLoading or
-  // its first paint (InitializeWnd starts it)
-  if not HandleAllocated or (csDestroying in ComponentState) or SchedulingClosed then Exit;
+  // its first paint (InitializeWnd starts it); in the form designer none at all (a form
+  // file holds no content: nothing there loads)
+  if not HandleAllocated or ([csDestroying, csDesigning] * ComponentState <> []) or
+    SchedulingClosed then Exit;
   try
     if TurnDriver = rtdIdle then
     begin
@@ -10048,8 +10075,9 @@ end;
 
 procedure TTyCustomRichEdit.ScheduleCall(ACall: TTyRichQueuedCall);
 begin
-  // (the destructor frees the calls before the window goes)
-  if (ACall = nil) or ACall.FQueued or (csDestroying in ComponentState) or SchedulingClosed then
+  // (the destructor frees the calls before the window goes; the form designer runs none)
+  if (ACall = nil) or ACall.FQueued or ([csDestroying, csDesigning] * ComponentState <> []) or
+    SchedulingClosed then
     Exit;
   ACall.FQueued := True;
   try
@@ -10262,7 +10290,9 @@ begin
   { The widgetset's own input method hook, as the memo installs it: Qt (whole commits, the
     candidate window's place), GTK2 (an input context of its own); nil elsewhere. }
   TyImeUninstall(FImeHook);
-  FImeHook := TyImeInstall(Self, @HookCommit, @HookCaretRect);
+  // (none in the form designer, where nothing is typed)
+  if not (csDesigning in ComponentState) then
+    FImeHook := TyImeInstall(Self, @HookCommit, @HookCaretRect);
 end;
 
 { ---- finding and replacing (Task 11b, fix wave W19) ----
@@ -12392,6 +12422,8 @@ var
   ext, byWord, toDoc: Boolean;
   q: TTyRichPos;
 begin
+  // the form designer's keys are the designer's: nothing is edited or moved there
+  if csDesigning in ComponentState then Exit;
   inherited KeyDown(Key, Shift);
   // a user action is an entry point of the loop (P-2: see SchedulingFailed)
   EndOwedLoad;

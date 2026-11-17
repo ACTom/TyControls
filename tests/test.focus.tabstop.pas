@@ -30,7 +30,7 @@ uses
   tyControls.PageControl, tyControls.TabSet, tyControls.ToolWindows,
   tyControls.Calendar, tyControls.DateTimePicker, tyControls.Dial, tyControls.GearDial,
   tyControls.Rating, tyControls.TrackBar, tyControls.MultiTrackBar, tyControls.Pagination,
-  tyControls.Memo, tyControls.Terminal,
+  tyControls.Memo, tyControls.RichEdit, tyControls.Terminal,
   tyControls.TreeSelect, tyControls.Cascader, tyControls.RibbonGallery,
   tyControls.ListGroupPanel, tyControls.RibbonAppMenu,
   { non-focusable side }
@@ -279,6 +279,10 @@ begin
     TTyRangeTrackBar, TTyMultiTrackBar, TTyGradientTrackBar,
     { 终端自己吞 Tab,焦点只经鼠标或宿主放行的键离开(spec §9.4) }
     TTyTerminalView,
+    { the rich text editor: typing, the caret and the selection are its keys; with WantTabs
+      it takes Tab itself as a tab character (Shift+Tab too), without it Tab moves the
+      focus on, as the memo's does }
+    TTyRichEdit,
     TTyRating, TTyPagination, TTyTreeSelect, TTyCascader, TTyRadioButton,
 
     { ----- entries that need their reason stated, because the name suggests otherwise ----
