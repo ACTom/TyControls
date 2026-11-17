@@ -8698,6 +8698,13 @@ begin
     AssertEquals('read back without content', 0, b.Document.Text.Length);
     AssertFalse('nothing to undo', b.Document.CanUndo);
     AssertFalse('not modified', b.Modified);
+    // the PlainText read from the form acts as one set by the user: an RTF file loads as text
+    b.LoadFromFile(TempFile('streamed.rtf',
+      BytesOf('{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}\pard\f0 Text.\par}')));
+    b.FinishLoading;
+    AssertEquals('the streamed PlainText: an RTF file read as text', '{\rtf1',
+      Copy(b.Lines[0], 1, 6));
+    AssertTrue('...and still plain', b.PlainText);
   finally
     sl.Free;
     ms.Free;

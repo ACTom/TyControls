@@ -121,6 +121,7 @@ type
     procedure TestTextClearAndCaretPosAsDelphis;
     // the selection in the other brackets; an explicit text load
     procedure TestAnUpdateDoesNotChangeWhatAWriteDoes;
+    procedure TestADocumentChangeWithAWriteBehindTheSelection;
     procedure TestAnExplicitTextLoadKeepsTheAsking;
   end;
 
@@ -3273,6 +3274,85 @@ begin
     FRich.Lines.EndUpdate;
   end;
   AssertEquals('one OnChange at the end', 1, FChanges);
+  { What each bracket holds back. BeginEdit holds both reports to its end; Lines.BeginUpdate
+    and the document's own update hold back OnChange and the repaint, and a selection set
+    inside them is reported at once - as Delphi reports a selection change inside its
+    anti-flicker bracket. }
+  for m := 1 to 3 do
+  begin
+    SetText('abc');
+    ResetEvents;
+    case m of
+      1: FRich.Lines.BeginUpdate;
+      2: FRich.Document.BeginUpdate;
+      3: FRich.BeginEdit;
+    end;
+    try
+      FRich.SelStart := 1;
+      if m = 3 then
+        AssertEquals('BeginEdit: a selection set inside is held back', 0, FSelChanges)
+      else
+        AssertEquals('bracket ' + IntToStr(m) + ': a selection set inside is reported at once',
+          1, FSelChanges);
+      FRich.SelLength := 1;
+      FRich.CaretPos := Point(2, 0);
+      FRich.CaretIndex := 3;
+      FRich.SelText := 'Hello';
+      AssertEquals('bracket ' + IntToStr(m) + ': OnChange held back', 0, FChanges);
+      if m = 3 then
+        AssertEquals('BeginEdit: still nothing reported', 0, FSelChanges)
+      else
+        AssertEquals('bracket ' + IntToStr(m) + ': each setter reported, the write not',
+          4, FSelChanges);
+    finally
+      case m of
+        1: FRich.Lines.EndUpdate;
+        2: FRich.Document.EndUpdate;
+        3: FRich.EndEdit;
+      end;
+    end;
+    AssertEquals('bracket ' + IntToStr(m) + ': one OnChange at the end', 1, FChanges);
+    if m = 3 then
+      AssertEquals('BeginEdit: one OnSelectionChange at the end', 1, FSelChanges)
+    else
+      AssertEquals('bracket ' + IntToStr(m) + ': one more OnSelectionChange at the end',
+        5, FSelChanges);
+  end;
+end;
+
+{ A control's write behind the selection, then a change made straight through the document
+  before it, in one update: the update's merged change (from the document's change to past
+  the write) does not carry the caret to its start - the caret stays where it was, as a
+  selection set inside the update does. }
+procedure TTyRichEditApiTest.TestADocumentChangeWithAWriteBehindTheSelection;
+var
+  m: Integer;
+begin
+  for m := 1 to 3 do
+  begin
+    SetText('abcdefgh');
+    FRich.SelStart := 5;
+    case m of
+      1: FRich.Lines.BeginUpdate;
+      2: FRich.Document.BeginUpdate;
+      3: FRich.BeginEdit;
+    end;
+    try
+      FRich.Lines.Add('x');
+      FRich.Document.Execute(TTyRichInsertText.Create(0, 'XX'));
+    finally
+      case m of
+        1: FRich.Lines.EndUpdate;
+        2: FRich.Document.EndUpdate;
+        3: FRich.EndEdit;
+      end;
+    end;
+    AssertEquals('bracket ' + IntToStr(m) + ': the text', 'XXabcdefgh', FRich.Lines[0]);
+    AssertEquals('...the line added', 'x', FRich.Lines[1]);
+    AssertEquals('bracket ' + IntToStr(m) + ': the caret not sent to the change''s start', 5,
+      FRich.SelStart);
+    AssertEquals('...nothing selected', 0, FRich.SelLength);
+  end;
 end;
 
 { An explicit text load agrees with an asked PlainText: the asking stays, and the next load

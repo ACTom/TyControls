@@ -526,6 +526,13 @@ type
       are the text's as it was then, not moved by the update's own change; the update's end
       clamps them to the final text and paints the selection. }
     FSelInUpdate: Boolean;
+    { The caret and the anchor already follow the update's text: they were set inside it, or a
+      write of the control's own inside it was followed (FollowBlockChange) - also one wholly
+      behind the selection, which moved neither. The update's one change at its end does not
+      move them again: it is the union of every text change made in the update, and a change
+      made straight through Document.Execute before the selection would otherwise carry a
+      caret inside that union to its start. Unlike FSelInUpdate it asks for no repaint. }
+    FPosInUpdate: Boolean;
     // editing (Task 10a)
     FWantTabs: Boolean;
     { Inside an edit the control makes itself (RunEdit, RunHistory, FinishEdit's Select): the
@@ -1016,7 +1023,7 @@ type
       content's state number before it) this hears its change itself - FEditChange set, the
       caret and the anchor moved over a text change as DocChanged moves them outside an
       update - and keeps the positions out of the update's one change at its end
-      (FSelInUpdate). So Delphi's anti-flicker bracket around SelText writes gives what the
+      (FPosInUpdate). So Delphi's anti-flicker bracket around SelText writes gives what the
       same writes give without it. False when outside an update or when ACmd changed nothing
       (and is gone). }
     function FollowBlockWrite(ACmd: TTyRichCommand; AStateBefore: Int64): Boolean;
@@ -3716,6 +3723,7 @@ begin
   if ViewBehind then
   begin
     FSelInUpdate := True;
+    FPosInUpdate := True;
     Exit;
   end;
   b0 := Math.Min(AAnchor, ACaret);
@@ -8672,9 +8680,11 @@ var
 begin
   // (outside an update DocChanged has already moved them over this change)
   if not FDoc.Updating or not (rckText in AChange.Kinds) then Exit;
-  { A write wholly behind the selection moves neither end, and the update's one change - the
-    union of such writes - will not either: the selection is left to it, and an update that
-    only appended (Lines.Add) costs no repaint of the text window at its end. }
+  { From here on the update's one change at its end does not move the positions: they follow
+    every write of the control's own as it is made. }
+  FPosInUpdate := True;
+  { A write wholly behind the selection moves neither end: the selection did not move, and an
+    update that only appended (Lines.Add) costs no repaint of the text window at its end. }
   if AChange.Pos > Math.Max(FCaret, FSelAnchor) then Exit;
   // DocChanged's arithmetic, for this one write (the update's change will not move them again)
   was := FCaret;
@@ -8759,9 +8769,11 @@ begin
     begin
       was := FCaret;
       wasAnchor := FSelAnchor;
-      { A selection set inside the update was set on the text as it was then: the update's
-        own change does not move it again (L-4); it is clamped to the final text. }
-      if not FSelInUpdate then
+      { A selection set inside the update was set on the text as it was then, and positions
+        that followed the control's own writes in it are already where those put them: the
+        update's own change does not move them again (L-4); they are clamped to the final
+        text. }
+      if not FPosInUpdate then
       begin
         ShiftForChange(FCaret, AChange);
         ShiftForChange(FSelAnchor, AChange);
@@ -8815,6 +8827,7 @@ begin
   FindWake;
   // (raised only when Updating is False; a content not heard of yet is DocChanged's)
   if ViewBehind then Exit;
+  FPosInUpdate := False;
   if FSelInUpdate then
   begin
     FSelInUpdate := False;
@@ -8866,6 +8879,7 @@ begin
   if not HasBackgroundWork then StopBackground;
   CancelCall(FSelCall);
   FSelInUpdate := False;
+  FPosInUpdate := False;
   // told, not recognised: the layouter empties everything it kept
   FLayouter.Document := FDoc;
   FAnchorPara := 0;
