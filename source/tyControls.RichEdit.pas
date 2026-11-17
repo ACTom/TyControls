@@ -120,9 +120,33 @@ const
     makes the process hold: the bytes, their decoded pixels while a PNG is made of them, and
     the picture the document and its undo step keep. }
   CRichPictureMaxBytes = 128 * 1024 * 1024;
+  { Where a user's edit leaves the caret or the anchor (TTyRichEditPlace, RunUserEdit), when
+    not at a position: behind what the document reports the edit changed (the end of its
+    change: behind typed text, at the join of a deletion), or where it is (the edit moved the
+    caret and the anchor by the text's arithmetic only - a format change leaves them). }
+  CRichPlaceChangeEnd = -1;
+  CRichPlaceStays = -2;
 
 type
   ETyRichEdit = class(Exception);
+
+  { Where a user's edit leaves the selection (TTyCustomRichEdit.RunUserEdit): Anchor .. Caret,
+    each a position in the text after the edit or CRichPlaceChangeEnd / CRichPlaceStays (an
+    Anchor of CRichPlaceChangeEnd is the caret: no selection); AtLineEnd the caret's affinity
+    at a line's end. ByGrowth: the two positions were taken in the text before the edit and
+    move by what the edit added to its length (behind what a paste put at a place).
+    CompositionEnded (read only): the door ended an open composition just before it asked for
+    the command - its commit changed the text, and what was read of it before is out of date. }
+  TTyRichEditPlace = record
+    Anchor, Caret: TTyRichPos;
+    AtLineEnd, ByGrowth: Boolean;
+    CompositionEnded: Boolean;
+  end;
+
+  { Makes the command of a user's edit when RunUserEdit asks for it, from the text and the
+    selection as they are then; nil: none (refused - told through EditRefused - or nothing to
+    do). APlace says where the edit leaves the selection (see TTyRichEditPlace). }
+  TTyRichEditMaker = function(var APlace: TTyRichEditPlace): TTyRichCommand of object;
 
   { What a stream holds: rfAuto finds out (RTF when it starts with the RTF signature, after an
     optional UTF-8 BOM and white space; anything else is text). RTF, found or named, may have
@@ -411,6 +435,11 @@ type
       marks get where the edit leaves the selection (FinishEdit). nil: none - the edit was
       kept inside the document's update, or none runs. }
     FEditStep: TTyRichCommand;
+    { A command of the control's own made before it goes through the door of a user's edit
+      (RunMade: the keys made it after they ended a composition) and where it leaves the
+      selection - what TakeMade hands the door; nil once taken. }
+    FMade: TTyRichCommand;
+    FMadePlace: TTyRichEditPlace;
     FOnEditRefused: TTyRichEditRefusedEvent;
     { The input method (Task 10b). A composition goes in at FCompPos (the caret when it began)
       and is not the document's: the layouter shows FCompText there (SetComposition), in
@@ -685,6 +714,25 @@ type
       was before its step, taken as it is (a hidden tail too - Select All had it). }
     procedure FinishEdit(AAnchor, ACaret: TTyRichPos; AAtEnd: Boolean = False;
       ARestore: Boolean = False);
+    { Runs ACmd (the document owns it from here) as the control's own edit: True when it ran
+      and changed something - FEditChange is what it changed, the caret has not been placed.
+      The step it became carries the selection before it (its marks; the selection after it
+      is FinishEdit's). Refused by the engine (CanExecute, an ETyRichModel the command
+      reverted): the caret, the selection and Modified stay as they were, and Refuse with
+      the reason that holds (CommandRefusal, EngineRefusal). AUser: told (OnEditRefused),
+      else raised (ETyRichEdit). The half of an edit both RunEdit's callers share: a user's
+      edit (RunUserEdit) and an edit from code (EditWith). }
+    function RunEdit(ACmd: TTyRichCommand; AUser: Boolean): Boolean;
+    { The command AMake makes, run (RunEdit) and finished (FinishEdit, at the place it says):
+      what a user's edit (RunUserEdit, AUser True) and an edit from code (AUser False: refusals
+      raised, ReadOnly not asked) share. AEnded: TTyRichEditPlace.CompositionEnded. }
+    function EditWith(AMake: TTyRichEditMaker; AUser, AEnded: Boolean): Boolean;
+    { ACmd, made by the control before, through the door of a user's edit (AUser) - or, from
+      code, EditWith - leaving the selection at APlace. }
+    function RunMade(ACmd: TTyRichCommand; const APlace: TTyRichEditPlace; AUser: Boolean): Boolean;
+    { RunMade's maker: the command made before - dropped (freed, nil) when the door ended a
+      composition first, for it was made on the text before that commit. }
+    function TakeMade(var APlace: TTyRichEditPlace): TTyRichCommand;
     { What typing AText over [AStart, AStart + ALen) asks before anything is made (EditAllowed,
       and for a user UserRangeAllowed - which may shrink ALen - and LongParaRefused): refused
       (told), False. A composition begins only where this says yes (one character for it). }
@@ -777,14 +825,31 @@ type
     {$ENDIF}
   protected
     function GetStyleTypeKey: string; override;
-    { Runs ACmd (the document owns it from here) as the control's own edit: True when it ran
-      and changed something - FEditChange is what it changed, the caret has not been placed.
-      The step it became carries the selection before it (its marks; the selection after it
-      is FinishEdit's). Refused by the engine (CanExecute, an ETyRichModel the command
-      reverted): the caret, the selection and Modified stay as they were, and Refuse with
-      the reason that holds (CommandRefusal, EngineRefusal). AUser: told (OnEditRefused),
-      else raised (ETyRichEdit). Protected for a descendant's own commands (fix wave W13). }
-    function RunEdit(ACmd: TTyRichCommand; AUser: Boolean): Boolean;
+    { The one door of a user's edit (fix wave W15) - every edit a key, the menu, a paste or an
+      input method's commit makes goes through it, and so does a descendant's own command (a
+      toolbar's or a menu's action). In this order:
+      - ReadOnly (or disabled, or inside the document's update): nothing happens, nothing is
+        told - a viewer takes the key and does nothing, as the memo does;
+      - an open composition ends first: what the input method shows goes in where it was
+        shown (EndCompositionForUser) - so AMake is called only after that commit, and makes
+        its command from the text and the selection as they are then (a command made before
+        would be one for a text that is gone);
+      - a document that takes no edit now (loading, incomplete, saving: R52) refuses it, told
+        once through EditRefused with that reason; AMake is not called;
+      - AMake makes the command (nil: nothing - a refusal it told itself, or nothing to do)
+        and says in APlace where the edit leaves the selection (default: a caret behind what
+        the document reports changed);
+      - the command runs as one history step that keeps the selection from before it (an undo
+        puts that back) and, once placed, the selection after it (a redo leaves that caret);
+        the engine's refusal (CanExecute, CommandRefusal; an ETyRichModel it reverted; out of
+        memory) is told through EditRefused, nothing changed;
+      - the caret and the selection go where APlace says (on caret places, never in a cut
+        paragraph's hidden tail), scrolled into view (not for a commit a press caused - the
+        view stays where the user clicked), then one OnChange and one OnSelectionChange.
+      True: the edit ran and changed the text or its formats. Virtual: a descendant may see
+      every user's edit (call inherited). Undo and Redo are not commands and do not come here
+      (RunHistory); an edit from code (SelText :=, Lines, the document's API) does not either. }
+    function RunUserEdit(AMake: TTyRichEditMaker): Boolean; virtual;
     { Why ACmd's CanExecute would refuse it: the engine's own text commands (an insert, a
       deletion, an object, a fragment) refuse only where a row holds a nested table; any
       other command's reasons are its own - told as a range that cannot be edited. }
@@ -2978,7 +3043,16 @@ begin
   if not IsEnabled then Exit;
   { A press while composing is placed on what the user saw: the text with the composition in
     it (the hit test answers the document's positions behind it), taken before the
-    composition ends. A point on the composition is its place, behind it. }
+    composition ends. A point on the composition is its place, behind it. The object under
+    the press is taken there too and carried as a position (DocChanged).
+    Not on macOS (accepted as the platform's limit, W15): LCL-Cocoa hands the mouse-down to
+    the input context before the control sees it (TCocoaFullControlEdit.mouseDown), and the
+    input method commits there - through the bridge, as typing, which scrolls the caret into
+    view. Here the composition has ended already, and the press is placed on the committed,
+    scrolled text: after a scroll away the view may jump back, and on the composition's line
+    the caret may be off by the difference between what was shown and what went in. Doing
+    better needs tyControls.CocoaWS (the bridge's commit inside a mouse-down hit-testing the
+    event's point on the composition first, and not scrolling). }
   pre := False;
   q := -1;
   o := -1;
@@ -3874,7 +3948,9 @@ end;
   goes: EditAllowed (the document takes edits now, no row that holds a nested table is in the
   way) - RunEdit (the command, the document's one OnChange heard but held: FEditing) -
   FinishEdit (the caret placed where the edit leaves it, scrolled into view, then the
-  action's one OnChange and one OnSelectionChange). The caret's new place is read off what
+  action's one OnChange and one OnSelectionChange). A user's edit - a key, the menu, a paste,
+  a commit, a descendant's command - takes these steps through one door, RunUserEdit (W15),
+  which asks ReadOnly and ends a composition first. The caret's new place is read off what
   the document reported: the end of the change (behind typed text, the join of a deletion,
   the new paragraph's start after Enter). A key never raises a refusal: it goes to
   EditRefused; a method called from code raises ETyRichEdit. }
@@ -4053,6 +4129,94 @@ begin
   DoSelectionChange;
 end;
 
+function TTyCustomRichEdit.EditWith(AMake: TTyRichEditMaker; AUser, AEnded: Boolean): Boolean;
+var
+  place: TTyRichEditPlace;
+  cmd: TTyRichCommand;
+  len0, grow, a, q: TTyRichPos;
+begin
+  Result := False;
+  place := Default(TTyRichEditPlace);
+  place.Anchor := CRichPlaceChangeEnd;
+  place.Caret := CRichPlaceChangeEnd;
+  place.CompositionEnded := AEnded;
+  cmd := AMake(place);
+  if cmd = nil then Exit;
+  len0 := FDoc.Text.Length;
+  if not RunEdit(cmd, AUser) then Exit;
+  if place.ByGrowth then grow := FDoc.Text.Length - len0 else grow := 0;
+  case place.Caret of
+    CRichPlaceChangeEnd: q := FEditChange.Pos + FEditChange.NewLen;
+    CRichPlaceStays: q := FCaret;
+  else
+    q := place.Caret + grow;
+  end;
+  case place.Anchor of
+    CRichPlaceChangeEnd: a := q;
+    CRichPlaceStays: a := FSelAnchor;
+  else
+    a := place.Anchor + grow;
+  end;
+  FinishEdit(a, q, place.AtLineEnd);
+  Result := True;
+end;
+
+function TTyCustomRichEdit.RunUserEdit(AMake: TTyRichEditMaker): Boolean;
+var
+  ended: Boolean;
+  reason: string;
+begin
+  Result := False;
+  if FReadOnly or not IsEnabled or ViewBehind then Exit;
+  ended := FComposing or FImeRefused;
+  EndCompositionForUser;
+  // (the commit's own handlers may have made it a viewer, or begun an update)
+  if FReadOnly or not IsEnabled or ViewBehind then Exit;
+  reason := RefusalReason;
+  if reason <> '' then
+  begin
+    EditRefused(reason);
+    Exit;
+  end;
+  Result := EditWith(AMake, True, ended);
+end;
+
+function TTyCustomRichEdit.RunMade(ACmd: TTyRichCommand; const APlace: TTyRichEditPlace;
+  AUser: Boolean): Boolean;
+var
+  keep: TTyRichCommand;
+  keepPlace: TTyRichEditPlace;
+begin
+  // (kept: an edit inside this one - the commit the door may cause - makes its own)
+  keep := FMade;
+  keepPlace := FMadePlace;
+  FMade := ACmd;
+  FMadePlace := APlace;
+  try
+    if AUser then Result := RunUserEdit(@TakeMade)
+    else Result := EditWith(@TakeMade, False, False);
+  finally
+    // not taken (the door said no before it asked): it never reached the document
+    FreeAndNil(FMade);
+    FMade := keep;
+    FMadePlace := keepPlace;
+  end;
+end;
+
+function TTyCustomRichEdit.TakeMade(var APlace: TTyRichEditPlace): TTyRichCommand;
+begin
+  Result := FMade;
+  FMade := nil;
+  { The control's own callers end a composition before they look at the text; one the door
+    found open was committed after this command was made: it is not run on the new text. }
+  if APlace.CompositionEnded then
+  begin
+    FreeAndNil(Result);
+    Exit;
+  end;
+  APlace := FMadePlace;
+end;
+
 function TTyCustomRichEdit.TypingFormat: TTyCharFormatId;
 var
   t: TTyRichText;
@@ -4081,10 +4245,11 @@ end;
 procedure TTyCustomRichEdit.TypeText(const AText: UTF8String; AMergeable, AUser: Boolean;
   AFormat: TTyCharFormatId; ACaretChars: Int64);
 var
-  s, n, q: TTyRichPos;
+  s, n: TTyRichPos;
   fmt: TTyCharFormatId;
   cmd: TTyRichCommand;
   comp: TTyRichCompositeCommand;
+  place: TTyRichEditPlace;
 begin
   s := GetSelStart;
   n := GetSelLength;
@@ -4106,22 +4271,30 @@ begin
     comp.Add(TTyRichInsertText.Create(s, AText, fmt, False));
     cmd := comp;
   end;
-  if RunEdit(cmd, AUser) then
-  begin
-    // behind what went in (a paragraph separator is one character: after Enter, the new
-    // paragraph's start) - a commit counts its own text (its change may be a composite's)
-    if ACaretChars >= 0 then q := s + ACaretChars
-    else q := FEditChange.Pos + FEditChange.NewLen;
-    FinishEdit(q, q);
-  end;
+  { Behind what went in (a paragraph separator is one character: after Enter, the new
+    paragraph's start) - a commit counts its own text (its change may be a composite's). A
+    user's typing goes through the door of a user's edit, as every key's edit does. }
+  place := Default(TTyRichEditPlace);
+  place.Anchor := CRichPlaceChangeEnd;
+  if ACaretChars >= 0 then place.Caret := s + ACaretChars
+  else place.Caret := CRichPlaceChangeEnd;
+  RunMade(cmd, place, AUser);
+end;
+
+{ Where most of the control's edits leave the selection: a caret behind what changed. }
+function ChangeEndPlace: TTyRichEditPlace;
+begin
+  Result := Default(TTyRichEditPlace);
+  Result.Anchor := CRichPlaceChangeEnd;
+  Result.Caret := CRichPlaceChangeEnd;
 end;
 
 procedure TTyCustomRichEdit.DeleteText(AFrom, ATo: TTyRichPos; AUser: Boolean);
 begin
   if ATo <= AFrom then Exit;
   if not EditAllowed(AFrom, ATo - AFrom, False, AUser) then Exit;
-  if RunEdit(TTyRichDelete.Create(AFrom, ATo - AFrom), AUser) then
-    FinishEdit(FEditChange.Pos, FEditChange.Pos);
+  // the caret at the join
+  RunMade(TTyRichDelete.Create(AFrom, ATo - AFrom), ChangeEndPlace, AUser);
 end;
 
 { The bytes of the control character at S[I] - C0, DEL, C1 (U+0080 .. U+009F, C2 80 .. C2 9F
@@ -4357,11 +4530,17 @@ begin
 end;
 
 procedure TTyCustomRichEdit.LeaveList(AIndex: Integer);
+var
+  place: TTyRichEditPlace;
 begin
   if not EditAllowed(FDoc.Text.ParaStart(AIndex), 0, True, True) then Exit;
-  if RunEdit(TTyRichSetParaFormat.Create(AIndex, AIndex, [pffList, pffLeftIndent,
-    pffFirstIndent], TyDefaultParaFormat), True) then
-    FinishEdit(FCaret, FCaret, FCaretAtEnd);
+  // a format change: the caret stays where it is, at its side of a line's end
+  place := Default(TTyRichEditPlace);
+  place.Anchor := CRichPlaceChangeEnd;
+  place.Caret := CRichPlaceStays;
+  place.AtLineEnd := FCaretAtEnd;
+  RunMade(TTyRichSetParaFormat.Create(AIndex, AIndex, [pffList, pffLeftIndent,
+    pffFirstIndent], TyDefaultParaFormat), place, True);
 end;
 
 type
@@ -4440,7 +4619,7 @@ begin
     removes nothing and copies nothing. }
   if n = 0 then Exit;
   CopyRange(s, n);
-  if RunEdit(TTyRichDelete.Create(s, n), AUser) then FinishEdit(FEditChange.Pos, FEditChange.Pos);
+  RunMade(TTyRichDelete.Create(s, n), ChangeEndPlace, AUser);
 end;
 
 procedure TTyCustomRichEdit.CutToClipboard;
@@ -4673,7 +4852,8 @@ end;
 procedure TTyCustomRichEdit.PasteFromClipboard(AAs: TTyRichPasteAs);
 var
   have: TTyRichClipFlavours;
-  s, n, q, lenBefore: TTyRichPos;
+  s, n: TTyRichPos;
+  place: TTyRichEditPlace;
   rtf: RawByteString;
   raw: string;
   txt: UTF8String;
@@ -4847,13 +5027,12 @@ begin
     if n > 0 then comp.Add(TTyRichDelete.Create(s, n));
     comp.Add(cmd);
     cmd := nil;
-    lenBefore := FDoc.Text.Length;
-    if RunEdit(comp, True) then
-    begin
-      // behind what went in
-      q := s + FDoc.Text.Length - (lenBefore - n);
-      FinishEdit(q, q);
-    end;
+    // behind what went in: the selection's end, moved by what the text grew
+    place := Default(TTyRichEditPlace);
+    place.Anchor := CRichPlaceChangeEnd;
+    place.Caret := s + n;
+    place.ByGrowth := True;
+    RunMade(comp, place, True);
   finally
     cmd.Free;
     if waiting then EndWait;
@@ -6531,7 +6710,9 @@ begin
   { A press made while composing (MouseDown): its place goes through the commit that ends the
     composition - text inserted at it goes after it when the press was before the
     composition, before it when on it or behind it; inside a range replaced: behind what
-    replaced it. The object under it is a character behind its place. }
+    replaced it. The object under it is that object, at its new place: text inserted at it
+    goes before it; one inside the range the commit replaced (a picture selected, then
+    composed over) is gone - the press selects no object then (W15). }
   if FPressCarry and (rckText in AChange.Kinds) then
   begin
     if FDoc.Text <> FText then
@@ -6539,7 +6720,13 @@ begin
     else
     begin
       CarryForChange(FPressPos, FPressAfter, AChange);
-      if FPressObj >= 0 then CarryForChange(FPressObj, True, AChange);
+      if FPressObj >= 0 then
+      begin
+        if (FPressObj >= AChange.Pos) and (FPressObj < AChange.Pos + AChange.OldLen) then
+          FPressObj := -1
+        else
+          CarryForChange(FPressObj, True, AChange);
+      end;
     end;
   end;
   FLayouter.DocumentChanged(AChange, loadOwn);

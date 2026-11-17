@@ -47,8 +47,16 @@ type
     { A document set through Lines.Text taken as a rich one (fix wave W13: R60 makes a plain
       text document paste text only; the paste suite's documents typed in are rich ones). }
     RichDocument: Boolean;
-    { RunEdit as a user's edit (fix wave W13: a command of the application's own). }
+    { A command of the application's own through the door of a user's edit (RunUserEdit; fix
+      wave W13, the door W15's). }
     function RunUser(ACmd: TTyRichCommand): Boolean;
+  public
+    { Fix wave W15: RunUserEdit's calls, counted (every user's edit comes through it). }
+    UserEdits: Integer;
+    UserCmd: TTyRichCommand;
+    function TakeUserCmd(var APlace: TTyRichEditPlace): TTyRichCommand;
+  protected
+    function RunUserEdit(AMake: TTyRichEditMaker): Boolean; override;
   end;
 
   TTyRichEditEditTest = class(TTestCase)
@@ -300,7 +308,25 @@ end;
 
 function TEditProbe.RunUser(ACmd: TTyRichCommand): Boolean;
 begin
-  Result := RunEdit(ACmd, True);
+  UserCmd := ACmd;
+  try
+    Result := RunUserEdit(@TakeUserCmd);
+  finally
+    // (not taken: the door said no first)
+    FreeAndNil(UserCmd);
+  end;
+end;
+
+function TEditProbe.TakeUserCmd(var APlace: TTyRichEditPlace): TTyRichCommand;
+begin
+  Result := UserCmd;
+  UserCmd := nil;
+end;
+
+function TEditProbe.RunUserEdit(AMake: TTyRichEditMaker): Boolean;
+begin
+  Inc(UserEdits);
+  Result := inherited RunUserEdit(AMake);
 end;
 
 { ---- the suite ---- }

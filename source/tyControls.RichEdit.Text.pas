@@ -227,7 +227,12 @@ type
     { The lazy paragraphs whose text an edit copied into the add buffer (CopyOfLazy): the
       buffer only grows, so that copy stays good while the text lives, and the next edit of
       the same paragraph - after an undo made it lazy again (RestoreSpan), a redo, the same
-      mistake typed again - takes it instead of copying the paragraph once more. }
+      mistake typed again - takes it instead of copying the paragraph once more.
+      Never pruned while the text lives: one entry (the key, the record and the dictionary's
+      own overhead, about 40 to 50 bytes) for every lazy paragraph an edit ever converted -
+      outside the history's limit (MaxUndoBytes), as the copies in the add buffer are. An
+      edit of every paragraph of a million-paragraph file (a replace all) keeps about 50 MB
+      here besides those copies; a content reset frees it with the text. }
     FCopied: TTyRichCopiedMap;
     FLoading: Boolean;
     FLoadLeaf: PTyRichLeaf;

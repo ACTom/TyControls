@@ -20,7 +20,7 @@ interface
 
 uses
   Classes, SysUtils, Types, Math, fpcunit, testregistry, Controls, Graphics, LCLType, Forms,
-  LMessages, BGRABitmap, BGRABitmapTypes,
+  LMessages, BGRABitmap, BGRABitmapTypes, BGRAWritePNG,
   tyControls.Controller, tyControls.Painter, tyControls.TextMenu, tyControls.StrConsts,
   tyControls.RichEdit.Text, tyControls.RichEdit.Model, tyControls.RichEdit.Commands,
   tyControls.RichEdit.TextIO, tyControls.RichEdit.Layout, tyControls.RichEdit,
@@ -72,6 +72,17 @@ type
     function Msg(AMsg: Cardinal; ALParam: PtrInt; AWParam: PtrInt = 0): PtrInt;
     { DoExit alone (CM_EXIT without the window's kill-focus before it). }
     procedure ExitOnly;
+  public
+    { Fix wave W15: a descendant's own command through the door of a user's edit
+      (RunUserEdit) - the selection wrapped in brackets. DoorMode: 0 the place left to the
+      door (behind what changed), 1 the text inside the brackets selected (anchor and caret
+      given), 2 no command, 3 a command whose CanExecute refuses. What the maker saw when the
+      door asked: how often, the selection, whether a composition had just ended. }
+    DoorMode, DoorCalls: Integer;
+    DoorStart, DoorLen: TTyRichPos;
+    DoorEnded: Boolean;
+    function RunDoor: Boolean;
+    function MakeDoorCommand(var APlace: TTyRichEditPlace): TTyRichCommand;
   end;
 
   TTyRichEditImeTest = class(TTestCase)
@@ -159,6 +170,10 @@ type
     procedure TestReadOnlyChangedWhileFocusedTellsTheContext;
     procedure TestThePublicActionsCommitTheCompositionFirst;
     procedure TestAWin32CommitPassesTheFormsKeyPreview;
+    // fix wave W15
+    procedure TestAPressOnAPictureComposedOverSelectsNoObject;
+    procedure TestADescendantsCommandIsAWholeUsersEdit;
+    procedure TestEveryUsersEditComesThroughTheOneDoor;
   end;
 
 implementation
@@ -382,6 +397,57 @@ end;
 procedure TImeProbe.ExitOnly;
 begin
   DoExit;
+end;
+
+type
+  // a command of an application's own whose CanExecute refuses
+  TDoorRefusing = class(TTyRichCommand)
+  protected
+    procedure DoExecute(ADoc: TTyRichDocument); override;
+  public
+    function CanExecute(ADoc: TTyRichDocument): Boolean; override;
+  end;
+
+procedure TDoorRefusing.DoExecute(ADoc: TTyRichDocument);
+begin
+end;
+
+function TDoorRefusing.CanExecute(ADoc: TTyRichDocument): Boolean;
+begin
+  Result := False;
+end;
+
+function TImeProbe.RunDoor: Boolean;
+begin
+  Result := RunUserEdit(@MakeDoorCommand);
+end;
+
+function TImeProbe.MakeDoorCommand(var APlace: TTyRichEditPlace): TTyRichCommand;
+var
+  s, n: TTyRichPos;
+  c: TTyRichCompositeCommand;
+  f: TTyCharFormatId;
+begin
+  Inc(DoorCalls);
+  s := SelStart;
+  n := SelLength;
+  DoorStart := s;
+  DoorLen := n;
+  DoorEnded := APlace.CompositionEnded;
+  case DoorMode of
+    1:
+      begin
+        APlace.Anchor := s + 1;
+        APlace.Caret := s + 1 + n;
+      end;
+    2: Exit(nil);
+    3: Exit(TDoorRefusing.Create);
+  end;
+  f := TypingFormat;
+  c := TTyRichCompositeCommand.Create('wrap');
+  c.Add(TTyRichInsertText.Create(s + n, ']', f, False));
+  c.Add(TTyRichInsertText.Create(s, '[', f, False));
+  Result := c;
 end;
 
 procedure TImeProbe.FillPaintStyle(var AStyle: TTyRichPaintStyle);
@@ -2664,6 +2730,285 @@ begin
     FRich.Parent := nil;
     F.Free;
   end;
+end;
+
+{ ---- fix wave W15 ---- }
+
+{ A picture of 600 x 300 twips (40 x 20 pixels at 96 dpi), as a PNG. }
+function NewPicture: TTyRichPicture;
+var
+  bmp: TBGRABitmap;
+  st: TBytesStream;
+  w: TBGRAWriterPNG;
+begin
+  bmp := TBGRABitmap.Create(40, 20, BGRA(0, 160, 0, 255));
+  st := TBytesStream.Create;
+  w := TBGRAWriterPNG.Create;
+  try
+    bmp.SaveToStream(st, w);
+    Result := TTyRichPicture.Create(rpfPng, Copy(st.Bytes, 0, st.Size), 600, 300);
+  finally
+    w.Free;
+    st.Free;
+    bmp.Free;
+  end;
+end;
+
+{ Minor 1 of the W13 re-review: a press on a picture while composing - the object under the
+  press is carried through the commit as a position. A picture selected and then composed over
+  is gone once the commit replaced the selection: the press selects no object (before: the
+  character behind what went in was selected as if it were the picture, and the next key
+  replaced it). A picture behind the composition is selected at its new place. With an input
+  method that answers at once and with one that answers late. }
+procedure TTyRichEditImeTest.TestAPressOnAPictureComposedOverSelectsNoObject;
+
+  procedure ClickAt(APos: TTyRichPos);
+  var
+    r0, r1: TRect;
+    x, y: Integer;
+  begin
+    r0 := FRich.PositionRect(APos);
+    r1 := FRich.PositionRect(APos + 1);
+    x := (r0.Left + r1.Left) div 2;
+    y := (r0.Top + r0.Bottom) div 2;
+    FRich.PressAt(x, y);
+    FRich.ReleaseAt(x, y);
+  end;
+
+  procedure PictureCase(AOver, ALate: Boolean);
+  var
+    what, s: string;
+    d: TTyRichDocument;
+    t: TTyRichText;
+  begin
+    what := Format('over it %s, late %s', [BoolToStr(AOver, True), BoolToStr(ALate, True)]);
+    SetText('abcd');
+    d := FRich.Document;
+    t := d.Text;
+    AssertTrue(what + ': a picture', d.Execute(TTyRichInsertObject.Create(2, NewPicture)));
+    FRich.UpdateView;
+    // a press far away first: the next one is a single click
+    FRich.PressAt(FRich.Width - 4, FRich.Height - 4);
+    FRich.ReleaseAt(FRich.Width - 4, FRich.Height - 4);
+    if AOver then
+    begin
+      ClickAt(2);
+      AssertEquals(what + ': the picture selected', Int64(2), FRich.SelStart);
+      AssertEquals(what + ': the picture selected, alone', Int64(1), FRich.SelLength);
+      FRich.PressAt(FRich.Width - 4, FRich.Height - 4);
+      FRich.ReleaseAt(FRich.Width - 4, FRich.Height - 4);
+      FRich.SelStart := 2;
+      FRich.SelLength := 1;
+    end
+    else
+      FRich.SelStart := 1;
+    FRich.Answer := not ALate;
+    FRich.Late := ALate;
+    FRich.AnswerWith := UTF8Decode(Han(2));
+    ComposeByMessages(FRich, 'nihao');
+    AssertTrue(what + ': composing', FRich.Composing);
+    // the picture where it is shown while composing
+    ClickAt(2);
+    AssertFalse(what + ': the press ended it', FRich.Composing);
+    if ALate then
+    begin
+      FRich.ResultStr := UTF8Decode(Han(2));
+      FRich.CompStr := '';
+      FRich.Msg(WM_IME_COMPOSITION, GCS_RESULTSTR or GCS_COMPSTR);
+      FRich.Msg(WM_IME_ENDCOMPOSITION, 0);
+    end;
+    if AOver then
+    begin
+      AssertEquals(what + ': the picture replaced', 'ab' + Han(2) + 'cd', FRich.Lines[0]);
+      AssertEquals(what + ': no object left', 6, t.ParaLength(0));
+      AssertEquals(what + ': nothing selected', Int64(0), FRich.SelLength);
+      AssertTrue(what + ': the caret beside what went in',
+        (FRich.SelStart = 2) or (FRich.SelStart = 4));
+      // the next key replaces nothing
+      FRich.Key8('z');
+      s := FRich.Lines[0];
+      AssertEquals(what + ': z went in, nothing was replaced', 7, Length(UTF8Decode(s)));
+      AssertTrue(what + ': cd still there', Pos('cd', s) > 0);
+      AssertTrue(what + ': the hanzi still there', Pos(Han(2), s) > 0);
+    end
+    else
+    begin
+      AssertEquals(what + ': the composition went in before the picture',
+        string('a' + Han(2) + 'b' + TyRichObjectChar + 'cd'), string(t.GetText(0, t.Length)));
+      AssertEquals(what + ': that picture selected', Int64(4), FRich.SelStart);
+      AssertEquals(what + ': it alone', Int64(1), FRich.SelLength);
+    end;
+    FRich.Answer := False;
+    FRich.Late := False;
+    FRich.AnswerWith := '';
+  end;
+
+var
+  over, late: Boolean;
+begin
+  for over := False to True do
+    for late := False to True do
+      PictureCase(over, late);
+end;
+
+{ Minor 2 of the W13 re-review: a descendant's own command through RunUserEdit is a whole
+  user's edit - ReadOnly asked, a composition ended before the command is made, a document that
+  takes no edit refused with its reason, the selection before it put back by its undo and the
+  one after it by its redo, the caret where the descendant says (or behind what changed), one
+  OnChange and one OnSelectionChange, the caret scrolled into view, a refusal told through
+  EditRefused. }
+procedure TTyRichEditImeTest.TestADescendantsCommandIsAWholeUsersEdit;
+var
+  t: TTyRichText;
+  r, a: TRect;
+begin
+  // the place left to the door: behind what changed
+  SetText('abcdef');
+  FRich.SelStart := 1;
+  FRich.SelLength := 2;
+  ResetEvents;
+  FRich.DoorMode := 0;
+  AssertTrue('ran', FRich.RunDoor);
+  AssertEquals('wrapped', 'a[bc]def', FRich.Lines[0]);
+  AssertEquals('the caret behind what changed', Int64(5), FRich.SelStart);
+  AssertEquals('no selection', Int64(0), FRich.SelLength);
+  AssertEquals('one OnChange', 1, FChanges);
+  AssertEquals('one OnSelectionChange', 1, FSelChanges);
+  FRich.Undo;
+  AssertEquals('undone', 'abcdef', FRich.Lines[0]);
+  AssertEquals('the selection before it put back: start', Int64(1), FRich.SelStart);
+  AssertEquals('the selection before it put back: length', Int64(2), FRich.SelLength);
+  // the place the descendant gives: the text inside the brackets selected
+  ResetEvents;
+  FRich.DoorMode := 1;
+  AssertTrue('ran again', FRich.RunDoor);
+  AssertEquals('wrapped again', 'a[bc]def', FRich.Lines[0]);
+  AssertEquals('the selection it gave: start', Int64(2), FRich.SelStart);
+  AssertEquals('the selection it gave: length', Int64(2), FRich.SelLength);
+  AssertEquals('one OnChange', 1, FChanges);
+  AssertEquals('one OnSelectionChange', 1, FSelChanges);
+  FRich.Undo;
+  AssertEquals('undone: start', Int64(1), FRich.SelStart);
+  AssertEquals('undone: length', Int64(2), FRich.SelLength);
+  FRich.Redo;
+  AssertEquals('redone', 'a[bc]def', FRich.Lines[0]);
+  // (without the step's after-marks a redo puts the caret behind the change: 5)
+  AssertEquals('the redo leaves the caret where the edit left it', Int64(4), FRich.SelStart);
+  AssertEquals('a plain caret', Int64(0), FRich.SelLength);
+  // ReadOnly: nothing, nothing told, the command not even made
+  SetText('abcdef');
+  FRich.ReadOnly := True;
+  ResetEvents;
+  FRich.DoorCalls := 0;
+  AssertFalse('read-only: not run', FRich.RunDoor);
+  AssertEquals('read-only: not asked for the command', 0, FRich.DoorCalls);
+  AssertEquals('read-only: unchanged', 'abcdef', FRich.Lines[0]);
+  AssertEquals('read-only: nothing told', 0, FRich.Refused);
+  AssertEquals('read-only: no OnChange', 0, FChanges);
+  FRich.ReadOnly := False;
+  // a composition ends first; the command is made from the text after the commit
+  SetText('abcdef');
+  FRich.SelStart := 2;
+  FRich.UpdateComposition('XY');
+  AssertTrue('composing', FRich.Composing);
+  FRich.DoorMode := 0;
+  AssertTrue('ran while composing', FRich.RunDoor);
+  AssertFalse('the composition ended', FRich.Composing);
+  AssertTrue('the maker was told it ended', FRich.DoorEnded);
+  AssertEquals('the maker saw the caret behind the commit', Int64(4), FRich.DoorStart);
+  AssertEquals('the commit, then the command', 'abXY[]cdef', FRich.Lines[0]);
+  AssertEquals('nothing shown', -1, FRich.Layouter.Composition.Para);
+  FRich.RunDoor;
+  AssertFalse('no composition: not told one ended', FRich.DoorEnded);
+  // no command: nothing
+  SetText('abcdef');
+  ResetEvents;
+  FRich.DoorMode := 2;
+  AssertFalse('no command', FRich.RunDoor);
+  AssertEquals('no command: no OnChange', 0, FChanges);
+  // the engine refuses: told once, as a range that cannot be edited
+  FRich.DoorMode := 3;
+  AssertFalse('refused', FRich.RunDoor);
+  AssertEquals('refused: told once', 1, FRich.Refused);
+  AssertEquals('refused: the reason', rsRichEditRefusedRange, FRich.LastReason);
+  AssertEquals('refused: nothing changed', 'abcdef', FRich.Lines[0]);
+  AssertEquals('refused: no OnChange', 0, FChanges);
+  // a document that loads: refused with that reason, the command never made
+  FRich.Slices(2048, 2048);
+  LoadBytes(PlainRtf(3000));
+  AssertTrue('loading', FRich.Loading);
+  FRich.UpdateView;
+  ResetEvents;
+  FRich.DoorCalls := 0;
+  FRich.DoorMode := 0;
+  AssertFalse('loading: not run', FRich.RunDoor);
+  AssertEquals('loading: told once', 1, FRich.Refused);
+  AssertEquals('loading: the reason', rsRichEditRefusedLoading, FRich.LastReason);
+  AssertEquals('loading: not asked for the command', 0, FRich.DoorCalls);
+  FRich.FinishLoading;
+  // scrolled into view: the caret far below the view
+  SetLinesOf(200);
+  t := FRich.Document.Text;
+  FRich.SelStart := t.ParaStart(150) + 2;
+  FRich.ScrollY := 0;
+  FRich.UpdateView;
+  AssertEquals('the view at the top', Int64(0), FRich.ScrollY);
+  FRich.DoorMode := 0;
+  AssertTrue('ran far below', FRich.RunDoor);
+  AssertEquals('wrapped there', 'Li[]ne 150', FRich.Lines[150]);
+  AssertTrue('scrolled', FRich.ScrollY > 0);
+  r := FRich.PositionRect(FRich.SelStart);
+  a := FRich.Area;
+  AssertTrue(Format('the caret in the view (%d..%d of %d..%d)', [r.Top, r.Bottom, a.Top,
+    a.Bottom]), (r.Bottom > r.Top) and (r.Top >= a.Top) and (r.Bottom <= a.Bottom));
+end;
+
+{ Minor 2: the control's own user's edits - a typed character, Backspace, Delete, Enter, Tab,
+  Shift+Enter, Ctrl+X, the menu's Cut, a paste, an input method's commit, Enter on an empty list
+  item - come through the same door (RunUserEdit: no second path); an edit from code (SelText
+  :=) does not. }
+procedure TTyRichEditImeTest.TestEveryUsersEditComesThroughTheOneDoor;
+
+  procedure Through(const AWhat: string; ACount: Integer = 1);
+  begin
+    AssertEquals(AWhat + ': through the door', ACount, FRich.UserEdits);
+    FRich.UserEdits := 0;
+  end;
+
+begin
+  SetText('abcdef');
+  FRich.SelStart := 3;
+  FRich.UserEdits := 0;
+  FRich.Key8('z');
+  Through('a character');
+  FRich.KeyResult(VK_BACK, []);
+  Through('Backspace');
+  FRich.KeyResult(VK_DELETE, []);
+  Through('Delete');
+  FRich.KeyResult(VK_RETURN, []);
+  Through('Enter');
+  FRich.KeyResult(VK_RETURN, [ssShift]);
+  Through('Shift+Enter');
+  FRich.WantTabs := True;
+  FRich.KeyResult(VK_TAB, []);
+  Through('Tab');
+  FRich.SelStart := 0;
+  FRich.SelLength := 2;
+  FRich.KeyResult(VK_X, [ssCtrl]);
+  Through('Ctrl+X');
+  FRich.SelStart := 0;
+  FRich.SelLength := 1;
+  FRich.TeCut;
+  Through('the menu''s Cut');
+  FRich.ClipText := 'q';
+  FRich.ClipRtf := '';
+  FRich.PasteFromClipboard;
+  Through('a paste');
+  FRich.UpdateComposition('XY');
+  FRich.CommitComposition('XY');
+  Through('a commit');
+  FRich.SelText := 'code';
+  Through('SelText from code', 0);
 end;
 
 initialization
