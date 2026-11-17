@@ -128,11 +128,11 @@ type
   // paragraph, with its properties - with its separator, or the document's last paragraph
   // taken to its end by a range that begins before it or that is the whole of a document of
   // one paragraph (it has no separator in the text; the RTF ends it with \par all the same,
-  // so that it reads back with its format and pastes as a paragraph - R64, R67; the plain
-  // text has no line break after it - R45). The last paragraph's text alone, in a document
+  // so that it reads back with its format and pastes as a paragraph; the plain
+  // text has no line break after it). The last paragraph's text alone, in a document
   // of more paragraphs, is taken in part, as any other line's text without its separator.
   // An empty last paragraph is taken whole by a range that reaches the document's end through
-  // the separator before it (it has no character of its own to be taken by; F-Y5).
+  // the separator before it (it has no character of its own to be taken by).
   // Empty: nothing to copy.
   TTyRichCopyRange = record
     FirstPara, LastPara: Integer;
@@ -157,7 +157,7 @@ function TyRichCopyRange(ADoc: TTyRichDocument; AFrom, ALen: TTyRichPos): TTyRic
 // there put back first, the groups the bytes leave open closed after them), else from the
 // model. A paragraph the range takes in part is written from the model, the characters it
 // takes: with its paragraph's properties and its \par when the range takes its separator
-// (or the document's last paragraph to its end, LastWhole: R64, R67); the last one without them
+// (or the document's last paragraph to its end, LastWhole); the last one without them
 // when the range ends before its separator (pasted, it adds no line break and takes the
 // paragraph it lands in). Rows are whole (TyRichCopyRange); inside
 // one cell the paragraphs are written as no table's. Objects go out as TyRichSaveRtf writes
@@ -1750,8 +1750,8 @@ begin
     no line break and takes the paragraph it lands in). One taken whole - also the document's
     last paragraph, which has no separator, when LastWhole says so - ends with its \par: a
     paragraph with its format for every reader, and content that ends with a paragraph's end
-    for a paste (R64, as Word's and WordPad's Select All copies the last paragraph mark; R67:
-    the last line's text alone is a part). }
+    for a paste (as Word's and WordPad's Select All copies the last paragraph mark; the last
+    line's text alone is a part). }
   if FRange and not FCopy.LastWhole and (FLastWritten = FCopy.LastPara) then Exit;
   EndPara(FPrevCell, nil);
 end;
@@ -2153,10 +2153,10 @@ begin
           Word('slmult0');
         end;
     end;
-    { The stops as the layout takes them (F-I4): in order of position, every one the format
+    { The stops as the layout takes them: in order of position, every one the format
       holds but a stop at exactly 0 - Delphi's TabCount's placeholder, "to be set next", no
       stop at all. A negative one is a file's stop left of the margin (a line that starts
-      there with a negative indent uses it): written (G-M4). The format keeps them as
+      there with a negative indent uses it): written. The format keeps them as
       written. }
     stops := nil;
     SetLength(stops, Length(Tabs));
@@ -2632,7 +2632,7 @@ begin
     // the model with its \par (a row taken whole ends with its separator in both flavours:
     // its bytes stay). And the file's own last paragraph that has no terminator, taken whole:
     // its bytes have no \par, and a range that takes the last paragraph whole ends it with
-    // one (R64)
+    // one
     model[k] := not FRangeOwn[k] or FCopy.InOneCell or
       ((k = 0) and (FCopy.FromChar > 0)) or
       ((k = n - 1) and not FCopy.LastWhole) or
@@ -2771,19 +2771,20 @@ begin
   else Result.ToChar := stop - t.ParaStart(Result.LastPara);
   { The document's last paragraph to its end is whole when the range holds more than it, or
     it is the document's one paragraph (Select All): the text of the last line alone pastes
-    inline, as the text of any other line does (R67). }
+    inline, as the text of any other line does. }
   Result.LastWhole := Result.LastSeparator or ((Result.LastPara = t.ParaCount - 1) and
     (Result.ToChar = t.ParaLength(Result.LastPara)) and
     ((Result.FirstPara < Result.LastPara) or ((Result.FromChar = 0) and (t.ParaCount = 1))));
   { An EMPTY last paragraph has no character to be the last one taken: a range that reaches
     the document's end takes the separator before it - and with it all of that paragraph's
-    zero characters. It is taken whole (R67's rule), so that its format comes along (F-Y5:
+    zero characters. It is taken whole (the last paragraph taken to its end is taken whole),
+    so that its format comes along (as in
     a document ending with an empty centred line or list item). The plain text is the same:
     the separator before it already ends with a line break. So such a copy pastes one
     paragraph end more than it has separators - the document given back plus one empty
-    paragraph (R64, R67): the last line with its break, or that break alone, is the same
+    paragraph: the last line with its break, or that break alone, is the same
     range as "to the document's end" and cannot be told apart from it (WordPad tells them
-    apart by its final mark; G-M7, as ruled). }
+    apart by its final mark; accepted). }
   if Result.LastSeparator and (stop = t.Length) and (Result.LastPara = t.ParaCount - 2) and
     (t.ParaLength(t.ParaCount - 1) = 0) then
   begin

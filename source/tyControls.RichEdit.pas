@@ -2,8 +2,8 @@ unit tyControls.RichEdit;
 
 { TTyRichEdit: a rich text editor, drawn by the package itself on every platform. It shows a
   document - txt or RTF, of any size - scrolls, zooms and wraps it, and edits it by keyboard:
-  typing, Backspace, Delete, Enter, Tab, undo and redo, cut (Task 10a), an input method's
-  composition shown in the text and committed as typing (10b), paste (10c). Every
+  typing, Backspace, Delete, Enter, Tab, undo and redo, cut, an input method's
+  composition shown in the text and committed as typing, paste. Every
   edit is a command of the document (Document.Execute),
   so all of it can be undone; ReadOnly turns the user's editing off and leaves a viewer, while
   code still changes the document through its commands, Lines and the editing methods.
@@ -53,7 +53,7 @@ unit tyControls.RichEdit;
   over the very file it was read from stays readable: SaveToFile writes a temporary file beside
   the target and puts it in the target's place only when the save completed.
 
-  Bidirectional text is not laid out (spec 6.1); a right-to-left control puts its vertical
+  Bidirectional text is not laid out; a right-to-left control puts its vertical
   scroll bar on the left and keeps the text left to right. }
 
 {$mode objfpc}{$H+}
@@ -85,16 +85,15 @@ const
   { One load slice: bytes of RTF indexed per step, at most. }
   CRichLoadStepBytes = 256 * 1024;
   { ... and at least: a load's turns start their slices at this size and double them while
-    turns are fast, halve them while they are slow (TTyCustomRichEdit.SliceBytes; L-6, N-3,
-    N-4). }
+    turns are fast, halve them while they are slow (TTyCustomRichEdit.SliceBytes). }
   CRichLoadMinStepBytes = 16 * 1024;
-  { rtdIdle's backstop (N-2): while there is work, a timer of this period runs one turn when no
+  { rtdIdle's backstop: while there is work, a timer of this period runs one turn when no
     turn ran since its last tick - for an application whose idle step never comes or never
     reaches the idle handlers (an Application.OnIdle that sets Done := False, a flood of
     messages). In the normal case a tick costs one comparison. }
   CRichBackstopMs = 50;
   { While a load runs, what its own turns change of the scroll bars reaches the bars at most
-    once in this many milliseconds (by the turns' clock), and always when the load ends (P-1):
+    once in this many milliseconds (by the turns' clock), and always when the load ends:
     a bar repaints itself whole on every change of its range (about 8 ms), more than a turn's
     work, while its thumb, at its smallest size, does not move. }
   CRichLoadBarsMs = 100;
@@ -124,9 +123,9 @@ const
   { A background replace's piece: matches replaced at most, and at least (the same rule). }
   CRichReplaceBatch = 4096;
   CRichReplaceMinBatch = 16;
-  { The budget of one read of ConsistentAttributes (SelAttributes' and Paragraph's, F-I1):
+  { The budget of one read of ConsistentAttributes (SelAttributes' and Paragraph's):
     at most this many units of work - a run looked at, or a paragraph whose format alone is
-    (a paragraph counts at least one; G-M1: runs, not paragraphs, so that resident
+    (a paragraph counts at least one; runs, not paragraphs, so that resident
     paragraphs of many runs cost what plain ones cost) -, and at most this many bytes of a
     lazily read file parsed for it (a parse already begun is finished; the first paragraph
     is always read). Measured (Select All + the first read, -O2): 21-23 ms over 20,000
@@ -244,7 +243,7 @@ type
   ETyRichGone = class(EAbort);
 
   { The clipboard's flavours a paste takes, in the order it takes them. HTML is none of them:
-    a clipboard with HTML and text pastes the text (spec goal 10). }
+    a clipboard with HTML and text pastes the text. }
   TTyRichClipFlavour = (rcfRtf, rcfPicture, rcfText);
   TTyRichClipFlavours = set of TTyRichClipFlavour;
   TTyRichClipFormats = array of TClipboardFormat;
@@ -274,7 +273,7 @@ type
     property Queued: Boolean read FQueued;
   end;
 
-  { What drives the background work's turns (R49), chosen per widgetset by what was measured
+  { What drives the background work's turns, chosen per widgetset by what was measured
     or read in its LCL source (TyRichTurnDriverFor):
     - rtdIdle (win32, gtk2, gtk3, qt5, qt6): one turn per pass of the application's loop. While
       there is work the control has an idle handler (Application.AddOnIdleHandler); the idle
@@ -304,12 +303,12 @@ type
   private
     FOwner: TTyCustomRichEdit;
     FBatch: TStringList;
-    { A load asked for inside the update, done by the control when the update ends (F-M8):
+    { A load asked for inside the update, done by the control when the update ends:
       a stream's bytes, read at once (Lines.LoadFromStream), or a file's name
-      (Lines.LoadFromFile), read only then (G-M10). }
+      (Lines.LoadFromFile), read only then. }
     FBatchLoad: TMemoryStream;
     FBatchFile: string;
-    // FBatchFile is a file to load at the update's end, not yet read (G-M10)
+    // FBatchFile is a file to load at the update's end, not yet read
     FBatchLoadFile: Boolean;
     FUpdating: Boolean;
     { An empty document is no lines or one empty line: TStrings tells them apart, the text
@@ -337,10 +336,10 @@ type
     procedure Clear; override;
     procedure Delete(Index: Integer); override;
     procedure Insert(Index: Integer; const S: string); override;
-    { As Delphi's TRichEdit.Lines (Task 11a): the control's load and save without a format
+    { As Delphi's TRichEdit.Lines: the control's load and save without a format
       (LoadFromFile, LoadFromStream, SaveToFile, SaveToStream with rfAuto, as PlainText
-      says: R69). So a rich control's Lines.SaveToFile writes RTF and its Lines.LoadFromFile
-      reads one, and the load decides PlainText (the document follows the file, R65). A load
+      says). So a rich control's Lines.SaveToFile writes RTF and its Lines.LoadFromFile
+      reads one, and the load decides PlainText (the document follows the file). A load
       inside the lines' BeginUpdate .. EndUpdate is the control's too, put off to the
       update's end (a replacement is gathered the same way); the saves there write the lines
       as TStrings does. }
@@ -389,14 +388,14 @@ type
     FSourceFile: string;
     FSourceFormat: TTyRichFormat;
     { What the RTF file had before its signature (a UTF-8 BOM, blank lines, spaces), exactly as
-      read: written first whenever the content is saved as RTF (R40). A load of anything else
+      read: written first whenever the content is saved as RTF. A load of anything else
       and a Lines replacement forget it. }
     FRtfPrefix: TBytes;
     // the view
     FAnchorPara: Integer;
     FAnchorOffset: Int64;
     { A layout parameter changed: the anchor block's offset as a share of its height then, so
-      that the same share of it is above the view once it is laid out again (H-M3). }
+      that the same share of it is above the view once it is laid out again. }
     FAnchorShareNum, FAnchorShareDen: Int64;
     { What the last LayoutView did to the view: the held blocks' tops moved (by FMovedBy when
       FMoveKnown: the same paragraph is on top, somewhere else). }
@@ -406,7 +405,7 @@ type
     { A bar decision a layout made in this EnsureView: 0 none, 1 hidden, 2 shown. }
     FLatchV, FLatchH: Integer;
     FScrollX: Integer;              // raster pixels
-    { The kept surface (R39): what the control shows, frame and text, at FSurfScale device
+    { The kept surface: what the control shows, frame and text, at FSurfScale device
       pixels per client pixel; FSurfW x FSurfH client pixels of it are in use. }
     FSurface: TBGRABitmap;
     FSurfW, FSurfH, FSurfScale: Integer;
@@ -421,7 +420,7 @@ type
     FWidestSeen: Integer;
     { A zoom or a PPI change scaled FWidestSeen as a stand-in until the view is laid out again
       (the bars are decided with it before that): the next LayoutView builds it again from what
-      it lays out (K-2). }
+      it lays out. }
     FExtentStale: Boolean;
     FBlocks: array of TTyRichViewBlock;
     FBlockCount: Integer;
@@ -449,24 +448,24 @@ type
     // inside CancelLoad: the load's notice that it stopped is its own (no edit)
     FInCancel: Boolean;
     FStepCall, FSelCall: TTyRichQueuedCall;
-    { The driver's state (R49): the idle handler is registered (rtdIdle), the turn timer
+    { The driver's state: the idle handler is registered (rtdIdle), the turn timer
       (rtdTimer; made on the first start, freed with the window), a turn is running. }
     FIdleOn: Boolean;
     FTurnTimer: TTimer;
     FInTurn: Boolean;
-    { rtdIdle's backstop timer (N-2; made on the first start, freed with the window), the
+    { rtdIdle's backstop timer (made on the first start, freed with the window), the
       turns run so far and how many of them its last tick had seen. }
     FBackstop: TTimer;
     FTurnsRun, FBackstopSeen: Int64;
-    { The size of a turn's load slices (N-3, N-4: see SliceBytes), and within a turn the bytes
+    { The size of a turn's load slices (see SliceBytes), and within a turn the bytes
       it indexed and the progress handler's milliseconds so far. }
     FSlice, FTurnBytes, FHandlerMs: Int64;
-    { P-1: inside a load's own change made in a turn (DocChanged); the bars' widgets are behind
+    { inside a load's own change made in a turn (DocChanged); the bars' widgets are behind
       the control's values; the turn clock at which a turn last gave them its range (valid:
       since the load began). }
     FBarsLazy, FBarsBehind, FBarsAtValid: Boolean;
     FBarsAt: QWord;
-    { P-2: a load whose next turn could not be scheduled ends at the next entry point of the
+    { a load whose next turn could not be scheduled ends at the next entry point of the
       loop (see SchedulingFailed). }
     FLoadEndOwed: Boolean;
     FPending: array of TTyRichPendingPicture;
@@ -474,7 +473,7 @@ type
     { The (picture, size) pairs whose PreparePicture raised (a fatal error: out of memory, an
       access violation), with a reference each: not queued again until the content or the
       layout parameters change. Every other outcome the layouter records itself - after
-      PreparePicture the picture is ready or known to be a placeholder (H-I7). }
+      PreparePicture the picture is ready or known to be a placeholder. }
     FFailed: array of TTyRichPendingPicture;
     FFailedCount: Integer;
     { The PPI the frame signature was taken at (PointerStateChanged compares at it). }
@@ -513,16 +512,16 @@ type
     FCopyWaitChars: Int64;
     FSavedCursor: TCursor;
     { A document change moved the caret or the anchor by arithmetic alone: the next paint or
-      settled query puts them on caret places (S-M10). }
+      settled query puts them on caret places. }
     FSnapPending: Boolean;
     { A window paint came while the document held its changes back and drew nothing new (it
       blitted the old surface, or nothing): the window is asked to paint again, whole, when
-      the view hears of the change (K-11). }
+      the view hears of the change. }
     FSkippedPaint: Boolean;
     { The pointer was last seen over the padding (MouseMove; GetCursor answers the arrow);
       cleared when it leaves the control. }
     FOverPadding: Boolean;
-    { The selection was set while the document held its changes back (L-4): the positions
+    { The selection was set while the document held its changes back: the positions
       are the text's as it was then, not moved by the update's own change; the update's end
       clamps them to the final text and paints the selection. }
     FSelInUpdate: Boolean;
@@ -533,7 +532,7 @@ type
       made straight through Document.Execute before the selection would otherwise carry a
       caret inside that union to its start. Unlike FSelInUpdate it asks for no repaint. }
     FPosInUpdate: Boolean;
-    // editing (Task 10a)
+    // editing
     FWantTabs: Boolean;
     { Inside an edit the control makes itself (RunEdit, RunHistory, FinishEdit's Select): the
       document's change is heard (FEditHeard, FEditChange: what it reported) but neither
@@ -552,7 +551,7 @@ type
     FMade: TTyRichCommand;
     FMadePlace: TTyRichEditPlace;
     FOnEditRefused: TTyRichEditRefusedEvent;
-    { The input method (Task 10b). A composition goes in at FCompPos (the caret when it began)
+    { The input method. A composition goes in at FCompPos (the caret when it began)
       and is not the document's: the layouter shows FCompText there (SetComposition), in
       FCompFormat (the typing format then), the input method's caret and clause in it
       (characters of FCompText). FImeRefused: the input method's session was refused (the
@@ -570,7 +569,7 @@ type
     FImeHook: TObject;
     FCocoaIme: TObject;
     FImePlaced: TRect;
-    { Fix wave W12. FCompAnchor: the selection's anchor when the composition began (FCompPos
+    { FCompAnchor: the selection's anchor when the composition began (FCompPos
       its caret) - the commit replaces that selection, the one the user saw, not one made
       meanwhile; both follow the text as the caret does. FCompPending: the control ended the
       composition and told the input method to commit, and it had not answered while told -
@@ -578,7 +577,7 @@ type
       FCompFormat kept). }
     FCompAnchor: TTyRichPos;
     FCompPending: Boolean;
-    { Fix wave W13. A press made while composing is placed on what the user saw - the text
+    { A press made while composing is placed on what the user saw - the text
       with the composition in it: FPressPos (its position; FPressAfter: on the composition or
       behind it, not before it) and FPressObj (the object under it, or -1) are taken before
       the composition ends, and carried through the commit that ends it as any position is
@@ -599,7 +598,7 @@ type
       nowhere - it went in, or was dropped, when the control ended it). }
     FCocoaSession, FCocoaSwallow: Boolean;
     FInBridge: Integer;
-    { The format API (Task 11a): the two façades' objects; the plain-text state (R65); the
+    { The format API: the two façades' objects; the plain-text state; the
       pending typing format - a format chosen with nothing selected, for the next typed text
       at FPendingAt (FHasPendingFmt); inside a façade's write (FApiWrite: the selection is
       kept as it is and the pending format with it, the view does not scroll). }
@@ -620,7 +619,7 @@ type
     FConsBase: TTyCharFormat;
     FConsMask: TTyCharFormatMask;
     FConsLast: Integer;
-    // the walks' budget (F-I1): units of work done, the loader's parsed bytes at the start, cut
+    // the walks' budget: units of work done, the loader's parsed bytes at the start, cut
     FConsBudgetWork: Integer;
     FConsBudgetBytes: Int64;
     FConsSeen: Integer;
@@ -640,10 +639,10 @@ type
     FParaConsBase: TTyParaFormat;
     FParaConsMask: TTyRichConsistentParaAttributes;
     FOnModifiedChange: TNotifyEvent;
-    { OnModifiedChange owed by a turn heard inside the control's own edit (F-M7): raised when
+    { OnModifiedChange owed by a turn heard inside the control's own edit: raised when
       the edit has made its own reports (PayModifiedOwed). }
     FModifiedOwed: Boolean;
-    // BeginEdit .. EndEdit (F-M9): the depth and the selection the block began with
+    // BeginEdit .. EndEdit: the depth and the selection the block began with
     FEditBlock: Integer;
     FEditBlockMarks: TTyRichStepMarks;
     procedure DocModifiedChanged(Sender: TObject);
@@ -673,7 +672,7 @@ type
     procedure ConsistencyAdd(AFormat: TTyCharFormatId);
     procedure ConsistencyWalk(AIndex: Integer; AData: Pointer; ASrcOffset, ASrcBytes: Int64;
       var AContinue: Boolean);
-    { The budget of a consistency walk (F-I1, G-M1): ConsistencyBegin starts one;
+    { The budget of a consistency walk: ConsistencyBegin starts one;
       ConsistencyGo says whether the walk may read a paragraph (AUnparsed: reading it
       parses) - False once the budget is spent (FConsCut); ConsistencyUnit counts one unit
       of work (a run looked at, a paragraph's format) and says whether it was within it. }
@@ -688,7 +687,7 @@ type
       ASrcBytes: Int64; var AContinue: Boolean);
     { The format SelAttributes reads: with a selection, of the first character a format write
       formats (one that starts at a paragraph's separator formats nothing of that paragraph:
-      the next one's first character, F-M6); else TypingFormat. }
+      the next one's first character); else TypingFormat. }
     function SelFormatId: TTyCharFormatId;
     function GetZoomFactor: Double;
     procedure SetZoomFactor(AValue: Double);
@@ -787,7 +786,7 @@ type
     procedure DocChanged(Sender: TObject; const AChange: TTyRichChange);
     { The document stopped holding its changes back (TTyRichDocument.OnUpdatingEnd), after
       the change, if any, was reported: what was put off while it held them is done now - a
-      skipped paint made good (K-11 / L-3), a selection set meanwhile painted (L-4). }
+      skipped paint made good, a selection set meanwhile painted. }
     procedure DocUpdatingEnded(Sender: TObject);
     procedure ContentReplaced;
     procedure ChangeInView(const AChange: TTyRichChange);
@@ -804,7 +803,7 @@ type
       AHeld: Boolean);
     function FailedIndex(APicture: TTyRichPicture; AWidth, AHeight: Integer): Integer;
     { The anchor block laid out at the new parameters takes the share a layout parameter
-      change recorded (H-M3): its offset becomes that share of its new height. }
+      change recorded: its offset becomes that share of its new height. }
     procedure ApplyAnchorShare(ABlock: TTyBlockLayout);
     procedure InvalidatePicture(APicture: TTyRichPicture; AWidth, AHeight: Integer);
     procedure LayoutParamsChanged;
@@ -925,9 +924,9 @@ type
     function SnapPos(APos: TTyRichPos): TTyRichPos;
     { The user's moves never leave the caret or the anchor in a cut paragraph's hidden tail. }
     function OutOfTail(APos: TTyRichPos; AForward: Boolean): TTyRichPos;
-    { The caret and the anchor a document change moved, put on caret places (S-M10). It calls
+    { The caret and the anchor a document change moved, put on caret places. It calls
       no user code: a move is reported by the user action it runs in (its one report at its
-      end), else by a queued call after it (K-10). }
+      end), else by a queued call after it. }
     procedure SnapAfterChange;
     { The document holds back changes the view has not heard of (TTyRichDocument.Updating, or
       a content the view was not told of yet): the view's blocks may name paragraphs that are
@@ -935,7 +934,7 @@ type
       caret, the blink and the drag ticks, keys, the wheel, the mouse, the input method's
       query, the public settled queries and the selection (Select, the selection setters):
       input does nothing (a key the viewer takes is still taken), a query answers "not
-      available" (K-9), a selection is kept and painted when the update ends (L-4). }
+      available", a selection is kept and painted when the update ends. }
     function ViewBehind: Boolean;
     procedure StartBlink;
     { The background work's next turn queued (StepCall) or taken off the queue; the selection
@@ -973,7 +972,7 @@ type
     procedure SetScrollXRaster(AValue: Integer);
     function GetSelText: string;
     procedure SetSelText(const AValue: string);
-    // editing (Task 10a)
+    // editing
     { Why the document takes no edit now ('' when it does): loading, incomplete, saving. }
     function RefusalReason: string;
     { AUser (a key, the menu): EditRefused; otherwise (code) ETyRichEdit is raised. }
@@ -1078,7 +1077,7 @@ type
     { A character typed: inserted when it is printable and whole (not with ReadOnly, not
       inside the document's update). }
     procedure TypeKey(const AKey: TUTF8Char);
-    // the input method (Task 10b)
+    // the input method
     { The composition's paragraph shown again: its block laid out again and its band drawn
       (as a change of the document there would, but none was made). }
     procedure RefreshComposed(APara: Integer);
@@ -1093,7 +1092,7 @@ type
       or cancelled. The input method is told first (ImeEndOnWidgetset); what it does not
       answer here is done here, or (a commit it was told of) when its result comes. }
     procedure EndComposition(ACommit: Boolean);
-    { The one door of a user's edit and action (fix wave W12): a composition open in the text
+    { The one door of a user's edit and action: a composition open in the text
       ends first, committed as a press commits it - see the body for who comes through it. }
     procedure EndCompositionForUser;
     { A press at client (X, Y) that the hit test put at the composition's own place (FCompPos):
@@ -1116,7 +1115,7 @@ type
     procedure WMImeEndComposition(var Message: TLMessage); message $010E;
     procedure WMImeComposition(var Message: TLMessage); message $010F;
     procedure WMImeRequest(var Message: TLMessage); message $0288;
-    { win32 (fix wave W12): the system's composition window kept away when the window gets the
+    { win32: the system's composition window kept away when the window gets the
       input context (WM_IME_SETCONTEXT); the composition ended where the window loses the
       focus, while it still has the thread's input context; the candidate window put again
       when the focus comes back from another window. }
@@ -1137,7 +1136,7 @@ type
     procedure RealSetText(const AValue: TCaption); override;
     { TControl.ActionChange copies a linked action's Caption into Caption: the content stays. }
     procedure ActionChange(Sender: TObject; CheckDefaults: Boolean); override;
-    { The one door of a user's edit (fix wave W15) - every edit a key, the menu, a paste or an
+    { The one door of a user's edit - every edit a key, the menu, a paste or an
       input method's commit makes goes through it, and so does a descendant's own command (a
       toolbar's or a menu's action). In this order:
       - ReadOnly (or disabled, or inside the document's update): nothing happens, nothing is
@@ -1146,7 +1145,7 @@ type
         shown (EndCompositionForUser) - so AMake is called only after that commit, and makes
         its command from the text and the selection as they are then (a command made before
         would be one for a text that is gone);
-      - a document that takes no edit now (loading, incomplete, saving: R52) refuses it, told
+      - a document that takes no edit now (loading, incomplete, saving) refuses it, told
         once through EditRefused with that reason; AMake is not called;
       - AMake makes the command (nil: nothing - a refusal it told itself, or nothing to do)
         and says in APlace where the edit leaves the selection (default: a caret behind what
@@ -1190,7 +1189,7 @@ type
     { The window's part to be painted again (client pixels) - a blit from the surface, nothing
       on the surface is drawn again. Every window invalidation goes through here:
       InvalidateContent's, a scroll's, which moves the surface instead of dirtying it, and
-      what is drawn over the blit after it - 9b's caret blinks through here alone (a test
+      what is drawn over the blit after it - the caret's blinks go through here alone (a test
       records them here). }
     procedure InvalidateArea(const ARect: TRect); virtual;
     { Everything on the surface drawn again at the next paint (frame and text). }
@@ -1238,7 +1237,7 @@ type
       there was nothing to do. What a turn runs, a few milliseconds a turn. A load slice that
       raises without having indexed a byte would raise again: the load is cancelled (the
       document keeps what was read, Incomplete) and the error goes on; one that got further
-      (a handler of its progress or change raised) leaves the load to go on (K-4). }
+      (a handler of its progress or change raised) leaves the load to go on. }
     function StepBackground: Boolean;
     function HasBackgroundWork: Boolean;
     { One turn of the background work: pieces of it until CRichIdleMaxSteps of them or
@@ -1263,13 +1262,13 @@ type
     procedure RemovePostedCall(ACall: TTyRichQueuedCall); virtual;
     procedure WatchIdle(AOn: Boolean); virtual;
     { The application no longer takes scheduling (it is being destroyed; its queue raises
-      then, its idle handler lists go): nothing is queued or registered (L-2). }
+      then, its idle handler lists go): nothing is queued or registered. }
     function SchedulingClosed: Boolean; virtual;
     { rtdIdle's idle handler: queues the one call that runs the next turn; with no work (or
       no window) left it takes itself away. Done is left as it is (the idle step still runs
       the actions' updates). }
     procedure IdleStep(Sender: TObject; var Done: Boolean); virtual;
-    { rtdIdle's backstop tick (N-2): when no turn ran since the last tick (the idle step is
+    { rtdIdle's backstop tick: when no turn ran since the last tick (the idle step is
       starved), one turn - the queued call, if one waits, taken off the queue first, so that it
       does not follow this turn; otherwise nothing. With no work (or no window) left it stops
       the driver. }
@@ -1339,7 +1338,7 @@ type
     function ReadRtfSource(const ABytes: TBytes; out AEndsWithParagraph: Boolean): TTyRichDocument; virtual;
     { The filter a paste of ASource into this document goes through
       (TyRichFragmentFilterFor). Made before the command that takes ASource over: a failure
-      here (out of memory) frees ASource and refuses the paste (F-Y4). A test seam. }
+      here (out of memory) frees ASource and refuses the paste. A test seam. }
     function MakeFragmentFilter(ASource: TTyRichDocument): TTyRichFragmentFilter; virtual;
     { Around a copy of more than CopyWaitChars characters: the wait cursor (Screen.Cursor),
       put back after it whatever happened. On Windows LCL sets the cursor at once; whether
@@ -1391,11 +1390,11 @@ type
     { The character format the next typed text gets: with a selection, its first
       character's (it is typed over); else the character's before the caret in its paragraph,
       at a paragraph's start the one's after it (TTyRichDocument.TypingFormatAt) - unless a
-      pending format was chosen at the caret with nothing selected (Task 11a: see the format
-      API), which comes first. }
+      pending format was chosen at the caret with nothing selected (see the format API),
+      which comes first. }
     function TypingFormat: TTyCharFormatId; virtual;
-    { The document is plain text (PlainText, R65): a key makes no line break inside a
-      paragraph (Shift+Enter makes a paragraph), a paste takes text only (R60). }
+    { The document is plain text (PlainText): a key makes no line break inside a
+      paragraph (Shift+Enter makes a paragraph), a paste takes text only. }
     function PlainTextDocument: Boolean; virtual;
     { An edit the user asked for (a key, the menu) was not made: the document is loading,
       incomplete after a cancelled load or being saved, a row that holds a nested table
@@ -1433,8 +1432,8 @@ type
       which starts at CRichLoadMinStepBytes with each load and changes after every turn that
       indexed - halved when the turn took longer than CRichIdleBudgetMs, doubled when it took
       less than a quarter of it, kept in between - within CRichLoadMinStepBytes .. StepBytes
-      (see NoteTurn). A file that indexes slowly gets smaller slices, not longer turns (L-6),
-      its first turn too (N-3); one stalled turn costs one halving (N-4). Outside a turn (a
+      (see NoteTurn). A file that indexes slowly gets smaller slices, not longer turns,
+      its first turn too; one stalled turn costs one halving. Outside a turn (a
       step by hand): StepBytes. A test seam (it records what the loader was asked). }
     function SliceBytes: Int64; virtual;
     property PendingPictureCount: Integer read FPendingCount;
@@ -1453,7 +1452,7 @@ type
     property Finder: TTyRichFinder read FFinder;
     property ReplaceCommand: TTyRichReplaceAllCommand read FReplaceCmd;
     property FindBytesRead: Int64 read FFindBytesRead write FFindBytesRead;
-    { The door of the format API for a descendant (F-M16): runs ACmd as the façades' writes
+    { The door of the format API for a descendant: runs ACmd as the façades' writes
       run theirs (RunApiEdit) - not refused by ReadOnly, an open composition ended first,
       the selection kept with the step and left where it is, no scroll, one OnChange;
       a refusal of the document raised (ETyRichEdit). AChars: how many characters it changes
@@ -1466,7 +1465,7 @@ type
     procedure LoadFromFile(const AFileName: string);
     { From the stream's position to its end, read here (nothing keeps the stream). }
     procedure LoadFromStream(AStream: TStream; AFormat: TTyRichFormat = rfAuto);
-    { rfAuto (one rule, R69): plain text when PlainText was set True by code or the Object
+    { rfAuto (one rule): plain text when PlainText was set True by code or the Object
       Inspector; else by the extension (.rtf RTF, .txt text); else - no extension to go by -
       text for a plain-text document (PlainText True) and RTF for a rich one. Where the
       content came from does not decide: a text file opened, formatted and saved as notes.rtf
@@ -1564,10 +1563,10 @@ type
       move. Nothing is laid out or walked: only what is on screen is painted again. Inside an
       update: as SelStart (the end is the text's end at that moment, clamped when it ends). }
     procedure SelectAll;
-    { The selection collapses onto the caret: the text stays (what ClearSelection did before
-      Task 11a; Delphi's and LCL's ClearSelection delete the selection). }
+    { The selection collapses onto the caret: the text stays (Delphi's and LCL's
+      ClearSelection delete the selection). }
     procedure CollapseSelection;
-    { Deletes the selection, as the Delete key does - a user's action (R66): an open
+    { Deletes the selection, as the Delete key does - a user's action: an open
       composition ends first; with ReadOnly or disabled nothing happens; a refusal is told
       (EditRefused), never raised; one undo step. Nothing selected: nothing. As Delphi's
       TCustomEdit.ClearSelection. }
@@ -1606,8 +1605,8 @@ type
       of its own (on Windows the text again as UTF-16, and each flavour in a global block) -
       a copy of a very large selection needs several times its size for a moment. }
     procedure CopyToClipboard;
-    { Copy, then the selection goes: one undo step. Nothing selected: nothing. A user's action
-      (R66), as Ctrl+X: an open composition ends first; with ReadOnly or disabled nothing
+    { Copy, then the selection goes: one undo step. Nothing selected: nothing. A user's action,
+      as Ctrl+X: an open composition ends first; with ReadOnly or disabled nothing
       happens (nothing is copied); a refusal is told (EditRefused) before anything is
       copied, never raised.
 
@@ -1624,7 +1623,7 @@ type
       own menu item, "paste as plain text" with rpaText). A user's action from any of them:
       an open composition ends first (EndCompositionForUser); with ReadOnly nothing happens
       (the clipboard is not read); a refusal - the document loading, incomplete or being
-      saved, a row that holds a nested table, a selection across cells (R57), the caret at
+      saved, a row that holds a nested table, a selection across cells, the caret at
       a cut paragraph's cut, a picture too large - is told once (EditRefused), never raised,
       and nothing changes.
       AAs rpaBest takes the first flavour there that can be used, in this order:
@@ -1646,8 +1645,9 @@ type
       What is pasted is read before the document changes: a reader's failure is that
       flavour's (the next one is tried); a lack of memory is refused (rsRichEditRefusedMemory),
       the document untouched. A paste of rows over a selection of whole rows is refused
-      (R57's reason; Task 12 pastes cells). RTF from another document leaves behind what
-      names that document's header tables by number (R62, TyRichFragmentFilterFor): style
+      (it would join text across cells; until table editing pastes cells). RTF from another
+      document leaves behind what names that document's header tables by number
+      (TyRichFragmentFilterFor): style
       names, shading, border and underline colours, the font of right-to-left text,
       tracked-change authors, the formatting inside a field's result, footnotes, comments,
       shapes and embedded objects; RTF copied out of this document's own file keeps all of
@@ -1660,18 +1660,18 @@ type
     { One step of the document's history back / forward (Ctrl+Z, Ctrl+Y). An undo puts the
       selection back as it was before the step (a step made by code: what it put back is
       selected); after a redo the caret is where the step left it. Nothing to undo / redo:
-      nothing. A user's action (R66), as the keys: an open composition ends first; with
+      nothing. A user's action, as the keys: an open composition ends first; with
       ReadOnly or disabled nothing happens; while the document is being saved (or is loading,
       or incomplete) the refusal is told (EditRefused), never raised. Code that must undo on
       a read-only control calls Document.Undo. }
     procedure Undo;
     procedure Redo;
-    { The user's (F-M11), as CanPaste: Undo / Redo would do something now - there is a step,
+    { The user's, as CanPaste: Undo / Redo would do something now - there is a step,
       the control is not ReadOnly, it is enabled and the document is in no update. Code that
       undoes regardless of ReadOnly asks Document.CanUndo / CanRedo. }
     function CanUndo: Boolean;
     function CanRedo: Boolean;
-    { Several writes as ONE undo step (F-M9): the format and edit writes of the document API
+    { Several writes as ONE undo step: the format and edit writes of the document API
       between BeginEdit and EndEdit (SelAttributes, Paragraph, the RichMemo-style methods,
       SelText, Lines) are one step whose undo puts back the selection there was at BeginEdit
       and whose redo the one there is at EndEdit. A block groups; it does not change what
@@ -1711,7 +1711,7 @@ type
     function TeCanPaste: Boolean;
     function TeHasText: Boolean;
     function TeIsReadOnly: Boolean;
-    { The input method's composition (Task 10b), what each widgetset's input method is turned
+    { The input method's composition, what each widgetset's input method is turned
       into (win32's messages, Cocoa's bridge, the Qt / GTK hooks' commits). A composition is
       shown where it goes in - at the caret when it began, in the typing format, underlined
       (TyRichEditComposition), laid out with its paragraph - and is not the document's: no
@@ -1755,19 +1755,19 @@ type
     procedure ImeSessionEnd;
     procedure ImeReplace(AStart, ALen: Integer; const AText: string);
 
-    { ---- the format API (Task 11a) ----
+    { ---- the format API ----
 
       Two façades over the same engine, Delphi's TRichEdit (SelAttributes, DefAttributes,
       Paragraph) and Lazarus' RichMemo (SetTextAttributes .. GetParaTabs): thin layers - each
       write is ONE command of the document (TTyRichSetCharFormat / TTyRichSetParaFormat) that
       changes the attributes it names and leaves the others as each character or paragraph
       has them, one undo step; the reads ask the document's formats. They are the document
-      API: called from code they edit regardless of ReadOnly (R53: ReadOnly is the user
+      API: called from code they edit regardless of ReadOnly (ReadOnly is the user
       interface's) and raise what the engine raises - ETyRichEdit when the document takes no
       edit now (loading, incomplete after a cancelled load, being saved), with that reason.
       An application's toolbar calls them as the user's actions, and so every write behaves
       as one: an open composition ends first (committed where it was shown); the step keeps
-      the selection from before it (an undo puts it back, R55) and the selection stays as it
+      the selection from before it (an undo puts it back) and the selection stays as it
       is (a selection in a cut paragraph's hidden tail too - Select All has it); the view does
       not scroll; one OnChange, and OnSelectionChange only when the selection changed (the
       commit of a composition moves it). A write over more than CopyWaitChars characters
@@ -1785,7 +1785,7 @@ type
       (SelAttributes, or SetTextAttributes / SetRangeParams / SetRangeColor of length 0 at the
       caret) changes no text - it is the format the next typed text gets (TypingFormat), and
       what SelAttributes reads. No command, no undo step, no OnChange. It lasts until the
-      selection is set again (even to the same place: msftedit's way, fact 6 - the caret then
+      selection is set again (even to the same place: Windows' rich edit's way - the caret then
       takes its neighbour's format again), an edit other than typing, a change from code, an
       undo or a redo, or a new content - application code that sets the selection again,
       even to the same place (SelStart := SelStart), drops it, as on Windows; typing, an input method's commit and a paste of plain
@@ -1882,7 +1882,7 @@ type
     { RichMemo's CharAtPos: the position at client point (X, Y) (PositionAtPoint). }
     function CharAtPos(X, Y: Integer): TTyRichPos;
 
-    { ---- finding and replacing (Task 11b) ----
+    { ---- finding and replacing ----
       What a match is (tyControls.RichEdit.Find): the needle against the text as it is shown -
       CR LF, LF or CR in it is a paragraph's end, U+000B a line break; an object is matched by
       nothing; the cells merged away are not there; case folded per code point unless asked;
@@ -1990,9 +1990,9 @@ type
     procedure SetSelLengthFor(const AText: string);
     { RichMemo's ZoomFactor: Zoom / 100 (written: rounded to Zoom's whole percent). }
     property ZoomFactor: Double read GetZoomFactor write SetZoomFactor;
-    { Delphi's PlainText, the plain-text document state (R65, R69) - one state, one rule.
+    { Delphi's PlainText, the plain-text document state - one state, one rule.
       True: a key makes no line break inside a paragraph (Shift+Enter makes a paragraph), a
-      paste takes text only (R60), and SaveToStream without a format (Lines.SaveToStream too)
+      paste takes text only, and SaveToStream without a format (Lines.SaveToStream too)
       writes plain text. False: the document is rich - SaveToStream without a format writes
       RTF, whatever the content was loaded from (PlainText := False on an opened text file
       makes it save as RTF).
@@ -2030,7 +2030,7 @@ type
     property TopOffset: Int64 read GetTopOffset;
     property Loading: Boolean read GetLoading;
     property Incomplete: Boolean read GetIncomplete;
-    { The document's (TTyRichDocument.Modified, R59): False exactly when the content is the
+    { The document's (TTyRichDocument.Modified): False exactly when the content is the
       one last loaded or saved - an undo back to it or a redo forward to it makes it False
       again; True for good once the history let go of the way back. Cleared by SaveToFile in
       a format that keeps the document (RTF; text for a plain-text document - PlainText
@@ -2088,7 +2088,7 @@ type
     property OnLoadProgress: TTyRichProgressEvent read FOnLoadProgress write FOnLoadProgress;
     property OnSaveProgress: TTyRichProgressEvent read FOnSaveProgress write FOnSaveProgress;
     property OnFallbackFont: TTyRichFallbackEvent read GetOnFallbackFont write SetOnFallbackFont;
-    { The constructor's values (R31): a fresh control stores neither, and a Cursor of crDefault
+    { The constructor's values: a fresh control stores neither, and a Cursor of crDefault
       set in the designer is stored. }
     property TabStop default True;
     { ITyScrollBarFrameHost }
@@ -2197,7 +2197,7 @@ function TyRichMakePicture(const ABytes: TBytes; AKind: TTyRichImageKind;
   AMaxWidthTwips: Integer; out APicture: TTyRichPicture): TTyRichPictureMade;
 
 var
-  { What TyRichMakePicture's walk of a TIFF's directory chain did (tests and probes, F-Y1):
+  { What TyRichMakePicture's walk of a TIFF's directory chain did (tests and probes):
     the directories visited and the entries read, added to on every call. }
   TyRichTiffDirsVisited: Int64 = 0;
   TyRichTiffEntriesRead: Int64 = 0;
@@ -2405,7 +2405,7 @@ begin
   t := d.Text;
   start := t.ParaStart(Index);
   len := t.ParaLength(Index);
-  { Never half done (review C-10a, Minor 2): what could refuse is asked before anything
+  { Never half done: what could refuse is asked before anything
     changes - the row the line is in - and the insert goes first, behind the old text in the
     format it would have got at the line's start, so that one the engine refuses (a text that
     ends inside a UTF-8 sequence) leaves the line, the history and OnChange as they were. }
@@ -2575,8 +2575,8 @@ end;
 
 { As Delphi's TRichEdit.Lines: the control's load and save (see the declaration). Inside the
   lines' update the document takes no new content: it is loaded by the control at the
-  update's end, as the file says (F-M8). A FILE is only named here and read then, lazily as
-  any load of the control (G-M10: no copy of a 100 MB file held through the update; one gone
+  update's end, as the file says. A FILE is only named here and read then, lazily as
+  any load of the control (no copy of a 100 MB file held through the update; one gone
   by then raises at EndUpdate, as LoadFromFile would). A STREAM is read at once (below): it
   may not live until the update ends. }
 procedure TTyRichEditLines.LoadFromFile(const FileName: string);
@@ -2628,7 +2628,7 @@ begin
   if FUpdating then inherited SaveToStream(Stream) else FOwner.SaveToStream(Stream);
 end;
 
-{ ---- the format façades' objects (Task 11a) ----
+{ ---- the format façades' objects ----
 
   They hold the control and nothing else: a read asks it, a write is its door's (RunApiEdit). }
 
@@ -2707,7 +2707,7 @@ end;
 function TTyRichDefAttrs.GetFormat: TTyCharFormat;
 begin
   Result := FOwner.BaseCharFormat;
-  { The automatic colour reads clDefault here too (R70), so that it equals what automatic
+  { The automatic colour reads clDefault here too, so that it equals what automatic
     text reads through SelAttributes; a colour the application gave the base is its own. }
   Result.Color := TyRichTextColorIn(FOwner.Font.Color);
 end;
@@ -2724,7 +2724,7 @@ end;
 
 function TTyRichDefAttrs.AssignMask: TTyCharFormatMask;
 begin
-  // the base holds neither: an Assign leaves them out (F-M10), a direct write raises
+  // the base holds neither: an Assign leaves them out, a direct write raises
   Result := CTyFontMask;
 end;
 
@@ -3187,7 +3187,7 @@ end;
 
 { Inside the document's update (ViewBehind) the setters ask the layout nothing (SnapPos would
   look a block up by a paragraph index the layouter has not heard of): Select keeps the
-  positions, the update's end puts them on caret places (L-4). }
+  positions, the update's end puts them on caret places. }
 procedure TTyCustomRichEdit.SetSelStart(AValue: TTyRichPos);
 begin
   if not ViewBehind then AValue := SnapPos(AValue);
@@ -3311,7 +3311,7 @@ end;
 
 procedure TTyCustomRichEdit.ClearSelection;
 begin
-  // a user's action (R66): the Delete key's, with its every check
+  // a user's action: the Delete key's, with its every check
   EndCompositionForUser;
   if FReadOnly or not IsEnabled or ViewBehind or not HasSelection then Exit;
   DeleteKey(True, False);
@@ -3437,7 +3437,7 @@ begin
   { Still the same line: a cell's last (first) line in a row taller than it, or the
     document's end. The block after (before) the caret's, at that x. A block reaching two
     views below the view's top (a tall picture, a long cell beside a short one) leaves the
-    one after it unheld: that one is laid out here (S-I3), and the move scrolls to it. }
+    one after it unheld: that one is laid out here, and the move scrolls to it. }
   if (ADown and (k < FBlockCount - 1)) or (not ADown and (k > 0)) then
   begin
     if ADown then y := FBlocks[k].Top + FBlocks[k].Height else y := FBlocks[k].Top - 1;
@@ -3709,15 +3709,16 @@ begin
   a1 := Math.Max(FSelAnchor, FCaret);
   { The caret or the anchor moved by anything but an edit of the control's own (a key, a
     click, a setter, a change from elsewhere): the next typing is an undo step of its own, as
-    the memo's caret moves end its run (S-M9's place: the edits place the caret themselves). }
+    the memo's caret moves end its run (an edit's own placing is not one: the edits place the
+    caret themselves). }
   if (FEditing = 0) and ((AAnchor <> FSelAnchor) or (ACaret <> FCaret)) then EndTypingRun;
   { The selection set again - also to the same place, and by an edit's own placing - ends a
-    pending format (msftedit, fact 6); a façade's write keeps the selection and it. }
+    pending format (as on Windows' rich edit); a façade's write keeps the selection and it. }
   if FApiWrite = 0 then FHasPendingFmt := False;
   FSelAnchor := AAnchor;
   FCaret := ACaret;
   FCaretAtEnd := AAtEnd;
-  { The door (K-9, L-4): while the document holds its changes back the held blocks may name
+  { The door: while the document holds its changes back the held blocks may name
     paragraphs that are gone - the positions are kept (clamped to the text as it is now) and
     nothing is painted; the update's end paints the selection (DocUpdatingEnded). }
   if ViewBehind then
@@ -3806,7 +3807,7 @@ begin
   { A line's end at the layout width or past it (a justified or right-aligned line, a full
     one, a wrapped line's hanging spaces) puts the caret on the text's right edge or beyond
     it, where the clip would take it away; with nothing to scroll to that way it is drawn
-    inside, against the edge (S-I1). The same at the left edge. }
+    inside, against the edge. The same at the left edge. }
   tw := TextWindowRect;
   if tw.Right - tw.Left < w then Exit;
   if (Result.Right > tw.Right) and (FScrollX >= Math.Max(0, FWidestSeen - FViewW)) then
@@ -3845,7 +3846,7 @@ begin
   FScrollX := AValue;
   ClampScrollX;
   if FScrollX = was then Exit;
-  // a range a load's turns held back first: the position is in the range the bar has (P-1)
+  // a range a load's turns held back first: the position is in the range the bar has
   CatchUpBars;
   if HBarShown then
   begin
@@ -4017,7 +4018,7 @@ var
   r: TRect;
 begin
   { Inside the document's update (an application pumping messages between BeginUpdate and
-    EndUpdate) the blocks may name paragraphs that are gone: the blink waits (S-M11). }
+    EndUpdate) the blocks may name paragraphs that are gone: the blink waits. }
   if ViewBehind then Exit;
   Inc(FBlinkMs, CRichBlinkMs);
   vis := TyCaretVisible(FBlinkMs, CRichBlinkMs);
@@ -4112,7 +4113,7 @@ begin
     it (the hit test answers the document's positions behind it), taken before the
     composition ends. A point on the composition is its place, behind it. The object under
     the press is taken there too and carried as a position (DocChanged).
-    Not on macOS (accepted as the platform's limit, W15): LCL-Cocoa hands the mouse-down to
+    Not on macOS (accepted as the platform's limit): LCL-Cocoa hands the mouse-down to
     the input context before the control sees it (TCocoaFullControlEdit.mouseDown), and the
     input method commits there - through the bridge, as typing, which scrolls the caret into
     view. Here the composition has ended already, and the press is placed on the committed,
@@ -4162,7 +4163,7 @@ begin
     FCompBefore := FCompPending and (q = FCompPos) and not FPressAfter;
   end;
   inherited MouseDown(Button, Shift, X, Y);
-  // a user action is an entry point of the loop (P-2: see SchedulingFailed)
+  // a user action is an entry point of the loop (see SchedulingFailed)
   EndOwedLoad;
   if (Button <> mbLeft) and (Button <> mbRight) then Exit;
   try
@@ -4170,7 +4171,7 @@ begin
   except
     // no focus to be had (a form not shown): the caret is placed all the same
   end;
-  // inside the document's update a press places nothing (K-9)
+  // inside the document's update a press places nothing
   if ViewBehind then Exit;
   if not pre then
   begin
@@ -4202,7 +4203,7 @@ begin
       FLastClickTick, FClickCount, ViewPPI);
     if clicks = 2 then
     begin
-      // the object under the pointer is the word (on its right half too: S-M3)
+      // the object under the pointer is the word (on its right half too)
       if o = -2 then o := ObjectAt(X, Y, q);
       if o >= 0 then
       begin
@@ -4228,7 +4229,7 @@ begin
       if clicks > 3 then FClickCount := 1;
       { A click on an object selects it (its handles come with editing). The object is the
         pressed unit, as a word is after a double click: it stays selected while the pointer
-        moves on it, and a drag extends from it (S-I2). }
+        moves on it, and a drag extends from it. }
       if o = -2 then o := ObjectAt(X, Y, q);
       if o >= 0 then
       begin
@@ -4283,7 +4284,7 @@ begin
       begin
         { From the object pressed: on it (either half: its start or its end) it stays
           selected with the anchor at its start; past it rightwards the anchor stays at its
-          start, leftwards it goes to its end - as a word's does (K-12). }
+          start, leftwards it goes to its end - as a word's does. }
         if q > FDragTo then Select(FDragFrom, q, atEnd)
         else if q < FDragFrom then Select(FDragTo, q, atEnd)
         else Select(FDragFrom, FDragTo, False);
@@ -4334,7 +4335,7 @@ begin
   FOverPadding := CursorAt(X, Y) <> crIBeam;
   if inherited GetCursor = crIBeam then SetTempCursor(Cursor);
   if not FDragging then Exit;
-  // inside the document's update the drag waits (K-9)
+  // inside the document's update the drag waits
   if ViewBehind then Exit;
   FDragPoint := Point(X, Y);
   area := TextArea(Rect(0, 0, Width, Height), ViewPPI);
@@ -4359,7 +4360,7 @@ begin
     StopDrag;
     Exit;
   end;
-  // inside the document's update: no query, the drag waits (S-M11)
+  // inside the document's update: no query, the drag waits
   if ViewBehind then Exit;
   area := TextArea(Rect(0, 0, Width, Height), ViewPPI);
   est := Math.Max(1, FEstimate div Math.Max(1, FScale));
@@ -4638,7 +4639,7 @@ begin
           takes the largest. A chain that comes back to a directory it visited, points outside
           the bytes, holds a directory with no size, or makes the walk read more entries than
           the bytes hold (12 bytes each) does not decode: the work is linear in the file's
-          bytes, once (F-Y1). The largest image is the one judged. }
+          bytes, once. The largest image is the one judged. }
         if (Length(ABytes) >= 8) and (ABytes[0] = Ord('I')) and (ABytes[1] = Ord('I')) then le := True
         else if (Length(ABytes) >= 8) and (ABytes[0] = Ord('M')) and (ABytes[1] = Ord('M')) then le := False
         else Exit;
@@ -5054,7 +5055,7 @@ begin
   end;
 end;
 
-{ ---- editing (Task 10a) ----
+{ ---- editing ----
 
   Every edit is a command run by the document (TTyRichDocument.Execute), so the history holds
   all of it; the control never changes the text another way. An edit of the control's own
@@ -5062,7 +5063,7 @@ end;
   way) - RunEdit (the command, the document's one OnChange heard but held: FEditing) -
   FinishEdit (the caret placed where the edit leaves it, scrolled into view, then the
   action's one OnChange and one OnSelectionChange). A user's edit - a key, the menu, a paste,
-  a commit, a descendant's command - takes these steps through one door, RunUserEdit (W15),
+  a commit, a descendant's command - takes these steps through one door, RunUserEdit,
   which asks ReadOnly and ends a composition first. The caret's new place is read off what
   the document reported: the end of the change (behind typed text, the join of a deletion,
   the new paragraph's start after Enter). A key never raises a refusal: it goes to
@@ -5363,7 +5364,7 @@ var
   s: TTyRichPos;
   p: Integer;
 begin
-  // a format chosen with nothing selected, at this very caret (Task 11a)
+  // a format chosen with nothing selected, at this very caret
   if FHasPendingFmt and (FCaret = FSelAnchor) and (FCaret = FPendingAt) then
     Exit(FPendingFmt);
   t := FDoc.Text;
@@ -5484,7 +5485,7 @@ begin
   ps := t.ParaStart(p);
   pe := ps + t.ParaLength(p);
   { Backspace at the start of a list item (empty or not) takes its numbering first, as
-    msftedit and Word do (R55 c); the next Backspace joins it with the paragraph before. }
+    Windows' rich edit and Word do; the next Backspace joins it with the paragraph before. }
   if not AForward and (FCaret = ps) and
     (FDoc.Formats.ParaFormat(FDoc.ParaFormatOf(p)).List.Kind <> lkNone) then
   begin
@@ -5566,7 +5567,7 @@ begin
     if (pf.List.Kind <> lkNone) and (t.ParaLength(p) = 0) then
     begin
       { An empty list item: Enter ends the list there - the item itself becomes a plain
-        paragraph, nothing is added (Word's way; msftedit adds one, R55 c), the caret stays. }
+        paragraph, nothing is added (Word's way; Windows' rich edit adds one), the caret stays. }
       LeaveList(p);
       Exit;
     end;
@@ -5589,8 +5590,9 @@ begin
   // a paragraph break puts the caret at the next paragraph's start, which is shown
   if (AText = '') or (Pos(#10, AText) > 0) then Exit;
   t := FDoc.Text;
-  { Past the cut the text would go in unseen, with the caret: the user is told instead (R52's
-    way) - the paragraph is too long to edit there. }
+  { Past the cut the text would go in unseen, with the caret: the user is told instead
+    (EditRefused, as for any edit the document refuses) - the paragraph is too long to edit
+    there. }
   if APos - t.ParaStart(t.ParaOfPos(APos)) + UTF8Length(AText) <= CRichMaxParaLayoutChars then
     Exit;
   Result := True;
@@ -5604,7 +5606,7 @@ end;
 
 function TTyCustomRichEdit.UserRangeAllowed(var AStart, ALen: TTyRichPos): Boolean;
 begin
-  // the document's rule (R57), the one a find's replace asks too
+  // the document's rule, the one a find's replace asks too
   Result := FDoc.UserRangeAllowed(AStart, ALen);
   { Told once the read scope is closed: a handler that loads a document (or waits on a
     dialog) must not meet it open. }
@@ -5697,7 +5699,8 @@ begin
   // refused before anything is copied: a cut that cannot delete is no cut
   if not EditAllowed(s, n, False, AUser) then Exit;
   if AUser and not UserRangeAllowed(s, n) then Exit;
-  { The clipboard gets what is removed: the range R57 may have shortened (the paragraph end
+  { The clipboard gets what is removed: the range the table rule may have shortened (the
+    paragraph end
     kept before a table stays, and is not copied); a selection that was only that end
     removes nothing and copies nothing. }
   if n = 0 then Exit;
@@ -5707,13 +5710,13 @@ end;
 
 procedure TTyCustomRichEdit.CutToClipboard;
 begin
-  // a user's action in an application's hands (EndCompositionForUser's list; R66)
+  // a user's action in an application's hands (EndCompositionForUser's list)
   EndCompositionForUser;
   if FReadOnly or not IsEnabled or ViewBehind then Exit;
   CutSelection(True);
 end;
 
-{ ---- pasting (Task 10c) ---- }
+{ ---- pasting ---- }
 
 function TTyCustomRichEdit.PastedText(const AText: RawByteString): UTF8String;
 var
@@ -5771,7 +5774,7 @@ begin
         end;
       #11:
         begin
-          // a line break; a text document has none inside a line (W11's Shift+Enter)
+          // a line break; a text document has none inside a line (Shift+Enter makes one)
           Inc(j);
           if plain then Result[j] := #10 else Result[j] := #11;
           Inc(i);
@@ -5889,7 +5892,7 @@ function TTyCustomRichEdit.CanPaste: Boolean;
 begin
   Result := not FReadOnly and IsEnabled and (RefusalReason = '');
   if not Result then Exit;
-  // a plain text document takes text only: a picture alone is no paste (R60) - one ask
+  // a plain text document takes text only: a picture alone is no paste - one ask
   if PlainTextDocument then
     Result := ClipboardFlavours * [rcfRtf, rcfText] <> []
   else
@@ -5967,7 +5970,7 @@ var
 
 begin
   EndOwedLoad;
-  // the door of a user's edit: a composition goes in first (W12)
+  // the door of a user's edit: a composition goes in first
   EndCompositionForUser;
   if FReadOnly or not IsEnabled or ViewBehind then Exit;
   have := ClipboardFlavours;
@@ -5975,7 +5978,7 @@ begin
   s := GetSelStart;
   n := GetSelLength;
   { As typing over the selection asks: the document takes edits, no row that holds a nested
-    table is in the way, the cells (R57: may keep a selection's last separator), the cut of a
+    table is in the way, the cells (may keep a selection's last separator), the cut of a
     paragraph too long to lay out (nothing goes in past what is shown). }
   if not EditAllowed(s, n, True, True) then Exit;
   if not UserRangeAllowed(s, n) then Exit;
@@ -5997,7 +6000,7 @@ begin
     { Everything is read and made before the document changes: a flavour that cannot be read
       is the next one's turn; a lack of memory is a refusal of the control's own. }
     try
-      { A plain text document (R60): its formats and pictures cannot be saved, so a paste takes
+      { A plain text document: its formats and pictures cannot be saved, so a paste takes
         text only - the text flavour, else the RTF's text (no formats, no objects, a table's
         cells as paragraphs); a picture is refused, and so is an explicit RTF or picture. }
       if PlainTextDocument then
@@ -6050,7 +6053,7 @@ begin
             FreeAndNil(src);
             raise;
           end;
-          { Rows over a selection of whole rows: until Task 12 pastes cells, refused as a
+          { Rows over a selection of whole rows: until table editing pastes cells, refused as a
             selection across cells is (the rows would go into the next row's first cell). }
           if (src <> nil) and rows and HoldsRows(src) then
           begin
@@ -6061,11 +6064,11 @@ begin
           { What the reader kept of the clipboard's file by number (styles, colours, fonts,
             lists inside formats, rows and objects) goes in as it is only where it means the
             same in this document's file - the entries its header defines the same (a copy
-            out of this very file); the rest is left out or made again (R62,
-            TyRichFragmentFilterFor). }
+            out of this very file); the rest is left out or made again
+            (TyRichFragmentFilterFor). }
           if (src <> nil) and ((src.Text.Length > 0) or ends) then
           begin
-            // made first: the command takes src over only once it exists (F-Y4)
+            // made first: the command takes src over only once it exists
             try
               flt := MakeFragmentFilter(src);
             except
@@ -6184,7 +6187,7 @@ begin
     Exit;
   end;
   { An undo puts the caret and the selection back as they were before the action, a redo
-    leaves a plain caret where the action left it (measured in msftedit, R55: a deleted or
+    leaves a plain caret where the action left it (measured in Windows' rich edit: a deleted or
     typed-over selection comes back selected, an undone Backspace has the caret after the
     character, an undone Delete before it, undone typing at its start) - from the marks the
     control kept with the step, never from the change's extent, which cannot tell a deleted
@@ -6204,7 +6207,7 @@ end;
 
 procedure TTyCustomRichEdit.Undo;
 begin
-  // a user's action in an application's hands (EndCompositionForUser's list; R66)
+  // a user's action in an application's hands (EndCompositionForUser's list)
   EndCompositionForUser;
   if FReadOnly or not IsEnabled or ViewBehind then Exit;
   RunHistory(False, True);
@@ -6240,7 +6243,7 @@ begin
   TypeText(s, False, False);
 end;
 
-{ ---- the format API (Task 11a) ----
+{ ---- the format API ----
 
   Both façades come here: a read asks the document's formats (RunsOf, ParaFormatOf), a write
   is one command through RunApiEdit - the door of a user's edit (RunMade, EditWith, RunEdit,
@@ -6253,7 +6256,7 @@ begin
   if [csLoading, csDestroying] * ComponentState <> [] then Exit;
   { Inside the control's own edit (a key, a façade's write, an undo): raised once the edit
     has placed the caret and made its OnChange - a handler that changes or loads the
-    document there is not taken for this edit (F-M7, as W11 did for EditRefused). }
+    document there is not taken for this edit (as for EditRefused). }
   if FEditing > 0 then
   begin
     FModifiedOwed := True;
@@ -6513,7 +6516,7 @@ begin
     Exit;
   end;
   parsed := FDoc.ReadValue(AData, pf, runs, cell);
-  // the budget: past it the walk stops and the answer is a lower bound (F-I1)
+  // the budget: past it the walk stops and the answer is a lower bound
   if not ConsistencyGo(not parsed) then
   begin
     AContinue := False;
@@ -6523,7 +6526,7 @@ begin
   if not parsed then runs := FDoc.RunsOf(AIndex);
   for i := 0 to High(runs) do
   begin
-    // each run a unit of the budget (G-M1)
+    // each run a unit of the budget
     if not ConsistencyUnit then
     begin
       AContinue := False;
@@ -6575,7 +6578,7 @@ begin
   Result := CAllCharFields;
   t := FDoc.Text;
   if ALen <= 0 then Exit;
-  // the same selection over the same content: the answer is known (F-I1)
+  // the same selection over the same content: the answer is known
   if FCharConsValid and (FCharConsStart = AStart) and (FCharConsLen = ALen) and
     (FCharConsState = FDoc.ContentState) then Exit(FCharConsResult);
   e := AStart + ALen;
@@ -6620,7 +6623,7 @@ begin
     Exit;
   end;
   parsed := FDoc.ReadValue(AData, pf, runs, cell);
-  // the first paragraph is always read; past the budget the walk stops (F-I1), a paragraph
+  // the first paragraph is always read; past the budget the walk stops, a paragraph
   // a unit (its format alone is looked at)
   if FParaConsHave and (not ConsistencyGo(not parsed) or not ConsistencyUnit) then
   begin
@@ -6715,7 +6718,7 @@ begin
 end;
 
 { The façades' writes: one command, through the door of a user's edit but for its ReadOnly
-  question (R53, R66), refusals raised (ETyRichEdit). AChars: how many characters it formats
+  question, refusals raised (ETyRichEdit). AChars: how many characters it formats
   (the wait cursor's threshold). }
 procedure TTyCustomRichEdit.RunApiEdit(ACmd: TTyRichCommand; AChars: TTyRichPos);
 var
@@ -6777,7 +6780,7 @@ begin
     in (the base's: what Name and Size read there, so what a toolbar writes back): such text
     shows it already and keeps none of its own - the base's value is not frozen into it, a
     later DefAttributes change still reaches it. Decided run by run by the engine
-    (AKeepNone), so it holds over any selection, however large (G-M2). }
+    (AKeepNone), so it holds over any selection, however large. }
   keep := [];
   if AMask * [cffFontName, cffSize] <> [] then
   begin
@@ -6904,7 +6907,7 @@ begin
       if st in AAddFontStyle + ARemoveFontStyle then
       begin
         { only the styles named change; one in both sets ends up off - RichMemo's own
-          statement is "Style := Style + AddFontStyle - RemoveFontStyle" (F-M3) }
+          statement is "Style := Style + AddFontStyle - RemoveFontStyle" }
         Include(m, Fields[st]);
         if (st in AAddFontStyle) and not (st in ARemoveFontStyle) then
           if st = fsStrikeOut then f.Strike := True else Include(f.Style, st);
@@ -7555,7 +7558,7 @@ begin
 end;
 {$ENDIF}
 
-{ ---- the input method (Task 10b) ----
+{ ---- the input method ----
 
   How the package's memo takes an input method, and what of it is here (phase 1 changes
   nothing in the memo):
@@ -7913,7 +7916,7 @@ begin
 end;
 
 { The one door of a user's edit and action: a key's edit (KeyDown's edit keys, a character
-  typed, Ctrl+A), a press, the menu's actions - and paste (Task 10c), the format actions and
+  typed, Ctrl+A), a press, the menu's actions - and paste, the format actions and
   table editing (Tasks 11, 12) must come in through it as well. A composition open in the text
   ends first, committed as a press commits it (what the input method has goes in where it was
   shown), so that the action works on the document the user sees: never on the text under a
@@ -7921,7 +7924,7 @@ end;
   everything). Copying, moving the caret, scrolling and zooming do not end it.
   The public methods that are a user's actions in an application's hands - an action list's
   shortcut (the form takes it before KeyDown), a toolbar button that never takes the focus -
-  come through it too (fix wave W13): CutToClipboard, PasteFromClipboard, Undo, Redo. Not the
+  come through it too: CutToClipboard, PasteFromClipboard, Undo, Redo. Not the
   ones that are code: SelText :=, SelectAll, the setters, Lines, the document's own API (a
   composition follows such a change, and its commit goes where it moved). }
 procedure TTyCustomRichEdit.EndCompositionForUser;
@@ -8095,7 +8098,7 @@ begin
     Message.Result := 1;
     Exit;
   end;
-  // read-only: the system's composition window, its text dropped as typing is (batch B's)
+  // read-only: the system's composition window, its text dropped as typing is
   if ImeIsReadOnly then
   begin
     inherited;
@@ -8362,7 +8365,7 @@ var
   w: Integer;
 begin
   { The widest content that does not wrap (a line, an object, a table row: the block's Width),
-    never the wrap width itself - text that wraps to the window fits it at any zoom (K-2). A
+    never the wrap width itself - text that wraps to the window fits it at any zoom. A
     page wider than the window scrolls over the page's width. }
   w := ALayout.Width;
   if (FWrapMode = rwmPage) and (ALayout.LayoutWidth <> CRichNoWrap) and
@@ -8454,7 +8457,7 @@ begin
         stay. What is wide is as much wider: the horizontal position keeps its fraction of the
         extent where there is still something to scroll (clamped to the new extent, 0 where
         there is none). The scaled extent only stands in for the bars' first decision: the
-        next layout builds the extent again from what it lays out, so it can shrink (K-2). }
+        next layout builds the extent again from what it lays out, so it can shrink. }
       FLayouter.ClearLayouts;
       factor := (z * rppi) / (FLayoutZoom * FLayoutPPI);
       FScrollX := Round(FScrollX * factor);
@@ -8476,7 +8479,7 @@ begin
     FEstimate := est;
     FViewValid := False;
     // the wished x is a raster x of the old layout (a zoom, a width, a scale): Up / Down
-    // start again from where the caret is now (S-M5)
+    // start again from where the caret is now
     FWishValid := False;
   end;
   if FDoc.Text.DefaultParaHeight <> FEstimate then FDoc.Text.DefaultParaHeight := FEstimate;
@@ -8705,9 +8708,9 @@ begin
   { The load's own change: one made while the step runs AND the document still loads. A
     slice is appended before the last step ends the loading; a command run from the last
     step's progress handler (the document no longer loads there) is an edit - for the
-    layouter's trust, the caret and the anchor, and the change report alike (S-X1). The
+    layouter's trust, the caret and the anchor, and the change report alike. The
     notice a cancelled load gives that it stopped comes after the load state ended, and is
-    the load's own all the same: it changes no text of the file (K-6). }
+    the load's own all the same: it changes no text of the file. }
   loadOwn := (FInStep and FDoc.Loading) or FInCancel;
   // (a background replace's place to go on from follows an edit it did not make)
   if not loadOwn and (FFindKind = rfkReplace) then ReplaceResumeFollows(AChange);
@@ -8731,7 +8734,7 @@ begin
     composition, before it when on it or behind it; inside a range replaced: behind what
     replaced it. The object under it is that object, at its new place: text inserted at it
     goes before it; one inside the range the commit replaced (a picture selected, then
-    composed over) is gone - the press selects no object then (W15). }
+    composed over) is gone - the press selects no object then. }
   if FPressCarry and (rckText in AChange.Kinds) then
   begin
     if FDoc.Text <> FText then
@@ -8761,7 +8764,7 @@ begin
       ranges, their kinds together), so a caret between two edits of one update goes to the
       first edit's start, and a format change joined with an inserted character moves a
       caret anywhere in that range. Right for a change from elsewhere. An edit the control
-      makes (FEditing) places the caret itself when the command has run (S-M9, FinishEdit):
+      makes (FEditing) places the caret itself when the command has run (FinishEdit):
       here the positions only follow the text by the same arithmetic - so that what the
       edit's Select repaints of an old selection is in the text as it is now - and are
       neither snapped nor reported. }
@@ -8771,7 +8774,7 @@ begin
       wasAnchor := FSelAnchor;
       { A selection set inside the update was set on the text as it was then, and positions
         that followed the control's own writes in it are already where those put them: the
-        update's own change does not move them again (L-4); they are clamped to the final
+        update's own change does not move them again; they are clamped to the final
         text. }
       if not FPosInUpdate then
       begin
@@ -8788,7 +8791,7 @@ begin
         FSnapPending := True;
       FWishValid := False;
     end;
-    { A slice a turn appends: its change of the bars may wait (UpdateBars, P-1). The end of a
+    { A slice a turn appends: its change of the bars may wait (UpdateBars). The end of a
       load (Loading False there) and anything that is not a slice reach them at once. }
     FBarsLazy := loadOwn and FInTurn and FDoc.Loading;
     try
@@ -8798,7 +8801,7 @@ begin
     end;
     { A paint that came while the document held this change back showed nothing new and left
       the window painted: the change's own bands are not all it missed (with no block held
-      they are nothing). The window is painted again, whole, once (K-11). }
+      they are nothing). The window is painted again, whole, once. }
     if FSkippedPaint then
     begin
       FSkippedPaint := False;
@@ -8840,8 +8843,9 @@ begin
     InvalidateArea(TextWindowRect);
     CaretMoved;
   end;
-  { K-11 for an update that ended with nothing to report (L-3): DocChanged made a skipped
-    paint good when there was a change. }
+  { A paint skipped while the document held its changes back is made good also for an
+    update that ended with nothing to report: DocChanged made it good when there was a
+    change. }
   if FSkippedPaint then
   begin
     FSkippedPaint := False;
@@ -8905,7 +8909,7 @@ begin
   if composed then ImeEndOnWidgetset(False);
 end;
 
-{ Held blocks the layouter dropped (a list's numbers after a change, F-M1's Stale) are laid
+{ Held blocks the layouter dropped (a list's numbers after a change: the layout's Stale) are laid
   out again: the same shape, only their band is painted again; another shape, the view is laid
   out again from there (above the view: the anchor below holds, only what is above goes). }
 procedure TTyCustomRichEdit.RelayStale;
@@ -9144,7 +9148,7 @@ begin
   else
   begin
     { The blocks below moved: the window from the change down; on the surface the changed
-      blocks are drawn again and what lies below them is moved (rule 10 of 10a: a keystroke
+      blocks are drawn again and what lies below them is moved (a keystroke
       that makes its paragraph a line taller draws that paragraph, not every block under it) -
       and whatever the move does not fill from valid pixels is drawn (MoveSurfaceText's one
       rule: a shorter edit at the view's bottom edge too; a change that reached past the held
@@ -9254,7 +9258,7 @@ begin
   begin
     { A zoom (a PPI, a width) since the last layout: the anchor's offset is a share of its
       block until it is laid out again - at the new parameters, here, before the walk starts
-      from it (H-M3's share, which the walk would otherwise drop). }
+      from it (the share a zoom keeps, which the walk would otherwise drop). }
     FDoc.BeginRead;
     try
       b := LayoutBlockAt(Math.Min(FAnchorPara, t.ParaCount - 1));
@@ -9449,7 +9453,7 @@ begin
     decision a layout made (measured heights) holds for the rest of this call: the width it
     changes makes the heights estimates again, and they must not take it back - a bar shown
     because the text overflowed stays, one hidden because it fits at the narrower width stays
-    hidden (it fits wider too). So it settles in at most three layouts (H-C1). }
+    hidden (it fits wider too). So it settles in at most three layouts. }
   FLatchV := 0;
   FLatchH := 0;
   try
@@ -9601,8 +9605,7 @@ begin
     (BackgroundTurn); CatchUpBars gives them the rest when the load ends, and any call of this
     that is not such a slice gives them everything at once. What the control works with - the
     document's height, the anchor, the clamps - is read from the document, never from a bar;
-    FBarScale is the scale the vertical bar was last given, the one its positions are in
-    (P-1). }
+    FBarScale is the scale the vertical bar was last given, the one its positions are in. }
   if FBarsLazy and not Result then
   begin
     // the turn decides at its end (BackgroundTurn)
@@ -9756,7 +9759,7 @@ end;
 
 { ---- points and positions ---- }
 
-{ One implementation of point -> position and position -> rectangle (S-M8): the control's own
+{ One implementation of point -> position and position -> rectangle: the control's own
   moves, clicks and caret go through these too (HitRaster, CaretRaster, with the affinity). }
 function TTyCustomRichEdit.PositionAtPoint(X, Y: Integer): TTyRichPos;
 var
@@ -9989,7 +9992,7 @@ begin
       if TyRichRtfLoadOf(FDoc) = load then Inc(FTurnBytes, load.BytesIndexed - before);
     except
       FInStep := False;
-      { (K-4) A slice that indexed nothing would raise the same again, every turn: the load
+      { A slice that indexed nothing would raise the same again, every turn: the load
         stops there. One that got further raised in a handler of its progress or its change
         (the load's state is whole: what was indexed is appended first): it goes on. }
       if (TyRichRtfLoadOf(FDoc) = load) and FDoc.Loading and (load.BytesIndexed = before) then
@@ -9997,7 +10000,7 @@ begin
       raise;
     end;
     FInStep := False;
-    // the load's end: the bars get what its last turns held back (P-1)
+    // the load's end: the bars get what its last turns held back
     if not FDoc.Loading then CatchUpBars;
     if FCancelRequested then CancelLoad;
     Exit(True);
@@ -10029,7 +10032,7 @@ begin
   Result := True;
 end;
 
-{ The driver on (R49). rtdIdle: the idle handler registered; when it was not, the first turn
+{ The driver on. rtdIdle: the idle handler registered; when it was not, the first turn
   is queued too, because a start from code the idle step itself runs after the handlers (an
   action's update, a later idle handler) would otherwise wait for the next message - this is
   a start, not a turn queuing the next: inside a turn nothing is queued. rtdTimer: the timer
@@ -10078,16 +10081,16 @@ end;
 
 { What will not schedule ends the background work here; nothing escapes into the load, the turn
   or the idle step that asked. An application that shuts down: quietly, the document as far as
-  it was read (Loading; FinishLoading reads the rest, a new window starts the driver again)
-  (L-2). Anything else (in practice: out of memory) would leave the load Loading with nothing to
-  drive it: it ends as a cancel ends it - Incomplete, with the load's own notice (N-5).
+  it was read (Loading; FinishLoading reads the rest, a new window starts the driver again).
+  Anything else (in practice: out of memory) would leave the load Loading with nothing to
+  drive it: it ends as a cancel ends it - Incomplete, with the load's own notice.
   That cancel is not run here: this is reached from the end of a paint, the tail of a layout
   pass (QueuePicturesAhead) and InitializeWnd, where the view must not hear a document notice.
   It is owed (FLoadEndOwed), and EndOwedLoad runs it at the next entry point of the loop: the
   idle step (rtdIdle: the handler is registered again for it - a registration is no queued
   call), a turn, a key or a mouse press; LoadAs and the idle step, which are such entry points
   themselves, run it before they return. It runs under no handler of ours: an exception from a
-  user's change handler reaches the caller as from a user's own cancel (P-2). }
+  user's change handler reaches the caller as from a user's own cancel. }
 procedure TTyCustomRichEdit.SchedulingFailed;
 begin
   // the driver's own calls only (no user code): what fails here was failing already
@@ -10112,7 +10115,7 @@ begin
   if FDoc.Loading and (TyRichRtfLoadOf(FDoc) <> nil) then CancelLoad;
 end;
 
-{ The bars get the range the load's turns held back (P-1). }
+{ The bars get the range the load's turns held back. }
 procedure TTyCustomRichEdit.CatchUpBars;
 begin
   if not FBarsBehind then Exit;
@@ -10157,7 +10160,7 @@ begin
   try
     PostCall(ACall);
   except
-    { Nothing was queued; the error does not travel on into a paint, a turn or a step (L-2). The
+    { Nothing was queued; the error does not travel on into a paint, a turn or a step. The
       background work: see SchedulingFailed. A selection report: the next user action reports
       the move with its own report at its end (DoSelectionChange compares with what was last
       reported), as when no loop runs the queue. }
@@ -10206,7 +10209,7 @@ procedure TTyCustomRichEdit.IdleStep(Sender: TObject; var Done: Boolean);
 begin
   if FLoadEndOwed and not FInStep and (FSaving = 0) then
   begin
-    // (P-2) its own driver stays on only for pictures left (CancelLoad's tail)
+    // its own driver stays on only for pictures left (CancelLoad's tail)
     EndOwedLoad;
     Exit;
   end;
@@ -10218,7 +10221,7 @@ begin
   // inside a load step or a save (a handler that runs a modal loop): their end goes on
   if FInStep or (FSaving > 0) then Exit;
   ScheduleCall(FStepCall);
-  // a call that could not be queued: the load ends now (P-2)
+  // a call that could not be queued: the load ends now
   EndOwedLoad;
 end;
 
@@ -10340,7 +10343,7 @@ begin
     NoteFindTurn(ms);
     { The range the turn's slices held back reaches the bars, the turn's whole work at once,
       when none did for CRichLoadBarsMs (by the clock's last reading); the first turn of a load
-      always (P-1). }
+      always. }
     tEnd := t0 + QWord(Math.Max(Int64(0), ms));
     if FBarsBehind and (not FBarsAtValid or (tEnd < FBarsAt) or
       (tEnd - FBarsAt >= CRichLoadBarsMs)) then
@@ -10351,7 +10354,7 @@ begin
     end;
   finally
     { The driver stays on while work is left, also after a piece raised: the work never
-      strands (K-4). Nothing is queued from here (R49): still inside the turn, a start only
+      strands. Nothing is queued from here: still inside the turn, a start only
       registers the idle handler, and the next idle step queues the next turn. A control a
       handler freed is not touched. }
     if not ALife.Gone then
@@ -10361,7 +10364,7 @@ begin
         FInTurn := False;
       end;
   end;
-  // (P-2) the next turn could not be scheduled: the load ends here, out of the turn
+  // the next turn could not be scheduled: the load ends here, out of the turn
   EndOwedLoad;
 end;
 
@@ -10374,7 +10377,7 @@ end;
   size is halved when the turn went over the budget (> CRichIdleBudgetMs), doubled when it was
   fast (< CRichIdleBudgetMs / 4), and kept in between. The last turn alone decides, one step at
   a time: a stall (a page fault, a debugger, the machine busy) costs one halving, and a few fast
-  turns bring the size back (N-4). The band between the two thresholds is four times wide, so a
+  turns bring the size back. The band between the two thresholds is four times wide, so a
   steady rate settles rather than flips: a size doubled from a fast turn gives a turn of at
   most twice that time, still under the budget (a turn of three slices under 2 ms becomes one
   under 4 ms), and a size halved from a slow turn gives a turn no faster than the band's floor
@@ -11350,7 +11353,7 @@ procedure TTyCustomRichEdit.CheckReplaceable;
 begin
   if FInStep or (FSaving > 0) then raise ETyRichEdit.Create(rsRichEditBusy);
   { Inside BeginEdit .. EndEdit: the block is one undo step and a new content has none -
-    refused before anything changes, with the control's own exception (G-M9). }
+    refused before anything changes, with the control's own exception. }
   if FEditBlock > 0 then raise ETyRichEdit.Create(rsRichEditReplaceInEdit);
   { A find or a replace running ends here, told before anything of the content goes (its
     handler sees the old content); one started from that handler ends with the content, and
@@ -11366,9 +11369,9 @@ var
 begin
   CheckReplaceable;
   FCancelRequested := False;
-  // a new file's turns start small and find their size (N-3); its first slice is not a turn
+  // a new file's turns start small and find their size; its first slice is not a turn
   FSlice := CRichLoadMinStepBytes;
-  // its first turn's range reaches the bars at once (P-1); an end owed to the last is moot
+  // its first turn's range reaches the bars at once; an end owed to the last is moot
   FBarsAtValid := False;
   FLoadEndOwed := False;
   if AFormat = rfRtf then
@@ -11395,7 +11398,7 @@ begin
   FLinesStored := False;
   FSourceFile := '';
   if HasBackgroundWork then StartBackground;
-  // a first turn that could not be queued: the load ends before this returns (P-2)
+  // a first turn that could not be queued: the load ends before this returns
   EndOwedLoad;
   PayFindOwed;
 end;
@@ -11454,7 +11457,7 @@ begin
   // a text of one line break is one empty line, no text at all is none
   FLines.FEmptyLine := (AText <> '') and (FDoc.Text.Length = 0);
   FRtfPrefix := nil;
-  { Text set as lines leaves PlainText as it is (R65): a rich control stays rich and saves
+  { Text set as lines leaves PlainText as it is: a rich control stays rich and saves
     RTF as it came, a plain one text. }
   if FPlainText then FSourceFormat := rfText else FSourceFormat := rfRtf;
   FSourceFile := '';
@@ -11513,7 +11516,7 @@ begin
     FInCancel := False;
     FInStep := False;
   end;
-  // (its notice reached them already when it changed a view: then this does nothing; P-1)
+  // (its notice reached them already when it changed a view: then this does nothing)
   CatchUpBars;
   if HasBackgroundWork then StartBackground else StopBackground;
 end;
@@ -11527,7 +11530,7 @@ begin
   if FFindKind = rfkReplace then EndFind(rfsCancelled, True);
   FinishLoading;
   if FDoc.Incomplete then raise ETyRichEdit.Create(rsRichEditIncomplete);
-  // the document's state decides, not where the content came from (R69)
+  // the document's state decides, not where the content came from
   if AFormat = rfAuto then
     if FPlainText then AFormat := rfText else AFormat := rfRtf;
   // a document of ours names the font its plain text is shown in (RtfWrite's \f0)
@@ -11663,7 +11666,7 @@ begin
   full := RealTarget(ExpandFileName(AFileName));
   FinishLoading;
   if FDoc.Incomplete then raise ETyRichEdit.Create(rsRichEditIncomplete);
-  { One rule (R69): text when the application asked for it (PlainText := True), else the
+  { One rule: text when the application asked for it (PlainText := True), else the
     extension, else the document's state - never where the content came from, so that a
     text file opened, formatted and saved under .rtf is RTF. }
   if (AFormat = rfAuto) and FPlainText and FPlainTextAsked then AFormat := rfText;
@@ -11704,7 +11707,7 @@ begin
     SysUtils.DeleteFile(tmp);
     raise ETyRichEdit.CreateFmt(rsRichEditCannotReplace, [full]);
   end;
-  { The same answer decides whether the file is now the document's (R69): RTF keeps any
+  { The same answer decides whether the file is now the document's: RTF keeps any
     content; text keeps a plain-text document's - the text is what such a document is, its
     formats included (the caller asked for text: an explicit .txt, rfText or PlainText, the
     application's choice); a rich document saved as text is an export and stays Modified. }
@@ -11717,7 +11720,7 @@ begin
   end;
 end;
 
-{ ---- the kept surface (R39) ----
+{ ---- the kept surface ----
 
   The control keeps one bitmap of what it shows, frame and text, at the canvas's device scale
   (FSurfScale raster pixels per client pixel; the view is laid out at that scale too, so the
@@ -11748,7 +11751,7 @@ end;
   The surface is made when the first paint needs it and released when the window goes
   (DestroyWnd): client size x scale squared x 4 bytes, rounded up to CRichSurfaceBlock. A theme
   ground that is not an opaque colour, or an opacity (a disabled control dims), is painted the
-  9a way instead - the painter's layer over the canvas, everything each paint. }
+  other way instead - the painter's layer over the canvas, everything each paint. }
 
 function TTyCustomRichEdit.ClientOf(const AArea: TRect; AL, AT, AR, AB: Int64): TRect;
 const
@@ -11812,7 +11815,7 @@ begin
   s := CurrentStyle;
   { Text may reach into the left padding (a table row's \trleft is usually negative: Word
     puts its lines in the margin) - never into what the frame inks: the surface fills and
-    moves what is inside this rectangle, the frame is drawn only outside it (H2-I3). What the
+    moves what is inside this rectangle, the frame is drawn only outside it. What the
     frame inks, as the painter draws it at the device scale: the border (render-style's 2 px
     when a 3D look gives none), the focus ring (outline offset + width), the pixel their
     antialiasing takes, and at a rounded corner the arcs and what lies outside them (the
@@ -12146,7 +12149,7 @@ begin
     them the state: a hover or a focus that changes nothing of these changes nothing here),
     what lies outside a rounded corner (the parent's fill, and the control's place in it when
     it is not one colour), the paint style's colours (the selection follows the focus), the
-    bars, the PPI. Never the states themselves (H2-M2): a press that looks like the normal
+    bars, the PPI. Never the states themselves: a press that looks like the normal
     state draws nothing. }
   st := CurrentStyle;
   h := 2166136261;
@@ -12177,7 +12180,7 @@ begin
   Mix(Cardinal(st.Padding.Bottom));
   { The base font the text is laid out in (CheckLayoutParams reads the current style, so a
     state's font-size or font-family takes effect): a state that changes it is a layout
-    change, which the paint then does (A3-M2). }
+    change, which the paint then does. }
   Mix(Cardinal(ResolveFontSize(st)));
   // (the weight and the style flags it carries: the base font's style)
   Mix(Cardinal(st.FontWeight));
@@ -12389,7 +12392,7 @@ begin
       end;
   end;
   { The marks are cleared once what they mark is drawn: a drawing that raises (a block's paint,
-    the frame's) leaves everything to be drawn again by the next paint (H2-M3) - never stale
+    the frame's) leaves everything to be drawn again by the next paint - never stale
     pixels marked clean. }
   try
     if full then
@@ -12406,7 +12409,7 @@ begin
       ground := TyColorToBGRA(CurrentStyle.Background.Color);
       { A block's ink may reach past its box (a descender, an italic, a picture frame): the
         blocks next to a region are painted into it too (clipped), as a full redraw would leave
-        them. No block of today's layouts inks outside its box (A10: equivalent now); 9b's
+        them. No block of today's layouts inks outside its box (equivalent now); the
         handles of a selected picture will, and this is what keeps them whole. }
       reach := Math.Max(1, FEstimate);
       FLayouter.BeginPaintPass;
@@ -12536,7 +12539,7 @@ begin
   {$ENDIF}
 end;
 
-{ The 9a way, for a ground that is not an opaque colour or an opacity: the painter's layer for
+{ The other way, for a ground that is not an opaque colour or an opacity: the painter's layer for
   the clip, frame and text, everything each paint, laid over the canvas by EndPaint (which
   dims and blends). At the device scale too. }
 procedure TTyCustomRichEdit.PaintLayer(ACanvas: TCanvas; const ARect, AClip: TRect;
@@ -12598,10 +12601,10 @@ begin
   { Inside the document's update (the text changed, the view has not heard of it: its blocks
     may name paragraphs that are gone) nothing is laid out, drawn or asked: the paint shows
     the kept surface as it is - the last picture, which the change at EndUpdate brings up to
-    date. With no surface yet (or one of another scale) it shows nothing (S-M11). }
+    date. With no surface yet (or one of another scale) it shows nothing. }
   if ViewBehind then
   begin
-    // the window counts this paint as done: it is asked for again when the view hears (K-11)
+    // the window counts this paint as done: it is asked for again when the view hears
     if ADefer then FSkippedPaint := True;
     if (FSurface <> nil) and (FSurfScale = sc.Scale) and
       IntersectRect(clip, clip, Rect(ARect.Left, ARect.Top, ARect.Left + FSurfW,
@@ -12613,7 +12616,7 @@ begin
   // the layout follows the device: a new scale is a PPI change (CheckLayoutParams)
   FScale := sc.Scale;
   { A window paint (ADefer) whose clip holds the whole text area blits whatever the layout
-    does to the view: no invalidation from inside it (H2-M6). A paint of a part, or RenderTo
+    does to the view: no invalidation from inside it. A paint of a part, or RenderTo
     (which leaves the window as it was), still asks for the window's paint. }
   tw := TextWindowRect;
   FPaintCoversText := ADefer and (ARect.Left = 0) and (ARect.Top = 0) and
@@ -12625,7 +12628,7 @@ begin
     FPaintCoversText := False;
   end;
   ClampScrollX;
-  // a caret or an anchor a change moved: on a caret place before it is drawn (S-M10)
+  // a caret or an anchor a change moved: on a caret place before it is drawn
   if FSnapPending then SnapAfterChange;
   if not SurfaceUsable(CurrentStyle) then
   begin
@@ -12633,7 +12636,7 @@ begin
     InvalidateSurface;
     { The kept frame signature is not this paint's: a state that leaves the layer path (a
       hover with an opacity ending) must paint again even when its look equals the one the
-      surface was last drawn with (A3-M1). }
+      surface was last drawn with. }
     FFrameSigValid := False;
   end
   else
@@ -12666,11 +12669,11 @@ begin
   // the form designer's keys are the designer's: nothing is edited or moved there
   if csDesigning in ComponentState then Exit;
   inherited KeyDown(Key, Shift);
-  // a user action is an entry point of the loop (P-2: see SchedulingFailed)
+  // a user action is an entry point of the loop (see SchedulingFailed)
   EndOwedLoad;
   if (Key = 0) or not IsEnabled then Exit;
   { Inside the document's update a key that moves or copies does nothing: the view does not
-    know the text yet (K-9). The viewer's keys are still taken - they never go on to the form. }
+    know the text yet. The viewer's keys are still taken - they never go on to the form. }
   if ViewBehind then
   begin
     if (Key in [VK_LEFT, VK_RIGHT, VK_UP, VK_DOWN, VK_HOME, VK_END, VK_PRIOR, VK_NEXT]) or
@@ -12746,7 +12749,7 @@ begin
           // a selection collapses to the side the arrow points at (shown at a cut, if past it)
           if Key = VK_RIGHT then q := GetSelStart + GetSelLength else q := GetSelStart;
           q := OutOfTail(q, False);
-          // onto the caret itself: it stays where it is drawn, at a line's end too (S-M4)
+          // onto the caret itself: it stays where it is drawn, at a line's end too
           if q = FCaret then Select(q, q, FCaretAtEnd) else Select(q, q, False);
         end
         else
@@ -12794,7 +12797,7 @@ begin
   if not IsEnabled then Exit(False);
   if inherited DoMouseWheel(Shift, WheelDelta, MousePos) then Exit(True);
   Result := True;
-  // inside the document's update: taken, nothing done (K-9)
+  // inside the document's update: taken, nothing done
   if ViewBehind then Exit;
   if ssCtrl in Shift then
   begin
@@ -12833,7 +12836,7 @@ begin
   FScrollX := FScrollX + notches * 3 * Math.Max(1, FEstimate);
   ClampScrollX;
   if FScrollX = was then Exit;
-  // a range a load's turns held back first: the position is in the range the bar has (P-1)
+  // a range a load's turns held back first: the position is in the range the bar has
   CatchUpBars;
   if HBarShown then
   begin
@@ -12858,7 +12861,7 @@ end;
 procedure TTyCustomRichEdit.MouseLeave;
 begin
   { Where the pointer comes back in is not known: the arrow is not answered over the text
-    until a move over the padding says so again (L-5). }
+    until a move over the padding says so again. }
   FOverPadding := False;
   inherited MouseLeave;
   if FVBar <> nil then FVBar.SetHostHovered(False);

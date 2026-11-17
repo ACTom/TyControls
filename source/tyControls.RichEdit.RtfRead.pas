@@ -825,7 +825,7 @@ function TyRichReadRtfFragment(const ABytes: TBytes; out AEndsWithParagraph: Boo
 
 // Whether ASource (a document TyRichReadRtfFragment read) and ATarget were read from files
 // whose header tables agree, as far as what is kept of ASource's bytes may go into ATarget
-// at all (R62): every font the target's file defines has the same number, name and charset
+// at all: every font the target's file defines has the same number, name and charset
 // in the source's; every colour of the target's table is the source's entry of the same
 // number; the style sheet, the list table, the list override table, the revision table, the
 // file table, the paragraph group table, the XML namespace table, the page description
@@ -838,7 +838,7 @@ function TyRichReadRtfFragment(const ABytes: TBytes; out AEndsWithParagraph: Boo
 // file behind it never agrees.
 function TyRichRtfTablesAgree(ASource, ATarget: TTyRichDocument): Boolean;
 // The filter a fragment of ASource needs to go into ATarget (TTyRichInsertFragment's AFilter),
-// a new one, the caller's (R62: what is kept must mean the same in the TARGET's file). When
+// a new one, the caller's (what is kept must mean the same in the TARGET's file). When
 // the two agree (TyRichRtfTablesAgree) a light one: a reference to a font number the
 // target's file does not define, or to a colour number past the end of the target file's
 // colour table, is treated as below - only what the target's own header defines the same is
@@ -2273,7 +2273,7 @@ begin
   if owner then old := FS.Props;
   { The document's own closing brace: nothing is read after it, but a last paragraph it ends
     (no \par after it) is still to be made, in Finish - with the properties that were in
-    effect before the brace, as Word and WordPad read it (R64). So they stay. }
+    effect before the brace, as Word and WordPad read it. So they stay. }
   if (FS.Depth > 1) or owner then
   begin
     FS.Props := FStack[FS.Depth - 1];
@@ -6416,7 +6416,7 @@ begin
   if T.HasParam then n := T.Param else n := 0;
   case k of
     ikFont: Result := not HasFont(n);
-    // colour 0 is "auto", which every file has, also one with no colour table (F-Y2)
+    // colour 0 is "auto", which every file has, also one with no colour table
     ikColor: Result := (n < 0) or ((n > 0) and (n >= FColorCount));
   else
     // the same bytes in both files
@@ -6816,7 +6816,7 @@ begin
           if Foreign(g, False) then g := WithoutForeignWords(g);
           { Text in the source's code page or default font in the picture's properties (its
             alternative text, a shape's name: \'xx bytes in a \picprop value) would read as
-            other characters in the target: the properties go, the image stays (F-Y3). }
+            other characters in the target: the properties go, the image stays. }
           if HasForeignText(g) then g := WithoutGroup(g, 'picprop');
           Result := Result + g;
           Dec(depth);
@@ -6865,7 +6865,7 @@ begin
     p := TTyRichPicture(AObj);
     { A foreign word, or (the documents not agreeing) text in its properties in the source's
       code page (its alternative text): its image, as a picture made here is written - the
-      properties go with the rest of its RTF (F-Y3: the smaller of the two ways; rewriting
+      properties go with the rest of its RTF (the smaller of the two ways; rewriting
       the text as \uN would mean re-encoding a group this control never shows). }
     if (p.RawRtf = '') or not (Foreign(p.RawRtf, False) or HasForeignText(p.RawRtf)) then Exit;
     // its image, as a picture made here is written

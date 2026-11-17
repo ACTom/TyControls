@@ -1,6 +1,6 @@
 unit tyControls.RichEdit.Attrs;
 
-{ The format API of TTyRichEdit in Delphi's style (Task 11a, fix wave W17): TTyRichTextAttributes
+{ The format API of TTyRichEdit in Delphi's style: TTyRichTextAttributes
   - the SelAttributes and DefAttributes of Vcl.ComCtrls.TRichEdit - and TTyRichParaAttributes -
   its Paragraph -, and the records of the RichMemo style (TTyFontParams, TTyParaMetric, ...).
   Names and meanings are the originals' wherever the engine can mean the same; this control's
@@ -45,7 +45,7 @@ const
   nsNone = lkNone;
   nsBullet = lkBullet;
   { The hanging indent a paragraph that becomes a list item gets when it has no indent
-    (WordPad's \fi-360\li720, msftedit fact 4), twips. }
+    (WordPad's \fi-360\li720, as Windows' rich edit writes it), twips. }
   CTyListLeftIndent = 720;
   CTyListFirstIndent = -360;
   { A list written as the user's list button writes it: the list record and the indents that
@@ -76,7 +76,7 @@ type
       an Assign between two selections copies). GetFormat unless overridden. }
     function GetRawFormat: TTyCharFormat; virtual;
     { This is the base (DefAttributes): an assignment from it is "reset to default" - it
-      writes the engine's "none of its own" for everything the base supplies (R70); one to
+      writes the engine's "none of its own" for everything the base supplies; one to
       it takes the source's values as shown. }
     function IsBase: Boolean; virtual;
     { The fields an assignment writes here (the base has no highlight and no vertical
@@ -111,9 +111,9 @@ type
     procedure Assign(Source: TPersistent); override;
     { The font's name - read: the one the text is shown in (the base's for text without a
       name of its own); written: a name LCL takes for its default font ('default', '';
-      IsFontNameDefault) is "none of its own" - the text follows the base (R70); the name
+      IsFontNameDefault) is "none of its own" - the text follows the base; the name
       the base shows leaves the text that has none of its own without one (it shows it
-      already: G-M2), and is written to the rest. }
+      already), and is written to the rest. }
     property Name: TFontName read GetName write SetName;
     { Points (the engine's half points: a read of 10.5 pt says 10, as Delphi's) - read: the
       size the text is shown in; written 0: none of its own; written the base's size, text
@@ -157,7 +157,7 @@ type
     answer for the first of them, each write is one command over all of them (the caret's
     paragraph when nothing is selected; a selection that ends at a paragraph's very start
     does not touch that paragraph) that changes the one attribute written and leaves the
-    others as each paragraph has them (F-M1). Units: points. }
+    others as each paragraph has them. Units: points. }
   TTyRichParaAttributes = class(TPersistent)
   protected
     function GetFormat: TTyParaFormat; virtual; abstract;
@@ -363,7 +363,7 @@ function TyRichConsistentOf(AMask: TTyCharFormatMask): TTyRichConsistentAttribut
 { Delphi's paragraph attributes in which A and B differ. }
 function TyRichParaDiff(const A, B: TTyParaFormat): TTyRichConsistentParaAttributes;
 { The colours and names Delphi's and LCL's "default" idioms use, as the engine's "none of its
-  own" (R70): clWindowText and clDefault are the automatic text colour (clDefault);
+  own": clWindowText and clDefault are the automatic text colour (clDefault);
   clWindow, clDefault and clNone no highlight (clNone); a name IsFontNameDefault holds for
   is no name (''). }
 function TyRichTextColorIn(AColor: TColor): TColor;
@@ -574,7 +574,7 @@ var
 begin
   { Written back as read (a toolbar echoing OnSelectionChange) over text without a name of
     its own, the base's name is not frozen into it: the control's write leaves such text
-    without one wherever the name written is the one it shows (G-M2, run by run). }
+    without one wherever the name written is the one it shows (run by run). }
   f := TyDefaultCharFormat;
   f.FontName := TyRichFontNameIn(AValue);
   SetFormat([cffFontName], f);
@@ -594,8 +594,8 @@ begin
   { Name and Size read what the text is shown in: written back unchanged (a toolbar echoing
     OnSelectionChange) they would freeze the base's value into text that has none of its
     own. The control's write leaves such text without one wherever the size written is the
-    one it shows - run by run, over any selection (G-M2); text whose own size differs takes
-    it, and a selection where nothing is left to change is no step (F-M2). }
+    one it shows - run by run, over any selection; text whose own size differs takes
+    it, and a selection where nothing is left to change is no step. }
   f.SizeHalfPt := AValue * 2;
   SetFormat([cffSize], f);
 end;
@@ -743,7 +743,7 @@ begin
       f := src.GetFormat
     else if src.IsBase then
     begin
-      { Delphi's "reset to default" (R70): none of its own for everything the base supplies -
+      { Delphi's "reset to default": none of its own for everything the base supplies -
         name, size, styles, colour, highlight, position; the text follows the base and the
         theme again, nothing of them is frozen into it. }
       SetFormat(AssignMask - [cffCharset], TyDefaultCharFormat);
@@ -867,7 +867,7 @@ procedure TTyRichParaAttributes.SetNumbering(AValue: TTyListKind);
 var
   l: TTyListFormat;
 begin
-  { The kind only: each paragraph keeps its own start (F-M1's rule, G-M6); lkNone takes the
+  { The kind only: each paragraph keeps its own start; lkNone takes the
     list record back to its default - a paragraph that was plain is plain again. }
   l := TyDefaultParaFormat.List;
   l.Kind := AValue;
@@ -883,7 +883,7 @@ procedure TTyRichParaAttributes.SetNumberingStart(AValue: Integer);
 var
   f: TTyParaFormat;
 begin
-  // the start only: a plain paragraph stays plain, an item keeps its kind (G-M6)
+  // the start only: a plain paragraph stays plain, an item keeps its kind
   f := TyDefaultParaFormat;
   f.List.StartAt := AValue;
   SetFormat([pffListStart], f);
@@ -906,7 +906,7 @@ var
 begin
   { At or past Delphi's MAX_TAB_STOPS: ignored. The VCL checks nothing - its record holds 32
     stops and a larger index writes past them, with no error raised (range checks off) -
-    and the system's rich edit keeps at most 32 (G-M8). }
+    and the system's rich edit keeps at most 32. }
   if AIndex >= CTyMaxTabStops then Exit;
   f := TyDefaultParaFormat;
   f.Tabs := Copy(GetFormat.Tabs);
@@ -992,7 +992,7 @@ begin
   f := TyDefaultParaFormat;
   f.LineSpacing := AValue;
   { The rule only: a height (exactly, at least) stays each paragraph's own; one without a
-    height takes the first paragraph's (G-M6). }
+    height takes the first paragraph's. }
   if AValue in [lsExact, lsAtLeast] then f.LineSpacingValue := cur.LineSpacingValue
   else f.LineSpacingValue := 0;
   SetFormat([pffSpacingRule], f);
@@ -1012,7 +1012,7 @@ var
   f: TTyParaFormat;
 begin
   { The height only, each paragraph keeping its rule where it is exactly or at least; one
-    with a multiple gets at least that height (Word's way) - per paragraph (G-M6). }
+    with a multiple gets at least that height (Word's way) - per paragraph. }
   f := TyDefaultParaFormat;
   f.LineSpacingValue := TyRichPtToTwips(AValue);
   SetFormat([pffSpacingHeight], f);

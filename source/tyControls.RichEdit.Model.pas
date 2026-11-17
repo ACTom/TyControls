@@ -86,7 +86,7 @@ type
     cffStrike, cffVertAlign, cffColor, cffHighlight, cffExtra);
   TTyCharFormatMask = set of TTyCharFormatField;
 
-  { paraLeft..paraJustify, not the plan's paLeft..: Menus.TPopupAlignment already has paLeft,
+  { paraLeft..paraJustify, not paLeft..: Menus.TPopupAlignment already has paLeft,
     paCenter and paRight, and the control units use Menus. }
   TTyParaAlign = (paraLeft, paraCenter, paraRight, paraJustify);
   TTyLineSpacing = (lsSingle, ls115, ls15, lsDouble, lsExact, lsAtLeast);
@@ -120,7 +120,7 @@ type
     LineSpacingValue: Integer;   // twips, for lsExact and lsAtLeast
     Tabs: TTyTabStops;
     List: TTyListFormat;
-    RtlPar: Boolean;        // kept and written back, not rendered (spec 6.1)
+    RtlPar: Boolean;        // kept and written back, not rendered (no bidirectional layout)
     Extra: TTyOpaqueAttrs;
     function Equals(const B: TTyParaFormat): Boolean;
     function Hash: Cardinal;
@@ -128,7 +128,7 @@ type
 
   { The fields of a paragraph format a write sets (TyMergeParaFormat). The last five set no
     field of their own: they move one indent meaning per paragraph and keep another, each
-    paragraph from its own values (F-M1) - LeftIndent is where the lines after the first
+    paragraph from its own values - LeftIndent is where the lines after the first
     start, LeftIndent + FirstIndent where the first line starts; AValue gives them in those
     terms:
     pffStartIndent  the first line at AValue.LeftIndent + AValue.FirstIndent, the other lines
@@ -141,10 +141,10 @@ type
                     HeadIndent);
     pffListIndents  with pffList (or pffListKind): a paragraph that becomes a list item and has no indent
                     (both 0) takes AValue's LeftIndent and FirstIndent - the default hanging
-                    indent; one that stops being a list item gets both back to 0 (msftedit's
-                    and WordPad's rule, fact 4); others keep theirs.
+                    indent; one that stops being a list item gets both back to 0 (Windows' rich
+                    edit's and WordPad's rule); others keep theirs.
     They are applied after the absolute fields, in this order. Four more set one part of a
-    record each paragraph keeps the rest of (G-M6), applied with the absolute fields:
+    record each paragraph keeps the rest of, applied with the absolute fields:
     pffListKind     the list kind (lkNone: the list record at its default; another kind:
                     the paragraph's own start, 1 where it has none);
     pffListStart    the list's start number, the kind staying;
@@ -329,8 +329,7 @@ type
     function ColBoundaryCount: Integer;
     property Rows[AIndex: Integer]: TTyRichRow read GetRow;
     property ColBoundaries[AIndex: Integer]: Integer read GetColBoundary;  // twips
-    { Merged cells and the like: shown and kept, but its structure cannot be edited
-      (spec 3.5). }
+    { Merged cells and the like: shown and kept, but its structure cannot be edited. }
     property StructureLocked: Boolean read FStructureLocked;
   end;
 
@@ -359,10 +358,11 @@ type
     FRuns: TTyRunArray;
     // the file's own marker text of a list item (TTyRichDocument.ListTextOf)
     FListText: UTF8String;
-    { The identity of its objects, in order (R72's count): 0 when its runs hold none; a value
+    { The identity of its objects, in order (for the history, which counts each object
+      once): 0 when its runs hold none; a value
       made from another one with the very same objects (typing in a paragraph that holds
       pictures) shares that one's key, so the history knows those objects are counted
-      without walking them again (G-M3). }
+      without walking them again. }
     FObjKey: Int64;
   end;
 
@@ -418,7 +418,7 @@ type
     FRemoved: TTyRichPieces;      // what it took away there
     { The storage at the places the change split or decoded, as it was (the paragraph's lazy
       piece among them): Revert gives it back once the text is the same again, so a paragraph
-      an undo returns to what it was is its file's bytes again (R56). FSpan2: a delete's other
+      an undo returns to what it was is its file's bytes again. FSpan2: a delete's other
       end, when it is apart from the first. }
     FSpan, FSpan2: TTyRichSpan;
     FFirstPara: Integer;
@@ -737,7 +737,7 @@ type
     function ChangedRange: TTyRichRange;
     { Bytes the history keeps for it (MaxUndoBytes): its own - records, texts -, without the
       objects it holds, which GatherObjects names and the history counts once each however
-      many steps hold them (R72). }
+      many steps hold them. }
     function MemSize: Int64; virtual;
     { Appends the objects this step keeps alive to AList (ACount used): those of its records;
       a command that holds an object itself adds it (TTyRichInsertObject, a fragment's, a
@@ -762,11 +762,11 @@ type
     Bytes: Int64;                 // the step's own (MemSize)
     Objs: TTyRichObjectList;      // the distinct objects it holds, each counted in FObjHolds
     { The object keys (TTyRichParaData.FObjKey) of the values whose objects are in Objs: a
-      value with one of them adds nothing when a merge brings it (G-M3). }
+      value with one of them adds nothing when a merge brings it. }
     Keys: TTyRichKeyList;
   end;
 
-  { How many steps of the history hold each object (R72): an object counts toward the
+  { How many steps of the history hold each object: an object counts toward the
     history's bytes once, while at least one step holds it. }
   TTyRichObjHolds = specialize TDictionary<Pointer, Integer>;
   // the object keys a gathering has met (or skips)
@@ -799,7 +799,7 @@ type
     FHold: Integer;
     FPending: TTyRichChange;
     FHasPending: Boolean;
-    { The saved point (R59): every content the document goes through has a number of its own
+    { The saved point: every content the document goes through has a number of its own
       (FState), never given twice (FNextState); FSavedState is the number of the content last
       loaded or saved (-1: none it can come back to). A step remembers the numbers before and
       after it, so an undo or a redo brings back the number with the content. }
@@ -936,7 +936,7 @@ type
       separator is in the range: its one run). Paragraphs of a row that holds a nested
       table are passed over. AKeepNone (cffFontName, cffSize): a run that has no name / size
       of its own keeps none - for a view that writes the value such text is shown in, which
-      it shows already (G-M2: the base's value is not frozen into it). }
+      it shows already (the base's value is not frozen into it). }
     function ApplyCharFormat(APos, ALen: TTyRichPos; AMask: TTyCharFormatMask;
       const AValue: TTyCharFormat; AKeepNone: TTyCharFormatMask = []): TTyRichUndoData;
     { Paragraphs of a row that holds a nested table are passed over. }
@@ -968,7 +968,8 @@ type
       than a few hundred characters are one stretch of the text: what lies between them is
       copied with the replacements, so the text keeps few pieces. Revert gives each
       paragraph its pieces and its value back (a lazily read one is its file's bytes again,
-      R56; the paragraph after it the value it had). For a replace of every match
+      so that an edit undone saves the file as it was; the paragraph after it the value it
+      had). For a replace of every match
       (tyControls.RichEdit.Find's TTyRichReplaceAllCommand). Raises ETyRichModel for
       matches out of order or range, a separator in them or in AText, before anything
       changes. }
@@ -1069,7 +1070,8 @@ type
       paragraphs at the range's ends. A command asks this in CanExecute; the insert and
       delete commands do. }
     function CanChange(APos, ALen: TTyRichPos): Boolean;
-    { R57, the one place of the rule (until table editing): may [AStart, AStart + ALen) be
+    { The one place of the rule that a user's edit never joins text across a cell's or a
+      row's edge (until table editing): may [AStart, AStart + ALen) be
       deleted or replaced as a user's edit - a key, the menu, a find's replace? The paragraph
       the deletion then joins with counts: the range INCLUDING the paragraph after it must not
       cross a cell's or a row's edge, unless it is whole rows (WholeRows). A range that begins
@@ -1164,7 +1166,7 @@ type
     property MarginLeft: Integer read FMarginLeft;
     property MarginRight: Integer read FMarginRight;
     property Loader: TTyRichParaLoader read FLoader;
-    { The content differs from the one last loaded or saved (R59). The history remembers the
+    { The content differs from the one last loaded or saved. The history remembers the
       saved point: Modified is False exactly when the document is at that content again - an
       undo back to it, a redo forward to it - and True otherwise; True for good (until the next
       Modified := False or load) once the step that led back to it is gone (the history's
@@ -1181,8 +1183,8 @@ type
     property OnModifiedChange: TNotifyEvent read FOnModifiedChange write FOnModifiedChange;
     { The number of the content as it is now (Modified's): a step, an undo, a redo, a load
       or an edit outside the history gives another one; the same number is the same
-      content. What a reader may remember an answer by (the control's ConsistentAttributes,
-      F-I1). A lazy load's slices and parses change no content and keep it. }
+      content. What a reader may remember an answer by (the control's
+      ConsistentAttributes). A lazy load's slices and parses change no content and keep it. }
     property ContentState: Int64 read FState;
     property OnChange: TTyRichChangeEvent read FOnChange write FOnChange;
 
@@ -1573,7 +1575,7 @@ begin
   end;
   if pffTabs in AMask then Result.Tabs := Copy(AValue.Tabs);
   if pffList in AMask then Result.List := AValue.List;
-  // one part of the list record and of the spacing, each paragraph keeping the rest (G-M6)
+  // one part of the list record and of the spacing, each paragraph keeping the rest
   if pffListKind in AMask then
     if AValue.List.Kind = lkNone then
       Result.List := TyDefaultParaFormat.List
@@ -2076,7 +2078,7 @@ var
   begin
     if D = nil then Exit;
     { In the history's gathering: a value of no objects, or of objects already gathered or
-      held by the step (its key met), adds nothing - no walk of its runs (G-M3). }
+      held by the step (its key met), adds nothing - no walk of its runs. }
     if FDoc.FGathering and ((D.FObjKey = 0) or not FDoc.MeetKey(D.FObjKey)) then Exit;
     for j := 0 to High(D.FRuns) do
       if D.FRuns[j].Obj <> nil then
@@ -2088,8 +2090,8 @@ var
 
 begin
   { Every object a value this record keeps holds - also while the document or a reader's
-    resident values hold it too: the history counts it once however many steps hold it
-    (R72), which over-counts one the document still shows (the safe side, bounded by the
+    resident values hold it too: the history counts it once however many steps hold it,
+    which over-counts one the document still shows (the safe side, bounded by the
     document's own pictures). One pass over the values, no lookup per object. }
   for i := 0 to FOldCount - 1 do Take(FOldData[i].Data);
   for i := 0 to High(FRemoved.Pieces) do
@@ -2530,7 +2532,7 @@ end;
 procedure TTyRichDocument.SetDefaultPage;
 begin
   { A new document's page, and one not read from RTF (a reader of RTF sets the file's):
-    A4 (R54: a control for Chinese users; Word's check said so), WordPad's 1.25" side margins }
+    A4 (a control for Chinese users; a check against Word said so), WordPad's 1.25" side margins }
   FPaperWidth := 11906;
   FPaperHeight := 16838;
   FMarginLeft := 1800;
@@ -3186,11 +3188,11 @@ type
     PsK, LenK, PsLast, LenLast: Int64;
     Mask: TTyCharFormatMask;
     Value: TTyCharFormat;
-    // of FontName and SizeHalfPt: a run with none of its own keeps none (G-M2)
+    // of FontName and SizeHalfPt: a run with none of its own keeps none
     KeepNone: TTyCharFormatMask;
     FromIds, ToIds: array of TTyCharFormatId;
     PrevD, PrevNew: TTyRichParaData;
-    Changed: Boolean;     // a value changed (F-M2: a write of what is there is no step)
+    Changed: Boolean;     // a value changed (a write of what is there is no step)
     function MapId(AId: TTyCharFormatId): TTyCharFormatId;
     function Map(AIndex: Integer; AData: Pointer): Pointer;
   end;
@@ -3910,8 +3912,9 @@ begin
 end;
 
 { Undoes what ReplaceInParas did, the paragraph changed last first: each paragraph's text goes
-  whole, with its separator, and its pieces come back (a lazy one: the file's bytes again,
-  R56; the paragraph after it gets the value it had then), then its value. }
+  whole, with its separator, and its pieces come back (a lazy one: the file's bytes again, so
+  that an edit undone saves the file as it was; the paragraph after it gets the value it had
+  then), then its value. }
 procedure TTyRichDocument.RevertSwaps(AUndo: TTyRichUndoData);
 var
   e, i: Integer;
@@ -3973,7 +3976,7 @@ begin
       FText.MapParaData(k, last, @w.Map);
       Result.SealOld;
       { No value changed (a write of what the text has, or a range wholly inside a row
-        that holds a nested table): no change - the command is then not kept (F-M2). }
+        that holds a nested table): no change - the command is then not kept. }
       if not w.Changed then
       begin
         Result.FChange := c;
@@ -4020,7 +4023,7 @@ begin
       Result.FFirstPara := AFirstPara;
       FText.MapParaData(AFirstPara, ALastPara, @w.Map);
       Result.SealOld;
-      // no value changed: no change, the command is not kept (F-M2)
+      // no value changed: no change, the command is not kept
       if not w.Changed then
       begin
         Result.FChange := c;
@@ -4372,7 +4375,7 @@ begin
   if i < 0 then
   begin
     nt := src;
-    { A table with a row that holds a nested table goes in as its paragraphs (R63): what
+    { A table with a row that holds a nested table goes in as its paragraphs: what
       made the inner table one is only in the bytes of the source's file, and in this
       document such a row could neither be saved nor edited. }
     for i := 0 to High(src.FRows) do
@@ -5043,7 +5046,7 @@ begin
   for i := 0 to FRecordCount - 1 do FRecords[i].GatherObjects(AList, ACount);
 end;
 
-{ ---- the history's objects (R72) ---- }
+{ ---- the history's objects ---- }
 
 { AEntry's command's objects, each distinct one held once by this step; an object no other
   step held yet adds its bytes to the history's. Sorted by address to find the distinct ones:
@@ -5442,7 +5445,7 @@ begin
     begin
       { The kinds that merge (typing, a replace's batches): what ACmd brings is gathered
         while its records are its own, past the values the step holds already (their keys) -
-        a merged keystroke beside a paragraph's pictures walks none of them (G-M3). }
+        a merged keystroke beside a paragraph's pictures walks none of them. }
       list := nil;
       n := 0;
       BeginGather(FUndo[FUndoCount - 1].Keys);

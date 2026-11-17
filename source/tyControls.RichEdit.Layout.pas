@@ -64,7 +64,7 @@ unit tyControls.RichEdit.Layout;
     for one that cannot be shown is ready too) - so a (picture, size) the control has just
     prepared is never queued again for that size.
 
-  Bidirectional text is not laid out (spec 6.1): logical order, left to right; RtlPar is
+  Bidirectional text is not laid out: logical order, left to right; RtlPar is
   kept by the model and not shown. }
 
 {$mode objfpc}{$H+}
@@ -1068,7 +1068,7 @@ function TyRichIsKinsokuNoLineEnd(ACode: Cardinal): Boolean;
 { A code point that belongs to the cluster before it: a combining mark, a variation
   selector, a joiner, an emoji modifier or tag. }
 function TyRichIsClusterExtend(ACode: Cardinal): Boolean;
-{ The platform's fallback candidates (the plan's lists). }
+{ The platform's fallback candidates (a list for each platform). }
 procedure TyRichDefaultFallbackFonts(AList: TStrings);
 { The code points a font's cmap table (its bytes, as GetFontData gives them) maps to glyphs -
   what the real device reads on Windows: the format 12 subtable, else format 4, else the

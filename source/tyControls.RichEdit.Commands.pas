@@ -5,7 +5,7 @@ unit tyControls.RichEdit.Commands;
   becomes). Each is run by TTyRichDocument.Execute, and each changes the document only
   through the primitives TTyRichCommand hands on, so the inherited undo (the records
   reverted, newest first) and redo (run again) are exact - none of them keeps text or a
-  snapshot of its own. A program adds its own commands the same way (spec 5.2). Table
+  snapshot of its own. A program adds its own commands the same way. Table
   commands come with the table editing. }
 
 {$mode objfpc}{$H+}
@@ -102,7 +102,7 @@ type
     function CanExecute(ADoc: TTyRichDocument): Boolean; override;
     function Description: string; override;
     { The step keeps the object alive: GatherObjects names it (the history counts its data
-      once, R72). }
+      once). }
     procedure GatherObjects(var AList: TTyRichObjectList; var ACount: Integer); override;
     property RichObject: TTyRichObject read FObject;
   end;
