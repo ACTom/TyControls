@@ -513,6 +513,11 @@ type
     FHasPendingFmt: Boolean;
     FPendingAt: TTyRichPos;
     FApiWrite: Integer;
+    FConsHave: Boolean;
+    FConsBaseId: TTyCharFormatId;
+    FConsBase: TTyCharFormat;
+    FConsMask: TTyCharFormatMask;
+    FConsLast: Integer;
     FOnModifiedChange: TNotifyEvent;
     procedure DocModifiedChanged(Sender: TObject);
     procedure SetSelAttributes(AValue: TTyRichTextAttributes);
@@ -535,6 +540,11 @@ type
     { The fields that are the same over [AStart, AStart + ALen): the paragraphs' runs walked
       until every field differed. }
     function RangeConsistency(AStart, ALen: TTyRichPos): TTyCharFormatMask;
+    { RangeConsistency's walk: the first format met, the fields still the same, the last
+      paragraph to walk. }
+    procedure ConsistencyAdd(AFormat: TTyCharFormatId);
+    procedure ConsistencyWalk(AIndex: Integer; AData: Pointer; ASrcOffset, ASrcBytes: Int64;
+      var AContinue: Boolean);
     { The paragraphs [AStart, AStart + ALen) touches: a range that ends at a paragraph's very
       start does not touch it; an empty range, its paragraph. }
     procedure ParasOfRange(AStart, ALen: TTyRichPos; out AFirst, ALast: Integer);
@@ -5614,55 +5624,96 @@ begin
   Result := runs[i].Format;
 end;
 
+procedure TTyCustomRichEdit.ConsistencyAdd(AFormat: TTyCharFormatId);
+begin
+  if FConsHave and (AFormat = FConsBaseId) then Exit;
+  if not FConsHave then
+  begin
+    FConsBaseId := AFormat;
+    FConsBase := FDoc.Formats.CharFormat(AFormat);
+    FConsHave := True;
+    Exit;
+  end;
+  FConsMask := FConsMask - TyRichCharDiff(FConsBase, FDoc.Formats.CharFormat(AFormat));
+end;
+
+procedure TTyCustomRichEdit.ConsistencyWalk(AIndex: Integer; AData: Pointer; ASrcOffset,
+  ASrcBytes: Int64; var AContinue: Boolean);
+var
+  pf: TTyParaFormatId;
+  runs: TTyRunArray;
+  cell: TTyRichCell;
+  i: Integer;
+begin
+  if AIndex > FConsLast then
+  begin
+    AContinue := False;
+    Exit;
+  end;
+  // a whole paragraph: every run; one not parsed yet is read (parsed) by its index
+  if not FDoc.ReadValue(AData, pf, runs, cell) then runs := FDoc.RunsOf(AIndex);
+  for i := 0 to High(runs) do
+  begin
+    ConsistencyAdd(runs[i].Format);
+    if FConsMask = [] then Break;
+  end;
+  AContinue := FConsMask <> [];
+end;
+
 function TTyCustomRichEdit.RangeConsistency(AStart, ALen: TTyRichPos): TTyCharFormatMask;
 var
   t: TTyRichText;
-  e, ps, pl, a, b, rs, re: TTyRichPos;
-  first, last, k, i: Integer;
-  runs: TTyRunArray;
-  base: TTyCharFormat;
-  baseId: TTyCharFormatId;
-  have: Boolean;
-begin
-  Result := CAllCharFields;
-  t := FDoc.Text;
-  if ALen <= 0 then Exit;
-  e := AStart + ALen;
-  ParasOfRange(AStart, ALen, first, last);
-  have := False;
-  baseId := -1;
-  for k := first to last do
+  e: TTyRichPos;
+  first, last: Integer;
+
+  // the part of paragraph AIndex in the range: the runs that hold its characters
+  procedure Edge(AIndex: Integer);
+  var
+    ps, pl, a, b, rs, re: TTyRichPos;
+    runs: TTyRunArray;
+    i: Integer;
   begin
-    ps := t.ParaStart(k);
-    pl := t.ParaLength(k);
+    ps := t.ParaStart(AIndex);
+    pl := t.ParaLength(AIndex);
     a := Math.Max(AStart, ps) - ps;
     b := Math.Min(e, ps + pl) - ps;
-    runs := FDoc.RunsOf(k);
+    runs := FDoc.RunsOf(AIndex);
     for i := 0 to High(runs) do
     begin
       rs := runs[i].Start;
       if i < High(runs) then re := runs[i + 1].Start else re := pl;
-      { The characters of the range: an empty paragraph whose separator is in it counts with
-        its one run (a format write formats it, ApplyCharFormat's rule). }
+      { An empty paragraph whose separator is in the range counts with its one run (a format
+        write formats it, ApplyCharFormat's rule). }
       if pl = 0 then
       begin
         if i > 0 then Break;
       end
       else if (re <= a) or (rs >= b) or (re <= rs) then
         Continue;
-      if have and (runs[i].Format = baseId) then Continue;
-      if not have then
-      begin
-        baseId := runs[i].Format;
-        base := FDoc.Formats.CharFormat(baseId);
-        have := True;
-        Continue;
-      end;
-      Result := Result - TyRichCharDiff(base, FDoc.Formats.CharFormat(runs[i].Format));
-      // nothing left to find out: the rest of the selection is not read
-      if Result = [] then Exit;
+      ConsistencyAdd(runs[i].Format);
+      if FConsMask = [] then Exit;
     end;
   end;
+
+begin
+  Result := CAllCharFields;
+  t := FDoc.Text;
+  if ALen <= 0 then Exit;
+  e := AStart + ALen;
+  ParasOfRange(AStart, ALen, first, last);
+  FConsHave := False;
+  FConsBaseId := -1;
+  FConsMask := CAllCharFields;
+  Edge(first);
+  { The paragraphs between: one walk of the text (no lookup per paragraph), ended as soon as
+    every field was found to differ - the rest of the selection is not read. }
+  if (FConsMask <> []) and (last > first + 1) then
+  begin
+    FConsLast := last - 1;
+    t.WalkParas(first + 1, @ConsistencyWalk);
+  end;
+  if (FConsMask <> []) and (last > first) then Edge(last);
+  Result := FConsMask;
 end;
 
 procedure TTyCustomRichEdit.ParasOfRange(AStart, ALen: TTyRichPos; out AFirst, ALast: Integer);
