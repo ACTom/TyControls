@@ -134,6 +134,8 @@ type
     procedure TestLazySourceLookupMissesEditedParagraphs;
     procedure TestIntegritySeesLazyPiecesOutOfOrder;
     procedure TestAProviderCannotChangeTheText;
+    // fix wave W11 (R56)
+    procedure TestASpanPutsTheLazyPiecesBack;
   end;
 
 implementation
@@ -2450,6 +2452,62 @@ begin
   FText.Insert(0, 'q');
   AssertBytesEqual('edits work afterwards', 'q' + FProvider.Texts[0], ParaText(0));
   AssertEquals('integrity', '', FText.CheckIntegrity);
+end;
+
+{ R56: what an insert splits or decodes, taken before it (PieceSpan), comes back when the
+  insert is undone (RestoreSpan): the lazy paragraph is lazy again, from its own source, and
+  so is the empty lazy paragraph the load appended last (which has no piece); a span put on a
+  text that is not the one it was taken from is refused. }
+procedure TTyRichLazyTextTest.TestASpanPutsTheLazyPiecesBack;
+var
+  i: Integer;
+  pos, src, n: Int64;
+  span: TTyRichSpan;
+  before: UTF8String;
+  raised: Boolean;
+begin
+  FProvider := TFakeRichProvider.Create(10);
+  FText := TTyRichText.CreateLazy(FProvider, False);
+  for i := 0 to 8 do
+    FText.AppendLazyParagraph(Utf8Chars(FProvider.Texts[i]), i * LazyStride + LazyBase,
+      40 + i mod 9, rsCR);
+  FText.AppendLazyParagraph(0, 9 * LazyStride + LazyBase, 0, rsNone);
+  FText.EndLazyLoad;
+  AssertEquals('an empty last paragraph', Int64(0), FText.ParaLength(9));
+  AssertTrue('lazy', FText.ParaLazySource(9, src, n));
+  // in a paragraph
+  before := ParaText(3);
+  pos := FText.ParaStart(3) + 2;
+  span := FText.PieceSpan(pos, pos);
+  FText.Insert(pos, 'xy');
+  AssertFalse('typed in: not the file''s', FText.ParaLazySource(3, src, n));
+  FText.Delete(pos, 2);
+  AssertFalse('taken out again: still decoded', FText.ParaLazySource(3, src, n));
+  FText.RestoreSpan(span);
+  AssertTrue('the span back: lazy again', FText.ParaLazySource(3, src, n));
+  AssertEquals('from its own source', 3 * LazyStride + LazyBase, src);
+  AssertBytesEqual('its text', before, ParaText(3));
+  AssertEquals('whole', '', FText.CheckIntegrity);
+  // the empty last paragraph
+  span := FText.PieceSpan(FText.Length, FText.Length);
+  FText.Insert(FText.Length, 'z');
+  AssertFalse('typed in the last: not the file''s', FText.ParaLazySource(9, src, n));
+  FText.Delete(FText.Length - 1, 1);
+  FText.RestoreSpan(span);
+  AssertTrue('the last lazy again', FText.ParaLazySource(9, src, n));
+  AssertEquals('from its source', 9 * LazyStride + LazyBase, src);
+  AssertEquals('whole again', '', FText.CheckIntegrity);
+  // not the text it was taken from
+  pos := FText.ParaStart(5) + 1;
+  span := FText.PieceSpan(pos, pos);
+  FText.Insert(pos, #13);
+  raised := False;
+  try
+    FText.RestoreSpan(span);
+  except
+    on ETyRichText do raised := True;
+  end;
+  AssertTrue('another text: refused', raised);
 end;
 
 initialization

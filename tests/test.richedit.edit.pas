@@ -112,6 +112,7 @@ type
     // fix wave W11
     procedure TestTheSurfaceAfterAnEditAtTheViewsBottomIsAFullRedraw;
     procedure TestUndoPutsTheSelectionBackAsItWas;
+    procedure TestATypingMistakeUndoneSavesTheFile;
   end;
 
 implementation
@@ -1994,6 +1995,75 @@ begin
   CheckSel('the merged run undone: where the user''s typing began', 5, 0, 5);
   FRich.Redo;
   CheckSel('redone: at the end of all of it', 9, 0, 9);
+end;
+
+{ E-M1 (R56) through keys: typed by mistake, Ctrl+Z, saved - the file, byte for byte: a
+  character, Enter, Backspace, a run of typing, in a Word file and a WordPad one. }
+procedure TTyRichEditEditTest.TestATypingMistakeUndoneSavesTheFile;
+
+  procedure Check(const AName: string);
+  var
+    orig: TBytes;
+    d: TTyRichDocument;
+    t: TTyRichText;
+    k, p: Integer;
+    ps: TTyRichPos;
+
+    procedure Saved(const AWhat: string);
+    var
+      st: TMemoryStream;
+      outb: TBytes;
+    begin
+      st := TMemoryStream.Create;
+      try
+        FRich.SaveToStream(st, rfRtf);
+        outb := nil;
+        SetLength(outb, st.Size);
+        if st.Size > 0 then Move(st.Memory^, outb[0], st.Size);
+      finally
+        st.Free;
+      end;
+      AssertTrue(Format('%s: %s, Ctrl+Z, saved: the file', [AName, AWhat]),
+        (Length(outb) = Length(orig)) and CompareMem(@outb[0], @orig[0], Length(orig)));
+    end;
+
+  begin
+    orig := FixtureFile(AName);
+    LoadBytes(orig);
+    FRich.FinishLoading;
+    FRich.UpdateView;
+    d := FRich.Document;
+    t := d.Text;
+    p := -1;
+    for k := 0 to t.ParaCount - 1 do
+      if (t.ParaLength(k) >= 3) and (d.CellAt(k) = nil) then
+      begin
+        p := k;
+        Break;
+      end;
+    AssertTrue(AName + ': a paragraph to type in', p >= 0);
+    ps := t.ParaStart(p);
+    FRich.SelStart := ps + 1;
+    Chars('x');
+    Press(VK_Z, [ssCtrl]);
+    Saved('a character');
+    FRich.SelStart := ps + 1;
+    Press(VK_RETURN);
+    Press(VK_Z, [ssCtrl]);
+    Saved('Enter');
+    FRich.SelStart := ps + 2;
+    Press(VK_BACK);
+    Press(VK_Z, [ssCtrl]);
+    Saved('Backspace');
+    FRich.SelStart := ps + 1;
+    Chars('abc');
+    Press(VK_Z, [ssCtrl]);
+    Saved('a run of typing');
+  end;
+
+begin
+  Check('word-list.rtf');
+  Check('wp-zh-plain.rtf');
 end;
 
 initialization

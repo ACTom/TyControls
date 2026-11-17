@@ -2482,14 +2482,14 @@ begin
     TyRichSaveRtf(d, o);
     AssertTrue('still modified: the caller says when it is saved', d.Modified);
     AssertEquals('the history stays', depth, d.UndoDepth);
-    // a paragraph deleted and brought back is the file's own again (typed text undone
-    // leaves its paragraph as text of the document: equal, but written from the model)
+    // a paragraph deleted and brought back is the file's own again, and so is one whose
+    // typed text was undone (R56: the undo gives the paragraph its lazy piece back)
     d.Undo;
     d.Execute(TTyRichDelete.Create(d.Text.ParaStart(2), d.Text.ParaLength(2) + 1));
     d.Undo;
     o.Clear;
     TyRichSaveRtf(d, o, info);
-    AssertEquals('only the paragraph that was typed in is rewritten', 1, info.RewrittenParas);
+    AssertEquals('no paragraph is rewritten', 0, info.RewrittenParas);
     r := LoadDoc(Copy(o.Bytes, 0, o.Size), True);
     full := LoadDoc(ReadFileBytes(FixtureDir + 're-styles.rtf'), True);
     try

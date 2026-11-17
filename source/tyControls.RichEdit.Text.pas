@@ -83,6 +83,17 @@ type
     CharCount: Int64;
   end;
 
+  { The whole pieces an edit at one place can split or decode (TTyRichText.PieceSpan), from
+    where the first starts, and whether the text's last paragraph was then the empty lazy one
+    the load appended: what an undo needs to give the storage back as it was
+    (RestoreSpan) - so that a lazy paragraph an edit decoded, undone, is the file's bytes
+    again. A few piece references, never text. }
+  TTyRichSpan = record
+    Pos: TTyRichPos;
+    Pieces: TTyRichPieces;
+    LazyTail: Boolean;
+  end;
+
   { One stretch of bytes a writer can copy. Bytes is nil for a lazy run (the bytes are in
     the original file at SrcOffset, which the text does not hold) and is valid only during
     the callback. A run of the whole of a paragraph that is still rpkOriginal or rpkLazy is
@@ -357,6 +368,19 @@ type
       which ParaOfLazySource walks by: pieces put anywhere else, or a second time, break it
       and CheckIntegrity says so. }
     procedure RestorePieces(APos: TTyRichPos; const P: TTyRichPieces);
+    { The whole pieces an edit from APos to AEnd (AEnd = APos: an insert; a delete takes one
+      span at each end) can split, grow or decode - the piece that holds the character
+      before APos through the one that holds the character at AEnd - taken before the edit,
+      for RestoreSpan. As many pieces as touch those places (a lazy paragraph is one), never
+      the paragraph's text. }
+    function PieceSpan(APos, AEnd: TTyRichPos): TTyRichSpan;
+    { After an undo has made the text from ASpan.Pos the same characters, with the same
+      separators at the same places, as when PieceSpan took the span: its pieces become the
+      span's again - a lazy piece an edit decoded is lazy again (ParaLazySource answers for
+      it, a writer copies its bytes), the paragraphs keep their data and heights, nothing is
+      reported. Pieces that are the span's already are left. Raises ETyRichText when the text
+      there does not have the span's characters and separators. }
+    procedure RestoreSpan(const ASpan: TTyRichSpan);
 
     { The height index. A paragraph is measured - it has a height the layout gave it,
       0..TyRichMaxParaHeight, and 0 is a height like any other - or unmeasured: every
@@ -2235,6 +2259,135 @@ begin
     InsertPieces(APos, items, System.Length(items), [])
   else
     InsertPieces(APos, items, System.Length(items), follow);
+end;
+
+function TTyRichText.PieceSpan(APos, AEnd: TTyRichPos): TTyRichSpan;
+var
+  p, p2: TTyRichPath;
+  before, before2: TTyRichSum;
+  it: PTyRichPiece;
+  i, n: Integer;
+  first, last, stop: TTyRichPos;
+begin
+  CheckRange(APos, AEnd - APos);
+  Result.Pos := APos;
+  Result.Pieces.Pieces := nil;
+  Result.Pieces.CharCount := 0;
+  Result.LazyTail := False;
+  if FTotal.Chars = 0 then
+  begin
+    Result.LazyTail := FLazyTail;
+    Exit;
+  end;
+  { An insert at APos splits the piece that holds APos and may grow or decode the one before
+    it (CheckJunction, Insert's typing path); a delete's ends do the same at each end. }
+  if APos > 0 then first := APos - 1 else first := 0;
+  if AEnd < FTotal.Chars then last := AEnd else last := FTotal.Chars - 1;
+  Find(rskChar, first, p, before);
+  Find(rskChar, last, p2, before2);
+  n := before2.Entries - before.Entries + 1;
+  SetLength(Result.Pieces.Pieces, n);
+  Result.Pos := before.Chars;
+  stop := before.Chars;
+  for i := 0 to n - 1 do
+  begin
+    it := ItemAt(p);
+    Result.Pieces.Pieces[i] := it^;
+    // the paragraph slots stay the live text's (RestoreSpan keeps them)
+    Result.Pieces.Pieces[i].FHeight := 0;
+    Result.Pieces.Pieces[i].FData := nil;
+    Inc(stop, it^.FChars);
+    if (i < n - 1) and not Advance(p) then
+      raise ETyRichText.Create('Rich text index is inconsistent');
+  end;
+  Result.Pieces.CharCount := stop - Result.Pos;
+  Result.LazyTail := FLazyTail and (stop = FTotal.Chars);
+end;
+
+procedure TTyRichText.RestoreSpan(const ASpan: TTyRichSpan);
+var
+  items: TTyRichPieceArray;
+  ea, eb, i, j, n: LongInt;
+  p: TTyRichPath;
+  before: TTyRichSum;
+  it: PTyRichPiece;
+  stop, offCur, offNew: Int64;
+  same: Boolean;
+  sepOff: array of Int64;
+  sepKind: array of Byte;
+  sepData: array of Pointer;
+  sepHeight: array of LongInt;
+  s: Integer;
+begin
+  CheckRange(ASpan.Pos, ASpan.Pieces.CharCount);
+  CheckNotWalking;
+  stop := ASpan.Pos + ASpan.Pieces.CharCount;
+  n := System.Length(ASpan.Pieces.Pieces);
+  if n > 0 then
+  begin
+    ea := SplitAt(ASpan.Pos);
+    eb := SplitAt(stop);
+    // the entries there now: their separators (where, which, the paragraph slot they carry)
+    sepOff := nil;
+    SetLength(sepOff, eb - ea);
+    SetLength(sepKind, eb - ea);
+    SetLength(sepData, eb - ea);
+    SetLength(sepHeight, eb - ea);
+    s := 0;
+    same := eb - ea = n;
+    offCur := 0;
+    if eb > ea then
+    begin
+      Find(rskEntry, ea, p, before);
+      for i := ea to eb - 1 do
+      begin
+        it := ItemAt(p);
+        if same then
+          with ASpan.Pieces.Pieces[i - ea] do
+            same := (FSrc = it^.FSrc) and (FBytes = it^.FBytes) and (FChars = it^.FChars);
+        Inc(offCur, it^.FChars);
+        if PSep(it^) <> sNone then
+        begin
+          sepOff[s] := offCur;
+          sepKind[s] := PSep(it^);
+          sepData[s] := it^.FData;
+          sepHeight[s] := it^.FHeight;
+          Inc(s);
+        end;
+        if (i < eb - 1) and not Advance(p) then
+          raise ETyRichText.Create('Rich text index is inconsistent');
+      end;
+    end;
+    if offCur <> ASpan.Pieces.CharCount then
+      raise ETyRichText.Create('The text is not the span''s to restore');
+    if not same then
+    begin
+      // the span's pieces, each separator taking the slot of the one at its place
+      items := Copy(ASpan.Pieces.Pieces);
+      offNew := 0;
+      j := 0;
+      for i := 0 to n - 1 do
+      begin
+        Inc(offNew, items[i].FChars);
+        items[i].FHeight := 0;
+        items[i].FData := nil;
+        if PSep(items[i]) <> sNone then
+        begin
+          if (j >= s) or (sepOff[j] <> offNew) or (sepKind[j] <> PSep(items[i])) then
+            raise ETyRichText.Create('The text is not the span''s to restore');
+          items[i].FData := sepData[j];
+          items[i].FHeight := sepHeight[j];
+          Inc(j);
+        end;
+      end;
+      if j <> s then
+        raise ETyRichText.Create('The text is not the span''s to restore');
+      if eb > ea then DeleteEntries(ea, eb - ea);
+      InsertEntries(ea, items);
+    end;
+  end;
+  // the empty lazy paragraph the load appended last is that again
+  if ASpan.LazyTail and (stop = FTotal.Chars) then FLazyTail := True;
 end;
 
 { ---- paragraphs ---- }

@@ -358,6 +358,11 @@ type
     FChange: TTyRichChange;
     FInserted: TTyRichPos;        // characters the change put at FChange.Pos
     FRemoved: TTyRichPieces;      // what it took away there
+    { The storage at the places the change split or decoded, as it was (the paragraph's lazy
+      piece among them): Revert gives it back once the text is the same again, so a paragraph
+      an undo returns to what it was is its file's bytes again (R56). FSpan2: a delete's other
+      end, when it is apart from the first. }
+    FSpan, FSpan2: TTyRichSpan;
     FFirstPara: Integer;
     FOldData: array of TTyRichOldData;   // run-length: one reference per entry
     FOldCount: Integer;
@@ -1576,8 +1581,8 @@ end;
 
 function TTyRichUndoData.MemSize: Int64;
 begin
-  Result := InstanceSize + Length(FRemoved.Pieces) * SizeOf(TTyRichPiece) +
-    Length(FOldData) * SizeOf(TTyRichOldData);
+  Result := InstanceSize + (Length(FRemoved.Pieces) + Length(FSpan.Pieces.Pieces) +
+    Length(FSpan2.Pieces.Pieces)) * SizeOf(TTyRichPiece) + Length(FOldData) * SizeOf(TTyRichOldData);
 end;
 
 procedure TTyRichUndoData.AddOld(D: TTyRichParaData);
@@ -2774,6 +2779,8 @@ begin
     Result.FFirstPara := k;
     Result.AddOld(d);
     Result.SealOld;
+    // the pieces the insert splits (a lazy paragraph's one), for the undo to give back
+    Result.FSpan := FText.PieceSpan(APos, APos);
     Inc(FEditing);
     try
       FText.Insert(APos, txt);
@@ -2947,6 +2954,15 @@ begin
     Result.FFirstPara := k;
     Result.AddOld(dk);
     Result.SealOld;
+    { The pieces the delete splits at its two ends (a lazy paragraph it cuts into), for the
+      undo to give back: one span when the ends are that close. }
+    Result.FSpan := FText.PieceSpan(APos, APos);
+    Result.FSpan2 := FText.PieceSpan(e, e);
+    if Result.FSpan.Pos + Result.FSpan.Pieces.CharCount > Result.FSpan2.Pos then
+    begin
+      Result.FSpan := FText.PieceSpan(APos, e);
+      Result.FSpan2 := Default(TTyRichSpan);
+    end;
     AcquireData(merged);   // it may be dm, whose slot the delete drops
     try
       Inc(FEditing);
@@ -3163,6 +3179,10 @@ begin
             AcquireData(TTyRichParaData(u.FRemoved.Pieces[i].Data));
         FText.RestorePieces(u.FChange.Pos, u.FRemoved);
       end;
+      { The text is what it was where the change split it: its pieces too (a decoded lazy
+        paragraph lazy again). }
+      if (Length(u.FSpan2.Pieces.Pieces) > 0) or u.FSpan2.LazyTail then FText.RestoreSpan(u.FSpan2);
+      if (Length(u.FSpan.Pieces.Pieces) > 0) or u.FSpan.LazyTail then FText.RestoreSpan(u.FSpan);
       if u.FOldCount > 0 then
       begin
         total := 0;

@@ -77,6 +77,9 @@ type
     procedure TestAWalkWithValuesGivesTheParseAndSetsNothing;
     // fix wave W7
     procedure TestARowReadWhileItLoadsStaysOneRow;
+    // fix wave W11
+    procedure TestAnEditUndoneInsideAParagraphGivesTheFileBack;
+    procedure TestAnUndoneInsertKeepsTheEditNotTheParagraph;
   end;
 
 implementation
@@ -2447,6 +2450,149 @@ begin
     end;
   finally
     full.Free;
+  end;
+end;
+
+{ ---- fix wave W11 (R56) ---- }
+
+function SaveOf(ADoc: TTyRichDocument): TBytes;
+var
+  s: TBytesStream;
+begin
+  s := TBytesStream.Create;
+  try
+    TyRichSaveRtf(ADoc, s);
+    Result := Copy(s.Bytes, 0, s.Size);
+  finally
+    s.Free;
+  end;
+end;
+
+function SameBytes(const A, B: TBytes): Boolean;
+begin
+  Result := (Length(A) = Length(B)) and ((Length(A) = 0) or CompareMem(@A[0], @B[0], Length(A)));
+end;
+
+{ "Typed by mistake, Ctrl+Z, save" gives the file back: an undo that returns a paragraph to
+  what it was returns it to its file's bytes - a character typed (at the paragraph's start, in
+  it, at its end), Enter, one character deleted, a merged run of typing, and an undo after a
+  redo - in a hand-written, a WordPad, a RichEdit and a Word file. The paragraph's lazy piece
+  the edit decoded and split is put back by the undo (the deletion's way), so the writer copies
+  it again. (The engine keeps no saved point: Modified stays True after the undo.) }
+procedure TTyRtfLazyTest.TestAnEditUndoneInsideAParagraphGivesTheFileBack;
+
+  procedure Check(const AName: string);
+  var
+    b: TBytes;
+    d: TTyRichDocument;
+    t: TTyRichText;
+    paras: array of Integer;
+    k, i, n, pc: Integer;
+    ps, len: TTyRichPos;
+    what: string;
+
+    procedure Back(const AOp: string);
+    begin
+      d.Undo;
+      AssertEquals(Format('%s: %s: the text is whole', [what, AOp]), '', t.CheckIntegrity);
+      AssertTrue(Format('%s: %s undone: saved as the file', [what, AOp]), SameBytes(SaveOf(d), b));
+    end;
+
+  begin
+    b := Fixture(AName);
+    d := LoadWith(b, False);
+    try
+      t := d.Text;
+      AssertTrue(AName + ': saved untouched as the file', SameBytes(SaveOf(d), b));
+      // paragraphs with some text that may be edited: the first three and the last
+      paras := nil;
+      n := 0;
+      for k := 0 to t.ParaCount - 1 do
+        if (t.ParaLength(k) >= 3) and d.CanChange(t.ParaStart(k), 0) and
+          d.CanChange(t.ParaStart(k) + 1, 1) then
+        begin
+          if n < 3 then
+          begin
+            SetLength(paras, n + 1);
+            paras[n] := k;
+            Inc(n);
+          end
+          else
+            paras[n - 1] := k;
+        end;
+      AssertTrue(AName + ': paragraphs to edit', n >= 2);
+      for i := 0 to n - 1 do
+      begin
+        k := paras[i];
+        what := Format('%s paragraph %d', [AName, k]);
+        ps := t.ParaStart(k);
+        len := t.ParaLength(k);
+        pc := t.ParaCount;
+        AssertTrue(what + ': typed in it', d.Execute(TTyRichInsertText.Create(ps + 1, 'x')));
+        Back('a character typed in it');
+        AssertTrue(what + ': typed at its start', d.Execute(TTyRichInsertText.Create(ps, 'x')));
+        Back('a character typed at its start');
+        AssertTrue(what + ': typed at its end', d.Execute(TTyRichInsertText.Create(ps + len, 'x')));
+        Back('a character typed at its end');
+        AssertTrue(what + ': Enter', d.Execute(TTyRichInsertText.Create(ps + 1, #10,
+          TyRichInheritFormat, False)));
+        AssertEquals(what + ': Enter made a paragraph', pc + 1, t.ParaCount);
+        Back('Enter');
+        AssertTrue(what + ': one deleted', d.Execute(TTyRichDelete.Create(ps + 1, 1)));
+        Back('a character deleted');
+        AssertTrue(what + ': a run', d.Execute(TTyRichInsertText.Create(ps + 1, 'a')));
+        AssertTrue(what + ': a run', d.Execute(TTyRichInsertText.Create(ps + 2, 'b')));
+        AssertTrue(what + ': a run', d.Execute(TTyRichInsertText.Create(ps + 3, 'c')));
+        AssertEquals(what + ': one step', 1, d.UndoDepth);
+        Back('a merged run of typing');
+        AssertTrue(what + ': typed again', d.Execute(TTyRichInsertText.Create(ps + 1, 'x')));
+        d.Undo;
+        d.Redo;
+        AssertEquals(what + ': redone', 'x', string(t.GetText(ps + 1, 1)));
+        Back('an undo after a redo');
+      end;
+      // the empty last paragraph the load appended (it has no piece: the text remembers it)
+      if t.ParaLength(t.ParaCount - 1) = 0 then
+      begin
+        what := AName + ' the last paragraph';
+        AssertTrue(what + ': typed in it', d.Execute(TTyRichInsertText.Create(t.Length, 'x')));
+        Back('a character typed in the empty last paragraph');
+      end;
+    finally
+      d.Free;
+    end;
+  end;
+
+begin
+  Check('hand-word-list.rtf');
+  Check('wp-zh-plain.rtf');
+  Check('re-zh-plain.rtf');
+  Check('word-list.rtf');
+end;
+
+{ What the undo of an insert keeps of the storage is what the insert replaced - the lazy
+  piece, a reference - not the paragraph's text: a character typed in a paragraph of 100,000
+  costs the step a few hundred bytes, and its undo gives the file back. }
+procedure TTyRtfLazyTest.TestAnUndoneInsertKeepsTheEditNotTheParagraph;
+var
+  b: TBytes;
+  d: TTyRichDocument;
+  s: RawByteString;
+  bytes: Int64;
+begin
+  s := '{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}' + #13#10 + '\pard\f0 ' +
+    StringOfChar('a', 100000) + '\par' + #13#10 + '\pard tail\par' + #13#10 + '}';
+  b := BytesOf(s);
+  d := LoadWith(b, False);
+  try
+    AssertEquals('the long paragraph', Int64(100000), d.Text.ParaLength(0));
+    AssertTrue('typed', d.Execute(TTyRichInsertText.Create(50000, 'x')));
+    bytes := d.UndoStep.MemSize;
+    AssertTrue(Format('the step keeps %d bytes', [bytes]), bytes < 1024);
+    d.Undo;
+    AssertTrue('undone: saved as the file', SameBytes(SaveOf(d), b));
+  finally
+    d.Free;
   end;
 end;
 
