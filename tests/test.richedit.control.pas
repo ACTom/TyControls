@@ -1850,7 +1850,7 @@ begin
   AssertEquals('two lines', 2, FRich.Lines.Count);
   AssertEquals('two paragraphs', 2, FRich.Document.Text.ParaCount);
   AssertEquals('the second', 'second', FRich.Lines[1]);
-  AssertFalse('editable by the user (Task 10a)', FRich.ReadOnly);
+  AssertFalse('editable by the user', FRich.ReadOnly);
   FRich.Lines.Add('third');
   AssertEquals('added', 3, FRich.Lines.Count);
   AssertEquals('at the end', 'third', FRich.Lines[2]);
@@ -2151,7 +2151,7 @@ end;
 procedure TTyRichEditControlTest.TestReadOnlyStaysOnAndCodeStillChanges;
 begin
   FRich.Lines.Text := 'text';
-  AssertFalse('editable by default (Task 10a)', FRich.ReadOnly);
+  AssertFalse('editable by default', FRich.ReadOnly);
   FRich.ReadOnly := True;
   AssertTrue('read-only once set', FRich.ReadOnly);
   AssertTrue('code still changes the document',
@@ -8367,7 +8367,7 @@ var
     pNew := FRich.LaidParas;
     pv := FRich.Document.Text.NodeVisits - v0;
     held := FRich.VisibleBlockCount;
-    WriteLn(Format('K-3 %s: key: %d layouts asked, %d new, %d tree visits; paint: %d asked, ' +
+    WriteLn(Format('%s: key: %d layouts asked, %d new, %d tree visits; paint: %d asked, ' +
       '%d new, %d tree visits; the view holds %d blocks', [AWhat, kGiven, kNew, kv, pGiven, pNew,
       pv, held]));
     // the key lays out at most the view it arrives at (a screen above and below included),
@@ -8487,7 +8487,7 @@ begin
   if not FRich.Document.Loading and FRich.Document.Incomplete then
   begin
     Inc(FLoadEnds);
-    raise Exception.Create('W10: the user''s change handler');
+    raise Exception.Create('the user''s change handler');
   end;
 end;
 
@@ -8499,7 +8499,7 @@ end;
   ended, Incomplete, and the next idle step stops the driver. }
 procedure TTyRichEditControlTest.TestAnOwedLoadEndRaisesFromItsEntryPoint;
 const
-  Msg = 'W10: the user''s change handler';
+  Msg = 'the user''s change handler';
 var
   F: TForm;
   raised: string;

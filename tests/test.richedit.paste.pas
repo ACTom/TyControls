@@ -3188,7 +3188,7 @@ begin
     Bytes16LE(257) + Bytes16LE(4) + Bytes32LE(1) + Bytes32LE(12);
   for i := 3 to 65535 do s := s + Bytes16LE(1000) + Bytes16LE(4) + Bytes32LE(1) + Bytes32LE(0);
   s := s + Bytes32LE(8);
-  AssertEquals('the review''s file', 786434, Length(s));
+  AssertEquals('the looping TIFF''s size', 786434, Length(s));
   d0 := TyRichTiffDirsVisited;
   e0 := TyRichTiffEntriesRead;
   AssertTrue('a chain that goes round: no image', TyRichMakePicture(RawBytes(s), rikTiff, 0, pic) = rpmNoImage);
