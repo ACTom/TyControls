@@ -78,3 +78,105 @@ These properties can never act on the control that publishes them, and from 4.0 
 | `TTyToolWindowActions` | `AutoSize`, `ChildSizing`, `BorderSpacing` | Its tool window places and sizes it, and it lays its children out in a row itself |
 
 The `Style` of these pick-only combo boxes (except `TTyColorBox` and `TTyColorComboBox`) is still published, but the Object Inspector lists only the pick-only styles; an editable style is replaced by its pick-only counterpart anyway.
+
+## `TTyRichEdit` and code from Delphi's `TRichEdit` or RichMemo
+
+`TTyRichEdit` is drawn by the package; it is not Windows' rich edit control. Most of Delphi's `TRichEdit` members and RichMemo's methods are there under their own names, but a few compile and do something else. The lists below say which.
+
+### Positions, lines and text
+
+- **A position counts characters (code points), not UTF-16 units.** A character outside the BMP (an emoji, a rare ideograph) is one position here and two in Delphi or in RichMemo on Windows; a paragraph end is one position.
+- **Positions and lengths are `TTyRichPos` (`Int64`).** `SelStart`, `SelLength`, `FindText`'s result and the RichMemo methods take and return it; an `Integer` assigned from them compiles, with FPC's hint.
+- **A line of `Lines` is a paragraph**, not a line as wrapped on screen as in Delphi: `Lines.Count` is the paragraph count and `Lines[i]` a paragraph's text. A large document is never laid out whole, so `Lines` has to answer without a layout.
+- **`CaretPos` is Delphi's `TPoint` of the selection's end**: `Y` the paragraph, `X` the character in it. RichMemo's `CaretPos` (LCL's memo) reads the selection's start.
+- **Writing `CaretPos` clamps `X` to the paragraph.** Delphi's adds `X` to the line's start unchecked, so a column past the end lands in a later line there.
+- **`SelText` reads the selection as a copy puts it on the clipboard as text**: a paragraph end is the platform's line break (Delphi: CR) and a picture gives nothing (Delphi: U+FFFC). So `Length(SelText)` does not equal `SelLength` as it does in Delphi.
+- **`Text` keeps a picture as U+FFFC** and joins paragraphs with the platform's line break; reading it in a large document builds a copy of all of it.
+- **`Text :=` and `Clear` replace the content**: the undo history goes, `Modified` is `False` afterwards and a `Clear` cannot be undone, as Delphi's `WM_SETTEXT` behaves. Inside `BeginEdit … EndEdit` both raise `ETyRichEdit`.
+
+### Compiles, means something else
+
+- **`PlainText` is set by every load through the control**: a text file makes it `True`, an RTF file `False`. Delphi's never changes by itself.
+- **`PlainText := True` set by code or in the Object Inspector stays in charge**: every load without a format then reads text and every file save without a format writes text, as in Delphi. A load with `rfText` keeps it; `PlainText := False`, `LoadRichText`, `LoadFromStream(S, rfRtf)` or a load that went by its file ends it.
+- **A load without a format goes by the file's signature** (`{\rtf` after an optional BOM and white space: RTF, else text). Delphi tries RTF and falls back to text, leaving `PlainText` alone.
+- **`Lines.LoadFromFile`, `LoadFromStream`, `SaveToFile` and `SaveToStream` with one parameter are the control's own load and save**, so an RTF file is read as RTF. The overloads with a `TEncoding` are TStrings' and treat the file as plain text; set `TextEncoding` and use the one-parameter forms instead.
+- **`Lines.SaveToFile` clears `Modified`**; Delphi's leaves it as it was. A "save changes?" prompt on close would otherwise ask again after a save.
+- **`Modified` turns `False` again** when undo or redo returns to the content last loaded or saved; Delphi's stays `True`.
+- **Undo puts back the selection there was before the step; redo leaves a plain caret where the step left it**, as Windows' rich edit does. Typing merges into one step; a format write and each edit from code are one step each.
+- **A write of the value the text already has is no undo step**: no `OnChange`, `Modified` untouched.
+- **`CanUndo` and `CanRedo` answer for the user**: `False` when `ReadOnly` or disabled. `Document.CanUndo` answers for code.
+- **`ReadOnly` stops the user only.** Code still edits through `SelText`, `Lines`, `Text`, the format API and the replace methods, as Delphi's `SelAttributes` does; Cut, Paste, `ClearSelection`, `Undo` and `Redo` do nothing on a read-only control, as in Delphi.
+- **`ClearSelection` deletes the selection**, as Delphi's does; `CollapseSelection` only collapses it.
+- **A format chosen with nothing selected (bold, then typing) is dropped by any setting of the selection**, even `SelStart := SelStart`, as on Windows.
+- **Inside `Lines.BeginUpdate … EndUpdate`, `Document.BeginUpdate … EndUpdate` and `BeginEdit … EndEdit` each write does what it does outside**: the caret and the selection follow `SelText`, `Lines` and `InDelText`. The bracket holds back the repaint and the reports: one `OnChange` and one `OnSelectionChange` at its end.
+- **Inside those brackets the user's actions do nothing**: Cut, Paste, `ClearSelection`, `Undo`, `Redo` and keys are ignored without an error or an `OnEditRefused`. A change made straight through `Document.Execute` there does not move the selection.
+- **`BeginEdit … EndEdit` is one undo step**: its undo puts back the selection there was at `BeginEdit`; its redo leaves a plain caret where `EndEdit` left the caret.
+- **A format write raises `ETyRichEdit` while a file is loading, after a cancelled load or during a save**, states Delphi's control does not have. It passes over a table row that holds a nested table, which is kept as the file has it.
+- **A format write ends an open input-method composition first.**
+- **`SendMessage(Handle, EM_…)` and `Perform(EM_…)` compile and do nothing**: there is no system control to receive them. Use `ScrollCaretIntoView` for `EM_SCROLLCARET`, `Document.Text.ParaOfPos` for `EM_LINEFROMCHAR`, `Document.Text.ParaStart` for `EM_LINEINDEX`, `TopParagraph` for `EM_GETFIRSTVISIBLELINE`, `PositionRect` for `EM_POSFROMCHAR`, `PositionAtPoint` for `EM_CHARFROMPOS`, `GetText` for `EM_GETTEXTRANGE`, `Zoom` for `EM_SETZOOM` and `WrapMode` for `EM_SETTARGETDEVICE`. `EM_EXLIMITTEXT` has nothing to set: there is no length limit.
+
+### Character and paragraph formats
+
+- **`TNumberingStyle` has seven members** (`nsNone`, `nsBullet` and the numbered kinds up to `lkUpperRoman`), so `Paragraph.Numbering := TNumberingStyle(Button.Down)` works, but a `for … in TNumberingStyle`, a `case` with an `else` or an array indexed by it sees seven values.
+- **`Numbering := nsBullet` (or a numbered kind) gives a paragraph without an indent WordPad's hanging indent** (first line at 18 pt, the others at 36 pt); `nsNone` takes the indents back to 0. Delphi sets only the offset.
+- **A justified paragraph reads `taLeftJustify` in `Paragraph.Alignment`**, because `TAlignment` has no justify; `ParaAlign` reads all four.
+- **`Paragraph.Alignment` is not swapped under a right-to-left `BiDiMode`**: the control has no right-to-left layout. An RTF file's right-to-left paragraphs are kept and saved back.
+- **Automatic text colour reads `clDefault` (Delphi: `clWindowText`) and no highlight reads `clNone` (Delphi: `clWindow`)**, because the automatic colour follows the theme. Writing `clWindowText`, `clWindow` or `clDefault` means automatic or none, as in Delphi.
+- **`Font.Assign(SelAttributes)` gives `clDefault` for automatic text** and sets no pitch.
+- **`SelAttributes.Assign(DefAttributes)` takes the text's own font away**, so it follows `DefAttributes` and the theme from then on; Delphi copies the base font's values into the text.
+- **`Name` and `Size` of text without a font of its own read the font it is shown in.** Writing back the very value it is shown in leaves such text without one, so a toolbar that writes back what it read freezes nothing into the text. The same holds for `Height`, the RichMemo methods and `Assign(TFont)`.
+- **A font name of `'default'` means "no name"** in every write, so no font called `default` goes into a file.
+- **`Height` takes a negative value as its absolute value.**
+- **`DefAttributes` is the control's `Font` laid over the theme**: a write changes `Font` and is no undo step. Its `BackColor` and `Subscript` cannot be set (a write raises `ETyRichEdit`).
+- **`ConsistentAttributes` compares what the text stores, not what it shows**: text without a font name beside text with the base font's name written out reads `caFace` as mixed.
+- **`ConsistentAttributes` has a budget**: over a very large selection, or bytes of a large RTF file not parsed yet, it reports what it could not prove the same as mixed, so a toolbar can read it on every selection change.
+- **`SelAttributes` over a selection that begins at a paragraph's end answers for the next paragraph's first character**, the one a write would format.
+- **`FirstIndent`, `LeftIndent` and `RightIndent` change each paragraph from its own value** over a multi-paragraph selection, as Delphi's do.
+- **Indents, spaces and tab stops read rounded to the nearest point**; Delphi's truncate. Writes are exact.
+- **`Tab[i] :=` past `TabCount` adds stops up to it**, so the count becomes `i + 1`; Delphi's sets the count to `i`. `TabCount` is at most 32, and an index of 32 or more is ignored.
+
+### Find and replace
+
+- **`FindText` takes `stWholeWord` and `stMatchCase` (type `TTySearchTypes`)**; RichMemo's `Search` takes `soMatchCase`, `soWholeWord` and `soBackward` (type `TTySearchOptions`). FPC's `StrUtils` has a `soMatchCase` and `soWholeWord` of its own: qualify them in a unit that uses both.
+- **A negative `Length` (`Len`) searches to the end.** Delphi's searches to the end only for -1 from 0. A range past the end is clamped.
+- **RichMemo's backward `Search` looks from `Start` back over `Len` characters** (down to 0 for a negative `Len`) and finds the match nearest `Start`, as RichMemo does on Windows.
+- **RichMemo's `Search` with `var` results reports the match's length in this control's characters**; RichMemo reports the needle's length. A CR LF needle matching one paragraph end gives 1 here, 2 in RichMemo. An `Integer` overload is there; a match past `High(Integer)` is reported as none.
+- **Whole word follows the caret's word rule**: every Chinese, Japanese or Korean character is a word boundary on both sides. Case folding is per code point (`ß` does not match `ss`, no Turkish rule) and nothing is normalised.
+- **CR LF, LF and CR in the needle each match one paragraph end.** Delphi turns CR LF into CR.
+- **A picture never matches**, and neither does a link's text or a merged-away table cell.
+- **While a file is still loading, `FindText` and `Search` search what is loaded** and return -1 for the rest; `FindNextAsync` waits for the load.
+
+### Missing
+
+- **Delphi's type names**: the attribute classes are `TTyRichTextAttributes` and `TTyRichParaAttributes`, the sets `TTyRichConsistentAttributes`, `TTyRichConsistentParaAttributes` and `TTySubscriptType`. Their member names are Delphi's (`caBold`, `cpaAlignment`, `sstSuperscript` …), so code that uses the values compiles and code that declares a variable of Delphi's type does not. The ordinals differ.
+- **RichMemo's type names**: the records, enums and sets carry the package's prefix (`TTyFontParams`, `TTyParaMetric`, `TTyParaNumbering`, `TTyTabStopList`, `TTyTextModifyMask` …), and `TTabStop` is `TTyRichTabStop`. Members keep RichMemo's names (`paLeft`, `tmm_Styles` …); in a unit that also uses `RichMemo` or `Menus`, qualify them.
+- **`Integer` variables passed to `GetStyleRange` or `GetParaRange`** do not compile: declare them `TTyRichPos`.
+- **Attributes the control does not hold**: `Protected`, `Disabled`, `Hidden`, `Link`, `Offset`, `Pitch`, `RevAuthor`, `UseForAllText` and their `ConsistentAttributes` members (`caProtected` …). An RTF file's are kept as its bytes and saved back.
+- **Memo members**: the control is no `TCustomMemo`, so `WordWrap` (use `WrapMode`), `ScrollBars` (bars appear as needed; `ScrollBarAutoHide`), `Alignment` (per paragraph: `Paragraph.Alignment`), `MaxLength`, `WantReturns` (Enter always makes a paragraph), `BorderStyle`, `Color` and `ParentColor` (the theme's; use `StyleOverride`), `HideSelection`, `HideScrollBars`, `GetSelTextBuf` and `SetSelTextBuf` are not there, and an `is TCustomEdit` test or LCL's standard edit actions do not see it. Its context menu is the package's text menu.
+- **Delphi's other members**: `OnProtectChange`, `OnResizeRequest`, `OnSaveClipboard`, `OnLinkClick`, `EnableURLs`, `ShowURLHint`, `SelectionStreamMode`, `SpellChecking`, `Transparent`, `ActiveLineNo`, `Print`, `PageRect`, `DefaultConverter` and `RegisterConversionFormat`.
+- **RichMemo's other members**: `SetLink`, `isLink`, `OnLinkAction`, `Print`, `OnPrintAction`, `InDelInline`, `InitParaNumber`, `InitParaBullet`, the second `InitTabStopList`, `GetFontParams`, `InitPrintParams` and `InitTextUIParams`.
+- **A replace of the current match**: use `SelText :=` or `InDelText`.
+- **`Lines` in a form file.** A rich document cannot be stored as lines without its formats, so `Lines` is not published. A form converted from Delphi that stores `Lines.Strings` for a rich edit gets an unknown-property error for it: delete those lines from the form and set the text or load a file at run time.
+- **RichMemo's `TTyParaNumbering` keeps only `Style` and `NumberStart`**: `pnCustomChar` becomes a bullet, and `Indent`, `CustomChar`, `SepChar` and `ForceNewNum` read 0, `#0` or `False`.
+- **A bar tab**: `tabWordBar` is written as a left stop.
+
+### RichMemo methods that behave differently
+
+- **`GetTextAttributes` gives the shown font's name and size for text without its own**; automatic colour is `clDefault`. The read-change-write idiom freezes nothing into the text.
+- **`TTyParaMetric.LineSpacing` is on RichMemo's scale** (single 1.2, one and a half 1.8, double 2.4). A write takes the nearest of the four the control has; 0 or less leaves the spacing alone, and an exact or at-least spacing reads 0.
+- **`SetParaMetric` and `SetRangeParaParams` change each paragraph from its own values**, in one undo step.
+- **`SetRangeParams` with a style in both the add and the remove set turns it off**, as RichMemo's does.
+- **`SetTextAttributes` with length 0 at the caret sets the format for what is typed next**; elsewhere length 0 does nothing.
+- **`GetStyleRange` stays inside the position's paragraph.**
+- **`InDelText` is one undo step** in the format of the first character it replaces, and returns the characters inserted.
+- **`LoadRichText` makes `PlainText` `False`**; it and `SaveRichText` return `False` on an error (out of memory is raised).
+- **`ZoomFactor` is `Zoom / 100`**, written to whole percent.
+
+### Added
+
+- **Paragraphs**: `ParaAlign` (with justify), `NumberingStart`, `SpaceBefore`, `SpaceAfter`, `LineSpacingRule`, `LineSpacing` (points); each write changes only its own part of each paragraph.
+- **Selection and editing**: `CaretIndex` (the caret's own end), `CollapseSelection`, `BeginEdit` / `EndEdit` (several writes as one undo step), `RangeText`.
+- **Find and replace**: `FindNext`, `FindNextAsync`, `ReplaceAll` (three forms), `ReplaceAllAsync`, `CancelFind`, `FindRunning`, `OnFindProgress`, `OnFindDone`, `OnReplaceDone`. A replace is one undo step and is not stopped by `ReadOnly`.
+- **Large files**: an RTF file is read in the background (`Loading`, `FinishLoading`, `CancelLoad`, `OnLoadProgress`); `OnSaveProgress` reports a save.
+- **Events and settings**: `OnModifiedChange`, `OnEditRefused` (a user's edit the document refused), `OnZoomChange`, `OnFallbackFont`, `WrapMode`, `TextEncoding`, `TextCodePage`, `ScrollBarAutoHide`.
+- **The document itself**: `Document` (commands, undo history, formats) for code that needs more than the façade.
