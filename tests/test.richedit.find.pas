@@ -59,6 +59,7 @@ type
     procedure TestReplaceIsOneStepOfParts;
     procedure TestReplaceKeepsFormatsAndObjects;
     procedure TestReplaceStopsAtTheLimit;
+    procedure TestReplaceSkipsANestedRow;
     procedure TestAStoppedReplaceLeavesNothingToRedo;
     procedure TestReplaceParsesEachIntervalOnce;
     procedure TestReplaceUndoneSavesTheFile;
@@ -1845,6 +1846,27 @@ begin
     ReplaceInParts(doc, ',', ';', [], 1024, skipped, parts, limited);
     AssertFalse('no limit: to the start', limited);
     AssertEquals('all of them', 0, CountOf(',', doc.Text.GetText(0, doc.Text.Length)));
+  finally
+    doc.Free;
+  end;
+end;
+
+{ A row that holds a nested table keeps its matches (counted), whatever comes before or after
+  it in the range: the row is asked of each paragraph, once a paragraph. }
+procedure TTyRichFindTest.TestReplaceSkipsANestedRow;
+var
+  doc: TTyRichDocument;
+  n, skipped: Integer;
+begin
+  doc := LoadRtf(BytesOf(Rtf('{|rtf1|ansi|deff0{|fonttbl{|f0 Arial;}}' +
+    '|trowd|cellx2000|cellx4000|pard|intbl word two|cell' +
+    '|pard|intbl|itap2 word nested|nestcell{|*|nesttableprops|trowd|cellx1000|nestrow}{|nonesttables|par}' +
+    '|pard|intbl|cell|row|pard word one|par word three|par}')), False);
+  try
+    n := ReplaceIn(doc, 'word', 'w', [], skipped);
+    AssertEquals('the paragraphs after the row replaced', 2, n);
+    AssertEquals('the row''s two left, and counted', 2, skipped);
+    AssertEquals('one step', 1, doc.UndoDepth);
   finally
     doc.Free;
   end;
