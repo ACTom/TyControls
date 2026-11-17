@@ -62,7 +62,7 @@ type
     procedure TestAStoppedReplaceLeavesNothingToRedo;
     procedure TestReplaceParsesEachIntervalOnce;
     procedure TestReplaceUndoneSavesTheFile;
-    procedure TestReplaceKeepsR57AtATablesEdges;
+    procedure TestReplaceKeepsTheTableEdgeRule;
     procedure TestALongNeedleWithAParagraphEndEnds;
     procedure TestARerunGoesOnWhereItStopped;
     procedure TestAParagraphIsFetchedOnce;
@@ -2041,7 +2041,7 @@ end;
   last paragraph end, or with the paragraph end before a table, or between two tables - is left
   and counted; what the document holds is what its file says (saved and read again, the same
   paragraphs in the same cells), and undone it is the file. Read whole and lazily. }
-procedure TTyRichFindTest.TestReplaceKeepsR57AtATablesEdges;
+procedure TTyRichFindTest.TestReplaceKeepsTheTableEdgeRule;
 const
   Head = '{|rtf1|ansi|ansicpg1252|deff0{|fonttbl{|f0|fswiss Arial;}}|pard ';
   Row = '|trowd|cellx2000|cellx4000|intbl ';

@@ -256,10 +256,10 @@ type
     procedure RunAtScaleTwo(const AWhat: string; ACase: TRunMethod);
     procedure RaiseOnce(Sender: TObject; ADone, ATotal: Int64; var ACancel: Boolean);
     function HandleForm: TForm;
-    procedure LoadW7Plain(AExpectLoading: Boolean = True);
-    procedure LoadW7Table(ARows, AInRow: Integer);
+    procedure LoadPlainInSlices(AExpectLoading: Boolean = True);
+    procedure LoadSmallTable(ARows, AInRow: Integer);
     procedure SlowHandler(Sender: TObject; ADone, ATotal: Int64; var ACancel: Boolean);
-    procedure LoadW8Big(AParas: Integer);
+    procedure LoadPlainParas(AParas: Integer);
   private
     FLoadEnds: Integer;
     FDocNotice: TTyRichChangeEvent;
@@ -5517,7 +5517,7 @@ end;
 
 { Plain paragraphs and two-row tables (one row with a merged cell) up to ATarget bytes - the
   tables apart, so that intervals seldom chain through them. }
-function W4TablesRtf(ATarget: Int64): TBytes;
+function TablesApartRtf(ATarget: Int64): TBytes;
 var
   m: TMemoryStream;
   k: Integer;
@@ -5656,7 +5656,7 @@ var
   end;
 
 begin
-  b := W4TablesRtf(3 * 1024 * 1024);
+  b := TablesApartRtf(3 * 1024 * 1024);
   LoadAs(b, True);
   FRich.SelectAll;
   whole := FRich.SelText;
@@ -5964,7 +5964,7 @@ begin
 end;
 
 { A plain RTF of ACount paragraphs; AFirstSlice: the byte after the 50th. }
-function W5PlainRtf(ACount: Integer; out AAfter50: Int64): TBytes;
+function PlainParasRtf(ACount: Integer; out AAfter50: Int64): TBytes;
 var
   m: TMemoryStream;
   k: Integer;
@@ -6034,7 +6034,7 @@ var
   end;
 
 begin
-  src := W5PlainRtf(3000, first);
+  src := PlainParasRtf(3000, first);
   FRich.Slices(first, 16 * 1024);
   st := TBytesStream.Create(src);
   try
@@ -6109,7 +6109,7 @@ var
   load: TTyRtfLoad;
   keep: Integer;
 begin
-  b := W4TablesRtf(3 * 1024 * 1024);
+  b := TablesApartRtf(3 * 1024 * 1024);
   st := TBytesStream.Create(b);
   try
     TyRichLoadRtfFull(FRich.Document, st);
@@ -6914,12 +6914,12 @@ end;
 var
   GReplaceError: DWord;
 
-procedure W6SetLastError(AError: DWord); stdcall; external 'kernel32' name 'SetLastError';
+procedure Win32SetLastError(AError: DWord); stdcall; external 'kernel32' name 'SetLastError';
 
-function W6FailingReplace(AReplaced, AReplacement, ABackup: PWideChar; AFlags: DWord;
+function FailingReplaceFileW(AReplaced, AReplacement, ABackup: PWideChar; AFlags: DWord;
   AExclude, AReserved: Pointer): LongBool; stdcall;
 begin
-  W6SetLastError(GReplaceError);
+  Win32SetLastError(GReplaceError);
   Result := False;
 end;
 {$ENDIF}
@@ -6945,7 +6945,7 @@ begin
   AssertTrue('changed', FRich.Document.Execute(TTyRichInsertText.Create(0, 'New ')));
   saved := TyRichReplaceFileW;
   try
-    TyRichReplaceFileW := @W6FailingReplace;
+    TyRichReplaceFileW := @FailingReplaceFileW;
     GReplaceError := 1; // ERROR_INVALID_FUNCTION
     FRich.SaveToFile(path);
     AssertFalse('saved', FRich.Modified);
@@ -7050,7 +7050,7 @@ end;
 { A small RTF table: a paragraph, ARows rows of three cells (rN a, rN b in bold, rN c), a
   paragraph after it. AInRow: the offset inside row AInRow after its second cell's end and
   before its third's (where a first slice leaves the row's first cell last in the text). }
-function W7TableRtf(ARows, AInRow: Integer; out AInside: Int64): TBytes;
+function SmallTableRtf(ARows, AInRow: Integer; out AInside: Int64): TBytes;
 var
   s, row: RawByteString;
   k: Integer;
@@ -7068,13 +7068,13 @@ begin
   Result := BytesOf(s);
 end;
 
-procedure TTyRichEditControlTest.LoadW7Table(ARows, AInRow: Integer);
+procedure TTyRichEditControlTest.LoadSmallTable(ARows, AInRow: Integer);
 var
   b: TBytes;
   inside: Int64;
   st: TBytesStream;
 begin
-  b := W7TableRtf(ARows, AInRow, inside);
+  b := SmallTableRtf(ARows, AInRow, inside);
   FRich.Slices(inside, 64);
   st := TBytesStream.Create(b);
   try
@@ -7097,13 +7097,13 @@ begin
   AssertFalse('the form is not shown', Result.Visible);
 end;
 
-procedure TTyRichEditControlTest.LoadW7Plain(AExpectLoading: Boolean);
+procedure TTyRichEditControlTest.LoadPlainInSlices(AExpectLoading: Boolean);
 var
   src: TBytes;
   first: Int64;
   st: TBytesStream;
 begin
-  src := W5PlainRtf(3000, first);
+  src := PlainParasRtf(3000, first);
   FRich.Slices(first, 16 * 1024);
   st := TBytesStream.Create(src);
   try
@@ -7150,7 +7150,7 @@ begin
       TyRichTurnDriverFor(WidgetSet.LCLPlatform) = rtdIdle);
     watches := TRichProbe.Watches;
     posts := TRichProbe.Posts;
-    LoadW7Plain;
+    LoadPlainInSlices;
     AssertEquals('a start registers the idle handler once', watches + 1, TRichProbe.Watches);
     AssertTrue('registered', FRich.IdleOn);
     AssertTrue('and queues the first turn', FRich.TurnQueued);
@@ -7188,7 +7188,7 @@ begin
     // a turn with the driver off (nothing registered, as the timer driver leaves it): it
     // registers the idle handler and queues nothing of its own
     FRich.ClosedApp := True;
-    LoadW7Plain;
+    LoadPlainInSlices;
     FRich.ClosedApp := False;
     AssertFalse('closed: not registered', FRich.IdleOn);
     posts := TRichProbe.Posts;
@@ -7197,7 +7197,7 @@ begin
     AssertEquals('and queues no call of its own', posts, TRichProbe.Posts);
     FRich.CancelLoad;
     // a cancel
-    LoadW7Plain;
+    LoadPlainInSlices;
     AssertTrue('registered again', FRich.IdleOn);
     removes := TRichProbe.Removes;
     unwatches := TRichProbe.Unwatches;
@@ -7208,13 +7208,13 @@ begin
     AssertEquals('the idle handler removed', unwatches + 1, TRichProbe.Unwatches);
     NothingEntered('after a cancel');
     // a new content
-    LoadW7Plain;
+    LoadPlainInSlices;
     FRich.Lines.Text := 'another';
     AssertFalse('a new content: nothing queued', FRich.TurnQueued);
     AssertFalse('a new content: not registered', FRich.IdleOn);
     NothingEntered('after a new content');
     // the handle's destruction
-    LoadW7Plain;
+    LoadPlainInSlices;
     RunQueuedCalls;
     RunIdleHandlers;
     AssertTrue('a turn queued by the idle step', FRich.TurnQueued);
@@ -7266,7 +7266,7 @@ begin
     FRich.ForceTimer := True;
     posts := TRichProbe.Posts;
     watches := TRichProbe.Watches;
-    LoadW7Plain;
+    LoadPlainInSlices;
     AssertTrue('a timer', FRich.TimerOf <> nil);
     AssertTrue('running', FRich.TimerOf.Enabled);
     AssertEquals('1 ms', 1, FRich.TimerOf.Interval);
@@ -7281,11 +7281,11 @@ begin
     AssertFalse('done: stopped', FRich.TimerOf.Enabled);
     AssertEquals('nothing queued', posts, TRichProbe.Posts);
     AssertEquals('nothing registered', watches, TRichProbe.Watches);
-    LoadW7Plain;
+    LoadPlainInSlices;
     AssertTrue('running again', FRich.TimerOf.Enabled);
     FRich.CancelLoad;
     AssertFalse('cancelled: stopped', FRich.TimerOf.Enabled);
-    LoadW7Plain;
+    LoadPlainInSlices;
     FRich.DropHandle;
     AssertTrue('the window went: freed', FRich.TimerOf = nil);
     FRich.HandleNeeded;
@@ -7323,7 +7323,7 @@ begin
     // the load's own start cannot queue its first turn
     FRich.FailPost := True;
     FLoadEnds := 0;
-    LoadW7Plain(False);
+    LoadPlainInSlices(False);
     AssertFalse('the start could not queue: the load ended', FRich.Loading);
     AssertTrue('incomplete', FRich.Document.Incomplete);
     AssertEquals('the load''s notice, once', 1, FLoadEnds);
@@ -7332,7 +7332,7 @@ begin
     AssertTrue('no backstop', (FRich.BackstopOf = nil) or not FRich.BackstopOf.Enabled);
     // the idle step's queuing refused: nothing escapes, the load ends the same way
     FRich.FailPost := False;
-    LoadW7Plain;
+    LoadPlainInSlices;
     RunQueuedCalls;
     AssertTrue('loading', FRich.Loading);
     FRich.FailPost := True;
@@ -7348,7 +7348,7 @@ begin
     FRich.ClosedApp := True;
     posts := TRichProbe.Posts;
     watches := TRichProbe.Watches;
-    LoadW7Plain;
+    LoadPlainInSlices;
     FRich.Turn;
     AssertEquals('closed: nothing queued', posts, TRichProbe.Posts);
     AssertEquals('closed: nothing registered', watches, TRichProbe.Watches);
@@ -7505,13 +7505,13 @@ begin
 end;
 
 { A plain RTF of AParas paragraphs, its first slice the first 50 of them, loading. }
-procedure TTyRichEditControlTest.LoadW8Big(AParas: Integer);
+procedure TTyRichEditControlTest.LoadPlainParas(AParas: Integer);
 var
   src: TBytes;
   first: Int64;
   st: TBytesStream;
 begin
-  src := W5PlainRtf(AParas, first);
+  src := PlainParasRtf(AParas, first);
   FRich.FirstSliceBytes := first;
   st := TBytesStream.Create(src);
   try
@@ -7533,7 +7533,7 @@ begin
   F := HandleForm;
   try
     FRich.Slices(0, 16 * 1024);
-    LoadW8Big(3000);
+    LoadPlainParas(3000);
     PaintAll(True);
     AssertTrue('the view holds blocks', FRich.VisibleBlockCount > 0);
     AssertTrue('the slice ends below the view',
@@ -7601,7 +7601,7 @@ begin
     // no clock that moves: fast
     FRich.FrozenClock := True;
     FRich.LogSlices := True;
-    LoadW8Big(40000);
+    LoadPlainParas(40000);
     FRich.LogSlices := False;
     AssertEquals('the load''s own first slice asks no size', 0, Length(FRich.SliceLog));
     AssertEquals('turn 1 starts small', '16 16 16', TurnSizes);
@@ -7615,7 +7615,7 @@ begin
     // 4 KB a millisecond: a 16 KB slice takes 4 ms, the turn ends at the budget after two
     FRich.FakeRate := 4096;
     FRich.ClockNow := 0;
-    LoadW8Big(40000);
+    LoadPlainParas(40000);
     AssertEquals('a slow file: its first turn small too', '16 16', TurnSizes);
     AssertEquals('and the next', '16 16', TurnSizes);
     // a slow handler, a fast file: the handler's time is not the slices'
@@ -7623,7 +7623,7 @@ begin
     FRich.FakeClock := True;
     FRich.ClockStep := 0;
     FRich.OnLoadProgress := @SlowHandler;
-    LoadW8Big(40000);
+    LoadPlainParas(40000);
     // (the handler's 50 ms end each turn after its first slice, but do not size the slices)
     AssertEquals('a slow handler: turn 1', '16', TurnSizes);
     AssertEquals('a slow handler: turn 2 doubles', '32', TurnSizes);
@@ -7657,7 +7657,7 @@ begin
     // a fast file: 1 MB a millisecond
     FRich.FakeRate := 1024 * 1024;
     FRich.ClockNow := 0;
-    LoadW8Big(200000);
+    LoadPlainParas(200000);
     for i := 1 to 5 do TurnSizes;
     AssertEquals('fast: the whole step', '256 256 256', TurnSizes);
     // the next turn stalls 500 ms after its first slice
@@ -7707,7 +7707,7 @@ begin
   F := HandleForm;
   try
     FRich.Slices(0, 16 * 1024);
-    LoadW8Big(40000);
+    LoadPlainParas(40000);
     AssertTrue('a backstop', FRich.BackstopOf <> nil);
     AssertTrue('running beside the idle handler', FRich.BackstopOf.Enabled and FRich.IdleOn);
     AssertEquals('its period', CRichBackstopMs, Integer(FRich.BackstopOf.Interval));
@@ -7748,14 +7748,14 @@ begin
     FRich.BackstopNow;
     AssertEquals('no work: no turn', t, FRich.Turns);
     // the removal paths
-    LoadW7Plain;
+    LoadPlainInSlices;
     AssertTrue('running again', FRich.BackstopOf.Enabled);
     FRich.CancelLoad;
     AssertFalse('cancelled: stopped', FRich.BackstopOf.Enabled);
-    LoadW7Plain;
+    LoadPlainInSlices;
     FRich.Lines.Text := 'another';
     AssertFalse('a new content: stopped', FRich.BackstopOf.Enabled);
-    LoadW7Plain;
+    LoadPlainInSlices;
     FRich.DropHandle;
     AssertTrue('the window went: freed', FRich.BackstopOf = nil);
     FRich.HandleNeeded;
@@ -7767,7 +7767,7 @@ begin
     FRich.HandleNeeded;
     // the timer driver has no backstop
     FRich.ForceTimer := True;
-    LoadW7Plain;
+    LoadPlainInSlices;
     AssertTrue('the timer driver: no backstop', FRich.BackstopOf = nil);
     FRich.CancelLoad;
   finally
@@ -7800,7 +7800,7 @@ procedure TTyRichEditControlTest.TestASlicesCostDoesNotGrowWithTheDocument;
     FRich := NewProbe;
     F := HandleForm;
     try
-      src := W5PlainRtf(AParas, dummy);
+      src := PlainParasRtf(AParas, dummy);
       FRich.Slices(Length(src) - 100 * 1024, 16 * 1024);
       st := TBytesStream.Create(src);
       try
@@ -7875,7 +7875,7 @@ begin
   F := HandleForm;
   try
     FRich.OnLoadProgress := @RaiseOnce;
-    LoadW7Plain;
+    LoadPlainInSlices;
     FRaiseOnce := True;
     raised := False;
     try
@@ -8147,7 +8147,7 @@ procedure TTyRichEditControlTest.TestAPartialRowCopiesAsTheFilesRow;
   end;
 
 begin
-  LoadW7Table(6, 3);
+  LoadSmallTable(6, 3);
   AssertTrue('loading', FRich.Loading);
   AssertEquals('the row''s first cell is last', 'r3 a',
     FRich.Lines[FRich.Lines.Count - 1]);
@@ -8167,7 +8167,7 @@ var
   found: Boolean;
   blk: TTyRichViewBlock;
 begin
-  LoadW7Table(6, 3);
+  LoadSmallTable(6, 3);
   AssertTrue('loading', FRich.Loading);
   last := FRich.Document.Text.ParaCount - 1;
   PaintAll(True);
@@ -8423,7 +8423,7 @@ begin
   F := HandleForm;
   try
     FRich.Slices(0, 16 * 1024);
-    LoadW8Big(40000);
+    LoadPlainParas(40000);
     PaintAll(True);
     // a clock of the test's that stands between the turns
     FRich.FakeClock := True;
@@ -8512,7 +8512,7 @@ begin
     FRich.FailPost := True;
     raised := '';
     try
-      LoadW7Plain(False);
+      LoadPlainInSlices(False);
     except
       on E: Exception do raised := E.Message;
     end;
@@ -8525,7 +8525,7 @@ begin
     RunIdleHandlers;
     AssertFalse('the next idle step: nothing registered', FRich.IdleOn);
     // owed from InitializeWnd
-    LoadW7Plain;
+    LoadPlainInSlices;
     FRich.DropHandle;
     AssertTrue('loading without a window', FRich.Loading);
     FRich.Document.OnChange := @RaiseOnLoadEnd;
@@ -8603,7 +8603,7 @@ begin
     AssertEquals('the caret was snapped', Int64(0), FRich.CaretIndex);
     AssertFalse('no selection report queued', FRich.ReportQueued);
     AssertEquals('nothing queued', posts, TRichProbe.Posts);
-    LoadW7Plain(True);
+    LoadPlainInSlices(True);
     AssertFalse('a load: no turn queued', FRich.TurnQueued);
     AssertEquals('no idle handler', watches, TRichProbe.Watches);
     AssertEquals('nothing queued at all', posts, TRichProbe.Posts);
