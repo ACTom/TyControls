@@ -16,7 +16,8 @@ unit test.richedit.paste;
 interface
 
 uses
-  Classes, SysUtils, Types, Math, fpcunit, testregistry, Controls, Graphics, LCLType, Forms,
+  Classes, SysUtils, Types, Math, fpcunit, testregistry, Controls, Graphics, LCLType, Forms, Clipbrd,
+  LCLIntf,
   BGRABitmap, BGRABitmapTypes, BGRAWritePNG, BGRAReadPng,
   tyControls.Controller, tyControls.TextMenu, tyControls.StrConsts,
   tyControls.RichEdit.Text, tyControls.RichEdit.Model, tyControls.RichEdit.Commands,
@@ -85,6 +86,12 @@ type
     procedure TestTheTablesAgreeOnlyWhereEveryTableDoes;
     procedure TestTheNestedSamplesPasteAsParagraphsThatSave;
     procedure TestEverythingPastedIntoAnEmptyDocumentKeepsTheLastFormat;
+    procedure TestAPictureHeaderMustBeBackedAndItsSizeIsAskedFirst;
+    procedure TestTheNextPictureFormatIsTriedAndACellsRoomIsItsTextArea;
+    procedure TestCanPasteEnumeratesTheClipboardOnce;
+    procedure TestRowsOverWholeRowsAreRefused;
+    procedure TestAReaderThatFailsOrRunsOutOfMemory;
+    procedure TestAPasteIntoAFileAddsToItsHeaderWhatItNeeds;
   end;
 
 implementation
@@ -436,7 +443,21 @@ begin
       Exit(Format('paragraph %d: a cell / none', [k]))
     else if (ca <> nil) and ((ca.Index <> cb.Index) or (ca.Row.CellCount <> cb.Row.CellCount)) then
       Exit(Format('paragraph %d: cell %d of %d / %d of %d', [k, ca.Index, ca.Row.CellCount,
-        cb.Index, cb.Row.CellCount]));
+        cb.Index, cb.Row.CellCount]))
+    else if ca <> nil then
+    begin
+      // the row: the same as the paragraph before's where the source's is, else another
+      if (k > R.FirstPara) and (PastedCell(A, R, k - 1) <> nil) and (B.CellAt(bk - 1) <> nil) and
+        ((PastedCell(A, R, k - 1).Row = ca.Row) <> (B.CellAt(bk - 1).Row = cb.Row)) then
+        Exit(Format('paragraph %d: its row', [k]));
+      if ca.Row.BoundaryCount <> cb.Row.BoundaryCount then
+        Exit(Format('paragraph %d: its row''s boundaries', [k]));
+      for i := 0 to ca.Row.BoundaryCount - 1 do
+        if ca.Row.Boundaries[i] <> cb.Row.Boundaries[i] then
+          Exit(Format('paragraph %d: its row''s boundary %d', [k, i]));
+      if not ASaved and not SameRaw(ca.Row.RawFormat, cb.Row.RawFormat) then
+        Exit(Format('paragraph %d: its row''s format', [k]));
+    end;
   end;
   Result := '';
 end;
@@ -1676,16 +1697,7 @@ begin
   FRich.PasteFromClipboard;
   for i := 1 to 3 do AssertTrue(Format('a selection in a cell: paragraph %d in it', [i]), d.CellAt(i) = c);
   AssertEquals('one table, one row', 1, c.Table.RowCount);
-  // the whole row selected and replaced: it lay in a table - the rows come as text
-  LoadRtf(Target);
-  d := FRich.Document;
-  FRich.SelStart := d.Text.ParaStart(1);
-  FRich.SelLength := d.Text.ParaStart(2) - d.Text.ParaStart(1);
-  FRich.PasteFromClipboard;
-  AssertEquals('whole row: no refusal', 0, FRich.Refused);
-  for i := 0 to d.Text.ParaCount - 1 do
-    AssertTrue(Format('whole row replaced: paragraph %d in no table', [i]), d.CellAt(i) = nil);
-  AssertEquals('whole row replaced: the text', 'r1', Para(1));
+  // the whole row selected: rows over it are refused (W14 V-M7: TestRowsOverWholeRowsAreRefused)
 end;
 
 { No document-level thing comes along (page, defaults); a run with no font of its own is
@@ -1716,6 +1728,12 @@ end;
 { Every sample's ranges - all of it, a third, paragraphs with and without their separator,
   across two - copied by the range writer and pasted into an empty document and into the
   middle of a paragraph of another, read back as the range. }
+const
+  // what TestEveryFixturesRangesPasteBackAsTheRange makes with the samples of the tree: 520
+  // ranges, each pasted into an empty document and into a paragraph (W14; a sample added
+  // only raises it)
+  PasteFloor = 1040;
+
 procedure TTyRichEditPasteTest.TestEveryFixturesRangesPasteBackAsTheRange;
 var
   sr: TSearchRec;
@@ -1729,23 +1747,28 @@ var
     rtf: TBytes;
     b: TTyRichDocument;
     dd: string;
+    R: TTyRichCopyRange;
+    parts: Integer;
   begin
-    try
-      rtf := RangeOut(a, AFrom, ALen);
-    except
-      // a range the writer refuses: a changed row that holds a nested table (9b's rule)
-      on ETyRichRtfWrite do Exit;
-    end;
+    R := TyRichCopyRange(a, AFrom, ALen);
+    // (an unchanged sample: the writer refuses nothing - a range that raises fails)
+    rtf := RangeOut(a, AFrom, ALen);
+    { The parts the paste makes: the range's paragraphs, an empty one after a last paragraph
+      taken whole (the copy ends it with its mark), one before rows pasted after text. }
+    parts := R.LastPara - R.FirstPara + 1 + Ord(R.LastWhole);
     // into an empty document
     b := TTyRichDocument.Create;
     try
-      if not PasteInto(b, 0, rtf) then Exit;
+      if not PasteInto(b, 0, rtf) then Fail(Format('%s [%d +%d]: its RTF does not read back', [AWhat, AFrom, ALen]));
       dd := PasteDiff(a, AFrom, ALen, b, 0, 0);
       if dd <> '' then Fail(Format('%s [%d +%d] into an empty document: %s', [AWhat, AFrom, ALen, dd]));
+      AssertEquals(Format('%s [%d +%d] into an empty document: paragraphs', [AWhat, AFrom, ALen]),
+        parts, b.Text.ParaCount);
       Inc(pastes);
     finally
       b.Free;
     end;
+    if not R.InOneCell and (PastedCell(a, R, R.FirstPara) <> nil) then Inc(parts);
     // into the middle of a paragraph
     b := LoadDoc(RawBytes('{' + BS + 'rtf1' + BS + 'ansi before' + BS + 'par 0123456789' + BS +
       'par after' + BS + 'par}'), True);
@@ -1754,6 +1777,11 @@ var
       dd := PasteDiff(a, AFrom, ALen, b, 1, 5);
       if dd <> '' then Fail(Format('%s [%d +%d] into a paragraph: %s', [AWhat, AFrom, ALen, dd]));
       AssertEquals(AWhat + ': the paragraph before stays', 'before', ParaText(b, 0));
+      AssertEquals(AWhat + ': paragraphs', 3 + parts - 1, b.Text.ParaCount);
+      AssertTrue(AWhat + ': the text after the place last', SameRaw(Copy(ParaText(b, parts),
+        Length(ParaText(b, parts)) - 4, 5), '56789'));
+      AssertEquals(AWhat + ': then the paragraph after', 'after', ParaText(b, parts + 1));
+      Inc(pastes);
       // a file with a paste in it saves (R63: never a row it cannot write)
       SaveOut(b);
     finally
@@ -1796,7 +1824,8 @@ begin
     FindClose(sr);
   end;
   AssertTrue('the samples', files >= 20);
-  AssertTrue(Format('pastes checked (%d)', [pastes]), pastes > 100);
+  // every range of the run pasted twice, none skipped (the run makes PasteFloor)
+  AssertTrue(Format('pastes checked (%d)', [pastes]), pastes >= PasteFloor);
 end;
 
 { A whole sample pasted into an empty new document and saved reads back as the sample's
@@ -2037,28 +2066,35 @@ end;
   refused half way; in a cell the lines are paragraphs of that cell. }
 procedure TTyRichEditPasteTest.TestPlainTextThatIsNotUtf8AndInACell;
 var
-  d, ref: TTyRichDocument;
+  d: TTyRichDocument;
   raw: RawByteString;
-  st: TBytesStream;
   c: TTyRichCell;
   i: Integer;
 begin
-  raw := 'abc'#$C4#$E3'd'#$E9;
-  ref := TTyRichDocument.Create;
-  st := TBytesStream.Create(RawBytes(raw));
-  try
-    TyRichLoadText(ref, st);
-    SetText('[]');
-    FRich.SelStart := 1;
-    ResetEvents;
-    Clip('', raw);
-    FRich.PasteFromClipboard;
-    AssertEquals('nothing refused', 0, FRich.Refused);
-    AssertEquals('as the text reader reads it', Shown('[' + ParaText(ref, 0) + ']'), Shown(Para(0)));
-  finally
-    st.Free;
-    ref.Free;
-  end;
+  { Read as a text file of the control's code page is read (TextCodePage): pinned for two
+    code pages, whatever this machine's is. }
+  raw := 'abc'#$C4#$E3'd';
+  FRich.TextCodePage := 936;
+  SetText('[]');
+  FRich.SelStart := 1;
+  ResetEvents;
+  Clip('', raw);
+  FRich.PasteFromClipboard;
+  AssertEquals('nothing refused', 0, FRich.Refused);
+  AssertEquals('GBK', Shown('[abc' + U($4F60) + 'd]'), Shown(Para(0)));
+  FRich.TextCodePage := 1252;
+  SetText('[]');
+  FRich.SelStart := 1;
+  Clip('', raw);
+  FRich.PasteFromClipboard;
+  AssertEquals('Windows Western', Shown('[abc' + U($C4) + U($E3) + 'd]'), Shown(Para(0)));
+  FRich.TextCodePage := 0;
+  // a byte order mark at the start is no character (W14 V-M11)
+  SetText('[]');
+  FRich.SelStart := 1;
+  Clip('', #$EF#$BB#$BF'bom');
+  FRich.PasteFromClipboard;
+  AssertEquals('no BOM', '[bom]', Para(0));
   LoadRtf('{' + BS + 'rtf1 ' + BS + 'trowd' + BS + 'cellx1000' + BS + 'pard' + BS + 'intbl xy' +
     BS + 'cell' + BS + 'row' + BS + 'pard z' + BS + 'par}');
   d := FRich.Document;
@@ -2128,7 +2164,6 @@ begin
   AssertTrue(Format('RTF: %d tree nodes', [t.NodeVisits - visits]), t.NodeVisits - visits <= 400);
   PaintAll;
   AssertTrue(Format('RTF: %d blocks painted', [FRich.BlockPaints]), FRich.BlockPaints <= 3);
-  WriteLn(Format('TTyRichEditPasteTest: a one-line paste in %d lines: %d tree nodes', [BigLines, n]));
 end;
 
 { Over CopyWaitChars bytes pasted: the wait cursor meanwhile, put back also when the paste
@@ -2233,6 +2268,243 @@ begin
   Clip(ClipBold, 'text', pic);
   FRich.PasteFromClipboard;
   AssertEquals('a rich document: the RTF', 'aRTb', Para(0));
+end;
+
+type
+  // A loader that raises (a class the test names) for any paragraph past the first.
+  TFailingLoader = class(TTyRichParaLoader)
+  public
+    OutOfMemory: Boolean;
+    procedure LoadParagraph(ADoc: TTyRichDocument; AIndex: Integer); override;
+  end;
+
+procedure TFailingLoader.LoadParagraph(ADoc: TTyRichDocument; AIndex: Integer);
+begin
+  if AIndex < 1 then Exit;
+  if OutOfMemory then raise EOutOfMemory.Create('the test''s lack of memory');
+  raise Exception.Create('the test''s reader failing');
+end;
+
+function FailingSource(AOutOfMemory: Boolean): TTyRichDocument;
+var
+  ld: TFailingLoader;
+begin
+  Result := TTyRichDocument.CreateFromUtf8(RawBytes('one' + #10 + 'two' + #10 + 'three'));
+  ld := TFailingLoader.Create;
+  ld.OutOfMemory := AOutOfMemory;
+  Result.InstallLoader(ld, True);
+end;
+
+function Bytes16LE(V: Integer): RawByteString;
+begin
+  Result := AnsiChar(V and $FF) + AnsiChar((V shr 8) and $FF);
+end;
+
+{ W14 V-M2, V-M11 (c): an uncompressed DIB whose header promises more pixel bytes than there
+  are is no image (the review's: a 40-byte header alone of 100 x 100; 5792 x 5792 with 16 bytes
+  of pixels); a JPEG's and a TIFF's size are read from their headers before anything is
+  decoded (65,535 x 65,535 in a few bytes: too large at once); a PNG is kept to its IEND. }
+procedure TTyRichEditPasteTest.TestAPictureHeaderMustBeBackedAndItsSizeIsAskedFirst;
+var
+  b, png: TBytes;
+  pic: TTyRichPicture;
+  s: RawByteString;
+begin
+  b := MakeDib(100, 100, 1, 2, 3, 255);
+  SetLength(b, 40);
+  AssertTrue('a header alone', TyRichMakePicture(b, rikDib, 0, pic) = rpmNoImage);
+  b := MakeDib(4, 4, 1, 2, 3, 255);
+  b[4] := 5792 and $FF; b[5] := 5792 shr 8; b[8] := 5792 and $FF; b[9] := 5792 shr 8;
+  AssertTrue('5792 x 5792 with 64 bytes', TyRichMakePicture(b, rikDib, 0, pic) = rpmNoImage);
+  b := MakeDib(4, 4, 1, 2, 3, 255);
+  AssertTrue('a whole one', TyRichMakePicture(b, rikDib, 0, pic) = rpmMade);
+  pic.Free;
+  SetLength(b, Length(b) - 1);
+  AssertTrue('one byte short', TyRichMakePicture(b, rikDib, 0, pic) = rpmNoImage);
+  // a JPEG frame of 65535 x 65535 in 23 bytes
+  s := #$FF#$D8#$FF#$C0#0#17#8#$FF#$FF#$FF#$FF#3#1#$22#0#2#$11#1#3#$11#1#$FF#$D9;
+  AssertTrue('a JPEG too large, from its header', TyRichMakePicture(RawBytes(s), rikJpeg, 0, pic) = rpmTooLarge);
+  AssertTrue('no JPEG', TyRichMakePicture(RawBytes(#$FF#$D8#$FF#$D9), rikJpeg, 0, pic) = rpmNoImage);
+  // a TIFF directory of 65535 x 65535
+  s := 'II'#42#0#8#0#0#0#2#0 + Bytes16LE(256) + Bytes16LE(3) + #1#0#0#0 + Bytes16LE(65535) + #0#0 +
+    Bytes16LE(257) + Bytes16LE(3) + #1#0#0#0 + Bytes16LE(65535) + #0#0 + #0#0#0#0;
+  AssertTrue('a TIFF too large, from its header', TyRichMakePicture(RawBytes(s), rikTiff, 0, pic) = rpmTooLarge);
+  // a PNG with what a clipboard block rounds it up with after IEND
+  png := MakePng(3, 2, BGRA(1, 2, 3, 255));
+  b := Copy(png, 0, Length(png));
+  SetLength(b, Length(png) + 13);
+  FillChar(b[Length(png)], 13, 0);
+  AssertTrue('made', TyRichMakePicture(b, rikPng, 0, pic) = rpmMade);
+  try
+    AssertEquals('kept to its IEND', Length(png), Length(pic.Data));
+  finally
+    pic.Free;
+  end;
+end;
+
+{ W14 V-M3, V-M4: a "PNG" that does not decode is followed by the next picture format (the
+  DIB); a picture in a cell is made as wide as the cell's text area - its width less the row's
+  half gaps on both sides - not the cell's whole width. }
+procedure TTyRichEditPasteTest.TestTheNextPictureFormatIsTriedAndACellsRoomIsItsTextArea;
+var
+  bad: TBytes;
+  o: TTyRichObject;
+begin
+  SetText('ab');
+  FRich.SelStart := 1;
+  bad := MakePng(4, 4, BGRA(1, 2, 3, 255));
+  SetLength(bad, 40);
+  Clip('', 'text', bad, rikPng);
+  FRich.ClipPicture2 := MakeDib(4, 3, 9, 9, 9, 255);
+  FRich.ClipPictureKind2 := rikDib;
+  try
+    FRich.PasteFromClipboard;
+  finally
+    FRich.ClipPicture2 := nil;
+  end;
+  AssertTrue('the DIB', ObjectAt(1) is TTyRichPicture);
+  AssertEquals('both read', 2, FRich.PictureReads);
+  // a cell 1000 twips wide, its half gap 108: 784 of text area
+  LoadRtf('{' + BS + 'rtf1' + BS + 'ansi' + BS + 'trowd' + BS + 'trgaph108' + BS + 'cellx1000' + BS +
+    'pard' + BS + 'intbl c' + BS + 'cell' + BS + 'row' + BS + 'pard after' + BS + 'par}');
+  FRich.SelStart := 1;
+  Clip('', '', MakePng(300, 100, BGRA(1, 2, 3, 255)));
+  FRich.PasteFromClipboard;
+  o := ObjectAt(1);
+  AssertTrue('a picture', o is TTyRichPicture);
+  AssertEquals('the cell''s text area wide', 784, TTyRichPicture(o).WidthTwips);
+end;
+
+{ W14 V-M5, V-M6: CanPaste asks the clipboard for its formats once (one enumeration answers RTF,
+  picture and text); LCL's own picture format (what this application copied through LCL) is a
+  picture flavour. }
+procedure TTyRichEditPasteTest.TestCanPasteEnumeratesTheClipboardOnce;
+begin
+  SetText('ab');
+  FRich.FromFormats := True;
+  try
+    FRich.ClipFormats := nil;
+    SetLength(FRich.ClipFormats, 2);
+    FRich.ClipFormats[0] := RegisterClipboardFormat(TyRichClipboardRtfName);
+    FRich.ClipFormats[1] := PredefinedClipboardFormat(pcfText);
+    FRich.ClipReset;
+    AssertTrue('RTF and text', FRich.CanPaste);
+    AssertEquals('one enumeration', 1, FRich.FormatAsks);
+    FRich.ClipFormats[0] := PredefinedClipboardFormat(pcfBitmap);
+    SetLength(FRich.ClipFormats, 1);
+    FRich.ClipReset;
+    AssertTrue('LCL''s bitmap: a picture', FRich.CanPaste);
+    AssertEquals('one enumeration', 1, FRich.FormatAsks);
+    FRich.ClipFormats := nil;
+    AssertFalse('nothing', FRich.CanPaste);
+  finally
+    FRich.FromFormats := False;
+    FRich.ClipFormats := nil;
+  end;
+end;
+
+{ W14 V-M7: until Task 12 pastes cells, a paste of rows over a selection of whole rows is
+  refused as a selection across cells is (the rows would go into the next row's first cell);
+  plain content over whole rows goes in as typing over them does. }
+procedure TTyRichEditPasteTest.TestRowsOverWholeRowsAreRefused;
+const
+  Rows = '{' + BS + 'rtf1' + BS + 'ansi' + BS + 'trowd' + BS + 'cellx1000' + BS + 'cellx2000' +
+    BS + 'pard' + BS + 'intbl r1' + BS + 'cell r2' + BS + 'cell' + BS + 'row}';
+  Target = '{' + BS + 'rtf1' + BS + 'ansi plain' + BS + 'par' + BS + 'trowd' + BS + 'cellx1000' +
+    BS + 'pard' + BS + 'intbl c1' + BS + 'cell' + BS + 'row' + BS + 'trowd' + BS + 'cellx1000' +
+    BS + 'pard' + BS + 'intbl c2' + BS + 'cell' + BS + 'row' + BS + 'pard after' + BS + 'par}';
+var
+  d: TTyRichDocument;
+  before: RawByteString;
+begin
+  LoadRtf(Target);
+  d := FRich.Document;
+  before := d.Text.GetText(0, d.Text.Length);
+  FRich.SelStart := d.Text.ParaStart(1);
+  FRich.SelLength := d.Text.ParaStart(2) - d.Text.ParaStart(1);
+  Clip(Rows, '');
+  FRich.PasteFromClipboard;
+  AssertEquals('refused', 1, FRich.Refused);
+  AssertEquals('as a selection across cells', rsRichEditRefusedCells, FRich.LastReason);
+  AssertTrue('nothing changed', SameRaw(before, d.Text.GetText(0, d.Text.Length)));
+  // RTF without rows over the same selection: as typing over it
+  ResetEvents;
+  FRich.SelStart := d.Text.ParaStart(1);
+  FRich.SelLength := d.Text.ParaStart(2) - d.Text.ParaStart(1);
+  Clip('{' + BS + 'rtf1 xy}', '');
+  FRich.PasteFromClipboard;
+  AssertEquals('text: not refused', 0, FRich.Refused);
+  AssertTrue('pasted', Pos('xy', d.Text.GetText(0, d.Text.Length)) > 0);
+end;
+
+{ W14 V-M8: what is pasted is read before the document changes. A source the reader cannot
+  read to its end is that flavour's failure - the text goes in instead; one that runs out of
+  memory is refused with the control's own reason, the document untouched, the wait cursor
+  put back. }
+procedure TTyRichEditPasteTest.TestAReaderThatFailsOrRunsOutOfMemory;
+begin
+  SetText('ab');
+  FRich.SetCopyWait(1);
+  FRich.SelStart := 1;
+  Clip('{' + BS + 'rtf1 x}', 'T');
+  FRich.RtfSource := FailingSource(False);
+  FRich.RtfSourceEnds := False;
+  FRich.PasteFromClipboard;
+  AssertEquals('the next flavour', 'aTb', Para(0));
+  AssertEquals('nothing refused', 0, FRich.Refused);
+  SetText('ab');
+  FRich.SelStart := 1;
+  Clip('{' + BS + 'rtf1 x}', 'T');
+  FRich.RtfSource := FailingSource(True);
+  FRich.PasteFromClipboard;
+  AssertEquals('refused', 1, FRich.Refused);
+  AssertEquals('for memory', rsRichEditRefusedMemory, FRich.LastReason);
+  AssertEquals('nothing pasted', 'ab', Para(0));
+  AssertEquals('no step', 0, FRich.Document.UndoDepth);
+  AssertTrue('a wait', FRich.Waits > 0);
+  AssertEquals('put back', FRich.Waits, FRich.WaitEnds);
+  FRich.SetCopyWait(High(Int64) div 2);
+end;
+
+{ W14 V-M9: pasted into a file, saved: the header gains exactly the font and the colour the
+  pasted text needs, at the ends of its tables; the paragraphs the paste did not touch go out
+  as their bytes. }
+procedure TTyRichEditPasteTest.TestAPasteIntoAFileAddsToItsHeaderWhatItNeeds;
+const
+  Clipped = '{' + BS + 'rtf1' + BS + 'ansi{' + BS + 'fonttbl{' + BS + 'f0 Courier New;}}{' + BS +
+    'colortbl;' + BS + 'red255' + BS + 'green0' + BS + 'blue0;}' + BS + 'f0' + BS + 'cf1 red}';
+var
+  d: TTyRichDocument;
+  filtered: Boolean;
+  st: TBytesStream;
+  info: TTyRtfWriteInfo;
+  s, head: RawByteString;
+begin
+  d := LoadDoc(RawBytes(TgtIdx), False);
+  try
+    AssertTrue(PasteAcross(d, d.Text.ParaStart(1), RawBytes(Clipped), filtered));
+    AssertEquals('inline', 3, d.Text.ParaCount);
+    st := TBytesStream.Create;
+    try
+      TyRichSaveRtf(d, st, info);
+      s := StrOfBytes(Copy(st.Bytes, 0, st.Size));
+    finally
+      st.Free;
+    end;
+    head := Copy(s, 1, info.HeaderStop);
+    AssertEquals('the table and one font more: ' + Shown(head), 4, CountRaw('{' + BS + 'f', head));
+    AssertEquals('Courier New, once', 1, CountRaw('Courier New;', head));
+    AssertTrue('the file''s fonts as they were', PosRaw('Times New Roman;}{' + BS + 'f1' + BS + 'fnil' +
+      BS + 'fcharset2 Wingdings;}', head) > 0);
+    AssertTrue('red after the file''s colours', PosRaw(BS + 'red255' + BS + 'green255' + BS + 'blue0;' +
+      BS + 'red255' + BS + 'green0' + BS + 'blue0;}', head) > 0);
+    AssertEquals('the colour table: three colours', 4, CountRaw(';', Copy(head, PosRaw('colortbl', head),
+      PosRaw('}', Copy(head, PosRaw('colortbl', head), MaxInt)))));
+    AssertEquals('the two other paragraphs as their bytes', 2, info.VerbatimParas);
+    AssertTrue('their bytes', PosRaw(BS + 'pard' + BS + 'f0 first' + BS + 'par', s) > 0);
+  finally
+    d.Free;
+  end;
 end;
 
 initialization

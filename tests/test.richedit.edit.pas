@@ -17,7 +17,7 @@ interface
 
 uses
   Classes, SysUtils, Types, Math, fpcunit, testregistry, Controls, Graphics, LCLType, Forms,
-  LMessages, BGRABitmap, BGRABitmapTypes,
+  LMessages, BGRABitmap, BGRABitmapTypes, BGRAWritePNG,
   tyControls.Controller, tyControls.Painter, tyControls.TextMenu, tyControls.StrConsts,
   tyControls.RichEdit.Text, tyControls.RichEdit.Model, tyControls.RichEdit.Commands,
   tyControls.RichEdit.TextIO, tyControls.RichEdit.RtfRead, tyControls.RichEdit.RtfWrite,
@@ -138,6 +138,8 @@ type
     procedure TestWholeRowsAtTheTextsEndAreRefused;
     procedure TestACutCopiesWhatItRemoves;
     procedure TestARefusedCommandIsToldItsOwnReason;
+    // fix wave W14 (V-M9)
+    procedure TestPastesAndTheirUndoKeepTheSurfaceRight;
   end;
 
 implementation
@@ -2700,6 +2702,72 @@ begin
   AssertEquals('told once', 1, FRich.Refused);
   AssertEquals('as a range that cannot be edited', rsRichEditRefusedRange, FRich.LastReason);
   AssertEquals('nothing changed', 'abc', FRich.Lines[0]);
+end;
+
+{ W14 V-M9: pastes that change the heights of the view's paragraphs - several paragraphs of
+  other sizes into the view's middle, lines of text, a picture -, their undo and redo: the kept
+  surface equals a full redraw after each, at device scale 1 and 2. }
+procedure TTyRichEditEditTest.TestPastesAndTheirUndoKeepTheSurfaceRight;
+const
+  Rtf = '{\rtf1\ansi{\fonttbl{\f0 Arial;}}\pard\qc\f0\fs48 Big one\par\pard\fs16 small\par' +
+    '\pard\li720\fs32 indented and somewhat longer so that it wraps in the view\par}';
+var
+  scale: Integer;
+  what: string;
+  t: TTyRichText;
+  pic: TBGRABitmap;
+  st: TBytesStream;
+  w: TBGRAWriterPNG;
+begin
+  for scale := 1 to 2 do
+  begin
+    what := Format('scale %d', [scale]);
+    FreeAndNil(FRich);
+    if scale > 1 then TyForceDeviceScaleForTest(scale, True, False)
+    else TyForceDeviceScaleForTest(0, False);
+    FPaintScale := scale;
+    FRich := NewProbe;
+    FRich.RichDocument := True;
+    SetLinesOf(60);
+    t := FRich.Document.Text;
+    PaintAll;
+    FRich.SelStart := t.ParaStart(4) + 2;
+    PaintAll;
+    FRich.ClipRtf := Rtf;
+    FRich.ClipText := '';
+    FRich.PasteFromClipboard;
+    CheckSurface(what + ': RTF pasted');
+    FRich.Undo;
+    CheckSurface(what + ': undone');
+    FRich.Redo;
+    CheckSurface(what + ': redone');
+    FRich.SelStart := t.ParaStart(10);
+    FRich.ClipRtf := '';
+    FRich.ClipText := 'one' + LineEnding + 'two' + LineEnding + 'three';
+    FRich.PasteFromClipboard;
+    CheckSurface(what + ': lines pasted');
+    FRich.Undo;
+    CheckSurface(what + ': undone');
+    pic := TBGRABitmap.Create(40, 90, BGRA(10, 120, 200, 255));
+    st := TBytesStream.Create;
+    w := TBGRAWriterPNG.Create;
+    try
+      pic.SaveToStream(st, w);
+      FRich.ClipText := '';
+      FRich.ClipPicture := Copy(st.Bytes, 0, st.Size);
+      FRich.ClipPictureKind := rikPng;
+    finally
+      w.Free;
+      st.Free;
+      pic.Free;
+    end;
+    FRich.SelStart := t.ParaStart(6);
+    FRich.PasteFromClipboard;
+    CheckSurface(what + ': a picture pasted');
+    FRich.Undo;
+    CheckSurface(what + ': undone');
+    FRich.ClipPicture := nil;
+  end;
 end;
 
 initialization

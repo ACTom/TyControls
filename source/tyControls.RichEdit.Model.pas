@@ -176,6 +176,9 @@ type
   public
     constructor Create;
     function Clone: TTyRichObject; virtual; abstract;
+    { The bytes its data takes (an image, kept RTF): what a history step that keeps it alive
+      counts toward the history's memory limit (TTyRichDocument.MaxUndoBytes). }
+    function DataBytes: Int64; virtual;
     { For an object that keeps RTF bytes as they were read (TTyRichOpaque.Bytes,
       TTyRichPicture.RawRtf): the \ucN in effect where they were read - how many fallback
       bytes follow each \uN in them, which the bytes themselves do not say. A writer puts
@@ -200,6 +203,7 @@ type
       AWidthTwips, AHeightTwips: Integer; const ARawRtf: RawByteString = '';
       ARawUc: Integer = 1);
     function Clone: TTyRichObject; override;
+    function DataBytes: Int64; override;
     { What an image decoder can show of this picture: the format to decode as and the part of
       Data to hand it, [AStart, AStart + ACount). PNG, JPEG, BMP and DIB pictures are their
       data; a metafile whose whole drawing is one bitmap is that bitmap (rpfDib, the
@@ -224,6 +228,7 @@ type
     constructor Create(const ABytes: RawByteString; const ADisplayText: UTF8String = '';
       ARawUc: Integer = 1);
     function Clone: TTyRichObject; override;
+    function DataBytes: Int64; override;
     property Bytes: RawByteString read FBytes;
     // what stands for it on screen, as plain text: a field's result ('' for most blocks)
     property DisplayText: UTF8String read FDisplayText;
@@ -559,6 +564,11 @@ type
     FCharMap, FParaMap: array of Integer;
     FSrcDefault: TTyCharFormat;
     FFilter: TTyRichFragmentFilter;
+    // what the first insert put in the text, as its pieces: a redo puts these back instead of
+    // copying the text into the add buffer once more (it only grows)
+    FPieces: TTyRichPieces;
+    FHavePieces: Boolean;
+    FTextBytes: Int64;
     // the source's tables met, and what goes in for each (made again, or the very one)
     FTabSrc, FTabNew: array of TTyRichTable;
     FTabCount: Integer;
@@ -1505,6 +1515,21 @@ begin
   if ARawUc >= 0 then FRawUc := ARawUc;
 end;
 
+function TTyRichObject.DataBytes: Int64;
+begin
+  Result := InstanceSize;
+end;
+
+function TTyRichPicture.DataBytes: Int64;
+begin
+  Result := InstanceSize + Length(FData) + Length(FRawRtf);
+end;
+
+function TTyRichOpaque.DataBytes: Int64;
+begin
+  Result := InstanceSize + Length(FBytes) + Length(FDisplayText);
+end;
+
 function TTyRichPicture.Clone: TTyRichObject;
 begin
   Result := TTyRichPicture.Create(FFormat, FData, FWidthTwips, FHeightTwips, FRawRtf, FRawUc);
@@ -1700,9 +1725,48 @@ begin
 end;
 
 function TTyRichUndoData.MemSize: Int64;
+var
+  objs: TFPList;
+  counts: array of Integer;
+  i: Integer;
+
+  // the objects of a value only this record holds, each counted per reference
+  procedure Take(D: TTyRichParaData);
+  var
+    j, k: Integer;
+  begin
+    if (D = nil) or (D.FRefCount <> 1) then Exit;
+    for j := 0 to High(D.FRuns) do
+      if D.FRuns[j].Obj <> nil then
+      begin
+        k := objs.IndexOf(D.FRuns[j].Obj);
+        if k < 0 then
+        begin
+          k := objs.Add(D.FRuns[j].Obj);
+          if k >= Length(counts) then SetLength(counts, k * 2 + 4);
+          counts[k] := 0;
+        end;
+        Inc(counts[k]);
+      end;
+  end;
+
 begin
   Result := InstanceSize + (Length(FRemoved.Pieces) + Length(FSpan.Pieces.Pieces) +
     Length(FSpan2.Pieces.Pieces)) * SizeOf(TTyRichPiece) + Length(FOldData) * SizeOf(TTyRichOldData);
+  { An object that only the values this record keeps hold (a deleted picture of the file, or
+    one whose step went from the history): this record keeps it alive, and its data counts. }
+  objs := TFPList.Create;
+  try
+    counts := nil;
+    for i := 0 to FOldCount - 1 do Take(FOldData[i].Data);
+    for i := 0 to High(FRemoved.Pieces) do
+      if FRemoved.Pieces[i].Separator <> rsNone then Take(TTyRichParaData(FRemoved.Pieces[i].Data));
+    for i := 0 to objs.Count - 1 do
+      if counts[i] >= TTyRichObject(objs[i]).RefCount then
+        Inc(Result, TTyRichObject(objs[i]).DataBytes);
+  finally
+    objs.Free;
+  end;
 end;
 
 procedure TTyRichUndoData.AddOld(D: TTyRichParaData);
@@ -3302,12 +3366,11 @@ begin
   t := ATarget.FText;
   k := t.ParaOfPos(APos);   // range check
   o := APos - t.ParaStart(k);
+  { The target's cell at APos is used to the end (the values made here hold it): in a document
+    that parses on demand it stays as read only inside a read scope - one for all of this. }
   ATarget.BeginRead;
   try
-    cell := ATarget.CellOfData(ATarget.DataOf(k));
-  finally
-    ATarget.EndRead;
-  end;
+  cell := ATarget.CellOfData(ATarget.DataOf(k));
   // a table goes into a table only as its text: there are no nested tables
   FFlat := AFlatten or (cell <> nil);
   FFlatCell := cell;
@@ -3358,6 +3421,9 @@ begin
     FTabNew := nil;
     FTabCount := 0;
   end;
+  finally
+    ATarget.EndRead;
+  end;
 end;
 
 destructor TTyRichFragment.Destroy;
@@ -3381,13 +3447,21 @@ end;
 
 function TTyRichFragment.MemSize: Int64;
 var
-  i: Integer;
+  i, j: Integer;
 begin
-  Result := InstanceSize + Length(FText) + Length(FParts) * (SizeOf(Pointer) + SizeOf(Int64) + 1);
-  // the values are this fragment's own (made for it), with their runs
+  // the text: as it is, or what its first insert keeps alive in the add buffer
+  Result := InstanceSize + Length(FText) + FTextBytes +
+    Length(FPieces.Pieces) * SizeOf(TTyRichPiece) +
+    Length(FParts) * (SizeOf(Pointer) + SizeOf(Int64) + 1);
+  // the values are this fragment's own (made for it), with their runs and the objects they
+  // bring (each is in one run of one part)
   for i := 0 to FCount - 1 do
     if FParts[i] <> nil then
+    begin
       Inc(Result, FParts[i].InstanceSize + Length(FParts[i].FRuns) * SizeOf(TTyRichRun));
+      for j := 0 to High(FParts[i].FRuns) do
+        if FParts[i].FRuns[j].Obj <> nil then Inc(Result, FParts[i].FRuns[j].Obj.DataBytes);
+    end;
 end;
 
 function TTyRichFragment.PartCell(AIndex: Integer): TTyRichCell;
@@ -3745,7 +3819,7 @@ begin
   FText.ParaOfPos(APos);   // range check before anything changes
   if AFragment.FCount = 0 then Exit(NewUndo(c));
   if ChangeRefused(APos, 0) then raise NestedRowRefused;
-  txt := WithBreaks(AFragment.FText, FDominantLineBreak);
+  if AFragment.FHavePieces then txt := '' else txt := WithBreaks(AFragment.FText, FDominantLineBreak);
   k := FText.ParaOfPos(APos);
   d := DataOf(k);
   r := RunsOfData(d);
@@ -3764,11 +3838,27 @@ begin
     Result.AddOld(d);
     Result.SealOld;
     Result.FSpan := FText.PieceSpan(APos, APos);
-    if txt <> '' then
+    if AFragment.FHavePieces then
+    begin
+      // again (a redo): the very bytes of the first insert, still in the add buffer
+      Inc(FEditing);
+      try
+        FText.RestorePieces(APos, AFragment.FPieces);
+      finally
+        Dec(FEditing);
+      end;
+    end
+    else if txt <> '' then
     begin
       Inc(FEditing);
       try
         FText.Insert(APos, txt);
+        // (taken before any paragraph value is put: the separators hand out no data)
+        AFragment.FPieces := FText.PieceSnapshot(APos, FText.Length - oldChars);
+        AFragment.FHavePieces := True;
+        // the text itself is no longer needed (its bytes are counted still: MemSize)
+        AFragment.FTextBytes := Length(AFragment.FText);
+        AFragment.FText := '';
       finally
         Dec(FEditing);
       end;
@@ -3803,7 +3893,8 @@ begin
       SetLength(runs1, n1);
       // the paragraph that ends with the fragment's first mark has that paragraph's format
       if AFragment.FOwn[0] then PutData(k, d, MakeDataLike(fmt, runs1, cell, d))
-      else PutData(k, d, MakeDataLike(FormatOfData(part), runs1, CellOfData(part), d));
+      // (a format of the fragment: not the file's list marker of the paragraph it was)
+      else PutData(k, d, MakeData(FormatOfData(part), runs1, CellOfData(part)));
       if last > 1 then
       begin
         w := TTyRichFragmentWalk.Create;

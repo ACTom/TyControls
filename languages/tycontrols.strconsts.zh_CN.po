@@ -902,6 +902,10 @@ msgstr "剪贴板上的图片太大，不能粘贴。"
 msgid "A plain text document takes only text: a picture or formatted text cannot be pasted into it."
 msgstr "纯文本文档只能粘贴文字，不能粘贴图片或带格式的文字。"
 
+#: tycontrols.strconsts.rsricheditrefusedmemory
+msgid "There is not enough memory to paste this."
+msgstr "内存不足，无法粘贴。"
+
 #: tycontrols.strconsts.rsricheditrefusedlongpara
 msgid "This paragraph is too long to edit here: what is typed past the part shown would not be seen."
 msgstr "这个段落太长，不能在这里编辑：在显示部分之外输入的文字会看不到。"

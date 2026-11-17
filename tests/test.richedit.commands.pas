@@ -97,6 +97,10 @@ type
     procedure TestAFragmentSharesItsObjectsAndKeepsOneStep;
     procedure TestAFragmentIsRefusedInARowWithANestedTable;
     procedure TestATableWithANestedRowGoesInAsParagraphs;
+    procedure TestTheHistoryCountsTheObjectsItKeeps;
+    procedure TestARedoOfAPasteCopiesNoText;
+    procedure TestAFragmentReadsTheTargetInOneScope;
+    procedure TestAPastedFirstParagraphTakesNoMarker;
     procedure TestReadingAFragmentOfUntrustedBytes;
   end;
 
@@ -1487,6 +1491,155 @@ begin
     AssertTrue(PasteRtf(d, 0, Nested));
     Check('a new document', 0);
     for k := 0 to d.Text.ParaCount - 1 do AssertTrue('no table at all', d.CellAt(k) = nil);
+  finally
+    d.Free;
+  end;
+end;
+
+function BigPicture(ABytes: Integer): TTyRichPicture;
+var
+  b: TBytes;
+begin
+  b := nil;
+  SetLength(b, ABytes);
+  FillChar(b[0], ABytes, 7);
+  Result := TTyRichPicture.Create(rpfPng, b, 1440, 1440);
+end;
+
+{ W14 V-M1: the history's memory bound sees the objects its steps keep alive - a picture
+  inserted, one a fragment brings, one a deletion's record holds the last reference of (a
+  picture of the file) - and drops old steps for them. }
+procedure TTyRichCommandsTest.TestTheHistoryCountsTheObjectsItKeeps;
+const
+  MB = 1024 * 1024;
+var
+  d, src: TTyRichDocument;
+  i: Integer;
+begin
+  d := NewDoc('ab');
+  try
+    AssertTrue(d.Execute(TTyRichInsertObject.Create(1, BigPicture(MB))));
+    AssertTrue(Format('an inserted picture counts (%d)', [d.HistoryBytes]), d.HistoryBytes >= MB);
+    // deleted: the insert's step keeps it, the deletion does not count it again
+    AssertTrue(d.Execute(TTyRichDelete.Create(1, 1)));
+    AssertTrue(Format('counted once (%d)', [d.HistoryBytes]), d.HistoryBytes < 2 * MB);
+    d.ClearUndo;
+    // a fragment's picture
+    src := TTyRichDocument.Create;
+    src.Execute(TTyRichInsertText.Create(0, 'p'));
+    src.Execute(TTyRichInsertObject.Create(1, BigPicture(MB)));
+    AssertTrue(d.Execute(TTyRichInsertFragment.Create(0, src, False)));
+    AssertTrue(Format('a pasted picture counts (%d)', [d.HistoryBytes]), d.HistoryBytes >= MB);
+    // its history gone, deleted: the deletion's record holds it last
+    d.ClearUndo;
+    AssertTrue(d.Execute(TTyRichDelete.Create(0, d.Text.Length)));
+    AssertTrue(Format('a deleted picture the step keeps counts (%d)', [d.HistoryBytes]),
+      d.HistoryBytes >= MB);
+    d.ClearUndo;
+    // the bound drops old steps for them
+    d.MaxUndoBytes := 3 * MB;
+    for i := 1 to 6 do AssertTrue(d.Execute(TTyRichInsertObject.Create(0, BigPicture(MB))));
+    AssertTrue(Format('old steps dropped (%d left)', [d.UndoDepth]), d.UndoDepth <= 3);
+  finally
+    d.Free;
+  end;
+end;
+
+{ W14 V-M11 (a): a redo of a paste puts back what the first run inserted - the add buffer
+  (it only grows) gets the fragment's text once, not once more per redo. }
+procedure TTyRichCommandsTest.TestARedoOfAPasteCopiesNoText;
+var
+  d: TTyRichDocument;
+  big: UTF8String;
+  i: Integer;
+  a0, a1: Int64;
+  text: UTF8String;
+begin
+  big := '{\rtf1\ansi ';
+  for i := 1 to 3000 do big := big + 'paragraph ' + IntToStr(i) + ' of a long paste\par ';
+  big := big + 'end}';
+  d := NewDoc('xy');
+  try
+    a0 := d.Text.AddedBytes;
+    PasteRtf(d, 1, big);
+    a1 := d.Text.AddedBytes;
+    AssertTrue('the first run copies the text', a1 - a0 > 50000);
+    text := AllText(d);
+    for i := 1 to 20 do
+    begin
+      d.Undo;
+      d.Redo;
+    end;
+    AssertEquals('redone: the same text', text, AllText(d));
+    AssertTrue(Format('20 redos added %d bytes', [d.Text.AddedBytes - a1]), d.Text.AddedBytes - a1 <= 20 * 16);
+    AssertEquals('integrity', '', d.Text.CheckIntegrity);
+  finally
+    d.Free;
+  end;
+end;
+
+type
+  // A source whose paragraphs, read by the fragment, record whether the target was inside a
+  // read scope then (and are plain).
+  TScopeLoader = class(TTyRichParaLoader)
+  public
+    Target: TTyRichDocument;
+    Reads, Busy: Integer;
+    procedure LoadParagraph(ADoc: TTyRichDocument; AIndex: Integer); override;
+  end;
+
+procedure TScopeLoader.LoadParagraph(ADoc: TTyRichDocument; AIndex: Integer);
+begin
+  Inc(Reads);
+  if DocumentBusy(Target) then Inc(Busy);
+end;
+
+{ W14 V-M10: the fragment reads the target's cell at the place and uses it to its end: one read
+  scope of the target over all of it (a caller that makes a fragment ahead of a command on a
+  document read on demand). }
+procedure TTyRichCommandsTest.TestAFragmentReadsTheTargetInOneScope;
+var
+  d, src: TTyRichDocument;
+  ld: TScopeLoader;
+  f: TTyRichFragment;
+begin
+  d := NewDoc('ab');
+  src := TTyRichDocument.CreateFromUtf8(Bytes('one' + #10 + 'two'));
+  ld := TScopeLoader.Create;
+  try
+    ld.Target := d;
+    src.InstallLoader(ld, False);
+    f := TTyRichFragment.Create(d, 1, src, False);
+    f.Free;
+    AssertTrue('the source read', ld.Reads > 0);
+    AssertEquals('the target in a read scope meanwhile', ld.Reads, ld.Busy);
+  finally
+    src.Free;
+    ld.Free;
+    d.Free;
+  end;
+end;
+
+{ W14 V-M11 (d): the paragraph that takes the pasted first paragraph's format takes none of
+  the file's list marker text it had. }
+procedure TTyRichCommandsTest.TestAPastedFirstParagraphTakesNoMarker;
+var
+  d: TTyRichDocument;
+  st: TFileStream;
+begin
+  st := TFileStream.Create(ExtractFilePath(ParamStr(0)) + '..' + PathDelim + 'tests' + PathDelim +
+    'fixtures' + PathDelim + 'rtf' + PathDelim + 'hand-word-list.rtf', fmOpenRead or fmShareDenyWrite);
+  d := TTyRichDocument.Create;
+  try
+    TyRichLoadRtfFull(d, st);
+  finally
+    st.Free;
+  end;
+  try
+    AssertEquals('(the file''s marker)', '1.', string(d.ListTextOf(1)));
+    AssertTrue(PasteRtf(d, d.Text.ParaStart(1) + d.Text.ParaLength(1), FragOpen));
+    AssertTrue('the first pasted paragraph''s format', AlignOf(d, 1) = paraCenter);
+    AssertEquals('no marker of the file', '', string(d.ListTextOf(1)));
   finally
     d.Free;
   end;

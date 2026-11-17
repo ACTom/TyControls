@@ -744,6 +744,10 @@ msgstr ""
 msgid "A plain text document takes only text: a picture or formatted text cannot be pasted into it."
 msgstr ""
 
+#: tycontrols.strconsts.rsricheditrefusedmemory
+msgid "There is not enough memory to paste this."
+msgstr ""
+
 #: tycontrols.strconsts.rsrichmodelnestedrow
 msgid "This row holds a nested table and is kept as the file has it: its text cannot be changed"
 msgstr ""

@@ -55,9 +55,12 @@ type
     function IdleTicks: QWord; override;
     function HasCaretFocus: Boolean; override;
     procedure WriteClipboard(const ARtf: RawByteString; const AText: string); override;
+    function ClipboardFormatList: TTyRichClipFormats; override;
     function ClipboardFlavours: TTyRichClipFlavours; override;
     function ReadClipboardRtf: RawByteString; override;
-    function ReadClipboardPicture(out AKind: TTyRichImageKind): TBytes; override;
+    function ReadClipboardPicture(AIndex: Integer; out AKind: TTyRichImageKind;
+      out ABytes: TBytes): Boolean; override;
+    function ReadRtfSource(const ABytes: TBytes; out AEndsWithParagraph: Boolean): TTyRichDocument; override;
     function ReadClipboardText: string; override;
     procedure BeginWait; override;
     procedure EndWait; override;
@@ -127,6 +130,18 @@ type
     ClipPictureKind: TTyRichImageKind;
     ClipHtml: string;
     FlavourAsks, RtfReads, PictureReads, TextReads, HtmlReads: Integer;
+    { W14: a second picture format, tried after the first (V-M3). }
+    ClipPicture2: TBytes;
+    ClipPictureKind2: TTyRichImageKind;
+    { W14 (V-M5): FromFormats - the flavours are the control's own answer from the format
+      list ClipFormats (one enumeration, FormatAsks counted) instead of the fields above. }
+    FromFormats: Boolean;
+    ClipFormats: TTyRichClipFormats;
+    FormatAsks: Integer;
+    { W14 (V-M8): the RTF read as this document instead of by the engine's reader (nil:
+      the reader's; the probe hands it over once). }
+    RtfSource: TTyRichDocument;
+    RtfSourceEnds: Boolean;
     procedure ClipReset;
     procedure SetCopyWait(AChars: Int64);
     { DoContextPopup's answer: Handled. }
@@ -885,13 +900,28 @@ begin
   ClipText := AText;
 end;
 
+function TRichProbe.ClipboardFormatList: TTyRichClipFormats;
+begin
+  Inc(FormatAsks);
+  Result := Copy(ClipFormats, 0, Length(ClipFormats));
+end;
+
 function TRichProbe.ClipboardFlavours: TTyRichClipFlavours;
 begin
   Inc(FlavourAsks);
+  if FromFormats then Exit(inherited ClipboardFlavours);
   Result := [];
   if ClipRtf <> '' then Include(Result, rcfRtf);
-  if Length(ClipPicture) > 0 then Include(Result, rcfPicture);
+  if (Length(ClipPicture) > 0) or (Length(ClipPicture2) > 0) then Include(Result, rcfPicture);
   if ClipText <> '' then Include(Result, rcfText);
+end;
+
+function TRichProbe.ReadRtfSource(const ABytes: TBytes; out AEndsWithParagraph: Boolean): TTyRichDocument;
+begin
+  if RtfSource = nil then Exit(inherited ReadRtfSource(ABytes, AEndsWithParagraph));
+  Result := RtfSource;
+  AEndsWithParagraph := RtfSourceEnds;
+  RtfSource := nil;
 end;
 
 function TRichProbe.ReadClipboardRtf: RawByteString;
@@ -900,11 +930,20 @@ begin
   Result := ClipRtf;
 end;
 
-function TRichProbe.ReadClipboardPicture(out AKind: TTyRichImageKind): TBytes;
+function TRichProbe.ReadClipboardPicture(AIndex: Integer; out AKind: TTyRichImageKind;
+  out ABytes: TBytes): Boolean;
 begin
-  Inc(PictureReads);
+  Result := AIndex in [0, 1];
+  ABytes := nil;
   AKind := ClipPictureKind;
-  Result := ClipPicture;
+  if not Result then Exit;
+  Inc(PictureReads);
+  if AIndex = 0 then ABytes := ClipPicture
+  else
+  begin
+    AKind := ClipPictureKind2;
+    ABytes := ClipPicture2;
+  end;
 end;
 
 function TRichProbe.ReadClipboardText: string;
@@ -915,6 +954,7 @@ end;
 
 procedure TRichProbe.ClipReset;
 begin
+  FormatAsks := 0;
   FlavourAsks := 0;
   RtfReads := 0;
   PictureReads := 0;

@@ -98,6 +98,8 @@ type
     destructor Destroy; override;
     function CanExecute(ADoc: TTyRichDocument): Boolean; override;
     function Description: string; override;
+    { With the object's data: the step keeps the object alive. }
+    function MemSize: Int64; override;
     property RichObject: TTyRichObject read FObject;
   end;
 
@@ -354,6 +356,11 @@ end;
 function TTyRichInsertObject.Description: string;
 begin
   Result := rsRichUndoInsertObject;
+end;
+
+function TTyRichInsertObject.MemSize: Int64;
+begin
+  Result := inherited MemSize + FObject.DataBytes;
 end;
 
 { ---- TTyRichInsertFragment ---- }
