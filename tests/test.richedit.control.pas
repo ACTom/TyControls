@@ -1748,7 +1748,7 @@ begin
   AssertEquals('two lines', 2, FRich.Lines.Count);
   AssertEquals('two paragraphs', 2, FRich.Document.Text.ParaCount);
   AssertEquals('the second', 'second', FRich.Lines[1]);
-  AssertTrue('read-only to the user', FRich.ReadOnly);
+  AssertFalse('editable by the user (Task 10a)', FRich.ReadOnly);
   FRich.Lines.Add('third');
   AssertEquals('added', 3, FRich.Lines.Count);
   AssertEquals('at the end', 'third', FRich.Lines[2]);
@@ -2048,9 +2048,9 @@ end;
 procedure TTyRichEditControlTest.TestReadOnlyStaysOnAndCodeStillChanges;
 begin
   FRich.Lines.Text := 'text';
-  AssertTrue('read-only', FRich.ReadOnly);
-  FRich.ReadOnly := False;
-  AssertTrue('stays read-only in this version', FRich.ReadOnly);
+  AssertFalse('editable by default (Task 10a)', FRich.ReadOnly);
+  FRich.ReadOnly := True;
+  AssertTrue('read-only once set', FRich.ReadOnly);
   AssertTrue('code still changes the document',
     FRich.Document.Execute(TTyRichInsertText.Create(0, 'more ')));
   AssertEquals('changed', 'more text', FRich.Lines[0]);
@@ -4990,6 +4990,8 @@ end;
   parent's focus navigation); Tab, Enter, Esc go on to the form. }
 procedure TTyRichEditControlTest.TestTheViewerTakesItsKeysAndLeavesTheRest;
 begin
+  // the viewer's keys (Task 10a: an editor takes Enter)
+  FRich.ReadOnly := True;
   FRich.Lines.Text := 'abc';
   FRich.UpdateView;
   FRich.SelStart := 0;
@@ -5309,6 +5311,8 @@ var
   acts: ITyTextEditActions;
   pm: TPopupMenu;
 begin
+  // the viewer's menu (Task 10a: ReadOnly is False by default)
+  FRich.ReadOnly := True;
   FRich.Lines.Text := 'menu text';
   acts := FRich as ITyTextEditActions;
   AssertTrue('read-only', acts.TeIsReadOnly);

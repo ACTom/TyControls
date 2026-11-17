@@ -866,6 +866,22 @@ msgstr "无法写入文件 %s,原文件保持不变。"
 msgid "The document cannot be replaced now: it is being loaded or saved."
 msgstr "文档正在载入或保存，现在不能替换。"
 
+#: tycontrols.strconsts.rsricheditrefusedloading
+msgid "The document is still being loaded: it cannot be changed yet."
+msgstr "文档还在载入，现在还不能修改。"
+
+#: tycontrols.strconsts.rsricheditrefusedincomplete
+msgid "The document holds only a part of its file (the load was cancelled): it cannot be changed."
+msgstr "文档只有文件的一部分（载入被取消了），不能修改。"
+
+#: tycontrols.strconsts.rsricheditrefusedsaving
+msgid "The document is being saved: it cannot be changed meanwhile."
+msgstr "文档正在保存，保存完之前不能修改。"
+
+#: tycontrols.strconsts.rsricheditrefusedfixedrow
+msgid "This table row holds a nested table and is kept as the file has it: its text cannot be changed."
+msgstr "这一行表格里套着另一个表格，按文件原样保留，里面的文字不能修改。"
+
 #: tycontrols.strconsts.rsricheditparanotshown
 msgid "%s more characters of this paragraph are not shown."
 msgstr "本段还有 %s 个字符没有显示。"

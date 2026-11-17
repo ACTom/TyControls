@@ -40,6 +40,16 @@ const
 
 type
   ETyRichTextIO = class(Exception);
+  { A text save was cancelled by its progress callback. An EAbort: it shows no message when it
+    reaches the application's exception handler. }
+  ETyRichTextSaveCancelled = class(EAbort);
+  { A text save's progress: ADone of ATotal characters are in the output (inside a long
+    paragraph counted by its bytes, so a step may be off by the width of its characters).
+    Called about every 256 KB of text, before it is written, never once everything is: not at
+    all for a shorter text. False cancels the save: it raises ETyRichTextSaveCancelled and
+    leaves a part of the file in the stream. The document is Saving meanwhile (it refuses
+    every change). The shape of the RTF writer's TTyRtfSaveProgress. }
+  TTyTextSaveProgress = function(ADone, ATotal: Int64): Boolean of object;
 
 { Replaces ADoc's content with the text in AStream from its position to its end (the stream
   must be able to seek), as loading, not as a change: the history goes and Modified is False
@@ -59,8 +69,11 @@ procedure TyRichLoadText(ADoc: TTyRichDocument; AStream: TStream;
   it is (UTF-8), '?' (ANSI) or U+FFFD (UTF-16), unless it is an escape (see the unit
   comment). Raises ETyRichTextIO, and writes nothing, when ADoc is Incomplete (a cancelled
   load: the rest of the file is not in it) or still Loading. ADoc is Saving while the text
-  goes out (the stream's code cannot change it). }
-procedure TyRichSaveText(ADoc: TTyRichDocument; AStream: TStream);
+  goes out (the stream's code cannot change it). AOnProgress: see TTyTextSaveProgress; a
+  cancelled save leaves a part of the text in the stream - save to a temporary file and put
+  it in the real one's place when this has returned. }
+procedure TyRichSaveText(ADoc: TTyRichDocument; AStream: TStream;
+  AOnProgress: TTyTextSaveProgress = nil);
 
 { The code page teAnsi uses for ACodePage: ACodePage itself, or for 0 the system's ANSI code
   page (1252 where that is UTF-8 or not supported). }
@@ -112,6 +125,7 @@ uses
 const
   ChunkSize = TyRichTextChunkSize;
   SaveBufSize = 256 * 1024;   // the saver's working buffer
+  SaveProgressBytes = 256 * 1024;   // text between two progress calls
   // the most UTF-8 bytes one input byte turns into (a high single byte in a code page: 3;
   // an escaped byte: 2), plus room for the decoders' 3-byte stores
   MaxGrowth = 3;
@@ -171,6 +185,10 @@ type
     FLen: Integer;
     FPos: Int64;               // characters written
     FPrefix: Integer;          // an escape's first byte waiting for the next run, or -1
+    FOnProgress: TTyTextSaveProgress;
+    FTotal: Int64;             // characters to write
+    FSince: Int64;             // bytes of text since the last progress call
+    procedure Tick(ADone: Int64);
     procedure Flush;
     procedure Room(AMore: Integer); inline;
     procedure PutByte(B: Byte); inline;
@@ -1480,33 +1498,73 @@ begin
 end;
 {$POP}
 
+{ Every SaveProgressBytes of text the callback is asked, with what is written so far. }
+procedure TTextSaver.Tick(ADone: Int64);
+begin
+  if not Assigned(FOnProgress) or (FSince < SaveProgressBytes) then Exit;
+  FSince := 0;
+  if not FOnProgress(ADone, FTotal) then
+    raise ETyRichTextSaveCancelled.Create('The save was cancelled');
+end;
+
 procedure TTextSaver.Run(const ARun: TTyRichByteRun; var AContinue: Boolean);
 var
   s: UTF8String;
+  p: PByte;
+  left, n, done: Int64;
 begin
   if ARun.Bytes = nil then
   begin
+    Tick(FPos);
     // a lazy paragraph has no bytes in memory: its decoded text, read where the walk stands
     // (a walk lets its callback read; leaving it here and coming back would cost a second
     // descent for every such paragraph)
     s := FText.GetText(FPos, ARun.CharCount);
     Put(PByte(s), Length(s));
+    Inc(FSince, Length(s));
   end
+  else if not Assigned(FOnProgress) then
+    Put(ARun.Bytes, ARun.ByteCount)
   else
-    Put(ARun.Bytes, ARun.ByteCount);
+  begin
+    { In steps, so that a long paragraph (one piece can be a gigabyte) reports and can be
+      cancelled; a step ends where a character starts, so no sequence - and no escape's pair -
+      is cut between two Puts. }
+    p := ARun.Bytes;
+    left := ARun.ByteCount;
+    done := 0;
+    while left > 0 do
+    begin
+      Tick(FPos + done * ARun.CharCount div ARun.ByteCount);
+      n := left;
+      if n > SaveProgressBytes then
+      begin
+        n := SaveProgressBytes;
+        while (n < left) and (p[n] and $C0 = $80) do Inc(n);
+      end;
+      Put(p, n);
+      Inc(p, n);
+      Dec(left, n);
+      Inc(done, n);
+      Inc(FSince, n);
+    end;
+  end;
   Inc(FPos, ARun.CharCount);
 end;
 
 procedure TTextSaver.Save;
 begin
   FPos := 0;
+  FSince := 0;
+  FTotal := FText.Length;
   FText.ForEachRun(0, FText.Length, @Run);
   if FPrefix >= 0 then PutUnknown;
   FPrefix := -1;
   Flush;
 end;
 
-procedure TyRichSaveText(ADoc: TTyRichDocument; AStream: TStream);
+procedure TyRichSaveText(ADoc: TTyRichDocument; AStream: TStream;
+  AOnProgress: TTyTextSaveProgress);
 const
   Utf8Bom: array[0..2] of Byte = ($EF, $BB, $BF);
   Utf16LEBom: array[0..1] of Byte = ($FF, $FE);
@@ -1541,6 +1599,7 @@ begin
       end;
     saver := TTextSaver.Create(ADoc.Text, AStream, enc, table);
     try
+      saver.FOnProgress := AOnProgress;
       saver.Save;
     finally
       saver.Free;

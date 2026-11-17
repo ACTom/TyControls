@@ -89,6 +89,8 @@ type
     procedure TestAHugeLengthCopiesToTheEnd;
     procedure TestTheFilesOpenLastParagraphFollowedIsNotItsBytes;
     procedure TestARangeWhileLoadingAndAfterACancel;
+    // Task 10a
+    procedure TestADocumentOfOursNamesItsFontAndPage;
   end;
 
 implementation
@@ -4626,6 +4628,73 @@ begin
     load.Cancel;
     AssertTrue('incomplete', d.Incomplete);
     Check('cancelled');
+  finally
+    d.Free;
+  end;
+end;
+
+{ ---- Task 10a ---- }
+
+{ The Word check (wordcheck-report.md): a document that was not read from RTF - a new one, a
+  text file - was written with no font and no page, so Word showed it in Times New Roman on
+  its own paper. Now its header names the page (the model's: WordPad's Letter and margins, an
+  inch above and below), and the view's font (BaseFontName) as \f0 for the text that names
+  none - with the charset its name or its text calls for -, which that text reads back in.
+  Without a view's font it stays in no font. A document read from RTF is untouched by either
+  (byte fidelity). }
+procedure TTyRtfWriteTest.TestADocumentOfOursNamesItsFontAndPage;
+const
+  Page = BS + 'paperw12240' + BS + 'paperh15840' + BS + 'margl1800' + BS + 'margr1800' + BS +
+    'margt1440' + BS + 'margb1440';
+var
+  d, b: TTyRichDocument;
+  s: RawByteString;
+  orig, outb: TBytes;
+  runs: TTyRunArray;
+  f: TTyCharFormat;
+begin
+  d := TTyRichDocument.CreateFromUtf8(BytesOf(Raw('plain text ' + ZhZhong + ZhWen)));
+  try
+    d.BaseFontName := 'Microsoft YaHei';
+    outb := SaveBytes(d);
+    s := StrOf(outb, 0, Length(outb));
+    AssertTrue('the page: ' + Shown(s), PosRaw(Page, s) > 0);
+    AssertTrue('the default font', PosRaw(BS + 'deff0', s) > 0);
+    // a Latin name, but Chinese text in it: the text says the charset
+    AssertTrue('the font as f0, Chinese: ' + Shown(s),
+      PosRaw('{' + BS + 'f0' + BS + 'fnil' + BS + 'fcharset134 Microsoft YaHei;}', s) > 0);
+    b := LoadDoc(BytesOf(s), True);
+    try
+      runs := b.RunsOf(0);
+      f := b.Formats.CharFormat(runs[0].Format);
+      AssertEquals('read back in it', 'Microsoft YaHei', f.FontName);
+      AssertEquals('the text', 'plain text ' + ZhZhong + ZhWen, ParaText(b, 0));
+    finally
+      b.Free;
+    end;
+    // Latin text in a Latin name: ANSI
+    d.Execute(TTyRichDelete.Create(11, 2));
+    d.BaseFontName := 'Arial';
+    outb := SaveBytes(d);
+    s := StrOf(outb, 0, Length(outb));
+    AssertTrue('Latin: ' + Shown(s),
+      PosRaw('{' + BS + 'f0' + BS + 'fnil' + BS + 'fcharset0 Arial;}', s) > 0);
+    // no view's font: none named, the page all the same
+    d.BaseFontName := '';
+    outb := SaveBytes(d);
+    s := StrOf(outb, 0, Length(outb));
+    AssertEquals('no font table', 0, PosRaw(BS + 'fonttbl', s));
+    AssertTrue('the page without a font', PosRaw(Page, s) > 0);
+  finally
+    d.Free;
+  end;
+  // a file's own header is the file's
+  orig := ReadFileBytes(FixtureDir + 'wp-zh-plain.rtf');
+  d := LoadDoc(orig, False);
+  try
+    d.BaseFontName := 'Microsoft YaHei';
+    outb := SaveBytes(d);
+    AssertTrue('a file saved unchanged is the file', SameBytes(orig, outb));
   finally
     d.Free;
   end;

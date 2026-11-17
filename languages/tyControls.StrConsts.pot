@@ -704,6 +704,22 @@ msgstr ""
 msgid "The document cannot be replaced now: it is being loaded or saved."
 msgstr ""
 
+#: tycontrols.strconsts.rsricheditrefusedloading
+msgid "The document is still being loaded: it cannot be changed yet."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditrefusedincomplete
+msgid "The document holds only a part of its file (the load was cancelled): it cannot be changed."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditrefusedsaving
+msgid "The document is being saved: it cannot be changed meanwhile."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditrefusedfixedrow
+msgid "This table row holds a nested table and is kept as the file has it: its text cannot be changed."
+msgstr ""
+
 #: tycontrols.strconsts.rsricheditparanotshown
 msgid "%s more characters of this paragraph are not shown."
 msgstr ""

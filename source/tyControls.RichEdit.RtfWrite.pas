@@ -32,7 +32,9 @@ unit tyControls.RichEdit.RtfWrite;
 //
 // A document with no file behind it is one stretch with a header of its own, in WordPad's
 // writing: every character above 7F as \uN? under \uc1 (nothing written here is a byte
-// above 7F), fonts in a font table with their \fcharset, \par after every paragraph.
+// above 7F), fonts in a font table with their \fcharset, \par after every paragraph. Its
+// header names the page, and the view's font (TTyRichDocument.BaseFontName) as \f0 for the
+// text that names no font of its own.
 //
 // Saving reads the model; it changes nothing in the document (a paragraph it has to write
 // from the model is parsed if it was not).
@@ -352,6 +354,7 @@ type
     function FontOf(AId: Integer): Integer;
     function FontNumOf(AId: Integer): Integer;
     function Unsettled(ADefName: Integer): Boolean;
+    function PlainLook: Boolean;
     procedure ReadPara(AIndex: Integer; AData: Pointer; out AFormat: TTyParaFormatId;
       out ARuns: TTyRunArray; out ACell: TTyRichCell);
     procedure Note(AIndex: Integer; AFormat: TTyParaFormatId; const ARuns: TTyRunArray;
@@ -1045,7 +1048,14 @@ begin
     begin
       Result^.DefName := DefNameIndex(f.FontName);
       if Result^.DefName >= 0 then Result^.Font := -2;
-    end;
+    end
+  else if (FLoad = nil) and (FDoc.BaseFontName <> '') then
+  begin
+    // a document of ours: text in no font of its own is shown in the view's, which is named
+    // (the default font, \f0) - a reader would show it in a font of its own choosing
+    Result^.DefName := DefNameIndex(FDoc.BaseFontName);
+    if Result^.DefName >= 0 then Result^.Font := -2;
+  end;
   n := f.Extra.Count;
   Result^.OneShot := (n > 0) and SameBytes(f.Extra.Item(n - 1), '\-');
 end;
@@ -1140,6 +1150,18 @@ begin
   Result := not FDefNames[ADefName].Known and not FDefNames[ADefName].Kana;
 end;
 
+// A document of ours whose plain paragraphs (no value, the default formats) are in the view's
+// font, and that font's charset is not settled yet: their text is looked at too.
+function TRtfWriter.PlainLook: Boolean;
+var
+  d: Integer;
+begin
+  Result := False;
+  if FLoad <> nil then Exit;
+  d := CharInfo(FDoc.DefaultCharFormatId)^.DefName;
+  Result := (d >= 0) and Unsettled(d);
+end;
+
 // What paragraph AIndex holds. AData is its value as a walk of the text hands it out: read
 // without a lookup. A paragraph with no value in a document that parses on demand is one
 // of the file's that was never parsed (a stretch takes it along: its row, the way back to
@@ -1209,8 +1231,9 @@ var
   any: Boolean;
 begin
   PlanTick(AIndex);
-  // (in a document of our own a paragraph with no value is plain, and was not noted)
-  if (AData = nil) and (FLoad = nil) then Exit;
+  // (in a document of our own a paragraph with no value is plain, and was not noted: its
+  // text is looked at only for the view's font, which plain text is in - PlainLook)
+  if (AData = nil) and (FLoad = nil) and not PlainLook then Exit;
   ReadPara(AIndex, AData, pf, runs, cell);
   any := False;
   for r := 0 to High(runs) do
@@ -1484,7 +1507,8 @@ begin
   FRawOpen := False;
 end;
 
-// {\rtf1\ansi\ansicpgN\deff0\nouicompat{\fonttbl ...}{\colortbl ;...}\viewkind4\uc1
+// {\rtf1\ansi\ansicpgN\deff0\nouicompat{\fonttbl ...}{\colortbl ;...}
+// \paperwN\paperhN\marglN\margrN\margt1440\margb1440\viewkind4\uc1
 procedure TRtfWriter.WriteHeaderOfOurs;
 var
   i, ansi: Integer;
@@ -1517,10 +1541,15 @@ begin
     WriteColors(0, True);
     NewLine;
   end;
-  if FDoc.PaperWidth <> 12240 then WordN('paperw', FDoc.PaperWidth);
-  if FDoc.PaperHeight <> 15840 then WordN('paperh', FDoc.PaperHeight);
-  if FDoc.MarginLeft <> 1800 then WordN('margl', FDoc.MarginLeft);
-  if FDoc.MarginRight <> 1800 then WordN('margr', FDoc.MarginRight);
+  { The page, always: a reader that finds none takes its own (Word its locale's paper and
+    margins), and the wrap at the page's width (rwmPage) would differ. The model has no top
+    and bottom margins (there is no page view): an inch each goes out. }
+  WordN('paperw', FDoc.PaperWidth);
+  WordN('paperh', FDoc.PaperHeight);
+  WordN('margl', FDoc.MarginLeft);
+  WordN('margr', FDoc.MarginRight);
+  WordN('margt', 1440);
+  WordN('margb', 1440);
   Word('viewkind4');
   Word('uc1');
   PutB(Ord(' '));
@@ -2398,6 +2427,7 @@ begin
   CharInfo(FDoc.DefaultCharFormatId);
   FStretchLook := False;
   FDoc.Text.WalkParas(0, @NoteWalk);
+  if PlainLook then FStretchLook := True;
   if FStretchLook then FDoc.Text.WalkParaTexts(0, FParaCount - 1, @LookPara);
   FinishTables;
   WriteHeaderOfOurs;
@@ -2522,6 +2552,7 @@ begin
   CharInfo(FDoc.DefaultCharFormatId);
   FStretchLook := False;
   FDoc.Text.WalkParas(FCopy.FirstPara, @RangeNote);
+  if PlainLook then FStretchLook := True;
   if FStretchLook then FDoc.Text.WalkParaTexts(FCopy.FirstPara, FCopy.LastPara, @LookPara);
   FinishTables;
   WriteHeaderOfOurs;

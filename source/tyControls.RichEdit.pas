@@ -1,9 +1,16 @@
 unit tyControls.RichEdit;
 
-{ TTyRichEdit: a rich text viewer and (from Task 10 on) editor, drawn by the package itself on
-  every platform. This first form shows a document - txt or RTF, of any size - and scrolls,
-  zooms and wraps it; it is read-only to the user (ReadOnly is True and stays so for now), while
-  code may change the document through its commands (Document.Execute) and Lines.
+{ TTyRichEdit: a rich text editor, drawn by the package itself on every platform. It shows a
+  document - txt or RTF, of any size - scrolls, zooms and wraps it, and edits it by keyboard:
+  typing, Backspace, Delete, Enter, Tab, undo and redo, cut (Task 10a; the input method and
+  paste come with 10b and 10c). Every edit is a command of the document (Document.Execute),
+  so all of it can be undone; ReadOnly turns the user's editing off and leaves a viewer, while
+  code still changes the document through its commands, Lines and the editing methods.
+
+  An edit the control makes places the caret itself, after the command ran (FinishEdit): the
+  change the document reports moves neither the caret nor the anchor by arithmetic, and the
+  action reports one OnChange and one OnSelectionChange. A change made elsewhere (code, a
+  load) moves them by arithmetic, as a viewer's (DocChanged).
 
   The layers under it (tyControls.RichEdit.*): the text storage with its paragraph and height
   index, the document model and its commands, txt and RTF reading and writing, and the layout
@@ -115,9 +122,13 @@ type
     such bytes before its signature: they are kept and saved back in front of it. }
   TTyRichFormat = (rfAuto, rfRtf, rfText);
 
-  { Loading: bytes of the file indexed; saving: paragraphs written. ACancel True stops it. }
+  { Loading: bytes of the file indexed; saving: paragraphs written (RTF) or characters (text).
+    ACancel True stops it - a cancelled save leaves the file as it was. }
   TTyRichProgressEvent = procedure(Sender: TObject; ADone, ATotal: Int64;
     var ACancel: Boolean) of object;
+
+  { An edit the user asked for (a key, the menu) was not made; AReason says why. }
+  TTyRichEditRefusedEvent = procedure(Sender: TObject; const AReason: string) of object;
 
   TTyCustomRichEdit = class;
 
@@ -272,6 +283,7 @@ type
     FLayoutZoom: Single;
     FLayoutFont: string;
     FLayoutFontSize: Integer;
+    FLayoutFontStyle: TFontStyles;
     FEstimate: Integer;
     FBarScale: Int64;
     FVBar, FHBar: TTyScrollBar;
@@ -364,6 +376,16 @@ type
       are the text's as it was then, not moved by the update's own change; the update's end
       clamps them to the final text and paints the selection. }
     FSelInUpdate: Boolean;
+    // editing (Task 10a)
+    FWantTabs: Boolean;
+    { Inside an edit the control makes itself (RunEdit, RunHistory, FinishEdit's Select): the
+      document's change is heard (FEditHeard, FEditChange: what it reported) but neither
+      moves the caret by arithmetic nor is reported - the edit places the caret and reports
+      once; a Select there does not end the run of typing. }
+    FEditing: Integer;
+    FEditHeard: Boolean;
+    FEditChange: TTyRichChange;
+    FOnEditRefused: TTyRichEditRefusedEvent;
     // events
     FOnSelectionChange: TNotifyEvent;
     FOnChange: TNotifyEvent;
@@ -395,6 +417,11 @@ type
     procedure InvalidatePicture(APicture: TTyRichPicture; AWidth, AHeight: Integer);
     procedure LayoutParamsChanged;
     procedure FallbackListChanged(Sender: TObject);
+    { The style the text gets that its format does not give (TTyRichLayouter.BaseFontStyle):
+      the resolved style's weight - a theme's font-weight, and the control's Font.Style where
+      it was set below the form (the rule the name and the size go by), which the style takes
+      in as the weight and its flags. }
+    function BaseFontStyle(const AStyle: TTyStyleSet): TFontStyles;
     procedure CheckReplaceable;
     { The view's top in raster pixels of the heights, as the anchor says (no settling). }
     function AnchorY: Int64;
@@ -412,7 +439,17 @@ type
     { The text changed in AL..AR x AT..AB (raster, relative to the text area): that part of the
       surface is dirty and its client rectangle (outward) is invalidated. }
     procedure InvalidateTextRect(AL, AT, AR, AB: Int64);
+    { InvalidateTextRect's two halves: ADirty, that part of the surface is drawn again;
+      AWindow, the window's part is invalidated (a blit). }
+    procedure TextRectChanged(AL, AT, AR, AB: Int64; ADirty, AWindow: Boolean);
     procedure InvalidateBand(ATop, ABottom: Int64);
+    { The text below row ABoundary of the view (raster, relative to the text area's top) moved
+      ADY raster pixels down (up when negative) because a block above it changed its height:
+      its rows are moved on the surface, what was dirty there moves along, and the band a
+      move up exposes at the bottom is dirty. Nothing is invalidated. False when the surface
+      cannot be moved so (none yet, all of it to be drawn, another size or column, a move
+      past what is shown): the caller marks the band dirty instead. }
+    function MoveSurfaceBelow(ABoundary, ADY: Int64): Boolean;
     procedure MarkDirty(const ARect: TRect);
     procedure MarkTextDirty;
     procedure MoveSurfaceText(ADX, ADY: Int64);
@@ -538,6 +575,47 @@ type
     procedure StartDragTimer;
     procedure SetScrollXRaster(AValue: Integer);
     function GetSelText: string;
+    procedure SetSelText(const AValue: string);
+    // editing (Task 10a)
+    { Why the document takes no edit now ('' when it does): loading, incomplete, saving. }
+    function RefusalReason: string;
+    { AUser (a key, the menu): EditRefused; otherwise (code) ETyRichEdit is raised. }
+    procedure Refuse(const AReason: string; AUser: Boolean);
+    { The edit may run: the document takes edits now, and deleting ALen characters at APos
+      (and, with AInsert, inserting at APos then) is not refused by a row that holds a nested
+      table. Refused: Refuse, False. }
+    function EditAllowed(APos, ALen: TTyRichPos; AInsert, AUser: Boolean): Boolean;
+    { Runs ACmd (the document owns it from here) as the control's own edit: True when it ran
+      and changed something - FEditChange is what it changed, the caret has not been placed.
+      Refused by the engine (CanExecute, an ETyRichModel the command reverted): the caret,
+      the selection and Modified stay as they were, and Refuse. }
+    function RunEdit(ACmd: TTyRichCommand; AUser: Boolean): Boolean;
+    { After an edit of the control's own: the selection AAnchor .. ACaret (put on caret places,
+      no affinity, the wished x forgotten), scrolled into view, the caret shown, then the one
+      OnChange and the one OnSelectionChange of the action. }
+    procedure FinishEdit(AAnchor, ACaret: TTyRichPos);
+    { AText in place of the selection (one undo step: delete and insert), else at the caret -
+      AMergeable: typing, which merges with the typing before it. The caret behind it. }
+    procedure TypeText(const AText: UTF8String; AMergeable, AUser: Boolean);
+    { Characters [AFrom, ATo) go; the caret at the join. }
+    procedure DeleteText(AFrom, ATo: TTyRichPos; AUser: Boolean);
+    { Backspace (AForward False) or Delete, by a character place or (AWord) by a word: the
+      selection when there is one. }
+    procedure DeleteKey(AForward, AWord: Boolean);
+    { May a key take [AFrom, ATo) away when nothing is selected: not across a cell's edge,
+      and not the separator after a cut paragraph. }
+    function KeyDeleteAllowed(AFrom, ATo: TTyRichPos): Boolean;
+    { Enter: a new paragraph, or on an empty list item the item out of the list. }
+    procedure ParagraphKey;
+    procedure CutSelection(AUser: Boolean);
+    { An undo (ARedo False) or a redo step and where it leaves the caret. }
+    procedure RunHistory(ARedo, AUser: Boolean);
+    { A key the editor takes (it edits, or would: ReadOnly takes it and does nothing, as the
+      memo does). }
+    function IsEditKey(AKey: Word; AShift: TShiftState): Boolean;
+    { A character typed: inserted when it is printable and whole (not with ReadOnly, not
+      inside the document's update). }
+    procedure TypeKey(const AKey: TUTF8Char);
   protected
     function GetStyleTypeKey: string; override;
     { The parts a descendant may make its own: the document (called once, from the
@@ -718,12 +796,33 @@ type
     procedure DoExit; override;
     procedure Resize; override;
     procedure InitializeWnd; override;
-    { The viewer's keys: the caret moves (arrows by a cluster, Ctrl by a word, Up / Down by a
-      line keeping the x, Home / End the line's ends, Ctrl+Home / Ctrl+End the document's,
-      PgUp / PgDn a page), with Shift the selection grows; Ctrl+A selects all. Every arrow is
-      taken, also where the caret cannot move (it never goes to the parent's focus
-      navigation); any other key (Tab, Enter, Esc) is left to the form. }
+    { The keys: the caret moves (arrows by a cluster, Ctrl by a word, Up / Down by a line
+      keeping the x, Home / End the line's ends, Ctrl+Home / Ctrl+End the document's, PgUp /
+      PgDn a page), with Shift the selection grows; Ctrl+A selects all, Ctrl+C and
+      Ctrl+Insert copy. Every arrow is taken, also where the caret cannot move (it never goes
+      to the parent's focus navigation). Editing: Backspace and Delete (Ctrl: by a word),
+      Enter (a paragraph) and Shift+Enter (a line break, U+000B), Tab when WantTabs, Ctrl+X
+      and Shift+Delete cut, Ctrl+Z undoes, Ctrl+Y and Ctrl+Shift+Z redo (Cmd on a Mac); with
+      ReadOnly they are taken and do nothing, Enter is left to the form. Esc, Enter with Ctrl
+      or Alt, and Tab without WantTabs are left to the form. }
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
+    { A printable character typed (any Unicode): it replaces the selection, else goes in at
+      the caret, in TypingFormat; consecutive typing is one undo step (the engine merges it)
+      until the caret is moved by the user, another command runs, Enter is pressed or the
+      focus leaves - a space does not end it (as the memo's). OnUTF8KeyPress and OnKeyPress
+      come first and may stop it (TyAskKeyPress), also with ReadOnly. }
+    procedure UTF8KeyPress(var UTF8Key: TUTF8Char); override;
+    { The character format the next typed text gets: with a selection, its first
+      character's (it is typed over); else the character's before the caret in its paragraph,
+      at a paragraph's start the one's after it (TTyRichDocument.TypingFormatAt). The one
+      place a pending format (a format chosen with nothing selected, Task 11) comes in. }
+    function TypingFormat: TTyCharFormatId; virtual;
+    { An edit the user asked for (a key, the menu) was not made: the document is loading,
+      incomplete after a cancelled load or being saved, a row that holds a nested table
+      cannot be changed, or the engine took no such range (AReason says which). Nothing is
+      raised and nothing changed. The default raises OnEditRefused, and nothing else (no
+      beep, no dialog). A refusal of an edit made from code raises ETyRichEdit instead. }
+    procedure EditRefused(const AReason: string); virtual;
     function DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
       MousePos: TPoint): Boolean; override;
     function DoMouseWheelHorz(Shift: TShiftState; WheelDelta: Integer;
@@ -841,9 +940,13 @@ type
       x is the layout width or past it) with nothing to scroll to that way is drawn inside
       the text, against that edge; the same at the left edge. }
     function CaretClientRect: TRect;
-    { The selection as plain text: RangeText(SelStart, SelLength). Read only in this version
-      (replacing the selection is editing, Task 10). }
-    property SelText: string read GetSelText;
+    { The selection as plain text: RangeText(SelStart, SelLength). Writing it replaces the
+      selection (nothing selected: inserts at the caret) with the text - line breaks make
+      paragraphs - in TypingFormat, one undo step that typing does not merge with, the caret
+      behind it. An edit from code: not refused by ReadOnly; refused by the document (it is
+      loading, incomplete or being saved, a row that holds a nested table), it raises
+      ETyRichEdit; a text that starts or ends inside a UTF-8 sequence raises ETyRichModel. }
+    property SelText: string read GetSelText write SetSelText;
     { Characters [AFrom, AFrom + ALen) as plain text, as a copy puts them on the clipboard: what
       TyRichCopyRange takes (rows whole once the range reaches past a cell); a paragraph's end
       and a line break inside one (U+000B) become sLineBreak - the line break the memo's
@@ -862,8 +965,26 @@ type
       of its own (on Windows the text again as UTF-16, and each flavour in a global block) -
       a copy of a very large selection needs several times its size for a moment. }
     procedure CopyToClipboard;
-    { ITyTextEditActions: Copy and Select All; Undo, Redo, Cut and Paste are not available in
-      the viewer (TeIsReadOnly, TeCanUndo False ...). }
+    { Copy, then the selection goes: one undo step. Nothing selected: nothing. An edit from
+      code (ReadOnly does not stop it; a refusal raises ETyRichEdit, before anything is
+      copied). }
+    procedure CutToClipboard;
+    { One step of the document's history back / forward (Ctrl+Z, Ctrl+Y). After an undo the
+      text the step put back is selected (an undone deletion, a typing over a selection) or,
+      when it put back none (an undone insertion), the caret is where that text was; after a
+      redo the caret is at the end of what the step changed. Nothing to undo / redo: nothing.
+      From code: not refused by ReadOnly; while the document is being saved (or is loading,
+      or incomplete) it raises ETyRichEdit. }
+    procedure Undo;
+    procedure Redo;
+    { The document's: there is a step to undo / redo now. }
+    function CanUndo: Boolean;
+    function CanRedo: Boolean;
+    { The history goes (TTyRichDocument.ClearUndo); the text stays. }
+    procedure ClearUndo;
+    { ITyTextEditActions: Undo, Redo, Cut, Copy and Select All; Paste is not available yet
+      (Task 10c). With ReadOnly the menu shows the editing items unavailable and they do
+      nothing. }
     function TeControl: TControl;
     function TeController: TTyCustomStyleController;
     procedure TeUndo;
@@ -915,9 +1036,15 @@ type
     property FallbackFonts: TStrings read GetFallbackFonts;
     property WrapMode: TTyRichWrapMode read FWrapMode write SetWrapMode default rwmWindow;
     property Zoom: Integer read FZoom write SetZoom default 100;
-    { Fixed at True in this version: the user cannot change the text; code can (Document,
-      Lines). Setting False is ignored. }
-    property ReadOnly: Boolean read FReadOnly write SetReadOnly default True;
+    { The user's editing, only: with True no key, no menu item (and, from Task 10b / 10c on,
+      no input method and no paste) changes the document - the caret, the selection and
+      copying work as in a viewer. Code is not stopped by it, as TMemo.ReadOnly does not stop
+      Lines.Add: the document's commands (Document.Execute), Lines, SelText, CutToClipboard,
+      Undo and Redo change the document with ReadOnly True. }
+    property ReadOnly: Boolean read FReadOnly write SetReadOnly default False;
+    { True: Tab inserts a tab character (Shift+Tab and Ctrl+Tab too, as the memo). False (the
+      default, as the memo): Tab is left to the form, which moves the focus. }
+    property WantTabs: Boolean read FWantTabs write FWantTabs default False;
     property Lines: TStrings read GetLines write SetLines stored IsLinesStored;
     { A txt file is read in this encoding (teAuto: found out) and, for teAnsi, code page. }
     property TextEncoding: TTyTextEncoding read FTextEncoding write FTextEncoding default teAuto;
@@ -929,6 +1056,8 @@ type
       once for a document change that moved them, and not while loading a form file. }
     property OnSelectionChange: TNotifyEvent read FOnSelectionChange write FOnSelectionChange;
     property OnZoomChange: TNotifyEvent read FOnZoomChange write FOnZoomChange;
+    { An edit the user asked for was refused (see EditRefused). }
+    property OnEditRefused: TTyRichEditRefusedEvent read FOnEditRefused write FOnEditRefused;
     { The progress events run inside a load step or a save. Their handlers must not free the
       control (as the memo's events must not). Replacing the content from them - a load,
       Lines.Text, Lines.Clear - raises ETyRichEdit (the step or the save goes on); CancelLoad
@@ -969,12 +1098,14 @@ type
     property WrapMode;
     property Zoom;
     property ReadOnly;
+    property WantTabs;
     property TextEncoding;
     property TextCodePage;
     property ScrollBarAutoHide;
     property OnChange;
     property OnSelectionChange;
     property OnZoomChange;
+    property OnEditRefused;
     property OnLoadProgress;
     property OnSaveProgress;
     property OnFallbackFont;
@@ -1255,7 +1386,8 @@ begin
   TabStop := True;
   FZoom := 100;
   FWrapMode := rwmWindow;
-  FReadOnly := True;
+  FReadOnly := False;
+  FWantTabs := False;
   FTextEncoding := teAuto;
   FTextCodePage := 0;
   FScrollBarAutoHide := sbahDefault;
@@ -1455,9 +1587,10 @@ end;
 
 procedure TTyCustomRichEdit.SetReadOnly(AValue: Boolean);
 begin
-  { Editing comes with Task 10: until then the user interface stays read-only. Code changes
-    the document through Document.Execute and Lines either way. }
-  if AValue then FReadOnly := True;
+  if FReadOnly = AValue then Exit;
+  FReadOnly := AValue;
+  // the run of typing ends: what is typed after it being editable again is a step of its own
+  FDoc.BreakMerge;
 end;
 
 procedure TTyCustomRichEdit.SetScrollBarAutoHide(AValue: TTyScrollBarAutoHide);
@@ -2052,6 +2185,10 @@ begin
   if ACaret > len then ACaret := len;
   a0 := Math.Min(FSelAnchor, FCaret);
   a1 := Math.Max(FSelAnchor, FCaret);
+  { The caret or the anchor moved by anything but an edit of the control's own (a key, a
+    click, a setter, a change from elsewhere): the next typing is an undo step of its own, as
+    the memo's caret moves end its run (S-M9's place: the edits place the caret themselves). }
+  if (FEditing = 0) and ((AAnchor <> FSelAnchor) or (ACaret <> FCaret)) then FDoc.BreakMerge;
   FSelAnchor := AAnchor;
   FCaret := ACaret;
   FCaretAtEnd := AAtEnd;
@@ -2375,6 +2512,8 @@ end;
 procedure TTyCustomRichEdit.DoExit;
 begin
   inherited DoExit;
+  // the focus left: the run of typing ends (as the memo's)
+  FDoc.BreakMerge;
   if FBlinkTimer <> nil then FBlinkTimer.Enabled := False;
   FCaretShown := True;
   StopDrag;
@@ -2889,6 +3028,7 @@ begin
   try
     txt := RangeText(s, n);
     rtf := '';
+    FDoc.BaseFontName := TyEffectiveFontName(CurrentStyle.FontName);
     st := TTyRichStringOut.Create;
     try
       try
@@ -2904,6 +3044,428 @@ begin
     WriteClipboard(rtf, txt);
   finally
     if wait then EndWait;
+  end;
+end;
+
+{ ---- editing (Task 10a) ----
+
+  Every edit is a command run by the document (TTyRichDocument.Execute), so the history holds
+  all of it; the control never changes the text another way. An edit of the control's own
+  goes: EditAllowed (the document takes edits now, no row that holds a nested table is in the
+  way) - RunEdit (the command, the document's one OnChange heard but held: FEditing) -
+  FinishEdit (the caret placed where the edit leaves it, scrolled into view, then the
+  action's one OnChange and one OnSelectionChange). The caret's new place is read off what
+  the document reported: the end of the change (behind typed text, the join of a deletion,
+  the new paragraph's start after Enter). A key never raises a refusal: it goes to
+  EditRefused; a method called from code raises ETyRichEdit. }
+
+function TTyCustomRichEdit.RefusalReason: string;
+begin
+  // (the document says False to Execute for each of these; a key's refusal says which)
+  if FDoc.Loading then Result := rsRichEditRefusedLoading
+  else if FDoc.Incomplete then Result := rsRichEditRefusedIncomplete
+  else if FDoc.Saving then Result := rsRichEditRefusedSaving
+  else Result := '';
+end;
+
+procedure TTyCustomRichEdit.Refuse(const AReason: string; AUser: Boolean);
+begin
+  if AUser then EditRefused(AReason) else raise ETyRichEdit.Create(AReason);
+end;
+
+procedure TTyCustomRichEdit.EditRefused(const AReason: string);
+begin
+  if Assigned(FOnEditRefused) then FOnEditRefused(Self, AReason);
+end;
+
+function TTyCustomRichEdit.EditAllowed(APos, ALen: TTyRichPos; AInsert, AUser: Boolean): Boolean;
+var
+  reason: string;
+begin
+  reason := RefusalReason;
+  { Asked before the command is made: a composite (a selection typed over) that the engine
+    refused half way would be reverted, but would have reported a change and set Modified on
+    the way (RunEdit puts Modified back, as a backstop). }
+  if (reason = '') and (((ALen > 0) and not FDoc.CanChange(APos, ALen)) or
+    (AInsert and not FDoc.CanChange(APos, 0))) then
+    reason := rsRichEditRefusedFixedRow;
+  Result := reason = '';
+  if not Result then Refuse(reason, AUser);
+end;
+
+function TTyCustomRichEdit.RunEdit(ACmd: TTyRichCommand; AUser: Boolean): Boolean;
+var
+  c, a: TTyRichPos;
+  atEnd, wasModified, ok: Boolean;
+begin
+  Result := False;
+  c := FCaret;
+  a := FSelAnchor;
+  atEnd := FCaretAtEnd;
+  wasModified := FDoc.Modified;
+  FEditHeard := False;
+  ok := False;
+  Inc(FEditing);
+  try
+    try
+      ok := FDoc.Execute(ACmd);
+    except
+      on E: ETyRichModel do
+      begin
+        // the engine reverted what the command did: as if it had not run
+        FCaret := c;
+        FSelAnchor := a;
+        FCaretAtEnd := atEnd;
+        FDoc.Modified := wasModified;
+        if not AUser then raise;
+        EditRefused(E.Message);
+        Exit;
+      end;
+    end;
+  finally
+    Dec(FEditing);
+  end;
+  if not ok then
+  begin
+    // CanExecute said no: the built-in commands ask CanChange, a row that holds a nested table
+    Refuse(rsRichEditRefusedFixedRow, AUser);
+    Exit;
+  end;
+  // (a command that changed nothing is not kept and reported nothing: the caret stays)
+  Result := FEditHeard;
+end;
+
+procedure TTyCustomRichEdit.FinishEdit(AAnchor, ACaret: TTyRichPos);
+begin
+  Inc(FEditing);
+  try
+    ACaret := SnapPos(ACaret);
+    if AAnchor <> ACaret then AAnchor := SnapPos(AAnchor) else AAnchor := ACaret;
+    Select(AAnchor, ACaret, False);
+  finally
+    Dec(FEditing);
+  end;
+  FWishValid := False;
+  ScrollCaretIntoView;
+  CaretMoved;
+  DoChange;
+  DoSelectionChange;
+end;
+
+function TTyCustomRichEdit.TypingFormat: TTyCharFormatId;
+var
+  t: TTyRichText;
+  s: TTyRichPos;
+  p: Integer;
+begin
+  t := FDoc.Text;
+  s := GetSelStart;
+  if HasSelection then
+  begin
+    // typed over: the format of the first character selected (the character before s + 1),
+    // unless that is the paragraph's separator
+    p := t.ParaOfPos(s);
+    if s < t.ParaStart(p) + t.ParaLength(p) then Inc(s);
+  end;
+  Result := FDoc.TypingFormatAt(s);
+end;
+
+procedure TTyCustomRichEdit.TypeText(const AText: UTF8String; AMergeable, AUser: Boolean);
+var
+  s, n, q: TTyRichPos;
+  fmt: TTyCharFormatId;
+  cmd: TTyRichCommand;
+  comp: TTyRichCompositeCommand;
+begin
+  s := GetSelStart;
+  n := GetSelLength;
+  if (AText = '') and (n = 0) then Exit;
+  if not EditAllowed(s, n, AText <> '', AUser) then Exit;
+  fmt := TypingFormat;
+  if n = 0 then
+    cmd := TTyRichInsertText.Create(s, AText, fmt, AMergeable)
+  else if AText = '' then
+    cmd := TTyRichDelete.Create(s, n)
+  else
+  begin
+    { One undo step. A fresh one, as the memo's: typing after it merges into a step of its
+      own (the composite takes nothing over), so an undo takes back that typing first. }
+    if AMergeable then comp := TTyRichCompositeCommand.Create(rsRichUndoTyping)
+    else comp := TTyRichCompositeCommand.Create(rsRichUndoInsertText);
+    comp.Add(TTyRichDelete.Create(s, n));
+    comp.Add(TTyRichInsertText.Create(s, AText, fmt, False));
+    cmd := comp;
+  end;
+  if RunEdit(cmd, AUser) then
+  begin
+    // behind what went in (a paragraph separator is one character: after Enter, the new
+    // paragraph's start)
+    q := FEditChange.Pos + FEditChange.NewLen;
+    FinishEdit(q, q);
+  end;
+end;
+
+procedure TTyCustomRichEdit.DeleteText(AFrom, ATo: TTyRichPos; AUser: Boolean);
+begin
+  if ATo <= AFrom then Exit;
+  if not EditAllowed(AFrom, ATo - AFrom, False, AUser) then Exit;
+  if RunEdit(TTyRichDelete.Create(AFrom, ATo - AFrom), AUser) then
+    FinishEdit(FEditChange.Pos, FEditChange.Pos);
+end;
+
+{ The one code point Backspace takes when it is the last of a cluster and not its start: a
+  combining mark (an accent, a vowel sign, a Hangul jamo after the first) - as the edit
+  controls of Windows do, so that a wrong accent is typed again without its letter. A
+  variation selector, a joiner, an emoji modifier or tag ends an emoji that is one picture:
+  the cluster goes whole. }
+function BackspaceTakesOne(ACode: Cardinal): Boolean;
+begin
+  Result := TyRichIsClusterExtend(ACode) and not ((ACode = $200C) or (ACode = $200D) or
+    ((ACode >= $FE00) and (ACode <= $FE0F)) or ((ACode >= $1F3FB) and (ACode <= $1F3FF)) or
+    ((ACode >= $E0020) and (ACode <= $E007F)) or ((ACode >= $E0100) and (ACode <= $E01EF)));
+end;
+
+procedure TTyCustomRichEdit.DeleteKey(AForward, AWord: Boolean);
+var
+  t: TTyRichText;
+  p: Integer;
+  ps, pe, a, b: TTyRichPos;
+  codes: TTyRichCodes;
+begin
+  if HasSelection then
+  begin
+    DeleteText(GetSelStart, GetSelStart + GetSelLength, True);
+    Exit;
+  end;
+  t := FDoc.Text;
+  p := t.ParaOfPos(FCaret);
+  ps := t.ParaStart(p);
+  pe := ps + t.ParaLength(p);
+  if AForward then
+  begin
+    // at the document's end nothing happens, and nothing goes on the history
+    if FCaret >= t.Length then Exit;
+    a := FCaret;
+    // at a paragraph's end (Ctrl too, as the memo): the separator, the next paragraph joins
+    if FCaret >= pe then b := pe + 1
+    else if AWord then b := WordStep(FCaret, True)
+    else b := CaretStep(FCaret, True);
+    { A step that leaves the paragraph before its end is the cut of a paragraph too long to
+      lay out whole: what lies past it is not shown, and a key does not take it. }
+    if (b > pe + 1) or ((b > pe) and (FCaret < pe)) then Exit;
+  end
+  else
+  begin
+    if FCaret <= 0 then Exit;
+    b := FCaret;
+    // at a paragraph's start (Ctrl too, as the memo): the separator before it
+    if FCaret <= ps then a := ps - 1
+    else if AWord then a := WordStep(FCaret, False)
+    else
+    begin
+      codes := RichCodes(t.GetText(FCaret - 1, 1));
+      if (Length(codes) = 1) and BackspaceTakesOne(codes[0]) then a := FCaret - 1
+      else a := CaretStep(FCaret, False);
+    end;
+  end;
+  if (a < b) and KeyDeleteAllowed(a, b) then DeleteText(a, b, True);
+end;
+
+function TTyCustomRichEdit.KeyDeleteAllowed(AFrom, ATo: TTyRichPos): Boolean;
+var
+  t: TTyRichText;
+  k, m: Integer;
+  b: TTyBlockLayout;
+begin
+  t := FDoc.Text;
+  k := t.ParaOfPos(AFrom);
+  m := t.ParaOfPos(ATo);
+  if m = k then Exit(True);
+  // (the cells are compared inside one read: a document that parses on demand keeps them)
+  FDoc.BeginRead;
+  try
+    { Across a cell's edge - two cells, a cell and the text before or after its table - Word
+      and WordPad do nothing (the engine would merge the two paragraphs and leave a cell
+      without one): neither does a key. A selection that spans cells is the engine's rule. }
+    if FDoc.CellAt(k) <> FDoc.CellAt(m) then Exit(False);
+    { The separator after a cut paragraph: the paragraph after it would go into the part of
+      that one not shown, with the caret. }
+    EnsureParams;
+    b := LayoutBlockAt(k);
+    try
+      Result := not ((b is TTyParaLayout) and (b.LastCaretPos < t.ParaLength(k)));
+    finally
+      b.Release;
+    end;
+  finally
+    FDoc.EndRead;
+  end;
+end;
+
+procedure TTyCustomRichEdit.ParagraphKey;
+var
+  t: TTyRichText;
+  p: Integer;
+  pf: TTyParaFormat;
+begin
+  if not HasSelection then
+  begin
+    t := FDoc.Text;
+    p := t.ParaOfPos(FCaret);
+    pf := FDoc.Formats.ParaFormat(FDoc.ParaFormatOf(p));
+    if (pf.List.Kind <> lkNone) and (t.ParaLength(p) = 0) then
+    begin
+      { An empty list item: Enter ends the list there - the item becomes a plain paragraph
+        (its list goes; its indents, alignment and spacing stay), the caret stays, as in
+        WordPad. }
+      if not EditAllowed(FCaret, 0, True, True) then Exit;
+      if RunEdit(TTyRichSetParaFormat.Create(p, p, [pffList], TyDefaultParaFormat), True) then
+        FinishEdit(FCaret, FCaret);
+      Exit;
+    end;
+  end;
+  { A new paragraph: the engine gives both parts the paragraph's format (as WordPad), and a
+    new empty paragraph the format given here - the typing format. }
+  TypeText(#10, False, True);
+end;
+
+procedure TTyCustomRichEdit.CutSelection(AUser: Boolean);
+var
+  s, n: TTyRichPos;
+begin
+  if not HasSelection then Exit;
+  s := GetSelStart;
+  n := GetSelLength;
+  // refused before anything is copied: a cut that cannot delete is no cut
+  if not EditAllowed(s, n, False, AUser) then Exit;
+  CopyToClipboard;
+  if RunEdit(TTyRichDelete.Create(s, n), AUser) then FinishEdit(FEditChange.Pos, FEditChange.Pos);
+end;
+
+procedure TTyCustomRichEdit.CutToClipboard;
+begin
+  CutSelection(False);
+end;
+
+procedure TTyCustomRichEdit.RunHistory(ARedo, AUser: Boolean);
+var
+  reason: string;
+  c: TTyRichChange;
+begin
+  if ARedo then
+  begin
+    if FDoc.RedoDepth = 0 then Exit;
+  end
+  else if FDoc.UndoDepth = 0 then
+    Exit;
+  reason := RefusalReason;
+  if reason <> '' then
+  begin
+    Refuse(reason, AUser);
+    Exit;
+  end;
+  FEditHeard := False;
+  Inc(FEditing);
+  try
+    try
+      if ARedo then FDoc.Redo else FDoc.Undo;
+    except
+      // a step the document could not take (it lets its history go then)
+      on E: ETyRichModel do
+      begin
+        if not AUser then raise;
+        EditRefused(E.Message);
+      end;
+    end;
+  finally
+    Dec(FEditing);
+  end;
+  if not FEditHeard then Exit;
+  c := FEditChange;
+  { After an undo, what it put back is selected - an undone deletion, a typing over a
+    selection: the user sees what came back; one that put nothing back (an undone insertion)
+    leaves the caret where the text was. After a redo the caret is at the end of what it
+    changed. }
+  if not ARedo and (c.NewLen > 0) then FinishEdit(c.Pos, c.Pos + c.NewLen)
+  else FinishEdit(c.Pos + c.NewLen, c.Pos + c.NewLen);
+end;
+
+procedure TTyCustomRichEdit.Undo;
+begin
+  RunHistory(False, False);
+end;
+
+procedure TTyCustomRichEdit.Redo;
+begin
+  RunHistory(True, False);
+end;
+
+function TTyCustomRichEdit.CanUndo: Boolean;
+begin
+  Result := FDoc.CanUndo;
+end;
+
+function TTyCustomRichEdit.CanRedo: Boolean;
+begin
+  Result := FDoc.CanRedo;
+end;
+
+procedure TTyCustomRichEdit.ClearUndo;
+begin
+  FDoc.ClearUndo;
+end;
+
+procedure TTyCustomRichEdit.SetSelText(const AValue: string);
+var
+  s: UTF8String;
+begin
+  s := AValue;
+  TypeText(s, False, False);
+end;
+
+function TTyCustomRichEdit.IsEditKey(AKey: Word; AShift: TShiftState): Boolean;
+begin
+  case AKey of
+    VK_BACK, VK_DELETE: Result := True;
+    // Enter with Ctrl or Alt is the form's (a default button's), and a viewer's Enter too
+    VK_RETURN: Result := not FReadOnly and (AShift * [ssCtrl, ssAlt, ssMeta] = []);
+    VK_TAB: Result := FWantTabs;
+    VK_X, VK_Y, VK_Z: Result := TyIsShortcutShift(AShift);
+  else
+    Result := False;
+  end;
+end;
+
+procedure TTyCustomRichEdit.TypeKey(const AKey: TUTF8Char);
+var
+  s: RawByteString;
+begin
+  EndOwedLoad;
+  if FReadOnly or ViewBehind then Exit;
+  // the key's bytes as they are (a short string has no code page to convert from)
+  s := '';
+  SetLength(s, Length(AKey));
+  if Length(AKey) > 0 then Move(AKey[1], s[1], Length(AKey));
+  SetCodePage(s, CP_UTF8, False);
+  { Printable: no control character - C0, DEL (Ctrl+Backspace types one on Windows), C1 -
+    and whole characters only: a key never puts half a sequence in the text. }
+  if (s = '') or (s[1] < #32) or (s[1] = #127) or
+    ((Length(s) >= 2) and (s[1] = #$C2) and (s[2] < #$A0)) or
+    not TyRichIsUtf8(PByte(s), Length(s)) then Exit;
+  Settle;
+  TypeText(s, True, True);
+end;
+
+procedure TTyCustomRichEdit.UTF8KeyPress(var UTF8Key: TUTF8Char);
+begin
+  if not IsEnabled then Exit;
+  // OnUTF8KeyPress, then OnKeyPress, before the character goes in - ReadOnly too (the memo's #150)
+  inherited UTF8KeyPress(UTF8Key);
+  if not TyAskKeyPress(Self, UTF8Key) then Exit;
+  try
+    TypeKey(UTF8Key);
+  finally
+    if TyKeyPressAsked(UTF8Key) then UTF8Key := '';
   end;
 end;
 
@@ -2993,15 +3555,17 @@ end;
 
 procedure TTyCustomRichEdit.TeUndo;
 begin
-  // editing comes with Task 10
+  if not FReadOnly then RunHistory(False, True);
 end;
 
 procedure TTyCustomRichEdit.TeRedo;
 begin
+  if not FReadOnly then RunHistory(True, True);
 end;
 
 procedure TTyCustomRichEdit.TeCut;
 begin
+  if not FReadOnly then CutSelection(True);
 end;
 
 procedure TTyCustomRichEdit.TeCopy;
@@ -3011,6 +3575,7 @@ end;
 
 procedure TTyCustomRichEdit.TePaste;
 begin
+  // pasting comes with Task 10c
 end;
 
 procedure TTyCustomRichEdit.TeSelectAll;
@@ -3020,12 +3585,12 @@ end;
 
 function TTyCustomRichEdit.TeCanUndo: Boolean;
 begin
-  Result := False;
+  Result := not FReadOnly and FDoc.CanUndo;
 end;
 
 function TTyCustomRichEdit.TeCanRedo: Boolean;
 begin
-  Result := False;
+  Result := not FReadOnly and FDoc.CanRedo;
 end;
 
 function TTyCustomRichEdit.TeHasSelection: Boolean;
@@ -3203,6 +3768,13 @@ begin
   FDoc.Text.SetParaHeights(first, h);
 end;
 
+function TTyCustomRichEdit.BaseFontStyle(const AStyle: TTyStyleSet): TFontStyles;
+begin
+  // the weight carries the control's Font.Style (italic, underline, strike-through as flags)
+  if tpFontWeight in AStyle.Present then Result := TyFontStylesOf(AStyle.FontWeight)
+  else Result := [];
+end;
+
 procedure TTyCustomRichEdit.CheckLayoutParams(APPI: Integer);
 var
   s: TTyStyleSet;
@@ -3211,6 +3783,7 @@ var
   factor: Double;
   area: TRect;
   fontDiff: Boolean;
+  style: TFontStyles;
 begin
   if APPI <= 0 then APPI := 96;
   FViewPPI := APPI;
@@ -3221,14 +3794,18 @@ begin
   else
     halfPt := size * 2;
   if halfPt < 1 then halfPt := 20;
-  fontDiff := (s.FontName <> FLayoutFont) or (halfPt <> FLayoutFontSize);
+  style := BaseFontStyle(s);
+  fontDiff := (s.FontName <> FLayoutFont) or (halfPt <> FLayoutFontSize) or
+    (style <> FLayoutFontStyle);
   if fontDiff then
   begin
     FLayoutFont := s.FontName;
     FLayoutFontSize := halfPt;
-    // either setter empties the layouter's caches when it changes something
+    FLayoutFontStyle := style;
+    // each setter empties the layouter's caches when it changes something
     FLayouter.BaseFontName := s.FontName;
     FLayouter.BaseFontSizeHalfPt := halfPt;
+    FLayouter.BaseFontStyle := style;
   end;
   // the view in raster pixels: the layout is made for the device (PPI x scale)
   if FScale < 1 then FScale := 1;
@@ -3474,11 +4051,14 @@ begin
       document's update the view knows nothing yet); the next paint or settled query puts
       them on caret places (FSnapPending). A format change moves neither; the slices a lazy
       load appends come after everything.
-      For Task 10: inside BeginUpdate .. EndUpdate the view hears one merged change (the
-      union of the ranges, their kinds together), so a caret between two edits of one update
-      goes to the first edit's start, and a format change joined with an inserted character
-      moves a caret anywhere in that range. Right for a viewer; editing commands place the
-      caret themselves (S-M9). }
+      Inside BeginUpdate .. EndUpdate the view hears one merged change (the union of the
+      ranges, their kinds together), so a caret between two edits of one update goes to the
+      first edit's start, and a format change joined with an inserted character moves a
+      caret anywhere in that range. Right for a change from elsewhere. An edit the control
+      makes (FEditing) places the caret itself when the command has run (S-M9, FinishEdit):
+      here the positions only follow the text by the same arithmetic - so that what the
+      edit's Select repaints of an old selection is in the text as it is now - and are
+      neither snapped nor reported. }
     if (rckText in AChange.Kinds) and not loadOwn then
     begin
       was := FCaret;
@@ -3495,8 +4075,8 @@ begin
       if FCaret <> was then FCaretAtEnd := False;
       { Snapped later also when it did not move: text taken away right after it can leave it
         before a combining mark. }
-      if (FCaret <> was) or (FSelAnchor <> wasAnchor) or (AChange.Pos <= FCaret + 1) or
-        (AChange.Pos <= FSelAnchor + 1) then
+      if (FEditing = 0) and ((FCaret <> was) or (FSelAnchor <> wasAnchor) or
+        (AChange.Pos <= FCaret + 1) or (AChange.Pos <= FSelAnchor + 1)) then
         FSnapPending := True;
       FWishValid := False;
     end;
@@ -3519,11 +4099,16 @@ begin
   end;
   if (FLines <> nil) and (FDoc.Text.Length > 0) then FLines.FEmptyLine := False;
   // the slices a lazy load adds are its progress, not changes of the content
-  if not loadOwn then
+  if loadOwn then Exit;
+  if FEditing > 0 then
   begin
-    DoChange;
-    DoSelectionChange;
+    // the control's own edit: it places the caret and reports when the command has run
+    FEditHeard := True;
+    FEditChange := AChange;
+    Exit;
   end;
+  DoChange;
+  DoSelectionChange;
 end;
 
 procedure TTyCustomRichEdit.DocUpdatingEnded(Sender: TObject);
@@ -3825,8 +4410,17 @@ begin
   end
   else
   begin
-    // the blocks below moved: from the change down; the next pass fills what the move left
-    InvalidateBand(oldTop, FViewH);
+    { The blocks below moved: the window from the change down; on the surface the changed
+      blocks are drawn again and what lies below them is moved (rule 10 of 10a: a keystroke
+      that makes its paragraph a line taller draws that paragraph, not every block under it).
+      The next pass fills what a move up exposed. }
+    if not cut and MoveSurfaceBelow(oldBottom, y - oldBottom) then
+    begin
+      TextRectChanged(-High(Integer), oldTop, High(Integer), y, True, False);
+      TextRectChanged(-High(Integer), oldTop, High(Integer), FViewH, False, True);
+    end
+    else
+      InvalidateBand(oldTop, FViewH);
     FViewValid := False;
   end;
   RelayStale;
@@ -5234,10 +5828,12 @@ begin
   FinishLoading;
   if FDoc.Incomplete then raise ETyRichEdit.Create(rsRichEditIncomplete);
   if AFormat = rfAuto then AFormat := FSourceFormat;
+  // a document of ours names the font its plain text is shown in (RtfWrite's \f0)
+  FDoc.BaseFontName := TyEffectiveFontName(CurrentStyle.FontName);
   Inc(FSaving);
   try
     if AFormat = rfText then
-      TyRichSaveText(FDoc, AStream)
+      TyRichSaveText(FDoc, AStream, @SaveProgress)
     else
     begin
       // the file's own first bytes, before the signature, as they came
@@ -5556,6 +6152,11 @@ begin
 end;
 
 procedure TTyCustomRichEdit.InvalidateTextRect(AL, AT, AR, AB: Int64);
+begin
+  TextRectChanged(AL, AT, AR, AB, True, True);
+end;
+
+procedure TTyCustomRichEdit.TextRectChanged(AL, AT, AR, AB: Int64; ADirty, AWindow: Boolean);
 var
   area, clip, r: TRect;
   s: Integer;
@@ -5572,10 +6173,77 @@ begin
   if AT < 0 then AT := 0;
   if AB > FViewH then AB := FViewH;
   if (AR <= AL) or (AB <= AT) then Exit;
-  MarkDirty(Rect(Integer(area.Left * s + AL), Integer(area.Top * s + AT),
-    Integer(area.Left * s + AR), Integer(area.Top * s + AB)));
-  r := ClientOf(area, AL, AT, AR, AB);
-  InvalidateArea(r);
+  if ADirty then
+    MarkDirty(Rect(Integer(area.Left * s + AL), Integer(area.Top * s + AT),
+      Integer(area.Left * s + AR), Integer(area.Top * s + AB)));
+  if AWindow then
+  begin
+    r := ClientOf(area, AL, AT, AR, AB);
+    InvalidateArea(r);
+  end;
+end;
+
+function TTyCustomRichEdit.MoveSurfaceBelow(ABoundary, ADY: Int64): Boolean;
+var
+  area, clip, R, d: TRect;
+  shifted: array[0..CRichDirtyMax - 1] of TRect;
+  s, y, y0, w, i, n, dy: Integer;
+begin
+  Result := False;
+  if (FSurface = nil) or FAllDirty then Exit;
+  s := Math.Max(1, FScale);
+  // the surface shows what the window shows, at this column: else it is drawn whole anyway
+  if (FSurfW <> Width) or (FSurfH <> Height) or (FSurfScale <> s) or
+    (FSurfScrollX <> FScrollX) then Exit;
+  area := TextArea(Rect(0, 0, Width, Height), ViewPPI);
+  clip := TextClipOf(Rect(0, 0, Width, Height), area, ViewPPI);
+  R := Rect(clip.Left * s, clip.Top * s, clip.Right * s, clip.Bottom * s);
+  if ABoundary < 0 then Exit;
+  // below what is shown: nothing of it is on the surface
+  if area.Top * s + ABoundary >= R.Bottom then Exit(True);
+  y0 := Integer(area.Top * s + ABoundary);
+  if y0 < R.Top then Exit;
+  if ADY = 0 then Exit(True);
+  if Abs(ADY) >= R.Bottom - y0 then Exit;
+  dy := Integer(ADY);
+  // (up: the rows land below the changed blocks' new bottom, which is in the clip)
+  if y0 + dy < R.Top then Exit;
+  w := R.Right - R.Left;
+  { The rows from y0 to the clip's bottom go dy rows down (up when negative); what lands past
+    the clip's bottom is gone. }
+  if dy > 0 then
+  begin
+    // down: from the bottom up, each row from dy above it
+    for y := R.Bottom - 1 downto y0 + dy do
+      Move((FSurface.ScanLine[y - dy] + R.Left)^, (FSurface.ScanLine[y] + R.Left)^,
+        w * SizeOf(TBGRAPixel));
+  end
+  else
+    // up: from the top down, each row from -dy below it
+    for y := y0 + dy to R.Bottom - 1 + dy do
+      Move((FSurface.ScanLine[y - dy] + R.Left)^, (FSurface.ScanLine[y] + R.Left)^,
+        w * SizeOf(TBGRAPixel));
+  FSurface.InvalidateBitmap;
+  { What was to be drawn below the boundary shifted with the text: it is to be drawn where it
+    is now too (where it was stays marked, which costs at most a band drawn twice). }
+  n := 0;
+  for i := 0 to FDirtyCount - 1 do
+    if FDirty[i].Bottom > y0 then
+    begin
+      d := FDirty[i];
+      if d.Top < y0 then d.Top := y0;
+      Types.OffsetRect(d, 0, dy);
+      if IntersectRect(d, d, Rect(R.Left, Math.Max(R.Top, y0 + dy), R.Right,
+        Math.Min(R.Bottom, R.Bottom + dy))) then
+      begin
+        shifted[n] := d;
+        Inc(n);
+      end;
+    end;
+  for i := 0 to n - 1 do MarkDirty(shifted[i]);
+  // a move up exposes the bottom: the next pass lays out what comes there
+  if dy < 0 then MarkDirty(Rect(R.Left, R.Bottom + dy, R.Right, R.Bottom));
+  Result := True;
 end;
 
 { A band of the view, across the text (raster, relative to the text area's top). }
@@ -5806,6 +6474,8 @@ begin
     state's font-size or font-family takes effect): a state that changes it is a layout
     change, which the paint then does (A3-M2). }
   Mix(Cardinal(ResolveFontSize(st)));
+  // (the weight and the style flags it carries: the base font's style)
+  Mix(Cardinal(st.FontWeight));
   Mix(Cardinal(Length(st.FontName)));
   for k := 1 to Length(st.FontName) do Mix(Ord(st.FontName[k]));
   cr := TyEffectiveCorners(st);
@@ -6291,7 +6961,7 @@ begin
   begin
     if (Key in [VK_LEFT, VK_RIGHT, VK_UP, VK_DOWN, VK_HOME, VK_END, VK_PRIOR, VK_NEXT]) or
       (TyIsShortcutShift(Shift) and (Key in [VK_A, VK_C])) or
-      ((Key = VK_INSERT) and (Shift = [ssCtrl])) then
+      ((Key = VK_INSERT) and (Shift = [ssCtrl])) or IsEditKey(Key, Shift) then
       Key := 0;
     Exit;
   end;
@@ -6309,6 +6979,29 @@ begin
   if (TyIsShortcutShift(Shift) and (Key = VK_C)) or ((Key = VK_INSERT) and (Shift = [ssCtrl])) then
   begin
     CopyToClipboard;
+    Key := 0;
+    Exit;
+  end;
+  if IsEditKey(Key, Shift) then
+  begin
+    // with ReadOnly taken, and nothing changes (the memo's way)
+    if not FReadOnly then
+    begin
+      Settle;
+      case Key of
+        VK_BACK: DeleteKey(False, byWord);
+        VK_DELETE:
+          // as the memo: Shift+Delete cuts
+          if Shift = [ssShift] then CutSelection(True) else DeleteKey(True, byWord);
+        VK_RETURN:
+          if ssShift in Shift then TypeText(#11, False, True) else ParagraphKey;
+        VK_TAB: TypeText(#9, True, True);
+        VK_X: CutSelection(True);
+        // Ctrl+Shift+Z redoes, as Ctrl+Y
+        VK_Z: RunHistory(ssShift in Shift, True);
+        VK_Y: RunHistory(True, True);
+      end;
+    end;
     Key := 0;
     Exit;
   end;
@@ -6355,7 +7048,7 @@ begin
         Moved(True);
       end;
   else
-    // not the viewer's: Tab, Enter, Esc go on to the form
+    // not the control's: Esc, Tab without WantTabs, a viewer's Enter go on to the form
     Exit;
   end;
   Key := 0;

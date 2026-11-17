@@ -67,6 +67,11 @@ type
     FChanges: array of TTyRichChange;
     FRuns: array of TTyRichByteRun;
     FRunCount: Integer;
+    // Task 10a: a save's progress calls
+    FTicks: array of Int64;
+    FTickTotal: Int64;
+    FCancelAt: Integer;
+    function SaveTick(ADone, ATotal: Int64): Boolean;
     procedure DocChanged(Sender: TObject; const AChange: TTyRichChange);
     procedure CollectRun(const ARun: TTyRichByteRun; var AContinue: Boolean);
     function RunsOf(AText: TTyRichText): string;
@@ -100,6 +105,8 @@ type
     procedure TestASaveInProgressRefusesEdits;
     // fix wave W9
     procedure TestTheConverterIsAskedOncePerSequence;
+    // Task 10a
+    procedure TestATextSaveReportsProgressAndCanBeCancelled;
   end;
 
 implementation
@@ -1333,6 +1340,86 @@ begin
   AssertTrue('asked again: the same answers', same);
   AssertEquals('asked again: the converter not at all', 0, TyRichCodePageAsks - n0);
   AssertEquals('81 33 is still no character', 0, Integer(TyRichCodePageChar(t, $81, $33)));
+end;
+
+{ ---- Task 10a ---- }
+
+function TTyRichTextIOTest.SaveTick(ADone, ATotal: Int64): Boolean;
+begin
+  SetLength(FTicks, Length(FTicks) + 1);
+  FTicks[High(FTicks)] := ADone;
+  FTickTotal := ATotal;
+  Result := (FCancelAt = 0) or (Length(FTicks) < FCancelAt);
+end;
+
+{ A big text's save reports its progress as the RTF writer's does (review H1): about every
+  256 KB, in characters of the whole, rising, never once all is written - also inside one
+  paragraph of a megabyte, which goes out in steps that end where a character starts (a
+  UTF-16 save of it is the same bytes as without the steps). False from the callback cancels
+  the save: ETyRichTextSaveCancelled, and the document is no longer Saving. }
+procedure TTyRichTextIOTest.TestATextSaveReportsProgressAndCanBeCancelled;
+var
+  line, s: UTF8String;
+  w: UnicodeString;
+  fileBytes, plain, stepped: TBytes;
+  d: TTyRichDocument;
+  st: TBytesStream;
+  i: Integer;
+  raised: Boolean;
+begin
+  // a line of five-byte units ('ab' and a Chinese character): 256 KB falls inside a character
+  s := U('ab' + '中');
+  line := '';
+  SetLength(line, 220000 * System.Length(s));
+  for i := 0 to 219999 do Move(s[1], line[1 + i * System.Length(s)], System.Length(s));
+  s := U('first line') + #13#10 + line + #13#10 + U('last line');
+  w := UTF8Decode(s);
+  fileBytes := nil;
+  SetLength(fileBytes, 2 + System.Length(w) * 2);
+  fileBytes[0] := $FF;
+  fileBytes[1] := $FE;
+  Move(w[1], fileBytes[2], System.Length(w) * 2);
+  d := LoadBytes(fileBytes);
+  try
+    AssertTrue('UTF-16 LE', d.SourceEncoding = teUtf16LE);
+    plain := SaveBytes(d);
+    AssertSameBytes('without progress: the file', fileBytes, plain);
+    FTicks := nil;
+    FCancelAt := 0;
+    st := TBytesStream.Create;
+    try
+      TyRichSaveText(d, st, @SaveTick);
+      stepped := Copy(st.Bytes, 0, st.Size);
+    finally
+      st.Free;
+    end;
+    AssertSameBytes('with progress, in steps: the same bytes', fileBytes, stepped);
+    AssertTrue(Format('called %d times', [System.Length(FTicks)]), System.Length(FTicks) >= 3);
+    AssertEquals('of all the characters', d.Text.Length, FTickTotal);
+    for i := 1 to High(FTicks) do
+      AssertTrue(Format('rising at %d', [i]), FTicks[i] > FTicks[i - 1]);
+    AssertTrue('never all of it', FTicks[High(FTicks)] < FTickTotal);
+    // cancelled at the second call
+    FTicks := nil;
+    FCancelAt := 2;
+    raised := False;
+    st := TBytesStream.Create;
+    try
+      try
+        TyRichSaveText(d, st, @SaveTick);
+      except
+        on ETyRichTextSaveCancelled do raised := True;
+      end;
+      AssertTrue('a part only', st.Size < System.Length(fileBytes));
+    finally
+      st.Free;
+    end;
+    AssertTrue('cancelled', raised);
+    AssertEquals('asked twice', 2, System.Length(FTicks));
+    AssertFalse('no longer saving', d.Saving);
+  finally
+    d.Free;
+  end;
 end;
 
 initialization

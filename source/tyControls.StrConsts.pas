@@ -302,6 +302,13 @@ resourcestring
   rsRichEditCannotReplace = 'The file %s could not be replaced; it was left as it was.';
   rsRichEditCannotWrite   = 'The file %s cannot be written; it was left as it was.';
   rsRichEditBusy          = 'The document cannot be replaced now: it is being loaded or saved.';
+  { Why an edit the user asked for (a key, the menu) was not made: what
+    TTyCustomRichEdit.EditRefused and OnEditRefused are told, and what the editing methods
+    raise. }
+  rsRichEditRefusedLoading    = 'The document is still being loaded: it cannot be changed yet.';
+  rsRichEditRefusedIncomplete = 'The document holds only a part of its file (the load was cancelled): it cannot be changed.';
+  rsRichEditRefusedSaving     = 'The document is being saved: it cannot be changed meanwhile.';
+  rsRichEditRefusedFixedRow   = 'This table row holds a nested table and is kept as the file has it: its text cannot be changed.';
   { The line under a paragraph too long to lay out whole (more than
     CRichMaxParaLayoutChars characters). %s is how many characters are not shown. }
   rsRichEditParaNotShown  = '%s more characters of this paragraph are not shown.';

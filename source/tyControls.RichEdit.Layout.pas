@@ -562,7 +562,7 @@ type
     function NearestInFragment(const F: TTyRichFragment; AX: Integer): Integer;
     function PointInLine(ALine, AX: Integer): Integer;
     function PaintFormat(AFormat: TTyCharFormatId): TTyRichPaintFormat;
-    procedure TakePaintFormats(ADoc: TTyRichDocument);
+    procedure TakePaintFormats(ADoc: TTyRichDocument; ABaseStyle: TFontStyles);
     function LineSelection(ALine: Integer; AFrom, ATo: TTyRichPos; out AXa, AXb: Integer): Boolean;
     procedure PaintLine(ATarget: TBGRABitmap; ALine, AX, AY: Integer; const AClip: TRect;
       const AStyle: TTyRichPaintStyle; ASelFrom, ASelTo: TTyRichPos);
@@ -732,6 +732,7 @@ type
     FDoc: TTyRichDocument;
     FBaseFontName: string;
     FBaseFontSizeHalfPt: Integer;
+    FBaseFontStyle: TFontStyles;
     FFallbackFonts: TStringList;
     FOnFallbackFont: TTyRichFallbackEvent;
     // the layout cache: by first paragraph, LRU order, two bounds
@@ -752,6 +753,7 @@ type
     FFontZoom: Single;
     FFontName: string;
     FFontSize: Integer;
+    FFontStyle: TFontStyles;
     // list numbers: by paragraph index; the list format of each paragraph format id
     FOrdinals: specialize TDictionary<Integer, TTyRichListOrdinal>;
     FListOfFormat: specialize TDictionary<Integer, TTyListFormat>;
@@ -798,6 +800,7 @@ type
     procedure SetDocument(AValue: TTyRichDocument);
     procedure SetBaseFontName(const AValue: string);
     procedure SetBaseFontSizeHalfPt(AValue: Integer);
+    procedure SetBaseFontStyle(AValue: TFontStyles);
     procedure FallbackFontsChanged(Sender: TObject);
     procedure SetOnFallbackFont(AValue: TTyRichFallbackEvent);
     procedure LruUnlink(L: TTyBlockLayout);
@@ -900,6 +903,11 @@ type
     { The font a character format with no name / no size gets: the control's theme font. }
     property BaseFontName: string read FBaseFontName write SetBaseFontName;
     property BaseFontSizeHalfPt: Integer read FBaseFontSizeHalfPt write SetBaseFontSizeHalfPt;
+    { Added to the style of every character format (bold, italic, underline, strike-through:
+      the control's Font.Style). A format's Style is a set - it cannot say "not bold" - so a
+      style here shows on all the text, as the base font's name and size show on the text
+      that names none of its own. Changing it empties the caches, as the name does. }
+    property BaseFontStyle: TFontStyles read FBaseFontStyle write SetBaseFontStyle;
     { Tried in order for a character the font in effect has no glyph for; the first that
       has it is used. Starts as the platform's list; change it freely. Changing the list, or
       naming another OnFallbackFont (asked first), empties the caches: the fonts found before
@@ -2792,7 +2800,7 @@ end;
 { What painting needs of each character format the fragments use, taken from the document
   when the layout is made (a layout outlives a document switch of its layouter): sorted by
   format id. }
-procedure TTyParaLayout.TakePaintFormats(ADoc: TTyRichDocument);
+procedure TTyParaLayout.TakePaintFormats(ADoc: TTyRichDocument; ABaseStyle: TFontStyles);
 var
   ids: array of Integer;
   n, i, j, k: Integer;
@@ -2837,8 +2845,8 @@ begin
     FPaintFormats[i].Format := ids[i];
     FPaintFormats[i].Color := f.Color;
     FPaintFormats[i].Highlight := f.HighlightColor;
-    FPaintFormats[i].Underline := fsUnderline in f.Style;
-    FPaintFormats[i].Strike := f.Strike or (fsStrikeOut in f.Style);
+    FPaintFormats[i].Underline := fsUnderline in f.Style + ABaseStyle;
+    FPaintFormats[i].Strike := f.Strike or (fsStrikeOut in f.Style + ABaseStyle);
   end;
 end;
 
@@ -5149,6 +5157,13 @@ begin
   ClearLayouts;
 end;
 
+procedure TTyRichLayouter.SetBaseFontStyle(AValue: TFontStyles);
+begin
+  if FBaseFontStyle = AValue then Exit;
+  FBaseFontStyle := AValue;
+  ClearLayouts;
+end;
+
 procedure TTyRichLayouter.FallbackFontsChanged(Sender: TObject);
 begin
   ClearLayouts;
@@ -5367,12 +5382,13 @@ end;
 procedure TTyRichLayouter.FontsFor(APPI: Integer; AZoom: Single);
 begin
   if (FFontPPI = APPI) and (FFontZoom = AZoom) and (FFontName = FBaseFontName) and
-    (FFontSize = FBaseFontSizeHalfPt) then Exit;
+    (FFontSize = FBaseFontSizeHalfPt) and (FFontStyle = FBaseFontStyle) then Exit;
   FFormatFonts.Clear;
   FFontPPI := APPI;
   FFontZoom := AZoom;
   FFontName := FBaseFontName;
   FFontSize := FBaseFontSizeHalfPt;
+  FFontStyle := FBaseFontStyle;
 end;
 
 function TTyRichLayouter.FormatFont(AFormat: TTyCharFormatId; APPI: Integer;
@@ -5406,7 +5422,7 @@ begin
         px := Max(1, Round(px * 2 / 3));
       end;
   end;
-  Result.Font := FDevice.ResolveFont(name, px, f.Style);
+  Result.Font := FDevice.ResolveFont(name, px, f.Style + FBaseFontStyle);
   FFormatFonts.Add(AFormat, Result);
 end;
 
@@ -5606,7 +5622,7 @@ var
   m: TTyRichFontMetrics;
 begin
   m := FDevice.Metrics(FDevice.ResolveFont(FBaseFontName,
-    TyRichHalfPointsToPx(FBaseFontSizeHalfPt, APPI, AZoom), []));
+    TyRichHalfPointsToPx(FBaseFontSizeHalfPt, APPI, AZoom), FBaseFontStyle));
   Result := Max(1, m.Ascent + m.Descent + m.Leading);
 end;
 
@@ -5668,7 +5684,7 @@ begin
       // characters before the cut; the separator is not laid out)
       if Result.FTruncated then Result.FShownChars := b.N
       else Result.FShownChars := Result.FCharCount;
-      Result.TakePaintFormats(ADoc);
+      Result.TakePaintFormats(ADoc, FBaseFontStyle);
     finally
       ADoc.EndRead;
     end;

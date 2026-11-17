@@ -87,6 +87,9 @@ type
     procedure TestHistoryGoesBeforeTheValues;
     procedure TestMaxUndoBytesDropsTheOldest;
     procedure TestFormatOverTheWholeDocumentWalksLeaves;
+    // Task 10a
+    procedure TestAnInsertThatCutsASequenceIsRefused;
+    procedure TestClearUndoDropsTheHistory;
   end;
 
 implementation
@@ -907,6 +910,103 @@ begin
     n := d.Text.NodeVisits - nv;
     AssertTrue(Format('its undo entered %d nodes, limit %d', [n, limit]), n <= limit);
     CheckRestored('para undo');
+  finally
+    d.Free;
+  end;
+end;
+
+{ Bytes as they are, in a string (no code page conversion). }
+function Raw(const ABytes: array of Byte): RawByteString;
+var
+  i: Integer;
+begin
+  Result := '';
+  SetLength(Result, Length(ABytes));
+  for i := 0 to High(ABytes) do Result[i + 1] := AnsiChar(ABytes[i]);
+  SetCodePage(Result, CP_UTF8, False);
+end;
+
+{ Task 10a (rereviewB-W45, out of scope 3): the storage counts characters per piece, a reader
+  of a paragraph per paragraph; an insert that ends inside a UTF-8 sequence, or starts with a
+  byte that continues one, would be counted two ways once the next insert joins it. The
+  insert command raises before anything changes; whole characters (an invalid byte inside
+  the text included) go in. }
+procedure TTyRichCommandsTest.TestAnInsertThatCutsASequenceIsRefused;
+var
+  d: TTyRichDocument;
+
+  procedure Refused(const AWhat: UTF8String; const AText: RawByteString);
+  var
+    raised: Boolean;
+  begin
+    raised := False;
+    try
+      d.Execute(TTyRichInsertText.Create(1, AText));
+    except
+      on ETyRichModel do raised := True;
+    end;
+    AssertTrue(AWhat + ': refused', raised);
+    AssertEquals(AWhat + ': nothing changed', 'ab', AllText(d));
+    AssertEquals(AWhat + ': nothing kept', 0, d.UndoDepth);
+    AssertFalse(AWhat + ': not modified', d.Modified);
+  end;
+
+begin
+  d := NewDoc('ab');
+  try
+    Refused('a lead byte alone', Raw([$C3]));
+    Refused('a three-byte lead and one more', Raw([$E4, $B8]));
+    Refused('a four-byte lead and two more', Raw([Ord('x'), $F0, $9F, $98]));
+    Refused('a continuation first', Raw([$A9, Ord('x')]));
+    Refused('an escape''s first byte at the end', Raw([Ord('x'), $F8]));
+    AssertTrue('whole characters', d.Execute(TTyRichInsertText.Create(1,
+      Raw([$C3, $A9, $E4, $B8, $AD]))));
+    AssertTrue('in', Raw([Ord('a'), $C3, $A9, $E4, $B8, $AD, Ord('b')]) = RawByteString(AllText(d)));
+    AssertEquals('as the storage counts them', 4, d.Text.Length);
+    AssertTrue('a stray byte inside is a character', d.Execute(TTyRichInsertText.Create(0,
+      Raw([Ord('x'), $80, Ord('y')]))));
+    AssertEquals('three more', 7, d.Text.Length);
+  finally
+    d.Free;
+  end;
+end;
+
+{ ClearUndo lets every step go - undo and redo - and the text stays; inside an update or a
+  running command it raises. }
+procedure TTyRichCommandsTest.TestClearUndoDropsTheHistory;
+var
+  d: TTyRichDocument;
+  raised: Boolean;
+begin
+  d := NewDoc('abc');
+  try
+    Type_(d, 'x');
+    d.BreakMerge;
+    Type_(d, 'y');
+    d.Undo;
+    AssertEquals('one to undo', 1, d.UndoDepth);
+    AssertEquals('one to redo', 1, d.RedoDepth);
+    AssertTrue('the history holds bytes', d.HistoryBytes > 0);
+    d.Modified := False;
+    d.ClearUndo;
+    AssertEquals('none to undo', 0, d.UndoDepth);
+    AssertEquals('none to redo', 0, d.RedoDepth);
+    AssertFalse('cannot undo', d.CanUndo);
+    AssertEquals('no bytes', 0, d.HistoryBytes);
+    AssertEquals('the text stays', 'abcx', AllText(d));
+    AssertFalse('not a change', d.Modified);
+    raised := False;
+    d.BeginUpdate;
+    try
+      try
+        d.ClearUndo;
+      except
+        on ETyRichModel do raised := True;
+      end;
+    finally
+      d.EndUpdate;
+    end;
+    AssertTrue('refused inside an update', raised);
   finally
     d.Free;
   end;

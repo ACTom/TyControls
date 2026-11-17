@@ -293,6 +293,7 @@ uses
   test.richedit.layoutdevice,
   test.richedit.layout,
   test.richedit.control,
+  test.richedit.edit,
   test.richedit.perf;
 
 type

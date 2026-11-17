@@ -587,6 +587,7 @@ type
     FLoadingContent: Boolean;
     FIncomplete: Boolean;
     FSaving: Integer;
+    FBaseFontName: string;
     function GetSaving: Boolean;
     function GetUpdating: Boolean;
     procedure Init;
@@ -639,7 +640,11 @@ type
       such rows as they are and change the rest of their range. }
 
     { AText may hold paragraph separators. A split gives every part the paragraph's format and
-      cell; the runs split at APos. AFormat: a character format id, or TyRichInheritFormat. }
+      cell; the runs split at APos. AFormat: a character format id, or TyRichInheritFormat.
+      AText must not start with a byte that continues a UTF-8 sequence nor end inside one
+      (raises ETyRichModel before anything changes): the storage would count those bytes as
+      other characters than a reader of the paragraph's bytes does. A byte that is no text
+      inside it (a stray continuation in the middle) is a character of its own, as in a file. }
     function InsertText(APos: TTyRichPos; const AText: UTF8String;
       AFormat: TTyCharFormatId = TyRichInheritFormat): TTyRichUndoData;
     { Inserts the object's U+FFFC; the document takes a reference to AObject. }
@@ -773,6 +778,9 @@ type
     procedure Redo;
     function CanUndo: Boolean;
     function CanRedo: Boolean;
+    { Every undo and redo step goes; the content stays as it is (not Modified by it). Raises
+      inside BeginUpdate .. EndUpdate or a running command. }
+    procedure ClearUndo;
     function UndoDescription: string;    // '' when there is nothing
     function RedoDescription: string;
     { Nested. The commands executed until the outermost EndUpdate become one undo step
@@ -834,6 +842,13 @@ type
     property Incomplete: Boolean read FIncomplete;
     { Inside BeginSave .. EndSave: the document cannot be changed. }
     property Saving: Boolean read GetSaving;
+    { The font a view shows the text in that names none of its own (a character format's
+      FontName '' is "the view's font"): TTyRichEdit puts its base font here. Not content -
+      no command, no OnChange, not Modified, kept by a load - but what a writer names when it
+      must: RTF written for a document that was not read from RTF (a new one, a text file)
+      defines it as \f0, the document's default font, with the charset its name or the text
+      in it calls for. '' (a document no view set it for): such text is written in no font. }
+    property BaseFontName: string read FBaseFontName write FBaseFontName;
   end;
 
 function TyDefaultCharFormat: TTyCharFormat;
@@ -2661,6 +2676,31 @@ begin
   Result := old;
 end;
 
+{ AText starts with a byte that continues a UTF-8 sequence (80..BF), or ends inside one: a lead
+  byte (C2..F4, or F8..FB, the first of a text file's escaped byte) that its last bytes do not
+  complete. The storage counts characters piece by piece and keeps an insert in pieces of its
+  own, while the copy and the layout read a paragraph's bytes as one stretch: such ends would
+  join with the bytes next to them there and be counted as other characters than the storage
+  counts. }
+function CutSequence(const AText: UTF8String): Boolean;
+var
+  n, i, need: Integer;
+begin
+  n := Length(AText);
+  if n = 0 then Exit(False);
+  if Byte(AText[1]) and $C0 = $80 then Exit(True);
+  i := n;
+  while (i > 1) and (n - i < 3) and (Byte(AText[i]) and $C0 = $80) do Dec(i);
+  case Byte(AText[i]) of
+    $C2..$DF, $F8..$FB: need := 2;
+    $E0..$EF: need := 3;
+    $F0..$F4: need := 4;
+  else
+    Exit(False);
+  end;
+  Result := n - i + 1 < need;
+end;
+
 function TTyRichDocument.InsertCore(APos: TTyRichPos; const AText: UTF8String;
   AFormat: TTyCharFormatId; AObj: TTyRichObject): TTyRichUndoData;
 var
@@ -2679,6 +2719,8 @@ begin
   c.Pos := APos;
   FText.ParaOfPos(APos);   // range check before anything changes
   if AText = '' then Exit(NewUndo(c));
+  if CutSequence(AText) then
+    raise ETyRichModel.Create('The text to insert starts or ends inside a UTF-8 sequence');
   if ChangeRefused(APos, 0) then raise ETyRichModel.Create(SNestedRow);
   // new breaks take the document's majority kind, so saving writes the stored bytes as they
   // are: the breaks already there stay what they were in the file
@@ -3594,6 +3636,15 @@ end;
 function TTyRichDocument.CanRedo: Boolean;
 begin
   Result := (FRedoCount > 0) and (FUpdateCount = 0) and (FRunning = nil) and (FSaving = 0);
+end;
+
+procedure TTyRichDocument.ClearUndo;
+begin
+  CheckIdle('ClearUndo');
+  if FUpdateCount > 0 then
+    raise ETyRichModel.Create('ClearUndo inside BeginUpdate .. EndUpdate');
+  ClearHistory;
+  FMergeBroken := False;
 end;
 
 function TTyRichDocument.UndoDescription: string;
