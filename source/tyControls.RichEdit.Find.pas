@@ -207,9 +207,16 @@ type
     FPhase: Integer;
     FCurOff: TTyRichPos;
     FCurByte: PtrInt;
+    FPassTo: TTyRichPos;              // characters of FNext passed, not matched (a start inside it)
     FK: Integer;
     FPend: Int64;
     FBudget: Int64;
+    { The text of paragraph FKeepPara, kept while the scan stands inside it and the document's
+      content is as it was (FKeepState): fetched once, not once a step. }
+    FKeep: RawByteString;
+    FKeepPara: Integer;
+    FKeepState: Int64;
+    FFetchedBytes: Int64;
     FRangeLo, FRangeHi: Integer;
     procedure ParseNeedle(const ANeedle: UTF8String);
     procedure SourceOf(AIndex: Integer; AData: Pointer; ASrcOffset, ASrcBytes: Int64;
@@ -303,6 +310,11 @@ type
     property Steps: Int64 read FSteps;
     property RawBytes: Int64 read FRawBytes;
     property TextBytes: Int64 read FTextBytes;
+    { Bytes of paragraph text the finder had handed to it (gathered from pieces or decoded):
+      a paragraph read over many steps counts once. Characters passed before a start inside a
+      paragraph, in bytes (never matched; a step passes at most eight times its budget). }
+    property FetchedBytes: Int64 read FFetchedBytes;
+    property PassedBytes: Int64 read FPassedBytes;
   end;
 
   { What a replace of every match has done so far, written by TTyRichReplaceAllCommand as its
@@ -1028,6 +1040,7 @@ begin
   FRangeLo := -1;
   FRangeHi := -1;
   FPend := -1;
+  FKeepPara := -1;
   ParseNeedle(ANeedle);
   if (FMax >= 0) and (FMax - FMin < FLen) then FNever := True;
 end;
@@ -1229,14 +1242,19 @@ begin
   FPhase := 0;
   FCurOff := 0;
   FCurByte := 0;
+  FPassTo := 0;
   FK := 0;
   FPend := -1;
+  // (the scan has left the paragraph: its text goes)
+  FKeep := '';
+  FKeepPara := -1;
 end;
 
 { Paragraph AIndex's text, read from where the scan stands in it (FCurOff characters, FCurByte
-  bytes in; -1: those characters are passed first) for as many bytes as FBudget allows. A
-  match stops the walk (mode 0: the scan then stands right after it); a budget spent inside the
-  paragraph keeps the matcher's state there, and the next step goes on from it. }
+  bytes in; up to FPassTo characters only passed, a start inside it) for as many bytes as
+  FBudget allows. A match stops the walk (mode 0: the scan then stands right after it); a
+  budget spent inside the paragraph keeps the matcher's state there, and the text itself
+  (KeepText): the next step goes on from it without fetching the paragraph again. }
 procedure TTyRichFinder.ExactPara(AIndex: Integer; AData: Pointer; AText: PByte; ALen: PtrInt;
   var AContinue: Boolean);
 var
@@ -1246,8 +1264,19 @@ var
   pos, pending: Int64;
   matchCase, whole: Boolean;
 
+  // the scan stays in the paragraph: its text is kept for the next step (once)
+  procedure KeepText;
+  begin
+    if (FKeepPara = AIndex) and (Pointer(AText) = Pointer(FKeep)) then Exit;
+    SetLength(FKeep, ALen);
+    if ALen > 0 then Move(AText^, Pointer(FKeep)^, ALen);
+    FKeepPara := AIndex;
+    FKeepState := FDoc.ContentState;
+  end;
+
   procedure Leave(AAt: PByte; AOff: Int64; AK: Integer; APending: Int64);
   begin
+    KeepText;
     Inc(FTextBytes, AAt - first);
     Dec(FBudget, AAt - first);
     FCurByte := AAt - AText;
@@ -1259,6 +1288,7 @@ var
 
 begin
   FPhase := 2;
+  if Pointer(AText) <> Pointer(FKeep) then Inc(FFetchedBytes, ALen);
   if (FCurOff = 0) and (FCurByte = 0) then
   begin
     Inc(FParasRead);
@@ -1276,12 +1306,21 @@ begin
   whole := rfoWholeWord in FOptions;
   ringN := FLen + 1;
   stop := AText + ALen;
-  if FCurByte < 0 then
+  if FCurOff < FPassTo then
   begin
-    // the scan begins inside the paragraph: its characters before are passed, not matched
-    p := AText;
-    pos := 0;
-    while (pos < FCurOff) and (p < stop) do
+    { The scan begins inside the paragraph: its characters before are passed, not matched -
+      an eighth of a unit a byte, and in pieces like any reading. }
+    p := AText + FCurByte;
+    first := p;
+    if FBudget * 8 < stop - p then
+    begin
+      lim := p + FBudget * 8;
+      if lim <= p then lim := p + 1;
+    end
+    else
+      lim := stop;
+    pos := FCurOff;
+    while (pos < FPassTo) and (p < lim) do
     begin
       if p^ < $80 then
       begin
@@ -1297,10 +1336,17 @@ begin
       if whole then FRing[pos mod ringN] := code;
       Inc(pos);
     end;
-    Dec(FBudget, (p - AText) div 8 + 1);
-    Inc(FPassedBytes, p - AText);
+    Dec(FBudget, (p - first) div 8 + 1);
+    Inc(FPassedBytes, p - first);
     FCurByte := p - AText;
     FCurOff := pos;
+    if (pos < FPassTo) and (p < stop) then
+    begin
+      // the budget is spent before the start: the next step passes on from here
+      KeepText;
+      AContinue := False;
+      Exit;
+    end;
   end;
   p := AText + FCurByte;
   first := p;
@@ -1441,7 +1487,7 @@ end;
   read. Paragraphs that need no filter are read in runs, one walk each. }
 procedure TTyRichFinder.ScanRange(ALast: Integer);
 var
-  filter: Boolean;
+  filter, cont: Boolean;
   e: Integer;
   v: TTyRichFilterVerdict;
 begin
@@ -1477,6 +1523,16 @@ begin
       end;
       Inc(FParasDecoded);
       FPhase := 2;
+    end;
+    { Inside the paragraph since an earlier step, its text kept and the content as it was:
+      read on in the kept text (not fetched again). }
+    if (FKeepPara = FNext) and (FKeepState = FDoc.ContentState) and
+      ((FCurByte > 0) or (FCurOff > 0)) then
+    begin
+      cont := True;
+      FRunPos := FText.ParaStart(FNext);
+      ExactPara(FNext, nil, PByte(Pointer(FKeep)), Length(FKeep), cont);
+      Continue;
     end;
     // this paragraph, and those after it that no filter must look at first, in one walk
     e := FNext;
@@ -1859,8 +1915,9 @@ begin
     FNext := FText.ParaOfPos(FMin);
     // (a scan that begins inside a paragraph passes its characters before FMin first)
     FPhase := 0;
-    FCurOff := FMin - FText.ParaStart(FNext);
-    if FCurOff > 0 then FCurByte := -1 else FCurByte := 0;
+    FPassTo := FMin - FText.ParaStart(FNext);
+    FCurOff := 0;
+    FCurByte := 0;
     FK := 0;
     FPend := -1;
   end;
@@ -1940,8 +1997,11 @@ begin
     FPhase := 0;
     FCurOff := 0;
     FCurByte := 0;
+    FPassTo := 0;
     FK := 0;
     FPend := -1;
+    FKeep := '';
+    FKeepPara := -1;
   end;
   FScanEnd := endPos;
   FMode := 2;
@@ -2027,8 +2087,11 @@ begin
     FMin := FText.ParaStart(ALo);
     if AFrom > FMin then FMin := AFrom;
     // (a range that begins inside its first paragraph passes the characters before it first)
-    FCurOff := FMin - FText.ParaStart(ALo);
-    if FCurOff > 0 then FCurByte := -1 else FCurByte := 0;
+    FPassTo := FMin - FText.ParaStart(ALo);
+    FCurOff := 0;
+    FCurByte := 0;
+    FKeep := '';
+    FKeepPara := -1;
   end;
   FScanEnd := FText.ParaStart(AHi) + FText.ParaLength(AHi);
   if (ATo >= 0) and (ATo < FScanEnd) then FScanEnd := ATo;

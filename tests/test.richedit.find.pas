@@ -66,6 +66,7 @@ type
     procedure TestReplaceKeepsR57AtATablesEdges;
     procedure TestALongNeedleWithAParagraphEndEnds;
     procedure TestARerunGoesOnWhereItStopped;
+    procedure TestAParagraphIsFetchedOnce;
   end;
 
 implementation
@@ -2370,6 +2371,121 @@ begin
     finally
       doc.Free;
     end;
+  end;
+end;
+
+{ A paragraph read over many steps is fetched once - gathered from its pieces after an edit,
+  or decoded from a lazily read file - and kept while the scan is inside it: the bytes handed to
+  the finder are about the paragraph's, not the steps' times it (a 20 MB line after one typed
+  character took 31 s). A start inside a long paragraph passes the characters before it in
+  pieces of a step's budget, not in one go. }
+procedure TTyRichFindTest.TestAParagraphIsFetchedOnce;
+const
+  CBudget = 64 * 1024;
+var
+  doc: TTyRichDocument;
+  s: RawByteString;
+  sb: TStringBuilder;
+  f: TTyRichFinder;
+  r: TTyRichFindResult;
+  steps, i: Integer;
+  size, want: Int64;
+begin
+  sb := TStringBuilder.Create;
+  try
+    while sb.Length < 4 * MB do sb.Append('lorem ipsum dolor sit amet ');
+    sb.Append('zebra');
+    s := sb.ToString;
+  finally
+    sb.Free;
+  end;
+  // one line of 4 MB, then one character typed in it: several pieces
+  doc := TextDoc(s);
+  try
+    AssertTrue(doc.Execute(TTyRichInsertText.Create(10, 'q')));
+    size := doc.Text.ParaLength(0);
+    want := size - 5;
+    f := TTyRichFinder.Create(doc, 'zebra', []);
+    try
+      steps := 0;
+      repeat
+        r := f.Step(CBudget);
+        Inc(steps);
+      until (r <> rfrMore) or (steps > 10000);
+      AssertEquals('found at the end', want, f.MatchPos);
+      AssertTrue(Format('in many steps (%d)', [steps]), steps > 20);
+      AssertTrue(Format('the line fetched once (%d bytes for %d)', [f.FetchedBytes, size]),
+        f.FetchedBytes <= 2 * size);
+    finally
+      f.Free;
+    end;
+    // a start in its middle: what lies before is passed in pieces too
+    f := TTyRichFinder.Create(doc, 'zebra', [rfoWholeWord], size div 2);
+    try
+      r := f.Step(4096);
+      AssertTrue('not found in the first step', r = rfrMore);
+      AssertTrue(Format('the first step passed a budget''s worth (%d)', [f.PassedBytes]),
+        f.PassedBytes <= 8 * 4096 + 16);
+      steps := 1;
+      repeat
+        r := f.Step(CBudget);
+        Inc(steps);
+      until (r <> rfrMore) or (steps > 10000);
+      AssertEquals('found from the middle', want, f.MatchPos);
+      AssertEquals('everything before the start passed once', size div 2, f.PassedBytes);
+      AssertTrue(Format('...the line fetched once (%d)', [f.FetchedBytes]), f.FetchedBytes <= 2 * size);
+    finally
+      f.Free;
+    end;
+    // the text changed while the scan stands in the paragraph: what it kept is not read on
+    f := TTyRichFinder.Create(doc, 'xyzzy', []);
+    try
+      for i := 1 to 3 do AssertTrue('not found yet', f.Step(CBudget) = rfrMore);
+      AssertTrue(doc.Execute(TTyRichInsertText.Create(size - 100, 'xyzzy')));
+      repeat
+        r := f.Step(CBudget);
+      until r <> rfrMore;
+      AssertEquals('what the change brought is found', size - 100, f.MatchPos);
+    finally
+      f.Free;
+    end;
+  finally
+    doc.Free;
+  end;
+  // an RTF paragraph of 2 MB read lazily: decoded once, not once a step
+  sb := TStringBuilder.Create;
+  try
+    sb.Append(Rtf('{|rtf1|ansi|deff0{|fonttbl{|f0 Arial;}}|pard first|par '));
+    i := 0;
+    while sb.Length < 2 * MB do
+    begin
+      sb.Append(Rtf('words of text {|b bold} and {|i more} here '));
+      Inc(i);
+    end;
+    sb.Append(Rtf('zebra|par last|par}'));
+    s := sb.ToString;
+  finally
+    sb.Free;
+  end;
+  doc := LoadRtf(BytesOf(s), False);
+  try
+    size := doc.Text.ParaLength(1);
+    f := TTyRichFinder.Create(doc, 'zebra', []);
+    try
+      steps := 0;
+      repeat
+        r := f.Step(CBudget);
+        Inc(steps);
+      until (r <> rfrMore) or (steps > 10000);
+      AssertEquals('found in the paragraph', doc.Text.ParaStart(1) + size - 5, f.MatchPos);
+      AssertTrue(Format('in many steps (%d)', [steps]), steps > 10);
+      AssertTrue(Format('decoded once (%d bytes for %d)', [f.FetchedBytes, size]),
+        f.FetchedBytes <= 2 * size + 64);
+    finally
+      f.Free;
+    end;
+  finally
+    doc.Free;
   end;
 end;
 
