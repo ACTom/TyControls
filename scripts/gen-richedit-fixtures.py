@@ -413,6 +413,39 @@ wl = (
 put(RTF, 'hand-word-list.rtf', wl.encode('ascii'))
 expected('hand-word-list.expected.txt', wl_paras)
 
+# ---------------------------------------------------------------- hand-end-*.rtf
+# Files that end where a paragraph is still open (a writer cut short, or one that leaves the
+# last \par out): the last paragraph has no \par, only the document's closing brace after its
+# text. Its properties are the ones in effect before that brace (as Word and WordPad read it).
+# hand-end-nopar.rtf: the last paragraph right-aligned and indented, bold Chinese then Latin.
+nopar_paras = [
+    '第一段，后面有段落标记。',
+    '签名：TyControls',
+]
+nopar = (
+    '{\\rtf1\\ansi\\ansicpg936\\deff0\\nouicompat\\deflang1033\\deflangfe2052'
+    '{\\fonttbl{\\f0\\fnil\\fcharset134 ' + hexed('宋体', 'gbk') + ';}'
+    '{\\f1\\fswiss\\fcharset0 Arial;}}\r\n'
+    '{\\*\\generator hand-written for TyControls;}\\viewkind4\\uc1 \r\n'
+    '\\pard\\f0\\fs24\\lang2052 ' + hexed(nopar_paras[0], 'gbk') + '\\par\r\n'
+    '\\pard\\qr\\li720\\b ' + hexed('签名：', 'gbk') + '\\b0\\f1 TyControls}\r\n\x00')
+put(RTF, 'hand-end-nopar.rtf', nopar.encode('ascii'))
+expected('hand-end-nopar.expected.txt', nopar_paras)
+
+# hand-end-inrow.rtf: the file ends inside a table row - its first cell ended (\cell), the
+# second cell's text with neither \cell nor \row after it: the row's two cells all the same.
+inrow_paras = ['表格前', '甲一', 'B1']
+inrow = (
+    '{\\rtf1\\ansi\\ansicpg936\\deff0\\nouicompat\\deflang1033\\deflangfe2052'
+    '{\\fonttbl{\\f0\\fnil\\fcharset134 ' + hexed('宋体', 'gbk') + ';}'
+    '{\\f1\\fswiss\\fcharset0 Arial;}}\r\n'
+    '{\\*\\generator hand-written for TyControls;}\\viewkind4\\uc1 \r\n'
+    '\\pard\\f0\\fs24\\lang2052 ' + hexed(inrow_paras[0], 'gbk') + '\\par\r\n'
+    '\\trowd\\trgaph108\\trleft-108\\cellx2000\\cellx4000\r\n'
+    '\\pard\\intbl ' + hexed(inrow_paras[1], 'gbk') + '\\cell\\pard\\intbl\\f1 B1}\r\n\x00')
+put(RTF, 'hand-end-inrow.rtf', inrow.encode('ascii'))
+expected('hand-end-inrow.expected.txt', inrow_paras)
+
 # ---------------------------------------------------------------- txt
 lines = [
     'TyControls 富文本控件的文本样本。',

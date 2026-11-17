@@ -12,6 +12,8 @@ as: UTF-8, one paragraph per line, each line ended by LF.
 | `hand-sjis.rtf` | `\ansicpg932`; f0 `\fcharset128` ＭＳ 明朝, f1 Arial | Japanese. ソ (83 5C) and 表 (95 5C) end in a backslash byte; the half-width katakana ｱｲｳ are single bytes and not lead bytes. |
 | `hand-uc.rtf` | `\ansicpg936`; f0 `\fcharset134` 宋体, f1 Arial | `\uc0`, `\uc2`, `\uc1`; a negative `\u` (`\u-244` is ，); `\uc` ending with its group; a `\'xx` as the one fallback; a surrogate pair as one character. |
 | `hand-split-dbcs.rtf` | `\ansicpg936`; f0 `\fcharset134` 宋体, f1 Arial | The two bytes of 中 kept apart by a group end, a control word, a group start (they join: same double-byte font), and by a font change to f1 (they do not). |
+| `hand-end-nopar.rtf` | `\ansicpg936`; f0 `\fcharset134` 宋体, f1 Arial | A file whose last paragraph has no `\par`: right-aligned, indented, bold Chinese then Arial, and then only the document's closing brace. The paragraph keeps the properties in effect before that brace. |
+| `hand-end-inrow.rtf` | `\ansicpg936`; f0 `\fcharset134` 宋体, f1 Arial | A file that ends inside a table row: the first cell ended with `\cell`, the second cell's text followed by neither `\cell` nor `\row`. Both are cells of the row. |
 
 The expected texts were compared with what the system RichEdit (msftedit.dll, the engine WordPad
 runs on, Windows 10 19044) reads from the same files. It agrees everywhere except:
@@ -22,6 +24,12 @@ runs on, Windows 10 19044) reads from the same files. It agrees everywhere excep
 - `hand-split-dbcs.rtf`, paragraphs 1 to 3: RichEdit pairs the lead byte with whatever byte comes
   next, a brace included, and shows nonsense. We join the halves. Paragraph 4 is RichEdit's own
   reading: `x?Ðy`.
+- `hand-end-nopar.rtf` and `hand-end-inrow.rtf` were added later (fix wave W16) and their
+  expected texts are ours. RichEdit reads `hand-end-nopar.rtf` as we do (the Windows-only test
+  that has it read every sample checks the paragraphs). It shows `hand-end-inrow.rtf` (as that test
+  saves it, its first paragraph rewritten) as the first paragraph alone: the row that is never
+  ended, and its text, are not there for it. We
+  keep the row's two cells - nothing of the file is lost - so that test leaves this sample out.
 
 Each `hand-*.rtf` ends the way WordPad ends a file: `}`, CR LF, and one NUL byte.
 

@@ -1412,6 +1412,10 @@ begin
       // (made to show where the control misreads a double-byte character split by a brace:
       // what it reads of the file's own paragraphs depends on which of them was rewritten)
       if names[i] = 'hand-split-dbcs.rtf' then Continue;
+      // (made to end inside a row that is never ended: the control shows the paragraph before
+      // it alone - the row and its text are not there for it -, where the reader keeps the
+      // row's two cells; there is nothing paragraph by paragraph to compare)
+      if names[i] = 'hand-end-inrow.rtf' then Continue;
       b := ReadFileBytes(FixtureDir + names[i]);
       AssertTrue(names[i] + ': the control reads the sample', RichEditText(b, original));
       d := LoadDoc(b, False);
