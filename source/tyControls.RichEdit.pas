@@ -222,6 +222,11 @@ type
   private
     FOwner: TTyCustomRichEdit;
     FBatch: TStringList;
+    { A load asked for inside the update (Lines.LoadFromFile / LoadFromStream): its bytes,
+      read at once, and the file they came from ('' for a stream); the control loads them
+      when the update ends (F-M8). }
+    FBatchLoad: TMemoryStream;
+    FBatchFile: string;
     FUpdating: Boolean;
     { An empty document is no lines or one empty line: TStrings tells them apart, the text
       cannot. Set by Add('') / Insert on no lines, by a delete that leaves one empty line and
@@ -229,6 +234,7 @@ type
       when the document is no longer empty. }
     FEmptyLine: Boolean;
     procedure Run(ACmd: TTyRichCommand);
+    procedure CheckNoLoad;
   protected
     function Get(Index: Integer): string; override;
     function GetCount: Integer; override;
@@ -245,11 +251,11 @@ type
     procedure Delete(Index: Integer); override;
     procedure Insert(Index: Integer; const S: string); override;
     { As Delphi's TRichEdit.Lines (Task 11a): the control's load and save without a format
-      (LoadFromFile, LoadFromStream, SaveToFile, SaveToStream with rfAuto) - plain text as
-      PlainText says, else by the file (RTF by its signature, else text; SaveToFile by the
-      extension, else as the content came, SaveToStream as the content came). So a rich control's Lines.SaveToFile writes RTF and
-      its Lines.LoadFromFile reads one, and the load decides PlainText (the document follows
-      the file, R65). Inside the lines' BeginUpdate .. EndUpdate they read and write the lines
+      (LoadFromFile, LoadFromStream, SaveToFile, SaveToStream with rfAuto, as PlainText
+      says: R69). So a rich control's Lines.SaveToFile writes RTF and its Lines.LoadFromFile
+      reads one, and the load decides PlainText (the document follows the file, R65). A load
+      inside the lines' BeginUpdate .. EndUpdate is the control's too, put off to the
+      update's end (a replacement is gathered the same way); the saves there write the lines
       as TStrings does. }
     procedure LoadFromFile(const FileName: string); overload; override;
     procedure LoadFromStream(Stream: TStream); overload; override;
@@ -1194,13 +1200,17 @@ type
     procedure LoadFromFile(const AFileName: string);
     { From the stream's position to its end, read here (nothing keeps the stream). }
     procedure LoadFromStream(AStream: TStream; AFormat: TTyRichFormat = rfAuto);
-    { rfAuto: by the extension (.rtf, .txt), else as the content came. Written to a temporary
-      file beside AFileName first, which takes AFileName's place only when the save completed:
-      a cancelled or failed save leaves the file as it was. Refused for an incomplete document
-      (a cancelled load). A load still going on is finished first. }
+    { rfAuto (one rule, R69): plain text when PlainText was set True by code or the Object
+      Inspector; else by the extension (.rtf RTF, .txt text); else - no extension to go by -
+      text for a plain-text document (PlainText True) and RTF for a rich one. Where the
+      content came from does not decide: a text file opened, formatted and saved as notes.rtf
+      is RTF. Written to a temporary file beside AFileName first, which takes AFileName's
+      place only when the save completed: a cancelled or failed save leaves the file as it
+      was. Refused for an incomplete document (a cancelled load). A load still going on is
+      finished first. Modified: see the property. }
     procedure SaveToFile(const AFileName: string; AFormat: TTyRichFormat = rfAuto);
-    { rfAuto: as the content came (RTF for a new document). A load still going on is finished
-      first; an incomplete document is refused. }
+    { rfAuto: text for a plain-text document (PlainText True), RTF for a rich one. A load
+      still going on is finished first; an incomplete document is refused. }
     procedure SaveToStream(AStream: TStream; AFormat: TTyRichFormat = rfAuto);
     { Runs the rest of an RTF load now. }
     procedure FinishLoading;
@@ -1534,21 +1544,29 @@ type
       (what the document had stays). }
     function LoadRichText(AStream: TStream): Boolean;
     function SaveRichText(AStream: TStream): Boolean;
-    { Delphi's PlainText, the plain-text document state (R65): True - SaveToFile and
-      SaveToStream without an explicit format (and Lines.SaveToFile / SaveToStream) write
-      plain text, a key makes no line break inside a paragraph (Shift+Enter makes a
-      paragraph) and a paste takes text only (R60); set True from code or the Object
-      Inspector, the loads without an explicit format (LoadFromFile, LoadFromStream,
-      Lines.LoadFromFile) read plain text too, whatever the file is, as Delphi's. False - a
-      load goes by the file (RTF by its signature) and a save as the content came
-      (SaveToFile: by the extension first). Only two things set it: a load through the
-      control (the document follows the file: a text file makes it True, an RTF file False;
-      a load that went by the file leaves the next load going by the file - an application
-      that opens a .txt and then a .rtf gets the RTF) and this property. Lines.Text, Text and SelText leave it alone (a rich control filled
-      through Lines stays rich and saves RTF); a new control is rich. Setting it changes no
-      content: a document with formats keeps them, and a save as text then writes its
-      characters only (fonts, colours, paragraph formats, pictures and tables' structure do
-      not go into a text file - a cell's paragraphs as lines). }
+    { Delphi's PlainText, the plain-text document state (R65, R69) - one state, one rule.
+      True: a key makes no line break inside a paragraph (Shift+Enter makes a paragraph), a
+      paste takes text only (R60), and SaveToStream without a format (Lines.SaveToStream too)
+      writes plain text. False: the document is rich - SaveToStream without a format writes
+      RTF, whatever the content was loaded from (PlainText := False on an opened text file
+      makes it save as RTF).
+      Only two things set it: a load through the control (the document follows the file: a
+      text file makes it True, an RTF file False) and this property; Lines.Text, Text and
+      SelText leave it alone (a rich control filled through Lines stays rich and saves RTF);
+      a new control is rich.
+      Set True by code or the Object Inspector (asked) it also decides the loads and the
+      file saves without a format, as Delphi's: LoadFromFile, LoadFromStream and
+      Lines.LoadFromFile read plain text whatever the file is, SaveToFile writes text whatever
+      the extension. A load through the control ends that (its file sets the state, and the
+      next load goes by its file again). Made True by a load it does not: SaveToFile then
+      goes by the extension (a text file opened, formatted and saved as notes.rtf is RTF),
+      else by the state.
+      Setting it changes no content: a document with formats keeps them, and a save as text
+      writes its characters only (fonts, colours, paragraph formats, pictures and tables'
+      structure do not go into a text file - a cell's paragraphs as lines). Such a save of a
+      plain-text document clears Modified all the same: the caller asked for text (rfText, a
+      .txt name or PlainText), which is the application's choice; a rich document saved as
+      text is an export and stays Modified (see Modified). }
     property PlainText: Boolean read FPlainText write SetPlainTextState default False;
     property Document: TTyRichDocument read FDoc;
     property Layouter: TTyRichLayouter read FLayouter;
@@ -1567,10 +1585,14 @@ type
     { The document's (TTyRichDocument.Modified, R59): False exactly when the content is the
       one last loaded or saved - an undo back to it or a redo forward to it makes it False
       again; True for good once the history let go of the way back. Cleared by SaveToFile in
-      a format that keeps the content (RTF; text for a text document) - the saved point is
-      set there; an RTF document saved as text is an export and stays Modified, with its
+      a format that keeps the document (RTF; text for a plain-text document - PlainText
+      True -, its formats dropped from the file by the caller's choice) - the saved point is
+      set there; a rich document saved as text is an export and stays Modified, with its
       SourceFile and SourceFormat. SaveToStream never touches Modified, SourceFile or
-      SourceFormat. Modified := False sets the saved point at the content as it is. }
+      SourceFormat. Modified := False sets the saved point at the content as it is. A change
+      made outside a command (straight on Document.Text, or a primitive run by no command)
+      turns Modified at once, but OnModifiedChange is raised only at the next step, undo,
+      redo, load or save. }
     property Modified: Boolean read GetModified write SetModified;
     { Modified turned (TTyRichDocument.OnModifiedChange: at the end of the edit, the undo,
       the redo, the load or the save that turned it); OnChange is not raised by Modified
@@ -1842,7 +1864,16 @@ end;
 destructor TTyRichEditLines.Destroy;
 begin
   FBatch.Free;
+  FBatchLoad.Free;
   inherited Destroy;
+end;
+
+{ A line changed after a load put off to the update's end would be changed in the content the
+  load is about to replace: refused rather than lost. }
+procedure TTyRichEditLines.CheckNoLoad;
+begin
+  if FBatchLoad <> nil then
+    raise ETyRichEdit.Create('Lines: a load inside BeginUpdate waits for EndUpdate');
 end;
 
 procedure TTyRichEditLines.Run(ACmd: TTyRichCommand);
@@ -1883,6 +1914,7 @@ begin
     FBatch[Index] := S;
     Exit;
   end;
+  CheckNoLoad;
   if (Index < 0) or (Index >= GetCount) then Error(SListIndexError, Index);
   d := FOwner.FDoc;
   t := d.Text;
@@ -1914,6 +1946,7 @@ begin
     FBatch.Insert(Index, S);
     Exit;
   end;
+  CheckNoLoad;
   n := GetCount;
   if (Index < 0) or (Index > n) then Error(SListIndexError, Index);
   t := FOwner.FDoc.Text;
@@ -1941,6 +1974,7 @@ begin
     FBatch.Delete(Index);
     Exit;
   end;
+  CheckNoLoad;
   n := GetCount;
   if (Index < 0) or (Index >= n) then Error(SListIndexError, Index);
   t := FOwner.FDoc.Text;
@@ -1972,6 +2006,8 @@ procedure TTyRichEditLines.Clear;
 begin
   if FUpdating then
   begin
+    // a replacement: a load put off before it is replaced too
+    FreeAndNil(FBatchLoad);
     if FBatch = nil then FBatch := TStringList.Create else FBatch.Clear;
     Exit;
   end;
@@ -1986,6 +2022,7 @@ begin
   if FUpdating and (FBatch = nil) then FBatch := TStringList.Create;
   if FBatch <> nil then
   begin
+    FreeAndNil(FBatchLoad);
     FBatch.Text := Value;
     Exit;
   end;
@@ -1995,6 +2032,7 @@ end;
 procedure TTyRichEditLines.SetUpdateState(Updating: Boolean);
 var
   s: string;
+  ld: TMemoryStream;
 begin
   FUpdating := Updating;
   if Updating then
@@ -2005,7 +2043,19 @@ begin
   end;
   // closed before a gathered replacement: the content is not replaced inside an update
   FOwner.FDoc.EndUpdate;
-  if FBatch <> nil then
+  if FBatchLoad <> nil then
+  begin
+    ld := FBatchLoad;
+    FBatchLoad := nil;
+    try
+      ld.Position := 0;
+      FOwner.LoadFromStream(ld);
+      if FBatchFile <> '' then FOwner.FSourceFile := FBatchFile;
+    finally
+      ld.Free;
+    end;
+  end
+  else if FBatch <> nil then
   begin
     s := FBatch.Text;
     FreeAndNil(FBatch);
@@ -2013,15 +2063,49 @@ begin
   end;
 end;
 
-{ As Delphi's TRichEdit.Lines: the control's load and save (see the declaration). }
+{ As Delphi's TRichEdit.Lines: the control's load and save (see the declaration). Inside the
+  lines' update the document takes no new content: the bytes are read now (a missing file
+  raises here) and loaded by the control at the update's end, as the file says (F-M8). }
 procedure TTyRichEditLines.LoadFromFile(const FileName: string);
+var
+  fs: TFileStream;
 begin
-  if FUpdating then inherited LoadFromFile(FileName) else FOwner.LoadFromFile(FileName);
+  if not FUpdating then
+  begin
+    FOwner.LoadFromFile(FileName);
+    Exit;
+  end;
+  fs := TFileStream.Create(FileName, fmOpenRead or fmShareDenyNone);
+  try
+    LoadFromStream(fs);
+  finally
+    fs.Free;
+  end;
+  FBatchFile := ExpandFileName(FileName);
 end;
 
 procedure TTyRichEditLines.LoadFromStream(Stream: TStream);
+var
+  ms: TMemoryStream;
 begin
-  if FUpdating then inherited LoadFromStream(Stream) else FOwner.LoadFromStream(Stream);
+  if not FUpdating then
+  begin
+    FOwner.LoadFromStream(Stream);
+    Exit;
+  end;
+  ms := TMemoryStream.Create;
+  try
+    // (CopyFrom with 0 would copy the whole stream from its start)
+    if Stream.Size > Stream.Position then ms.CopyFrom(Stream, Stream.Size - Stream.Position);
+  except
+    ms.Free;
+    raise;
+  end;
+  // the latest replacement wins: a gathered text or an earlier load goes
+  FreeAndNil(FBatch);
+  FBatchLoad.Free;
+  FBatchLoad := ms;
+  FBatchFile := '';
 end;
 
 procedure TTyRichEditLines.SaveToFile(const FileName: string);
@@ -9332,8 +9416,11 @@ begin
     FSourceFormat := rfText;
     FRtfPrefix := nil;
   end;
-  // the document follows the file (R65): one of the two things that set PlainText
+  { The document follows the file (R65): one of the two things that set PlainText. A state
+    the file made is not one the application asked for (R69): the next load without a
+    format goes by its file again, whatever an earlier PlainText := True said. }
   FPlainText := AFormat <> rfRtf;
+  FPlainTextAsked := False;
   FLinesStored := False;
   FSourceFile := '';
   if HasBackgroundWork then StartBackground;
@@ -9455,8 +9542,9 @@ begin
   if FInStep then raise ETyRichEdit.Create(rsRichEditBusy);
   FinishLoading;
   if FDoc.Incomplete then raise ETyRichEdit.Create(rsRichEditIncomplete);
+  // the document's state decides, not where the content came from (R69)
   if AFormat = rfAuto then
-    if FPlainText then AFormat := rfText else AFormat := FSourceFormat;
+    if FPlainText then AFormat := rfText else AFormat := rfRtf;
   // a document of ours names the font its plain text is shown in (RtfWrite's \f0)
   FDoc.BaseFontName := TyEffectiveFontName(CurrentStyle.FontName);
   Inc(FSaving);
@@ -9590,13 +9678,17 @@ begin
   full := RealTarget(ExpandFileName(AFileName));
   FinishLoading;
   if FDoc.Incomplete then raise ETyRichEdit.Create(rsRichEditIncomplete);
-  if (AFormat = rfAuto) and FPlainText then AFormat := rfText;
+  { One rule (R69): text when the application asked for it (PlainText := True), else the
+    extension, else the document's state - never where the content came from, so that a
+    text file opened, formatted and saved under .rtf is RTF. }
+  if (AFormat = rfAuto) and FPlainText and FPlainTextAsked then AFormat := rfText;
   if AFormat = rfAuto then
   begin
     ext := LowerCase(ExtractFileExt(full));
     if ext = '.rtf' then AFormat := rfRtf
     else if ext = '.txt' then AFormat := rfText
-    else AFormat := FSourceFormat;
+    else if FPlainText then AFormat := rfText
+    else AFormat := rfRtf;
   end;
   if TargetWriteProtected(full) then raise ETyRichEdit.CreateFmt(rsRichEditCannotWrite, [full]);
   { Beside the target, so that putting it in the target's place is a rename on one volume;
@@ -9627,8 +9719,11 @@ begin
     SysUtils.DeleteFile(tmp);
     raise ETyRichEdit.CreateFmt(rsRichEditCannotReplace, [full]);
   end;
-  // RTF keeps the content; text keeps a text document's: an RTF document saved as text is an export
-  keeps := (AFormat = rfRtf) or (FSourceFormat = rfText) or FPlainText;
+  { The same answer decides whether the file is now the document's (R69): RTF keeps any
+    content; text keeps a plain-text document's - the text is what such a document is, its
+    formats included (the caller asked for text: an explicit .txt, rfText or PlainText, the
+    application's choice); a rich document saved as text is an export and stays Modified. }
+  keeps := (AFormat = rfRtf) or ((AFormat = rfText) and FPlainText);
   if keeps then
   begin
     FDoc.Modified := False;

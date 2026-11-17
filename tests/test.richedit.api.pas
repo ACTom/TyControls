@@ -84,6 +84,10 @@ type
     procedure TestTheEventsArePublished;
     procedure TestTheWaitCursorOverTheThreshold;
     procedure TestAWriteLeavesTheViewWhereItIs;
+    // fix wave W17
+    procedure TestPlainTextIsOneState;
+    procedure TestTheSaveRuleWithoutAFormat;
+    procedure TestALinesLoadInsideAnUpdate;
   end;
 
 implementation
@@ -1795,6 +1799,239 @@ begin
   FRich.UpdateView;
   AssertEquals('a paragraph write: the view stays', 0, FRich.TopParagraph);
   AssertTrue('written', fsBold in Fmt(FRich.Document.Text.ParaStart(150)).Style);
+end;
+
+{ ---- fix wave W17 ---- }
+
+procedure WriteFileBytes(const APath: string; const B: TBytes);
+var
+  f: TFileStream;
+begin
+  f := TFileStream.Create(APath, fmCreate);
+  try
+    if Length(B) > 0 then f.WriteBuffer(B[0], Length(B));
+  finally
+    f.Free;
+  end;
+end;
+
+function StreamText(AStream: TMemoryStream): RawByteString;
+begin
+  Result := '';
+  SetLength(Result, AStream.Size);
+  if AStream.Size > 0 then Move(AStream.Memory^, Result[1], AStream.Size);
+end;
+
+{ R69: one state, one rule - the review's three sequences (I-2). }
+procedure TTyRichEditApiTest.TestPlainTextIsOneState;
+var
+  st: TMemoryStream;
+  path: string;
+  s: RawByteString;
+  b: TBytes;
+begin
+  // (ii) a text file opened, formatted, saved as notes.rtf: RTF, with the bold
+  LoadBytes(RawBytes('a text file'));
+  AssertTrue('a text file: plain', FRich.PlainText);
+  Sel(0, 1);
+  FRich.SelAttributes.Style := [fsBold];
+  path := TempDir + 'notes.rtf';
+  FRich.SaveToFile(path);
+  s := StrOf(FileBytes(path));
+  AssertEquals('(ii) RTF under .rtf', '{' + BS + 'rtf1', Copy(s, 1, 6));
+  AssertTrue('(ii) the bold went into the file', Pos(BS + 'b ', s) > 0);
+  AssertFalse('(ii) an RTF save keeps the document', FRich.Modified);
+  AssertTrue('(ii) its source format now', FRich.SourceFormat = rfRtf);
+  // (iii) PlainText := False makes a text-loaded document rich, and it saves as RTF
+  LoadBytes(RawBytes('a text file'));
+  FRich.PlainText := False;
+  Sel(0, 1);
+  FRich.SelAttributes.Style := [fsBold];
+  st := TMemoryStream.Create;
+  try
+    FRich.SaveToStream(st);
+    AssertEquals('(iii) SaveToStream: RTF', '{' + BS + 'rtf1', Copy(StreamText(st), 1, 6));
+    st.Clear;
+    FRich.Lines.SaveToStream(st);
+    AssertEquals('(iii) Lines.SaveToStream: RTF', '{' + BS + 'rtf1', Copy(StreamText(st), 1, 6));
+  finally
+    st.Free;
+  end;
+  path := TempDir + 'notes.txt';
+  FRich.SaveToFile(path);
+  AssertEquals('(iii) .txt: the characters', 'a text file', StrOf(FileBytes(path)));
+  AssertTrue('(iii) a rich document saved as text is an export: still Modified', FRich.Modified);
+  path := TempDir + 'notes';
+  FRich.SaveToFile(path);
+  AssertEquals('(iii) no extension: the state says RTF', '{' + BS + 'rtf1',
+    Copy(StrOf(FileBytes(path)), 1, 6));
+  // (i) an asked True that a load ended does not force a later load to text
+  FRich.PlainText := True;
+  st := TMemoryStream.Create;
+  try
+    b := PlainRtf(2);
+    st.WriteBuffer(b[0], Length(b));
+    st.Position := 0;
+    AssertTrue('LoadRichText', FRich.LoadRichText(st));
+  finally
+    st.Free;
+  end;
+  AssertFalse('(i) LoadRichText: rich', FRich.PlainText);
+  LoadBytes(RawBytes('a text file'));
+  AssertTrue('(i) a text file: plain', FRich.PlainText);
+  LoadBytes(PlainRtf(2));
+  AssertFalse('(i) the RTF file: rich', FRich.PlainText);
+  AssertEquals('(i) read as RTF, not as its source', 'Paragraph 0 of the file.', FRich.Lines[0]);
+end;
+
+{ R69's rule for a save without a format: asked text / made by a load / rich, each saved under
+  .rtf, under .txt, under a name without an extension and to a stream. }
+procedure TTyRichEditApiTest.TestTheSaveRuleWithoutAFormat;
+const
+  Rtf = '{' + BS + 'rtf1';
+var
+  kind, target: Integer;
+  path, what: string;
+  s: RawByteString;
+  st: TMemoryStream;
+  wantText, wantKept: Boolean;
+begin
+  for kind := 0 to 2 do
+    for target := 0 to 3 do
+    begin
+      // (an asked True of the round before would read the next file as text)
+      FRich.PlainText := False;
+      case kind of
+        0: begin
+             // asked: PlainText := True by code over a formatted rich document
+             LoadBytes(PlainRtf(2));
+             Sel(0, 3);
+             FRich.SelAttributes.Style := [fsBold];
+             FRich.PlainText := True;
+             what := 'asked';
+           end;
+        1: begin
+             // made by the load of a text file, then formatted
+             LoadBytes(RawBytes('Paragraph 0 of the file.'));
+             Sel(0, 3);
+             FRich.SelAttributes.Style := [fsBold];
+             what := 'load-made';
+           end;
+      else
+        begin
+          LoadBytes(PlainRtf(2));
+          Sel(0, 3);
+          FRich.SelAttributes.Style := [fsBold];
+          what := 'rich';
+        end;
+      end;
+      AssertTrue(what + ': Modified before the save', FRich.Modified);
+      case target of
+        0: path := TempDir + 'save' + IntToStr(kind) + '.rtf';
+        1: path := TempDir + 'save' + IntToStr(kind) + '.txt';
+        2: path := TempDir + 'save' + IntToStr(kind);
+      else
+        path := '';
+      end;
+      what := what + ' to ' + IntToStr(target);
+      if path <> '' then
+      begin
+        FRich.SaveToFile(path);
+        s := StrOf(FileBytes(path));
+      end
+      else
+      begin
+        st := TMemoryStream.Create;
+        try
+          FRich.SaveToStream(st);
+          s := StreamText(st);
+        finally
+          st.Free;
+        end;
+      end;
+      case kind of
+        0: wantText := True;
+        1: wantText := target <> 0;
+      else
+        wantText := target = 1;
+      end;
+      if wantText then
+        AssertEquals(what + ': text', 'Paragraph 0 of the file.', Copy(s, 1, 24))
+      else
+        AssertEquals(what + ': RTF', Rtf, Copy(s, 1, 6));
+      if path <> '' then
+      begin
+        // RTF keeps any document, text a plain one; a rich document as text is an export
+        wantKept := not wantText or (kind <> 2);
+        AssertEquals(what + ': Modified after the save', not wantKept, FRich.Modified);
+      end
+      else
+        AssertTrue(what + ': a stream leaves Modified', FRich.Modified);
+    end;
+end;
+
+{ F-M8: Lines.LoadFromFile / LoadFromStream inside Lines.BeginUpdate .. EndUpdate is the
+  control's load, put off to the update's end - an RTF file is read as RTF. }
+procedure TTyRichEditApiTest.TestALinesLoadInsideAnUpdate;
+var
+  path: string;
+  st: TBytesStream;
+  raised: Boolean;
+begin
+  path := TempDir + 'inupdate.rtf';
+  WriteFileBytes(path, PlainRtf(3));
+  SetText('before');
+  FRich.Lines.BeginUpdate;
+  try
+    FRich.Lines.LoadFromFile(path);
+    AssertEquals('not yet: the content stays inside the update', 'before', FRich.Lines[0]);
+  finally
+    FRich.Lines.EndUpdate;
+  end;
+  FRich.FinishLoading;
+  AssertEquals('read as RTF', 'Paragraph 0 of the file.', FRich.Lines[0]);
+  AssertEquals('all of it', 3, FRich.Lines.Count);
+  AssertFalse('the file decided: rich', FRich.PlainText);
+  AssertEquals('its file', ExpandFileName(path), FRich.SourceFile);
+  // a stream the same way; a text file is plain
+  SetText('before');
+  st := TBytesStream.Create(RawBytes('plain one'));
+  try
+    FRich.Lines.BeginUpdate;
+    try
+      FRich.Lines.LoadFromStream(st);
+    finally
+      FRich.Lines.EndUpdate;
+    end;
+  finally
+    st.Free;
+  end;
+  AssertEquals('a text stream', 'plain one', FRich.Lines[0]);
+  AssertTrue('a text file: plain', FRich.PlainText);
+  // a replacement after it wins; a line edit after it is refused, not lost
+  FRich.Lines.BeginUpdate;
+  try
+    FRich.Lines.LoadFromFile(path);
+    FRich.Lines.Text := 'replaced';
+  finally
+    FRich.Lines.EndUpdate;
+  end;
+  AssertEquals('the later replacement', 'replaced', FRich.Lines[0]);
+  raised := False;
+  FRich.Lines.BeginUpdate;
+  try
+    FRich.Lines.LoadFromFile(path);
+    try
+      FRich.Lines.Add('more');
+    except
+      on ETyRichEdit do raised := True;
+    end;
+  finally
+    FRich.Lines.EndUpdate;
+  end;
+  FRich.FinishLoading;
+  AssertTrue('a line added after the load: refused', raised);
+  AssertEquals('the load', 'Paragraph 0 of the file.', FRich.Lines[0]);
 end;
 
 initialization
