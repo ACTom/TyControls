@@ -55,6 +55,11 @@ const
   CTyMaxTabStops = 32;
 
 type
+  { Delphi's TNumberingStyle as the same type as Numbering's: Delphi's classic cast
+    Paragraph.Numbering := TNumberingStyle(BulletsButton.Down) compiles and gives nsNone /
+    nsBullet. }
+  TNumberingStyle = TTyListKind;
+
   { The character format of the selection (SelAttributes) or the control's base
     (DefAttributes) - see the control's properties for what each answers for. Reading a value
     of a selection whose characters differ gives the value of the first character a write

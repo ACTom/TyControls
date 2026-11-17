@@ -554,6 +554,8 @@ type
     { PlainText was set True by code or the Object Inspector (not by a text file's load): only
       then does a load without a format read text whatever the file is. }
     FPlainTextAsked: Boolean;
+    // inside ActionChange: a linked action's Caption is not the document's text
+    FInActionChange: Boolean;
     FPendingFmt: TTyCharFormatId;
     FHasPendingFmt: Boolean;
     FPendingAt: TTyRichPos;
@@ -807,6 +809,10 @@ type
     procedure SetSelStart(AValue: TTyRichPos);
     procedure SetSelLength(AValue: TTyRichPos);
     procedure SetCaretIndex(AValue: TTyRichPos);
+    function GetCaretPos: TPoint;
+    procedure SetCaretPos(const AValue: TPoint);
+    function GetAllText: TCaption;
+    procedure SetAllText(const AValue: TCaption);
     { The layout parameters are known (a control never laid out takes the theme's now): what
       a query of a block's layout needs, without laying out the view. }
     procedure EnsureParams;
@@ -1035,6 +1041,12 @@ type
     {$ENDIF}
   protected
     function GetStyleTypeKey: string; override;
+    { Caption IS Text, as on LCL's TCustomMemo and the package's Memo: code holding the
+      control as a TControl (an action link, a generic text reader) reaches the document. }
+    function RealGetText: TCaption; override;
+    procedure RealSetText(const AValue: TCaption); override;
+    { TControl.ActionChange copies a linked action's Caption into Caption: the content stays. }
+    procedure ActionChange(Sender: TObject; CheckDefaults: Boolean); override;
     { The one door of a user's edit (fix wave W15) - every edit a key, the menu, a paste or an
       input method's commit makes goes through it, and so does a descendant's own command (a
       toolbar's or a menu's action). In this order:
@@ -1435,6 +1447,20 @@ type
     { The caret: SelStart's end or the other (the end a Shift move moves); writing it collapses
       the selection there. Inside an update: as SelStart. }
     property CaretIndex: TTyRichPos read FCaret write SetCaretIndex;
+    { Delphi's CaretPos (TCustomRichEdit's): X the column, Y the line of the selection's END
+      (its larger end, as Delphi reads EM_EXGETSEL's cpMax), where a line is a paragraph
+      (Lines) and a column a character of it; written, the selection collapses at column X
+      of paragraph Y (both clamped), as SelStart := does. CaretIndex is the caret's own
+      position. }
+    property CaretPos: TPoint read GetCaretPos write SetCaretPos;
+    { The whole text as one string, paragraphs joined by the platform's line break and
+      nothing after the last (Delphi's Text); written, the content becomes that text as plain
+      text - as Lines.Text := does (PlainText stays as it is), a line break at the end making
+      an empty last paragraph. Caption is Text, as on the package's Memo. Reading it builds
+      the whole text: in a large document, that is a copy of all of it. }
+    property Text: TCaption read GetAllText write SetAllText;
+    { Empties the content (Lines.Clear); Modified is False afterwards, as Delphi's. }
+    procedure Clear;
     { The caret's affinity: it stands at the end of a wrapped line rather than at the start of
       the line below (End, a click past a line's end). }
     property CaretAtLineEnd: Boolean read FCaretAtEnd;
@@ -3028,6 +3054,81 @@ end;
 procedure TTyCustomRichEdit.SetCaretIndex(AValue: TTyRichPos);
 begin
   SetSelStart(AValue);
+end;
+
+function TTyCustomRichEdit.GetCaretPos: TPoint;
+var
+  t: TTyRichText;
+  e: TTyRichPos;
+  p: Integer;
+begin
+  t := FDoc.Text;
+  // the selection's end, as Delphi's rich edit reads it (cpMax)
+  e := Math.Min(Math.Max(FCaret, FSelAnchor), t.Length);
+  p := t.ParaOfPos(e);
+  Result.Y := p;
+  Result.X := Integer(Math.Min(e - t.ParaStart(p), Int64(High(Integer))));
+end;
+
+procedure TTyCustomRichEdit.SetCaretPos(const AValue: TPoint);
+var
+  t: TTyRichText;
+  p: Integer;
+  x: TTyRichPos;
+begin
+  t := FDoc.Text;
+  p := Math.Max(0, Math.Min(AValue.Y, t.ParaCount - 1));
+  x := Math.Max(Int64(0), Math.Min(Int64(AValue.X), t.ParaLength(p)));
+  SetSelStart(t.ParaStart(p) + x);
+end;
+
+function TTyCustomRichEdit.GetAllText: TCaption;
+var
+  n: Integer;
+begin
+  Result := '';
+  // (none yet while the control is made, none any more while it goes)
+  if FLines = nil then Exit;
+  // Lines.Text without the break TStrings adds after the last line
+  Result := FLines.Text;
+  n := Length(FLines.LineBreak);
+  if (n > 0) and (Length(Result) >= n) and
+    (Copy(Result, Length(Result) - n + 1, n) = FLines.LineBreak) then
+    SetLength(Result, Length(Result) - n);
+end;
+
+procedure TTyCustomRichEdit.SetAllText(const AValue: TCaption);
+begin
+  { As Lines.Text := (a gathered replacement inside Lines.BeginUpdate too); one break more,
+    since Lines.Text takes a break at the end as closing the last line and Text as a line
+    of its own. }
+  if AValue = '' then FLines.Text := '' else FLines.Text := AValue + FLines.LineBreak;
+end;
+
+procedure TTyCustomRichEdit.Clear;
+begin
+  FLines.Clear;
+end;
+
+function TTyCustomRichEdit.RealGetText: TCaption;
+begin
+  Result := GetAllText;
+end;
+
+procedure TTyCustomRichEdit.RealSetText(const AValue: TCaption);
+begin
+  if FInActionChange then Exit;
+  SetAllText(AValue);
+end;
+
+procedure TTyCustomRichEdit.ActionChange(Sender: TObject; CheckDefaults: Boolean);
+begin
+  FInActionChange := True;
+  try
+    inherited ActionChange(Sender, CheckDefaults);
+  finally
+    FInActionChange := False;
+  end;
 end;
 
 procedure TTyCustomRichEdit.SelectAll;

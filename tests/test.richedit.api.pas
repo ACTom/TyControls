@@ -118,6 +118,7 @@ type
     procedure TestANewContentInsideABlockIsRefused;
     procedure TestALinesFileLoadReadsAtTheUpdatesEnd;
     procedure TestTheConsistencyBudgetCountsRuns;
+    procedure TestTextClearAndCaretPosAsDelphis;
   end;
 
   // the control's protected test seams (the consistency budget, the API's door)
@@ -3303,7 +3304,7 @@ begin
   try
     FRich.SelStart := 6;
     FRich.SelText := '!';
-    for kind := 0 to 3 do
+    for kind := 0 to 5 do
       try
         case kind of
           0: begin
@@ -3317,6 +3318,8 @@ begin
           1: FRich.LoadFromFile(TempDir + 'no such file.rtf');
           2: FRich.Lines.Text := 'other';
           3: FRich.Lines.Clear;
+          4: FRich.Text := 'other';
+          5: FRich.Clear;
         end;
         Fail('a new content inside a block: refused (' + IntToStr(kind) + ')');
       except
@@ -3329,7 +3332,7 @@ begin
   finally
     FRich.EndEdit;
   end;
-  AssertEquals('all four refused by the control', 4, refused);
+  AssertEquals('all six refused by the control', 6, refused);
   AssertEquals('...saying why', rsRichEditReplaceInEdit, msg);
   AssertEquals('the content as the block left it', 'before!', FRich.Lines[0]);
   FRich.Undo;
@@ -3417,6 +3420,61 @@ begin
   AssertTrue(Format('...781 runs walked (%d)', [acc.ConsistencyWork]),
     (acc.ConsistencyWork >= 780) and (acc.ConsistencyWork <= 782));
   acc.ConsistencyBudgetWork := CRichConsistWork;
+end;
+
+{ G-L: the members a porter calls that the control can mean as the originals do - Text (the
+  whole text, read and written), Caption the same, Clear (Modified False), CaretPos as
+  Delphi's TPoint of column and paragraph (the selection's end), and TNumberingStyle's
+  classic cast. }
+procedure TTyRichEditApiTest.TestTextClearAndCaretPosAsDelphis;
+var
+  down: Boolean;
+  p: TPoint;
+begin
+  FRich.Text := 'one' + LineEnding + 'two';
+  AssertEquals('two paragraphs', 2, FRich.Lines.Count);
+  AssertEquals('read back, nothing after the last', 'one' + LineEnding + 'two', FRich.Text);
+  AssertEquals('Caption is Text', FRich.Text, TControl(FRich).Caption);
+  FRich.Text := 'one' + LineEnding;
+  AssertEquals('a break at the end: an empty last paragraph', 2, FRich.Lines.Count);
+  AssertEquals('...read back as written', 'one' + LineEnding, FRich.Text);
+  FRich.Text := '';
+  AssertEquals('empty', '', FRich.Text);
+  TControl(FRich).Caption := 'by caption';
+  AssertEquals('Caption writes the text', 'by caption', FRich.Lines[0]);
+  AssertFalse('a rich control stays rich', FRich.PlainText);
+  // Clear: empty, not Modified
+  Chars('x');
+  AssertTrue('typed: Modified', FRich.Modified);
+  FRich.Clear;
+  AssertEquals('Clear: no text', 0, FRich.Document.Text.Length);
+  AssertFalse('Clear: not Modified', FRich.Modified);
+  // CaretPos: the column and the paragraph of the selection's end
+  SetText('abc' + LineEnding + 'defgh');
+  FRich.SelStart := 6;
+  p := FRich.CaretPos;
+  AssertEquals('column', 2, p.X);
+  AssertEquals('paragraph', 1, p.Y);
+  Sel(1, 5);
+  AssertEquals('a selection: its end''s paragraph', 1, FRich.CaretPos.Y);
+  AssertEquals('...and column', 2, FRich.CaretPos.X);
+  // a reversed selection: still its end (Delphi's cpMax); the caret's own place is CaretIndex
+  FRich.SelStart := 6;
+  FRich.SelLength := -5;
+  AssertEquals('reversed: the caret at the start', 1, FRich.CaretIndex);
+  AssertEquals('...CaretPos the end''s paragraph', 1, FRich.CaretPos.Y);
+  FRich.CaretPos := Point(1, 0);
+  AssertEquals('written: the caret there', 1, FRich.SelStart);
+  AssertEquals('...nothing selected', 0, FRich.SelLength);
+  FRich.CaretPos := Point(99, 7);
+  AssertEquals('clamped: the last paragraph''s end', FRich.Document.Text.Length, FRich.SelStart);
+  // Delphi's cast of a button's state
+  down := True;
+  FRich.Paragraph.Numbering := TNumberingStyle(down);
+  AssertTrue('TNumberingStyle(True) = nsBullet', FRich.Paragraph.Numbering = nsBullet);
+  down := False;
+  FRich.Paragraph.Numbering := TNumberingStyle(down);
+  AssertTrue('TNumberingStyle(False) = nsNone', FRich.Paragraph.Numbering = nsNone);
 end;
 
 initialization
