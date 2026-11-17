@@ -89,6 +89,8 @@ type
     procedure TestAHugeLengthCopiesToTheEnd;
     procedure TestTheFilesOpenLastParagraphFollowedIsNotItsBytes;
     procedure TestARangeWhileLoadingAndAfterACancel;
+    // fix wave W17 (F-Y5)
+    procedure TestAnEmptyLastParagraphIsTakenWhole;
     // Task 10a
     procedure TestADocumentOfOursNamesItsFontAndPage;
   end;
@@ -4743,6 +4745,56 @@ begin
     d.BaseFontName := 'Microsoft YaHei';
     outb := SaveBytes(d);
     AssertTrue('a file saved unchanged is the file', SameBytes(orig, outb));
+  finally
+    d.Free;
+  end;
+end;
+
+{ F-Y5: a range that reaches the document's end through the separator before an empty last
+  paragraph takes that paragraph whole - with its format, ended by \par; one that ends before
+  that separator does not. Written and read back, both are what they took. }
+procedure TTyRtfWriteTest.TestAnEmptyLastParagraphIsTakenWhole;
+var
+  d, b: TTyRichDocument;
+  pf: TTyParaFormat;
+  r: TTyRichCopyRange;
+  info: TTyRtfWriteInfo;
+  o: TBytes;
+  body: RawByteString;
+begin
+  d := TTyRichDocument.CreateFromUtf8(BytesOf('abc'#10));
+  try
+    pf := TyDefaultParaFormat;
+    pf.Align := paraCenter;
+    AssertTrue(d.Execute(TTyRichSetParaFormat.Create(1, 1, [pffAlign], pf)));
+    r := TyRichCopyRange(d, 0, d.Text.Length);
+    AssertEquals('the last paragraph', 1, r.LastPara);
+    AssertTrue('whole', r.LastWhole);
+    AssertFalse('no separator of its own', r.LastSeparator);
+    o := RangeOut(d, 0, d.Text.Length, info);
+    body := StrOf(o, info.HeaderStop, Length(o) - info.HeaderStop);
+    AssertTrue('centred: ' + Shown(body), PosRaw('\qc', body) > 0);
+    AssertTrue('ended as a paragraph', RtfEndsWithBreak(o));
+    AssertTrue('two paragraph ends: ' + Shown(body),
+      PosRaw('\par', body, PosRaw('\par', body) + 4) > 0);
+    b := LoadDoc(o, True);
+    try
+      // read back: abc, the empty centred paragraph, and the reader's last (empty) one
+      AssertEquals('read back: abc', 'abc', b.Text.GetText(0, 3));
+      AssertEquals('...the empty paragraph', 0, b.Text.ParaLength(1));
+      AssertTrue('...centred', b.Formats.ParaFormat(b.ParaFormatOf(1)).Align = paraCenter);
+    finally
+      b.Free;
+    end;
+    // from the second character: the same
+    r := TyRichCopyRange(d, 1, d.Text.Length - 1);
+    AssertEquals('from inside the first: the last too', 1, r.LastPara);
+    // ending before the separator: unchanged
+    r := TyRichCopyRange(d, 0, 3);
+    AssertEquals('before the separator: the first only', 0, r.LastPara);
+    AssertFalse('...in part', r.LastWhole);
+    o := RangeOut(d, 0, 3, info);
+    AssertFalse('before the separator: no paragraph''s end', RtfEndsWithBreak(o));
   finally
     d.Free;
   end;

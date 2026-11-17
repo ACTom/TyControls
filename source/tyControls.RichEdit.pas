@@ -1146,6 +1146,10 @@ type
     { The clipboard's RTF read as a document of its own (TyRichReadRtfFragment; nil: it
       cannot be used). The seam a test stands in for a reader that fails. }
     function ReadRtfSource(const ABytes: TBytes; out AEndsWithParagraph: Boolean): TTyRichDocument; virtual;
+    { The filter a paste of ASource into this document goes through
+      (TyRichFragmentFilterFor). Made before the command that takes ASource over: a failure
+      here (out of memory) frees ASource and refuses the paste (F-Y4). A test seam. }
+    function MakeFragmentFilter(ASource: TTyRichDocument): TTyRichFragmentFilter; virtual;
     { Around a copy of more than CopyWaitChars characters: the wait cursor (Screen.Cursor),
       put back after it whatever happened. On Windows LCL sets the cursor at once; whether
       GTK or Cocoa show it before their event loop turns again - the copy lets no message in
@@ -1833,6 +1837,12 @@ function TyRichClipboardRtfName: string;
   more pixel bytes than there are is no image. A PNG is kept to its IEND chunk. APicture is the caller's (no reference taken) when rpmMade, else nil. }
 function TyRichMakePicture(const ABytes: TBytes; AKind: TTyRichImageKind;
   AMaxWidthTwips: Integer; out APicture: TTyRichPicture): TTyRichPictureMade;
+
+var
+  { What TyRichMakePicture's walk of a TIFF's directory chain did (tests and probes, F-Y1):
+    the directories visited and the entries read, added to on every call. }
+  TyRichTiffDirsVisited: Int64 = 0;
+  TyRichTiffEntriesRead: Int64 = 0;
 
 { The driver of the background work's turns on widgetset APlatform (see TTyRichTurnDriver). }
 function TyRichTurnDriverFor(APlatform: TLCLPlatform): TTyRichTurnDriver;
@@ -4015,6 +4025,8 @@ var
   w, h, xppm, yppm, base, hs, i, len, bits, comp, used, entry, masks, pal, need, off: Int64;
   tag, typ, cnt, ifd, e, dirs, dw, dh: Int64;
   le: Boolean;
+  seen: TBits;
+  entries: Int64;
   st: TMemoryStream;
   outSt: TBytesStream;
   bmp: TBGRABitmap;
@@ -4140,26 +4152,38 @@ begin
     rikTiff:
       begin
         { Every directory's width and length: the decoder reads every image of the file and
-          takes the largest. The chain is followed a bounded number of steps; one that loops,
-          points outside the bytes, or holds a directory with no size does not decode. The
-          largest image is the one judged. }
+          takes the largest. A chain that comes back to a directory it visited, points outside
+          the bytes, holds a directory with no size, or makes the walk read more entries than
+          the bytes hold (12 bytes each) does not decode: the work is linear in the file's
+          bytes, once (F-Y1). The largest image is the one judged. }
         if (Length(ABytes) >= 8) and (ABytes[0] = Ord('I')) and (ABytes[1] = Ord('I')) then le := True
         else if (Length(ABytes) >= 8) and (ABytes[0] = Ord('M')) and (ABytes[1] = Ord('M')) then le := False
         else Exit;
         if le then ifd := Cardinal(PicLE32(ABytes, 4)) else ifd := PicBE32(ABytes, 4);
         dirs := 0;
+        entries := 0;
+        seen := TBits.Create(Length(ABytes));
+        try
         while ifd <> 0 do
         begin
           // a directory takes at least 18 bytes: a chain longer than the bytes could hold
           // distinct ones goes round
           Inc(dirs);
+          Inc(TyRichTiffDirsVisited);
           if (dirs > Length(ABytes) div 18 + 1) or (ifd < 8) or (ifd + 2 > Length(ABytes)) then Exit;
+          // back at a directory of the chain: it goes round
+          if seen[ifd] then Exit;
+          seen[ifd] := True;
           if le then cnt := PicLE16(ABytes, ifd) else cnt := PicBE16(ABytes, ifd);
           if (cnt <= 0) or (ifd + 2 + cnt * 12 + 4 > Length(ABytes)) then Exit;
+          // directories that overlap each other: no more entries than the bytes hold, in all
+          Inc(entries, cnt);
+          if entries > Length(ABytes) div 12 then Exit;
           dw := -1;
           dh := -1;
           for e := 0 to cnt - 1 do
           begin
+            Inc(TyRichTiffEntriesRead);
             i := ifd + 2 + e * 12;
             if le then
             begin
@@ -4186,6 +4210,9 @@ begin
           end;
           i := ifd + 2 + cnt * 12;
           if le then ifd := Cardinal(PicLE32(ABytes, i)) else ifd := PicBE32(ABytes, i);
+        end;
+        finally
+          seen.Free;
         end;
         if (w <= 0) or (h <= 0) then Exit;
       end;
@@ -5481,6 +5508,7 @@ var
   comp: TTyRichCompositeCommand;
   fmt: TTyCharFormatId;
   i: Integer;
+  flt: TTyRichFragmentFilter;
 
   function Wanted(AFlavour: TTyRichClipFlavour): Boolean;
   begin
@@ -5594,8 +5622,16 @@ begin
             out of this very file); the rest is left out or made again (R62,
             TyRichFragmentFilterFor). }
           if (src <> nil) and ((src.Text.Length > 0) or ends) then
-            cmd := TTyRichInsertFragment.Create(s, src, ends, flat,
-              TyRichFragmentFilterFor(src, FDoc))
+          begin
+            // made first: the command takes src over only once it exists (F-Y4)
+            try
+              flt := MakeFragmentFilter(src);
+            except
+              FreeAndNil(src);
+              raise;
+            end;
+            cmd := TTyRichInsertFragment.Create(s, src, ends, flat, flt);
+          end
           else
             src.Free;
         end;
@@ -6815,6 +6851,11 @@ begin
   if s = '' then Exit;
   SetLength(ABytes, Length(s));
   Move(s[1], ABytes[0], Length(s));
+end;
+
+function TTyCustomRichEdit.MakeFragmentFilter(ASource: TTyRichDocument): TTyRichFragmentFilter;
+begin
+  Result := TyRichFragmentFilterFor(ASource, FDoc);
 end;
 
 function TTyCustomRichEdit.ReadRtfSource(const ABytes: TBytes;

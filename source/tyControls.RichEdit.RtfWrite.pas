@@ -131,6 +131,8 @@ type
   // so that it reads back with its format and pastes as a paragraph - R64, R67; the plain
   // text has no line break after it - R45). The last paragraph's text alone, in a document
   // of more paragraphs, is taken in part, as any other line's text without its separator.
+  // An empty last paragraph is taken whole by a range that reaches the document's end through
+  // the separator before it (it has no character of its own to be taken by; F-Y5).
   // Empty: nothing to copy.
   TTyRichCopyRange = record
     FirstPara, LastPara: Integer;
@@ -2771,6 +2773,19 @@ begin
   Result.LastWhole := Result.LastSeparator or ((Result.LastPara = t.ParaCount - 1) and
     (Result.ToChar = t.ParaLength(Result.LastPara)) and
     ((Result.FirstPara < Result.LastPara) or ((Result.FromChar = 0) and (t.ParaCount = 1))));
+  { An EMPTY last paragraph has no character to be the last one taken: a range that reaches
+    the document's end takes the separator before it - and with it all of that paragraph's
+    zero characters. It is taken whole (R67's rule), so that its format comes along (F-Y5:
+    a document ending with an empty centred line or list item). The plain text is the same:
+    the separator before it already ends with a line break. }
+  if Result.LastSeparator and (stop = t.Length) and (Result.LastPara = t.ParaCount - 2) and
+    (t.ParaLength(t.ParaCount - 1) = 0) then
+  begin
+    Result.LastPara := t.ParaCount - 1;
+    Result.ToChar := 0;
+    Result.LastSeparator := False;
+    Result.LastWhole := True;
+  end;
   ADoc.BeginRead;
   try
     c0 := ADoc.CellAt(Result.FirstPara);

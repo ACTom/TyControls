@@ -101,6 +101,12 @@ type
     procedure TestTheLastLinesTextAlonePastesInline;
     procedure TestATiffsEveryDirectoryAndADibsColourTable;
     procedure TestEveryFixturesRangesPasteAcrossDocuments;
+    // fix wave W17 (the re-review of W16)
+    procedure TestATiffChainThatLoopsIsReadOnce;
+    procedure TestColourZeroIsNeverForeign;
+    procedure TestAPicturesAltTextInAnotherCodePage;
+    procedure TestTheFilterFailingFreesTheSource;
+    procedure TestAnEmptyLastParagraphIsCopied;
   end;
 
 implementation
@@ -3169,6 +3175,226 @@ begin
   finally
     d.Free;
   end;
+end;
+
+{ ---- fix wave W17 ---- }
+
+{ F-Y1: a directory whose next-directory offset is its own, of 65,535 entries (786,434 bytes):
+  read once, then the chain ends as "does not decode" - counted, never timed. }
+procedure TTyRichEditPasteTest.TestATiffChainThatLoopsIsReadOnce;
+var
+  s: RawByteString;
+  pic: TTyRichPicture;
+  i: Integer;
+  d0, e0: Int64;
+begin
+  s := 'II'#42#0 + Bytes32LE(8) + Bytes16LE(65535) +
+    Bytes16LE(256) + Bytes16LE(4) + Bytes32LE(1) + Bytes32LE(16) +
+    Bytes16LE(257) + Bytes16LE(4) + Bytes32LE(1) + Bytes32LE(12);
+  for i := 3 to 65535 do s := s + Bytes16LE(1000) + Bytes16LE(4) + Bytes32LE(1) + Bytes32LE(0);
+  s := s + Bytes32LE(8);
+  AssertEquals('the review''s file', 786434, Length(s));
+  d0 := TyRichTiffDirsVisited;
+  e0 := TyRichTiffEntriesRead;
+  AssertTrue('a chain that goes round: no image', TyRichMakePicture(RawBytes(s), rikTiff, 0, pic) = rpmNoImage);
+  AssertTrue(Format('the directory read once (%d entries)', [TyRichTiffEntriesRead - e0]),
+    TyRichTiffEntriesRead - e0 <= 65535);
+  AssertTrue(Format('two visits at most (%d)', [TyRichTiffDirsVisited - d0]),
+    TyRichTiffDirsVisited - d0 <= 2);
+  // a small directory that points at itself, padded: read once, not again until the bytes
+  // run out
+  s := 'II'#42#0 + Bytes32LE(8) + TiffDir(16, 12, 8) + StringOfChar(#0, 2000);
+  e0 := TyRichTiffEntriesRead;
+  AssertTrue('a small loop: no image', TyRichMakePicture(RawBytes(s), rikTiff, 0, pic) = rpmNoImage);
+  AssertEquals('its two entries, once', 2, TyRichTiffEntriesRead - e0);
+  // two directories that overlap, chained to each other: the entries the bytes hold, in all
+  s := 'II'#42#0 + Bytes32LE(8) + Bytes16LE(2) +
+    Bytes16LE(256) + Bytes16LE(4) + Bytes32LE(1) + Bytes32LE(16) +
+    Bytes16LE(257) + Bytes16LE(4) + Bytes32LE(1) + Bytes32LE(12) + Bytes32LE(10);
+  e0 := TyRichTiffEntriesRead;
+  AssertTrue('overlapping: no image', TyRichMakePicture(RawBytes(s), rikTiff, 0, pic) = rpmNoImage);
+  AssertTrue(Format('a few entries (%d)', [TyRichTiffEntriesRead - e0]), TyRichTiffEntriesRead - e0 <= 6);
+end;
+
+{ F-Y2: a copy inside one file that has no colour table keeps a field holding \cf0 or
+  \highlight0 (colour 0 is "auto", in every file) byte for byte. }
+procedure TTyRichEditPasteTest.TestColourZeroIsNeverForeign;
+const
+  F = '{`rtf1`ansi`ansicpg1252`deff0{`fonttbl{`f0`fswiss`fcharset0 Arial;}}' +
+    '`pard`f0 a {`field{`*`fldinst HYPERLINK "http://x"}{`fldrslt`cf0 link}} and ' +
+    '{`field{`*`fldinst PAGE}{`fldrslt`highlight0 1}} b`par}';
+var
+  d: TTyRichDocument;
+  filtered: Boolean;
+  all: TBytes;
+  body: RawByteString;
+begin
+  d := LoadDoc(RawBytes(Esc(F)), False);
+  try
+    AssertTrue('pasted', PasteAcross(d, d.Text.Length, RangeOut(d, 0, d.Text.Length), filtered));
+    body := SavedBody(d, all);
+    AssertEquals('the \cf0 field twice, as its bytes: ' + Shown(body), 2,
+      CountRaw(Esc('{`fldrslt`cf0 link}'), body));
+    AssertEquals('the \highlight0 field twice', 2, CountRaw(Esc('{`fldrslt`highlight0 1}'), body));
+  finally
+    d.Free;
+  end;
+end;
+
+{ F-Y3: the re-review's bytes - a picture whose \picprop holds Chinese alternative text in
+  \ansicpg936, pasted into a \ansicpg1252 file: alone, and as the result of a field made
+  again. Its image comes along, the text that would read as other characters does not. }
+procedure TTyRichEditPasteTest.TestAPicturesAltTextInAnotherCodePage;
+const
+  H = '{`rtf1`ansi`ansicpg936`deff0{`fonttbl{`f0`fnil`fcharset0 Arial;}{`f1`fnil`fcharset134 SimSun;}}' +
+    '{`colortbl;`red255`green0`blue0;}';
+  Tgt = '{`rtf1`ansi`ansicpg1252`deff0{`fonttbl{`f0`froman`fcharset0 Times New Roman;}{`f1`fnil`fcharset2 Wingdings;}}' +
+    '{`colortbl;`red0`green255`blue0;}`pard`f0 first`par second`par}';
+  Png = '89504e470d0a1a0a';
+var
+  d: TTyRichDocument;
+  filtered: Boolean;
+  all: TBytes;
+  body: RawByteString;
+begin
+  // as the result of a field made again (INCLUDEPICTURE in \f1)
+  d := LoadDoc(RawBytes(Esc(Tgt)), False);
+  try
+    AssertTrue('pasted', PasteAcross(d, d.Text.ParaStart(1), RawBytes(Esc(H +
+      '`pard`f0 a {`field{`*`fldinst`f1 INCLUDEPICTURE "x.png"}{`fldrslt {`*`shppict{`pict' +
+      '{`*`picprop{`sp{`sn wzDescription}{`sv `''d6`''d0`''ce`''c4}}}`pngblip ' + Png +
+      '}}{`nonshppict{`pict`wmetafile8 0100}}}} b`par}')), filtered));
+    AssertTrue('filtered', filtered);
+    body := SavedBody(d, all);
+    AssertEquals('no bytes of the source''s code page: ' + Shown(body), 0, PosRaw(Esc('`''d6'), body));
+    AssertEquals('...no properties group', 0, PosRaw('picprop', body));
+    AssertTrue('the image kept', PosRaw('pngblip', body) > 0);
+    AssertTrue('the other picture too', PosRaw('wmetafile8', body) > 0);
+  finally
+    d.Free;
+  end;
+  // alone
+  d := LoadDoc(RawBytes(Esc(Tgt)), False);
+  try
+    AssertTrue('pasted', PasteAcross(d, d.Text.ParaStart(1), RawBytes(Esc(H +
+      '`pard`f0 a {`*`shppict{`pict{`*`picprop{`sp{`sn wzDescription}{`sv `''d6`''d0`''ce`''c4}}}' +
+      '`pngblip ' + Png + '}}{`nonshppict{`pict`wmetafile8 0100}} b`par}')), filtered));
+    body := SavedBody(d, all);
+    AssertEquals('alone: no bytes of the source''s code page: ' + Shown(body), 0, PosRaw(Esc('`''d6'), body));
+    AssertTrue('alone: the image kept', PosRaw('pngblip', body) > 0);
+  finally
+    d.Free;
+  end;
+  // between files that agree, the properties stay
+  d := LoadDoc(RawBytes(Esc(H + '`pard`f0 first`par second`par}')), False);
+  try
+    AssertTrue('pasted', PasteAcross(d, d.Text.ParaStart(1), RawBytes(Esc(H +
+      '`pard`f0 a {`*`shppict{`pict{`*`picprop{`sp{`sn wzDescription}{`sv `''d6`''d0`''ce`''c4}}}' +
+      '`pngblip ' + Png + '}}{`nonshppict{`pict`wmetafile8 0100}} b`par}')), filtered));
+    body := SavedBody(d, all);
+    AssertTrue('agreeing files: the alternative text kept', PosRaw(Esc('`''d6`''d0`''ce`''c4'), body) > 0);
+  finally
+    d.Free;
+  end;
+end;
+
+type
+  // the filter's allocation failing (F-Y4)
+  TFilterFailProbe = class(TEditProbe)
+  protected
+    function MakeFragmentFilter(ASource: TTyRichDocument): TTyRichFragmentFilter; override;
+  end;
+
+  // a loader that counts its own end: the document that owns it was freed
+  TCountedLoader = class(TTyRichParaLoader)
+  public
+    class var Freed: Integer;
+    procedure LoadParagraph(ADoc: TTyRichDocument; AIndex: Integer); override;
+    destructor Destroy; override;
+  end;
+
+function TFilterFailProbe.MakeFragmentFilter(ASource: TTyRichDocument): TTyRichFragmentFilter;
+begin
+  raise EOutOfMemory.Create('the test''s lack of memory');
+end;
+
+procedure TCountedLoader.LoadParagraph(ADoc: TTyRichDocument; AIndex: Integer);
+begin
+end;
+
+destructor TCountedLoader.Destroy;
+begin
+  Inc(Freed);
+  inherited Destroy;
+end;
+
+{ F-Y4: the filter is made before the command takes the source over; when making it fails
+  (out of memory) the source is freed and the paste refused, nothing changed. }
+procedure TTyRichEditPasteTest.TestTheFilterFailingFreesTheSource;
+var
+  src: TTyRichDocument;
+begin
+  FreeAndNil(FRich);
+  FRich := TFilterFailProbe.Create(nil);
+  FRich.Controller := FCtl;
+  FRich.Font.PixelsPerInch := 96;
+  FRich.SetBounds(0, 0, 400, 300);
+  SetText('ab');
+  FRich.SelStart := 1;
+  Clip('{' + BS + 'rtf1 x}', '');
+  src := TTyRichDocument.CreateFromUtf8(RawBytes('x'));
+  src.InstallLoader(TCountedLoader.Create, True);
+  TCountedLoader.Freed := 0;
+  FRich.RtfSource := src;
+  FRich.RtfSourceEnds := False;
+  FRich.PasteFromClipboard;
+  AssertEquals('refused', 1, FRich.Refused);
+  AssertEquals('for memory', rsRichEditRefusedMemory, FRich.LastReason);
+  AssertEquals('nothing pasted', 'ab', Para(0));
+  AssertEquals('the source freed', 1, TCountedLoader.Freed);
+end;
+
+{ F-Y5: a document that ends with an empty centred paragraph: Select All, copy, paste into a
+  new document gives that paragraph back with its format - 'abc' (right-aligned), '' (centred)
+  and then the one empty paragraph a paste of whole paragraphs leaves (R64): three; a selection
+  that ends before the last separator is as it was. The two flavours agree. }
+procedure TTyRichEditPasteTest.TestAnEmptyLastParagraphIsCopied;
+var
+  a, d: TTyRichDocument;
+  pf: TTyParaFormat;
+  filtered: Boolean;
+  r: TTyRichCopyRange;
+begin
+  a := TTyRichDocument.CreateFromUtf8(RawBytes('abc'#10));
+  d := TTyRichDocument.Create;
+  try
+    AssertEquals('two paragraphs, the last empty', 2, a.Text.ParaCount);
+    pf := TyDefaultParaFormat;
+    pf.Align := paraRight;
+    AssertTrue(a.Execute(TTyRichSetParaFormat.Create(0, 0, [pffAlign], pf)));
+    pf.Align := paraCenter;
+    AssertTrue(a.Execute(TTyRichSetParaFormat.Create(1, 1, [pffAlign], pf)));
+    r := TyRichCopyRange(a, 0, a.Text.Length);
+    AssertEquals('Select All takes the empty last paragraph', 1, r.LastPara);
+    AssertTrue('...whole', r.LastWhole);
+    r := TyRichCopyRange(a, 0, 3);
+    AssertEquals('ending before the separator: as it was', 0, r.LastPara);
+    AssertFalse('...in part', r.LastWhole);
+    AssertTrue(PasteAcross(d, 0, RangeOut(a, 0, a.Text.Length), filtered));
+    AssertEquals('abc, the empty one, and the paste''s own', 3, d.Text.ParaCount);
+    AssertEquals('abc', 'abc', ParaText(d, 0));
+    AssertTrue('right-aligned', d.Formats.ParaFormat(d.ParaFormatOf(0)).Align = paraRight);
+    AssertEquals('the empty paragraph', 0, d.Text.ParaLength(1));
+    AssertTrue('...centred, as it was', d.Formats.ParaFormat(d.ParaFormatOf(1)).Align = paraCenter);
+    AssertEquals('then an empty one', 0, d.Text.ParaLength(2));
+  finally
+    d.Free;
+    a.Free;
+  end;
+  // the control's two flavours agree: the text ends with the line break before it
+  SetText('abc'#10#10);
+  FRich.SelectAll;
+  AssertEquals('the plain text', 'abc' + sLineBreak, FRich.RangeText(FRich.SelStart, FRich.SelLength));
 end;
 
 initialization

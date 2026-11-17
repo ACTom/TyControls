@@ -6185,6 +6185,7 @@ type
     function WithoutForeignWords(const ABytes: RawByteString): RawByteString;
     function FieldInstruction(const ABytes: RawByteString; AUc: Integer): UTF8String;
     function ResultPictures(const ABytes: RawByteString): RawByteString;
+    function HasForeignText(const ABytes: RawByteString): Boolean;
   public
     function KeepFragment(const AFragment: RawByteString; APara: Boolean): Boolean; override;
     function RowFormat(const ARaw: RawByteString): RawByteString; override;
@@ -6216,7 +6217,8 @@ begin
   if T.HasParam then n := T.Param else n := 0;
   case k of
     ikFont: Result := not HasFont(n);
-    ikColor: Result := (n < 0) or (n >= FColorCount);
+    // colour 0 is "auto", which every file has, also one with no colour table (F-Y2)
+    ikColor: Result := (n < 0) or ((n > 0) and (n >= FColorCount));
   else
     // the same bytes in both files
     Result := False;
@@ -6438,6 +6440,60 @@ begin
   Result := Trim(Result);
 end;
 
+{ ABytes hold text a reader decodes by the source's code page or default font (a \'xx of 80
+  or more, a \plain) and the documents do not agree (not light): it would read otherwise in
+  the target. }
+function TTyRtfForeignFilter.HasForeignText(const ABytes: RawByteString): Boolean;
+var
+  lex: TTyRtfLexer;
+  t: TTyRtfToken;
+  buf: PByte;
+begin
+  Result := False;
+  if FLight or (ABytes = '') then Exit;
+  buf := PByte(PAnsiChar(ABytes));
+  lex.Init(buf, 0, Length(ABytes));
+  while lex.Next(t) do
+    case t.Kind of
+      rtkWord:
+        if (t.NameLen = 5) and CompareMem(@buf[t.NameStart], PChar('plain'), 5) then Exit(True);
+      rtkHex:
+        if t.Value >= $80 then Exit(True);
+    end;
+end;
+
+{ ABytes without every group whose first word (after an optional \*) is AName. }
+function WithoutGroup(const ABytes: RawByteString; const AName: string): RawByteString;
+var
+  lex, peek: TTyRtfLexer;
+  t, w: TTyRtfToken;
+  buf: PByte;
+  d: Integer;
+  from: PtrInt;
+begin
+  Result := '';
+  if ABytes = '' then Exit;
+  buf := PByte(PAnsiChar(ABytes));
+  lex.Init(buf, 0, Length(ABytes));
+  from := 0;
+  while lex.Next(t) do
+  begin
+    if t.Kind <> rtkGroupStart then Continue;
+    peek := lex;
+    if not peek.Next(w) then Break;
+    if (w.Kind = rtkSymbol) and (w.Value = Ord('*')) and not peek.Next(w) then Break;
+    if (w.Kind <> rtkWord) or (w.NameLen <> Length(AName)) or
+      not CompareMem(@buf[w.NameStart], PChar(AName), Length(AName)) then Continue;
+    Result := Result + Copy(ABytes, from + 1, t.Start - from);
+    d := 1;
+    while (d > 0) and lex.Next(t) do
+      if t.Kind = rtkGroupStart then Inc(d)
+      else if t.Kind = rtkGroupEnd then Dec(d);
+    from := lex.Position;
+  end;
+  Result := Result + Copy(ABytes, from + 1, MaxInt);
+end;
+
 // S's characters as RTF text of its own: ASCII as it is (\, { and } escaped), a tab \tab,
 // every other character \uN? (under \uc1), what is no text left out.
 function RtfTextOf(const S: UTF8String): RawByteString;
@@ -6559,6 +6615,10 @@ begin
             else if t.Kind = rtkGroupEnd then Dec(d);
           g := Copy(ABytes, start + 1, lex.Position - start);
           if Foreign(g, False) then g := WithoutForeignWords(g);
+          { Text in the source's code page or default font in the picture's properties (its
+            alternative text, a shape's name: \'xx bytes in a \picprop value) would read as
+            other characters in the target: the properties go, the image stays (F-Y3). }
+          if HasForeignText(g) then g := WithoutGroup(g, 'picprop');
           Result := Result + g;
           Dec(depth);
         end;
@@ -6604,7 +6664,11 @@ begin
   if AObj is TTyRichPicture then
   begin
     p := TTyRichPicture(AObj);
-    if (p.RawRtf = '') or not Foreign(p.RawRtf, False) then Exit;
+    { A foreign word, or (the documents not agreeing) text in its properties in the source's
+      code page (its alternative text): its image, as a picture made here is written - the
+      properties go with the rest of its RTF (F-Y3: the smaller of the two ways; rewriting
+      the text as \uN would mean re-encoding a group this control never shows). }
+    if (p.RawRtf = '') or not (Foreign(p.RawRtf, False) or HasForeignText(p.RawRtf)) then Exit;
     // its image, as a picture made here is written
     Result := TTyRichPicture.Create(p.PictureFormat, p.Data, p.WidthTwips, p.HeightTwips);
   end;
