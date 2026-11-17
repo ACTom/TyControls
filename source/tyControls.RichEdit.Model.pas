@@ -1226,6 +1226,12 @@ function TyRichPlatformLineBreak: TTyRichSeparator;
 { The kind most of the counted breaks are; a tie for the most, or no break at all: the
   platform's. }
 function TyRichMajorityLineBreak(ACR, ALF, ACRLF: Int64): TTyRichSeparator;
+{ The caret's word rule (what a double click and Ctrl+Left / Right take, and a find's whole
+  word): white space (a space, a tab, U+00A0, U+000B) and ASCII punctuation are no word (0),
+  an object (U+FFFC) is a word by itself (2), every other character is a word character (1) -
+  letters, digits, ideographs, marks, a byte that is no text. A paragraph's end (a find's
+  $FFFFFFFF) and "no character" ($FFFFFFFE, before the text's start) are no word. }
+function TyRichWordClass(C: Cardinal): Integer;
 
 implementation
 
@@ -1270,6 +1276,16 @@ begin
   // byte compare: comparing with = could convert between code pages
   Result := (Length(A) = Length(B)) and
     ((Length(A) = 0) or (CompareByte(A[1], B[1], Length(A)) = 0));
+end;
+
+function TyRichWordClass(C: Cardinal): Integer;
+begin
+  case C of
+    $FFFC: Result := 2;
+    9, 11, 32, $A0, 33..47, 58..64, 91..94, 96, 123..126, $FFFFFFFE, $FFFFFFFF: Result := 0;
+  else
+    Result := 1;
+  end;
 end;
 
 function TyRichObjectChar: UTF8String;

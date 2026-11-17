@@ -932,7 +932,8 @@ var
   m: TMemoryStream;
   turns: Integer;
 begin
-  SetText(Lines(1000, 'a cat sat here '));
+  // (more text than a part of the largest size takes: every stop below is mid-way)
+  SetText(Lines(20000, 'a cat sat here '));
   // an edit
   ResetEvents;
   FRich.ReplaceAllAsync('cat', 'dog');

@@ -344,8 +344,10 @@ var
   want, got: string;
   f: TTyRichFinder;
   hitParas: Integer;
-  k: Int64;
+  k, g, e: Int64;
+  phrases: Integer;
 begin
+  phrases := 0;
   if ARtf then full := LoadRtf(ABytes, True) else full := LoadTxt(ABytes, AEncoding);
   words := TStringList.Create;
   try
@@ -369,6 +371,23 @@ begin
         w := '';
         for k := i to j - 1 do w := w + U([text[k]]);
         words.Add(w);
+        { (M10) and a phrase: the word, the spaces or punctuation after it, the next word - a
+          needle with characters that are no word goes through the filter too }
+        g := j;
+        while (g < Length(text)) and (g - j < 3) and (TyRichWordClass(text[g]) = 0) and
+          (text[g] <> TyRichFindParaEnd) do
+          Inc(g);
+        if (g > j) and (g < Length(text)) and (TyRichWordClass(text[g]) = 1) and
+          (text[g] < TyRichFindRawByte) and (phrases < 25) then
+        begin
+          e := g;
+          while (e < Length(text)) and (TyRichWordClass(text[e]) = 1) and
+            (text[e] < TyRichFindRawByte) do
+            Inc(e);
+          for k := j to e - 1 do w := w + U([text[k]]);
+          if words.IndexOf(w) < 0 then Inc(phrases);
+          words.Add(w);
+        end;
       end;
       if j > i then i := j else Inc(i);
     end;
@@ -1695,6 +1714,24 @@ begin
   finally
     doc.Free;
     counter.Free;
+  end;
+  // one paragraph with matches all through it: replaced in parts too (CRichReplacePartMatches)
+  s := '';
+  for i := 0 to 19999 do s := s + 'a,';
+  doc := TextDoc(s);
+  try
+    before := doc.Text.GetText(0, doc.Text.Length);
+    n := ReplaceInParts(doc, ',', ';', [], 1 shl 20, skipped, parts, limited);
+    AssertEquals('one paragraph: every comma', 20000, n);
+    AssertTrue(Format('...in parts (%d)', [parts]), parts >= 3);
+    AssertEquals('...none left', 0, CountOf(',', doc.Text.GetText(0, doc.Text.Length)));
+    AssertEquals('...one step', 1, doc.UndoDepth);
+    doc.Undo;
+    AssertEquals('...undone at once', before, doc.Text.GetText(0, doc.Text.Length));
+    doc.Redo;
+    AssertEquals('...redone', 0, CountOf(',', doc.Text.GetText(0, doc.Text.Length)));
+  finally
+    doc.Free;
   end;
 end;
 

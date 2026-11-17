@@ -3072,7 +3072,7 @@ end;
   inside a paragraph (U+000B) is no word. }
 function WordClass(C: Cardinal): Integer;
 begin
-  // one rule, the find's whole word too (tyControls.RichEdit.Find)
+  // one rule, the find's whole word too (the document's: tyControls.RichEdit.Model)
   Result := TyRichWordClass(C);
 end;
 
