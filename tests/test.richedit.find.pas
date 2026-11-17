@@ -37,6 +37,9 @@ type
     // the filter: every fixture, and every form of a character the reader takes
     procedure TestTheFilterNeverLosesAHit;
     procedure TestEveryFormTheReaderTakes;
+    procedure TestTheAdversarialFiles;
+    procedure TestEveryByteFormOfEveryWord;
+    procedure TestParagraphEndsAndOutsideTheBmpAreFiltered;
     // what a match is
     procedure TestEachOptionAloneAndTogether;
     procedure TestCaseFoldingPerScript;
@@ -196,6 +199,18 @@ begin
     if i > 0 then Result := Result + ' ';
     Result := Result + IntToStr(A[i]);
   end;
+end;
+
+{ The matches a finder kept. }
+function Joined(AFinder: TTyRichFinder): string;
+var
+  a: array of Int64;
+  i: Integer;
+begin
+  a := nil;
+  SetLength(a, AFinder.MatchCount);
+  for i := 0 to AFinder.MatchCount - 1 do a[i] := AFinder.Match(i);
+  Result := Join(a);
 end;
 
 { The paragraphs of a cell merged into the one before it (as the layout reads a row). }
@@ -654,6 +669,359 @@ begin
   end;
 end;
 
+{ The review's 49 adversarial files (tests/fixtures/rtf/find, its cases.txt: the file, the needle
+  as hex of its UTF-8, m for match case): read whole, lazily with the filter and without it,
+  the finder gives the same places (H-I1: hex control bytes, a \u without a number, a font
+  table and an \ansicpg given again in the body lost a hit before). }
+procedure TTyRichFindTest.TestTheAdversarialFiles;
+var
+  lines: TStringList;
+  parts: TStringArray;
+  i, k, n: Integer;
+  bytes: TBytes;
+  full, lazy: TTyRichDocument;
+  needle: UTF8String;
+  opts: TTyRichFindOptions;
+  want: string;
+begin
+  lines := TStringList.Create;
+  try
+    lines.LoadFromFile(FixtureDir('rtf') + 'find' + PathDelim + 'cases.txt');
+    n := 0;
+    for i := 0 to lines.Count - 1 do
+    begin
+      if Trim(lines[i]) = '' then Continue;
+      parts := lines[i].Split([#9]);
+      AssertTrue('a case line', Length(parts) >= 3);
+      needle := '';
+      SetLength(needle, Length(parts[1]) div 2);
+      for k := 1 to Length(needle) do
+        needle[k] := Chr(StrToInt('$' + Copy(parts[1], 2 * k - 1, 2)));
+      if parts[2] = 'm' then opts := [rfoMatchCase] else opts := [];
+      bytes := ReadFileBytes(FixtureDir('rtf') + 'find' + PathDelim + parts[0]);
+      full := LoadRtf(bytes, True);
+      try
+        want := Positions(full, needle, opts);
+      finally
+        full.Free;
+      end;
+      lazy := LoadRtf(bytes, False);
+      try
+        AssertEquals(parts[0] + ': lazily, filtered', want, Positions(lazy, needle, opts, True));
+      finally
+        lazy.Free;
+      end;
+      lazy := LoadRtf(bytes, False);
+      try
+        AssertEquals(parts[0] + ': lazily, not filtered', want, Positions(lazy, needle, opts, False));
+      finally
+        lazy.Free;
+      end;
+      Inc(n);
+    end;
+    AssertEquals('the review''s cases', 49, n);
+    { And two of our own: a code page that only a later font table or an ansicpg word brings, used by a
+      paragraph whose bytes do not hold that table or word. }
+    bytes := BytesOf(Rtf('{|rtf1|ansi|ansicpg1252|deff0{|fonttbl{|f0|fswiss Arial;}}|pard one' +
+      '{|fonttbl{|f5|fnil|fcharset134 SimSun;}}|par |f5 |''d6|''d0|par}'));
+    lazy := LoadRtf(bytes, False);
+    try
+      AssertEquals('a font of a later table', '4', Positions(lazy, U([$4E2D]), [], True));
+    finally
+      lazy.Free;
+    end;
+    bytes := BytesOf(Rtf('{|rtf1|ansi|ansicpg1252|pard one|ansicpg1251|par |''cf|''f0|''e8|par}'));
+    lazy := LoadRtf(bytes, False);
+    try
+      AssertEquals('a later ansicpg', '4', Positions(lazy, U([$41F, $440, $438]), [rfoMatchCase], True));
+    finally
+      lazy.Free;
+    end;
+  finally
+    lines.Free;
+  end;
+end;
+
+{ The words of ADoc's text (runs of word characters), each once. }
+procedure CollectWords(ADoc: TTyRichDocument; AWords: TStringList);
+var
+  text: TTyRichCodeArray;
+  i, j, k: Integer;
+  w: UTF8String;
+begin
+  AWords.Sorted := True;
+  AWords.Duplicates := dupIgnore;
+  text := TyRichFindCodes(ADoc.Text.GetText(0, ADoc.Text.Length));
+  i := 0;
+  while i < Length(text) do
+  begin
+    if TyRichWordClass(text[i]) <> 1 then
+    begin
+      Inc(i);
+      Continue;
+    end;
+    j := i;
+    while (j < Length(text)) and (TyRichWordClass(text[j]) = 1) and (text[j] < TyRichFindRawByte) do
+      Inc(j);
+    if j > i then
+    begin
+      w := '';
+      for k := i to j - 1 do w := w + U([text[k]]);
+      AWords.Add(w);
+      i := j;
+    end
+    else
+      Inc(i);
+  end;
+end;
+
+{ H-I1, by a generator: every word of every RTF fixture, written in each byte form the reader
+  takes - \uN with a fallback of none, one and two bytes, \'xx and raw bytes in each code page
+  of the fixture that has its characters, a control word and a group between any two of its
+  letters - in a paragraph after another: the filtered find finds it there (and the whole
+  parse reads it so). }
+procedure TTyRichFindTest.TestEveryByteFormOfEveryWord;
+var
+  sr: TSearchRec;
+  names, words: TStringList;
+  f, i, k, n, cp, forms: Integer;
+  bytes: TBytes;
+  doc, lazy: TTyRichDocument;
+  codes: TTyRichCodeArray;
+  cps: array of Integer;
+  table: Pointer;
+  body, s: RawByteString;
+  ok: Boolean;
+  v: Integer;
+  c: Cardinal;
+
+  function UWord(ACode: Cardinal; const AFallback: RawByteString): RawByteString;
+  var
+    hi, lo: Cardinal;
+  begin
+    if ACode > $FFFF then
+    begin
+      hi := $D800 + ((ACode - $10000) shr 10);
+      lo := $DC00 + ((ACode - $10000) and $3FF);
+      Result := UWord(hi, AFallback) + UWord(lo, AFallback);
+      Exit;
+    end;
+    if ACode > $7FFF then Result := Rtf('|u') + IntToStr(Integer(ACode) - 65536)
+    else Result := Rtf('|u') + IntToStr(ACode);
+    Result := Result + AFallback;
+  end;
+
+  // the word's bytes in the code page of ATable (empty: a character it has not)
+  function InCodePage(ARaw: Boolean): RawByteString;
+  var
+    j, b: Integer;
+
+    function OneByte(AByte: Integer): RawByteString;
+    begin
+      // raw, but never a byte the lexer takes for markup, nor one above 7F written as is
+      // where a control word right before it would swallow it
+      if ARaw and (AByte >= $20) and not (AByte in [$5C, $7B, $7D]) then Result := Chr(AByte)
+      else Result := Rtf('|''') + LowerCase(IntToHex(AByte, 2));
+    end;
+
+  begin
+    Result := '';
+    for j := 0 to High(codes) do
+    begin
+      b := TyRichCodePageBytes(table, codes[j]);
+      if b = 0 then Exit('');
+      if b > $FF then Result := Result + OneByte(b shr 8) + OneByte(b and $FF)
+      else Result := Result + OneByte(b);
+    end;
+  end;
+
+  procedure Check(const AForm: string; ACodePage: Integer; const ABody: RawByteString);
+  var
+    file_: RawByteString;
+    want, got: string;
+  begin
+    file_ := Rtf('{|rtf1|ansi|ansicpg') + IntToStr(ACodePage) +
+      Rtf('|deff0{|fonttbl{|f0|fnil Some Font;}}|pard filler|par ') + ABody + Rtf('|par}');
+    doc := LoadRtf(BytesOf(file_), True);
+    try
+      want := Positions(doc, words[i], [rfoMatchCase]);
+    finally
+      doc.Free;
+    end;
+    AssertEquals(Format('%s: %s, %s is read', [names[f], words[i], AForm]), '7', want);
+    lazy := LoadRtf(BytesOf(file_), False);
+    try
+      got := Positions(lazy, words[i], [rfoMatchCase], True);
+    finally
+      lazy.Free;
+    end;
+    AssertEquals(Format('%s: %s, %s is found', [names[f], words[i], AForm]), want, got);
+    Inc(forms);
+  end;
+
+begin
+  names := TStringList.Create;
+  words := TStringList.Create;
+  forms := 0;
+  try
+    names.Sorted := True;
+    if FindFirst(FixtureDir('rtf') + '*.rtf', faAnyFile, sr) = 0 then
+    begin
+      repeat
+        names.Add(sr.Name);
+      until FindNext(sr) <> 0;
+      FindClose(sr);
+    end;
+    AssertTrue('the RTF fixtures are there', names.Count >= 20);
+    for f := 0 to names.Count - 1 do
+    begin
+      bytes := ReadFileBytes(FixtureDir('rtf') + names[f]);
+      words.Clear;
+      // the fixture's code pages, as the index scan met them
+      lazy := LoadRtf(bytes, False);
+      try
+        cps := nil;
+        for k := 0 to TyRichRtfLoadOf(lazy).Scan.CodePageCount - 1 do
+        begin
+          cp := TyRichRtfLoadOf(lazy).Scan.CodePageSeen(k);
+          if (cp > 0) and (TyRichCodePageTable(cp) <> nil) then
+          begin
+            SetLength(cps, Length(cps) + 1);
+            cps[High(cps)] := cp;
+          end;
+        end;
+      finally
+        lazy.Free;
+      end;
+      doc := LoadRtf(bytes, True);
+      try
+        CollectWords(doc, words);
+      finally
+        doc.Free;
+      end;
+      for i := 0 to words.Count - 1 do
+      begin
+        codes := TyRichFindCodes(words[i]);
+        // \uN, its fallback none, one byte, two
+        body := '';
+        for k := 0 to High(codes) do body := body + UWord(codes[k], ' ');
+        Check('\u, \uc0', 1252, Rtf('{|uc0 ') + body + '}');
+        body := '';
+        for k := 0 to High(codes) do body := body + UWord(codes[k], '?');
+        Check('\u, \uc1', 1252, Rtf('{|uc1 ') + body + '}');
+        body := '';
+        for k := 0 to High(codes) do body := body + UWord(codes[k], Rtf('|''3f|''3f'));
+        Check('\u, \uc2', 1252, Rtf('{|uc2 ') + body + '}');
+        // \'xx and raw bytes in each code page that has the word's characters
+        for k := 0 to High(cps) do
+        begin
+          table := TyRichCodePageTable(cps[k]);
+          s := InCodePage(False);
+          if s = '' then Continue;
+          Check(Format('\''xx in %d', [cps[k]]), cps[k], s);
+          Check(Format('raw bytes in %d', [cps[k]]), cps[k], InCodePage(True));
+        end;
+        // a control word, and a group, between any two characters
+        body := '';
+        for k := 0 to High(codes) do
+        begin
+          if k > 0 then body := body + Rtf('|i ');
+          body := body + UWord(codes[k], '');
+        end;
+        Check('a control word between', 1252, Rtf('{|uc0 ') + body + '}');
+        body := '';
+        for k := 0 to High(codes) do
+        begin
+          if k > 0 then body := body + Rtf('{|b}');
+          body := body + UWord(codes[k], '');
+        end;
+        Check('a group between', 1252, Rtf('{|uc0 ') + body + '}');
+      end;
+    end;
+    AssertTrue(Format('every form of every word (%d)', [forms]), forms > 1000);
+  finally
+    words.Free;
+    names.Free;
+  end;
+end;
+
+{ H-M3: what the filter takes now, through the same comparison - a character outside the BMP
+  (only \uN pairs make one), a needle that is only paragraph ends (the lengths in the
+  paragraph tree say where; nothing is read but what a table holds), and one of text and
+  paragraph ends (each side's text filtered in its paragraph). U+FFFD is not filtered. }
+procedure TTyRichFindTest.TestParagraphEndsAndOutsideTheBmpAreFiltered;
+var
+  s: RawByteString;
+  bytes: TBytes;
+  i: Integer;
+  full, lazy: TTyRichDocument;
+  load: TTyRtfLoad;
+  f: TTyRichFinder;
+  needles: array[0..5] of UTF8String;
+  want: string;
+  parsed: Integer;
+begin
+  s := Rtf('{|rtf1|ansi|ansicpg1252|deff0{|fonttbl{|f0|fswiss Arial;}}|pard ');
+  for i := 0 to 2999 do
+  begin
+    s := s + Rtf('line of some words ') + IntToStr(i) + Rtf('|par ');
+    if i = 1500 then s := s + Rtf('|par the |u-10179?|u-8704? face|par ');
+    if i = 2500 then s := s + Rtf('|par |par end of it|par ');
+  end;
+  s := s + Rtf('last|par}');
+  bytes := BytesOf(s);
+  needles[0] := U([$1F600]);
+  needles[1] := U([32, $1F600, 32, Ord('f')]);
+  needles[2] := #10#10;
+  needles[3] := #10#10#10;
+  needles[4] := '2500'#10#10#10'end';
+  needles[5] := U([$FFFD]);
+  full := LoadRtf(bytes, True);
+  try
+    for i := 0 to High(needles) do
+    begin
+      want := Naive(full, needles[i], []);
+      AssertEquals(Format('needle %d: read whole', [i]), want, Positions(full, needles[i], []));
+      lazy := LoadRtf(bytes, False);
+      try
+        load := TyRichRtfLoadOf(lazy);
+        parsed := load.ParseCount;
+        f := TTyRichFinder.Create(lazy, needles[i], []);
+        try
+          f.Collect := True;
+          f.Run;
+          AssertEquals(Format('needle %d: the same places', [i]), want, Joined(f));
+          if i < 5 then
+          begin
+            AssertTrue(Format('needle %d: the bytes were looked at (%d)', [i, f.ParasFiltered]),
+              (i in [2, 3]) or (f.ParasFiltered > 1000));
+            AssertTrue(Format('needle %d: few paragraphs read (%d)', [i, f.ParasDecoded]),
+              f.ParasDecoded <= 4);
+            AssertTrue(Format('needle %d: few intervals parsed (%d)', [i, load.ParseCount - parsed]),
+              load.ParseCount - parsed <= 2);
+            // paragraph ends alone: the lengths say it all, outside a table nothing is read
+            if i in [2, 3] then
+            begin
+              AssertEquals(Format('needle %d: no paragraph read', [i]), 0, f.ParasRead);
+              AssertEquals(Format('needle %d: no interval parsed', [i]), 0, load.ParseCount - parsed);
+            end;
+          end
+          else
+            AssertEquals('U+FFFD: not filtered', 0, f.ParasFiltered);
+        finally
+          f.Free;
+        end;
+        AssertEquals(Format('needle %d: and without the filter', [i]), want,
+          Positions(lazy, needles[i], [], False));
+      finally
+        lazy.Free;
+      end;
+    end;
+  finally
+    full.Free;
+  end;
+end;
+
 { ---- what a match is ---- }
 
 procedure TTyRichFindTest.TestEachOptionAloneAndTogether;
@@ -723,20 +1091,34 @@ procedure TTyRichFindTest.TestWholeWordAndChinese;
 var
   doc: TTyRichDocument;
 begin
-  // a Chinese run is one word (the caret's rule): a needle that is all of it is whole
+  { H-M5: an ideograph (kana, Hangul - the scripts written without spaces) bounds a word on
+    both of its sides, as Windows' rich edit finds it: a Chinese needle is whole between
+    ideographs, and a Latin word inside Chinese text is bounded by them. }
   doc := TextDoc(U([$4E2D, $6587, 32, $4E2D, $6587, $5B57, 32, $4E2D, $6587, Ord(','), Ord('a'),
     $4E2D, $6587]));
   try
     AssertEquals('anywhere', '0 3 7 11', Positions(doc, U([$4E2D, $6587]), []));
-    AssertEquals('whole words', '0 7', Positions(doc, U([$4E2D, $6587]), [rfoWholeWord]));
-    AssertEquals('a part of a Chinese run is no whole word', '',
-      Positions(doc, U([$6587]), [rfoWholeWord]));
+    AssertEquals('whole words, also inside a run of ideographs', '0 3 7 11',
+      Positions(doc, U([$4E2D, $6587]), [rfoWholeWord]));
+    AssertEquals('one ideograph of a run', '1 4 8 12', Positions(doc, U([$6587]), [rfoWholeWord]));
     // never refused: a needle whose end is no word character
     AssertEquals('a comma, whole', '9', Positions(doc, ',', [rfoWholeWord]));
     AssertEquals('a Chinese run and a comma', '7',
       Positions(doc, U([$4E2D, $6587, Ord(',')]), [rfoWholeWord]));
-    AssertEquals('...not from inside the run', '',
+    AssertEquals('...also from inside the run', '8',
       Positions(doc, U([$6587, Ord(',')]), [rfoWholeWord]));
+    AssertEquals('a Latin letter before an ideograph', '10', Positions(doc, 'a', [rfoWholeWord]));
+  finally
+    doc.Free;
+  end;
+  // Latin words inside Chinese text, and kana and Hangul
+  doc := TextDoc(U([$4E2D, Ord('a'), Ord('b'), Ord('c'), $6587, 32, $3042, $3044, 32, $D55C,
+    $AE00]));
+  try
+    AssertEquals('a Latin word between ideographs', '1', Positions(doc, 'abc', [rfoWholeWord]));
+    AssertEquals('...not a part of it', '', Positions(doc, 'ab', [rfoWholeWord]));
+    AssertEquals('kana', '7', Positions(doc, U([$3044]), [rfoWholeWord]));
+    AssertEquals('Hangul', '9', Positions(doc, U([$D55C]), [rfoWholeWord]));
   finally
     doc.Free;
   end;

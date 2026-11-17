@@ -301,6 +301,8 @@ type
     FVersionGen: Integer;
     FAnsiCp: Integer;
     FAnsiCpSet: Boolean;
+    FCodePages: array of Integer;  // every code page this parser decoded or could decode with
+    FCodePageN: Integer;
     FDeff: Integer;
     FPaperW, FPaperH, FMargL, FMargR: Integer;
     FFonts: array of TTyRtfFont;
@@ -449,6 +451,7 @@ type
     function FontIndex(ANum: Integer): Integer;
     function FontOfNum(ANum: Integer): Integer;
     function ResolveCodePage(ACharset, ACpg: Integer): Integer;
+    procedure NoteCodePage(ACodePage: Integer);
     function DecodeRaw(const ARaw: RawByteString; ACodePage: Integer): UTF8String;
     procedure UpdateDecoder;
     procedure AddColor;
@@ -526,6 +529,13 @@ type
     function Color(AIndex: Integer; out AAuto: Boolean): TColor;
     procedure ResolveListRef(ALs, AIlvl: Integer; var AList: TTyListFormat);
     property AnsiCodePage: Integer read FAnsiCp;
+    // Every code page text read by this parser so far may have been decoded with: each \ansicpg
+    // (and \ansi, \mac, \pc, \pca) it met, each font table entry's (a table given again in the
+    // body included: the earlier paragraphs keep the code pages of their time), 1252 to begin
+    // with. Of the index scan: the whole file's once the scan has ended; a finder looking at
+    // unparsed bytes reads them in all of these (CpSymbol for a Symbol charset font).
+    function CodePageCount: Integer;
+    function CodePageSeen(AIndex: Integer): Integer;
     property DefaultFont: Integer read FDeff;     // \deff, -1 none
     // Where the first font table and the first colour table before the body close (the
     // position of their closing brace), -1 when the header has none.
@@ -868,6 +878,34 @@ function TyRtfStateWords(const AState: TTyRtfState; const ABytes: TBytes;
 // The code page the reader decodes a font's bytes (and its name) with: its \fcharset's, else
 // the file's \ansicpg; 0 for the Symbol charset, which has none.
 function TyRtfCharsetCodePage(ACharset, AAnsiCodePage: Integer): Integer;
+
+{ ---- the reader's rules for a token of text: the parser reads by them, and so does the find's
+  filter over bytes never parsed (tyControls.RichEdit.Find), so the two cannot drift ---- }
+type
+  { What the reader makes of a byte of text, raw or written \'xx, before its code page is asked:
+    rbrText - a character (decoded); rbrDropped - nothing at all, a lead byte waiting for its
+    trail still waits (NUL, LF, CR); rbrControl - nothing, a lead byte waiting reads as '?'
+    (every other byte below 20h but the tab). A byte a \uN skips as its fallback is counted
+    before any of this. }
+  TTyRtfByteRole = (rbrText, rbrDropped, rbrControl);
+
+function TyRtfByteRole(B: Byte): TTyRtfByteRole; inline;
+// The character \uN makes: N as it is, a negative N as N + 65536; one that is no character
+// U+FFFD; 0 (\u0, and a \u without a number) - none, though its fallback is skipped all the
+// same. A surrogate pair \uH\uL is one character; a lone surrogate is U+FFFD.
+function TyRtfUnicodeOf(AParam: Integer): Cardinal;
+// The character a control word makes in a paragraph's text (\tab, \line, \emdash, the quotes,
+// the spaces, the joiners and the marks), 0 for any other word. AIsU: the word is \u (its
+// character is TyRtfUnicodeOf of its number).
+function TyRtfWordChar(ABuf: PByte; ANameStart, ANameLen: Integer; out AIsU: Boolean): Cardinal;
+// The character a control symbol makes in text (\~ \_ \\ \{ \}), 0 for the others.
+function TyRtfSymbolChar(AValue: Integer): Cardinal;
+// A word that changes how the bytes after it decode for the whole file (a font table, an
+// \ansicpg and its kin): a find that meets one in bytes it reads cannot be sure of them.
+function TyRtfWordSetsCodePages(ABuf: PByte; ANameStart, ANameLen: Integer): Boolean;
+// A group that begins with this word holds no text the reader takes (\pict): its bytes need
+// not be looked at to find text.
+function TyRtfWordHidesGroup(ABuf: PByte; ANameStart, ANameLen: Integer): Boolean;
 
 implementation
 
@@ -1250,6 +1288,79 @@ begin
   if (v < 0) or (v > $10FFFF) then Result := $FFFD else Result := v;
 end;
 
+function TyRtfUnicodeOf(AParam: Integer): Cardinal;
+begin
+  Result := UnicodeOfParam(AParam);
+end;
+
+function TyRtfByteRole(B: Byte): TTyRtfByteRole;
+begin
+  if (B = 0) or (B = 10) or (B = 13) then Result := rbrDropped
+  else if (B < $20) and (B <> 9) then Result := rbrControl
+  else Result := rbrText;
+end;
+
+// The character of a word BodyWord turns into one (EmitChar), 0 for the others.
+function KwChar(AKw: Integer): Cardinal;
+begin
+  case AKw of
+    kwLine: Result := $0B;
+    kwTab: Result := $09;
+    kwLdblquote: Result := $201C;
+    kwRdblquote: Result := $201D;
+    kwLquote: Result := $2018;
+    kwRquote: Result := $2019;
+    kwEmdash: Result := $2014;
+    kwEndash: Result := $2013;
+    kwBullet: Result := $2022;
+    kwEmspace: Result := $2003;
+    kwEnspace: Result := $2002;
+    kwQmspace: Result := $2005;
+    kwZwj: Result := $200D;
+    kwZwnj: Result := $200C;
+    kwLtrMark: Result := $200E;
+    kwRtlMark: Result := $200F;
+    kwZwbo: Result := $200B;
+    kwZwnbo: Result := $FEFF;
+  else
+    Result := 0;
+  end;
+end;
+
+function TyRtfWordChar(ABuf: PByte; ANameStart, ANameLen: Integer; out AIsU: Boolean): Cardinal;
+var
+  kw: Integer;
+begin
+  kw := LookupWord(@ABuf[ANameStart], ANameLen);
+  AIsU := kw = kwU;
+  Result := KwChar(kw);
+end;
+
+function TyRtfSymbolChar(AValue: Integer): Cardinal;
+begin
+  case AValue of
+    Ord('~'): Result := $A0;
+    Ord('_'): Result := $2011;
+    Ord('\'), Ord('{'), Ord('}'): Result := AValue;
+  else
+    Result := 0;
+  end;
+end;
+
+function TyRtfWordSetsCodePages(ABuf: PByte; ANameStart, ANameLen: Integer): Boolean;
+begin
+  case LookupWord(@ABuf[ANameStart], ANameLen) of
+    kwAnsi, kwMac, kwPc, kwPca, kwAnsiCpg, kwDFontTbl: Result := True;
+  else
+    Result := False;
+  end;
+end;
+
+function TyRtfWordHidesGroup(ABuf: PByte; ANameStart, ANameLen: Integer): Boolean;
+begin
+  Result := LookupWord(@ABuf[ANameStart], ANameLen) = kwDPict;
+end;
+
 // CJK ideographs, kana, Hangul, Bopomofo, CJK punctuation and the full-width forms: the
 // characters Word gives the double-byte font.
 function IsEastAsian(ACode: Cardinal): Boolean;
@@ -1454,6 +1565,7 @@ begin
   FFontNumMax := -1;
   FColorTblClose := -1;
   FAnsiCp := 1252;
+  NoteCodePage(1252);
   FDeff := -1;
   FFirstFont := -1;
   FPaperW := 12240;
@@ -1742,6 +1854,8 @@ begin
   TablesChanged;
   FAnsiCp := AOther.FAnsiCp;
   FAnsiCpSet := AOther.FAnsiCpSet;
+  FCodePages := Copy(AOther.FCodePages, 0, AOther.FCodePageN);
+  FCodePageN := AOther.FCodePageN;
   FDeff := AOther.FDeff;
   FFirstFont := AOther.FFirstFont;
   FFonts := Copy(AOther.FFonts, 0, Length(AOther.FFonts));
@@ -2320,9 +2434,8 @@ begin
   if not (FS.Props.Dest in [rdNormal, rdFieldResult, rdListText]) then Exit;
   if FS.InRowDef then EndRowDef;
   case v of
-    Ord('~'): EmitChar($A0);
-    Ord('_'): EmitChar($2011);
-    Ord('\'), Ord('{'), Ord('}'): EmitChar(v);
+    // (the find's filter reads the same: TyRtfSymbolChar)
+    Ord('~'), Ord('_'), Ord('\'), Ord('{'), Ord('}'): EmitChar(TyRtfSymbolChar(v));
     Ord('-'):
       if FS.Props.Dest = rdNormal then
       begin
@@ -2752,6 +2865,7 @@ begin
   if not FEntryOn then Exit;
   FEntryOn := False;
   FEntry.CodePage := ResolveCodePage(FEntry.Charset, FEntry.Cpg);
+  NoteCodePage(FEntry.CodePage);
   FEntry.Name := FEntry.Name + DecodeRaw(FEntryRaw, FEntry.CodePage);
   FEntryRaw := '';
   if FEntry.CodePage <> CpSymbol then FEntry.Table := TyRichCodePageTable(FEntry.CodePage);
@@ -2822,6 +2936,27 @@ begin
   if ANum < 0 then ANum := FFirstFont;
   if ANum < 0 then Exit(-1);
   Result := FontIndex(ANum);
+end;
+
+procedure TTyRtfParser.NoteCodePage(ACodePage: Integer);
+var
+  i: Integer;
+begin
+  for i := 0 to FCodePageN - 1 do
+    if FCodePages[i] = ACodePage then Exit;
+  if FCodePageN = Length(FCodePages) then SetLength(FCodePages, FCodePageN * 2 + 4);
+  FCodePages[FCodePageN] := ACodePage;
+  Inc(FCodePageN);
+end;
+
+function TTyRtfParser.CodePageCount: Integer;
+begin
+  Result := FCodePageN;
+end;
+
+function TTyRtfParser.CodePageSeen(AIndex: Integer): Integer;
+begin
+  Result := FCodePages[AIndex];
 end;
 
 function TTyRtfParser.ResolveCodePage(ACharset, ACpg: Integer): Integer;
@@ -3519,12 +3654,14 @@ begin
         else
           FAnsiCp := 850;
         end;
+        NoteCodePage(FAnsiCp);
         TablesChanged;
       end;
     kwAnsiCpg:
       begin
         p := RtfCodePage(p);
         if TyRichCodePageSupported(p) then FAnsiCp := p else FAnsiCp := 1252;
+        NoteCodePage(FAnsiCp);
         FAnsiCpSet := True;
         Inc(FFontGen);
         TablesChanged;
@@ -3788,24 +3925,8 @@ begin
     kwRow: if normal then DoRow;
     // characters
     kwPar: if normal then EndParagraph(rpkPar);
-    kwLine: EmitChar($0B);
-    kwTab: EmitChar($09);
-    kwLdblquote: EmitChar($201C);
-    kwRdblquote: EmitChar($201D);
-    kwLquote: EmitChar($2018);
-    kwRquote: EmitChar($2019);
-    kwEmdash: EmitChar($2014);
-    kwEndash: EmitChar($2013);
-    kwBullet: EmitChar($2022);
-    kwEmspace: EmitChar($2003);
-    kwEnspace: EmitChar($2002);
-    kwQmspace: EmitChar($2005);
-    kwZwj: EmitChar($200D);
-    kwZwnj: EmitChar($200C);
-    kwLtrMark: EmitChar($200E);
-    kwRtlMark: EmitChar($200F);
-    kwZwbo: EmitChar($200B);
-    kwZwnbo: EmitChar($FEFF);
+    // (the find's filter reads the same table: TyRtfWordChar)
+    kwLine..kwZwnbo: EmitChar(KwChar(AKw));
     kwObjWord:
       if normal and (FFieldNest = 0) then
       begin
@@ -3993,7 +4114,8 @@ begin
     Dec(FS.UcSkip);
     Exit;
   end;
-  if (B = 0) or (B = 10) or (B = 13) then Exit;
+  // (the find's filter reads bytes by the same roles: TyRtfByteRole)
+  if TyRtfByteRole(B) = rbrDropped then Exit;
   if FS.PendingHigh <> 0 then
   begin
     FS.PendingHigh := 0;
@@ -4015,9 +4137,11 @@ begin
     end;
     EmitCode(Ord('?'), False);
   end;
+  if TyRtfByteRole(B) = rbrControl then Exit;
   if B < $20 then
   begin
-    if B = 9 then EmitCode(9, False);
+    // the tab
+    EmitCode(9, False);
     Exit;
   end;
   if FDecCp = CpSymbol then
