@@ -5354,6 +5354,9 @@ begin
   FRich.Lines.Text := 'ime text';
   FRich.UpdateView;
   ime := FRich as ITyImeEditable;
+  // an editor since Task 10a: the viewer is ReadOnly (10b: the input method is told so)
+  AssertFalse('an editor: not read-only', ime.ImeIsReadOnly);
+  FRich.ReadOnly := True;
   AssertTrue('read-only', ime.ImeIsReadOnly);
   AssertTrue('the control', ime.ImeTargetControl = FRich);
   FRich.SelStart := 2;

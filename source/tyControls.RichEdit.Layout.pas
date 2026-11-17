@@ -381,6 +381,10 @@ type
     PlaceholderFrame: TBGRAPixel;
     ObjectFrame: TBGRAPixel;        // around a selected picture
     TableBorder: TBGRAPixel;
+    { An input method's composition (TTyRichLayouter.SetComposition) is underlined in this
+      colour - the clause the input method works on twice as thick; alpha 0: in the colour of
+      the composition's text. }
+    CompositionLine: TBGRAPixel;
     { A picture not ready to be drawn at its box's size (not decoded, or not scaled to it) is
       not made ready by this paint: its box is filled PlaceholderFill (no frame, which would
       flash) and the layouter notes it (TakeSkippedPictures), for the owner to prepare later
@@ -405,6 +409,19 @@ type
     Highlight: TColor;
     Underline: Boolean;
     Strike: Boolean;
+  end;
+
+  { The text an input method is composing, shown where it will go in (see
+    TTyRichLayouter.SetComposition). Para -1: none. Offset: characters from the paragraph's
+    start; Caret, ClauseFrom, ClauseTo: characters from the composition's start (ClauseTo <=
+    ClauseFrom: no clause). }
+  TTyRichComposition = record
+    Para: Integer;
+    Offset: Integer;
+    Text: UTF8String;
+    Format: TTyCharFormatId;
+    Caret: Integer;
+    ClauseFrom, ClauseTo: Integer;
   end;
 
   TTyRichLayouter = class;
@@ -513,6 +530,9 @@ type
       cut paragraph. In a row, the line of the cell paragraph APos is in. }
     procedure LineBounds(APos: TTyRichPos; AAtLineEnd: Boolean; out AStart, AEnd: TTyRichPos;
       out AEndAtLineEnd: Boolean); virtual; abstract;
+    { The caret inside the input method's composition the block shows (where the input method
+      says its caret is), as CaretRect gives one; False when the block shows none. }
+    function CompositionCaret(out ARect: TRect): Boolean; virtual;
     { What it says may no longer be the document: the paragraphs it shows changed after it
       was made (the layouter dropped it), or - for a layout the cache had already let go of
       while its holder kept it (evicted for space) - the document changed in any way since:
@@ -550,6 +570,21 @@ type
     FSpaceBefore: Integer;
     FSpaceAfter: Integer;
     FPaintFormats: array of TTyRichPaintFormat;
+    { An input method's composition laid out in the paragraph (TTyRichLayouter.SetComposition):
+      FCompLen characters at FCompAt that are not the document's, the input method's caret and
+      clause in them. The layout's own positions (Lines, Fragments, Text, LineOfPos) count
+      them; what it answers in the document's positions (CaretRect, PosAtPoint, the selection,
+      NextCaretPos, LineBounds, LastCaretPos, Length, Paint's selection) does not: a document
+      position at FCompAt is before the composition, one after it is after. }
+    FCompAt, FCompLen, FCompCaret, FCompClauseFrom, FCompClauseTo: Integer;
+    { A document position as one of the layout's: at the composition's place, before it - or,
+      AAfter, after it. And back: a place inside the composition is the document's FCompAt. }
+    function InPos(APos: TTyRichPos; AAfter: Boolean): TTyRichPos;
+    function OutPos(APos: TTyRichPos): TTyRichPos;
+    function GetDocLength: Integer;
+    function InnerCaretRect(APos: TTyRichPos; AAtLineEnd: Boolean): TRect;
+    function InnerPosAtPoint(AX, AY: Integer; out AAtLineEnd: Boolean): TTyRichPos;
+    function InnerNextCaretPos(APos: TTyRichPos; AForward: Boolean): TTyRichPos;
     function GetLine(AIndex: Integer): TTyRichLine;
     function GetFragment(AIndex: Integer): TTyRichFragment;
     function ByteOfChar(const F: TTyRichFragment; AChars: Integer): Integer;
@@ -578,9 +613,15 @@ type
     function NextCaretPos(APos: TTyRichPos; AForward: Boolean): TTyRichPos; override;
     procedure LineBounds(APos: TTyRichPos; AAtLineEnd: Boolean; out AStart, AEnd: TTyRichPos;
       out AEndAtLineEnd: Boolean); override;
+    function CompositionCaret(out ARect: TRect): Boolean; override;
+    { The composition it shows: its place and length (the layout's positions; 0 characters:
+      none). }
+    property CompositionStart: Integer read FCompAt;
+    property CompositionLength: Integer read FCompLen;
     { The line a position is on (the start of a wrapped line belongs to that line - or, with
       AAtLineEnd, to the line it ends: see CaretRect), and the line at a height (above the
-      first: the first; below the last: the last). }
+      first: the first; below the last: the last). The layout's positions (a composition's
+      characters counted). }
     function LineOfPos(APos: TTyRichPos; AAtLineEnd: Boolean = False): Integer;
     function LineAtY(AY: Integer): Integer;
     { What fragment AIndex draws (its Text for an object or a replacement). }
@@ -597,7 +638,8 @@ type
       Width in every mode, so a view narrower than the notice - wrapped or not - scrolls to
       its end. (A control may also say it its own way: Truncated.) }
     property Text: RawByteString read FText;
-    property Length: Integer read FLength;
+    { The document's (a composition shown in it not counted). }
+    property Length: Integer read GetDocLength;
     property Notice: TTyRichFragment read FNotice;
     property NoticeBaseline: Integer read FNoticeBaseline;
     property SpaceBefore: Integer read FSpaceBefore;
@@ -695,6 +737,8 @@ type
     function NextCaretPos(APos: TTyRichPos; AForward: Boolean): TTyRichPos; override;
     procedure LineBounds(APos: TTyRichPos; AAtLineEnd: Boolean; out AStart, AEnd: TTyRichPos;
       out AEndAtLineEnd: Boolean); override;
+    { The composition's caret of the cell paragraph that shows one, in the row's pixels. }
+    function CompositionCaret(out ARect: TRect): Boolean; override;
     { The item (paragraph) position APos is in: the last that starts at or before it. }
     function ItemAt(APos: TTyRichPos): Integer;
     function CellCount: Integer;
@@ -779,6 +823,14 @@ type
     FPictureDecodeBudget: Int64;
     FPictureScaleBudget: Int64;
     FPictureDecodedPixels: Int64;
+    FComp: TTyRichComposition;
+    { The cached block paragraph APara is in goes (Stale) - nothing else: no list number, no
+      trust in the file's markers (a composition is no change of the document). }
+    procedure DropBlockOf(APara: Integer);
+    { The composition put into a paragraph's text and runs as BuildPara read them (a copy of
+      the runs is made: they are the model's): its characters, 0 when its place is past what
+      was read. }
+    function SpliceComposition(var AText: RawByteString; var ARuns: TTyRunArray): Integer;
     function PictureEntry(APicture: TTyRichPicture): TObject;
     procedure PictureRecount(AEntry: TObject);
     procedure PictureDecode(AEntry: TObject);
@@ -876,6 +928,24 @@ type
       steps the load) - the file's own paragraphs, numbered as the file numbers them, so
       trust stays. }
     procedure DocumentChanged(const AChange: TTyRichChange; AFromLoad: Boolean = False);
+    { An input method's composition: AText (in AFormat) shown in paragraph APara before its
+      character AOffset - laid out with the paragraph, through the same line breaking and
+      measuring as its text, and underlined - while the document does not have it. The
+      paragraph's layout says the document's positions (see TTyParaLayout), so a caret, a hit
+      test and a selection go on as without it. ACaret, AClauseFrom, AClauseTo: characters of
+      AText (clamped to it). Only the block that shows the composition (before, and the one
+      that shows it now) goes - one paragraph laid out again for each change of it; the layouts
+      held elsewhere go Stale as for any change of the layouter. AText '' or APara < 0: none
+      (ClearComposition). An offset past what a paragraph lays out (a cut paragraph's hidden
+      tail) shows nothing. }
+    procedure SetComposition(APara, AOffset: Integer; const AText: UTF8String;
+      AFormat: TTyCharFormatId; ACaret, AClauseFrom, AClauseTo: Integer);
+    procedure ClearComposition;
+    { The document changed while a composition is shown and took it to paragraph APara,
+      AOffset: told BEFORE DocumentChanged, which then drops or moves the block as for any
+      change (a block that moves keeps what it laid out, which is right at its new index). }
+    procedure MoveComposition(APara, AOffset: Integer);
+    property Composition: TTyRichComposition read FComp;
     { Every layout goes (Stale) and every kept measure. }
     procedure Clear;
     { Every layout and everything measured goes, as with Clear; the decoded pictures stay
@@ -2037,7 +2107,46 @@ end;
 function TTyParaLayout.LastCaretPos: TTyRichPos;
 begin
   // FShown is the length when nothing is cut, else the cut
-  Result := FShown;
+  Result := OutPos(FShown);
+end;
+
+function TTyParaLayout.InPos(APos: TTyRichPos; AAfter: Boolean): TTyRichPos;
+begin
+  Result := APos;
+  if (FCompLen > 0) and ((APos > FCompAt) or (AAfter and (APos = FCompAt))) then
+    Inc(Result, FCompLen);
+end;
+
+function TTyParaLayout.OutPos(APos: TTyRichPos): TTyRichPos;
+begin
+  Result := APos;
+  if FCompLen = 0 then Exit;
+  if APos >= FCompAt + FCompLen then Dec(Result, FCompLen)
+  else if APos > FCompAt then Result := FCompAt;
+end;
+
+function TTyParaLayout.GetDocLength: Integer;
+begin
+  Result := FLength - FCompLen;
+end;
+
+function TTyBlockLayout.CompositionCaret(out ARect: TRect): Boolean;
+begin
+  ARect := Rect(0, 0, 0, 0);
+  Result := False;
+end;
+
+function TTyParaLayout.CompositionCaret(out ARect: TRect): Boolean;
+begin
+  Result := FCompLen > 0;
+  if not Result then
+  begin
+    ARect := Rect(0, 0, 0, 0);
+    Exit;
+  end;
+  { at the composition's end, the end of the line it ends on (where it wraps there, not the
+    next line's start) }
+  ARect := InnerCaretRect(FCompAt + FCompCaret, FCompCaret = FCompLen);
 end;
 
 function TTyParaLayout.ByteOfChar(const F: TTyRichFragment; AChars: Integer): Integer;
@@ -2344,6 +2453,17 @@ begin
 end;
 
 function TTyParaLayout.PosAtPoint(AX, AY: Integer; out AAtLineEnd: Boolean): TTyRichPos;
+begin
+  Result := InnerPosAtPoint(AX, AY, AAtLineEnd);
+  if FCompLen > 0 then
+  begin
+    // on the composition: its place, which is no line's end
+    if (Result > FCompAt) and (Result < FCompAt + FCompLen) then AAtLineEnd := False;
+    Result := OutPos(Result);
+  end;
+end;
+
+function TTyParaLayout.InnerPosAtPoint(AX, AY: Integer; out AAtLineEnd: Boolean): TTyRichPos;
 var
   ln: Integer;
 begin
@@ -2361,6 +2481,12 @@ begin
 end;
 
 function TTyParaLayout.CaretRect(APos: TTyRichPos; AAtLineEnd: Boolean): TRect;
+begin
+  if APos < 0 then APos := 0;
+  Result := InnerCaretRect(InPos(APos, False), AAtLineEnd);
+end;
+
+function TTyParaLayout.InnerCaretRect(APos: TTyRichPos; AAtLineEnd: Boolean): TRect;
 var
   ln, x: Integer;
 begin
@@ -2378,6 +2504,9 @@ var
 begin
   Result := nil;
   if AFrom < 0 then AFrom := 0;
+  // the composition is never selected: a selection that ends at it ends before it
+  AFrom := InPos(AFrom, True);
+  ATo := InPos(ATo, False);
   if ATo > FLength + 1 then ATo := FLength + 1;
   if ATo <= AFrom then Exit;
   n := 0;
@@ -2392,6 +2521,13 @@ begin
 end;
 
 function TTyParaLayout.NextCaretPos(APos: TTyRichPos; AForward: Boolean): TTyRichPos;
+begin
+  // a step forward from the composition's place starts behind it, a step back before it
+  Result := InnerNextCaretPos(InPos(APos, AForward), AForward);
+  if Result >= 0 then Result := OutPos(Result);
+end;
+
+function TTyParaLayout.InnerNextCaretPos(APos: TTyRichPos; AForward: Boolean): TTyRichPos;
 
   { The fragment holding character APos: on the line it starts, else -1. }
   function FragAt(AChar: TTyRichPos): Integer;
@@ -2471,6 +2607,7 @@ var
   ln: Integer;
 begin
   if APos < 0 then APos := 0;
+  APos := InPos(APos, False);
   if APos > FShown then APos := FShown;
   ln := LineOfPos(APos, AAtLineEnd);
   with FLines[ln] do
@@ -2482,6 +2619,8 @@ begin
   end;
   if AEnd > FShown then AEnd := FShown;
   if AStart > AEnd then AStart := AEnd;
+  AStart := OutPos(AStart);
+  AEnd := OutPos(AEnd);
 end;
 
 { ---- table rows ---- }
@@ -2723,6 +2862,20 @@ begin
   Inc(AEnd, FItems[k].Pos);
 end;
 
+function TTyRowLayout.CompositionCaret(out ARect: TRect): Boolean;
+var
+  k: Integer;
+begin
+  for k := 0 to High(FItems) do
+    if FItems[k].Layout.CompositionCaret(ARect) then
+    begin
+      Types.OffsetRect(ARect, FItems[k].X, FItems[k].Y);
+      Exit(True);
+    end;
+  ARect := Rect(0, 0, 0, 0);
+  Result := False;
+end;
+
 { ---- painting ---- }
 
 function PaintColor(AColor: TColor; const ADefault: TBGRAPixel): TBGRAPixel;
@@ -2893,6 +3046,12 @@ begin
   if ATarget = nil then Exit;
   old := ATarget.ClipRect;
   if not Types.IntersectRect(clip, AClip, old) then Exit;
+  // the selection in the layout's positions (a composition is never selected)
+  if ASelTo > ASelFrom then
+  begin
+    ASelFrom := InPos(ASelFrom, True);
+    ASelTo := InPos(ASelTo, False);
+  end;
   ATarget.ClipRect := clip;
   FLayouter.PaintEnter;
   try
@@ -3088,6 +3247,35 @@ begin
           AStyle.SelectionText);
     end;
   end;
+  { An input method's composition: underlined where an underline goes (its thickness from the
+    font's size), the clause the input method works on twice as thick - fragment by fragment,
+    so a composition across fonts and lines is underlined under each piece of it. }
+  if (FCompLen > 0) and (ln^.First < FCompAt + FCompLen) and
+    (ln^.First + ln^.Count > FCompAt) then
+    for i := ln^.FirstFrag to ln^.FirstFrag + ln^.FragCount - 1 do
+    begin
+      f := @FFrags[i];
+      if (f^.Count = 0) or (f^.First >= FCompAt + FCompLen) or
+        (f^.First + f^.Count <= FCompAt) then
+        Continue;
+      if not Visible(f^) then Continue;
+      px := FLayouter.Device.FontPixelHeight(f^.Font);
+      th := Max(1, Round(px / 16));
+      lineY := base + f^.Shift + Max(1, Round(px / 10));
+      if AStyle.CompositionLine.alpha = 0 then
+        col := PaintColor(PaintFormat(f^.Format).Color, AStyle.TextColor)
+      else
+        col := AStyle.CompositionLine;
+      k := Max(f^.First, FCompAt);
+      n := Min(f^.First + f^.Count, FCompAt + FCompLen);
+      ATarget.FillRect(AX + XInLine(ALine, k), lineY, AX + XInLine(ALine, n), lineY + th, col,
+        dmSet);
+      k := Max(k, FCompAt + FCompClauseFrom);
+      n := Min(n, FCompAt + FCompClauseTo);
+      if n > k then
+        ATarget.FillRect(AX + XInLine(ALine, k), lineY, AX + XInLine(ALine, n),
+          lineY + 2 * th, col, dmSet);
+    end;
   // pictures and placeholders, decoded when one is first drawn
   for i := ln^.FirstFrag to ln^.FirstFrag + ln^.FragCount - 1 do
   begin
@@ -4663,6 +4851,7 @@ begin
   Result.PlaceholderFrame := BGRA(160, 160, 160, 255);
   Result.ObjectFrame := BGRA(51, 153, 255, 255);
   Result.TableBorder := BGRA(128, 128, 128, 255);
+  Result.CompositionLine := BGRAPixelTransparent;
   Result.DeferPictures := False;
 end;
 
@@ -5114,6 +5303,7 @@ begin
   FPictureScaleBudget := CRichPictureMaxScaledPixels;
   FTrustFrom := MaxInt;
   FFontPPI := -1;
+  FComp.Para := -1;
 end;
 
 destructor TTyRichLayouter.Destroy;
@@ -5313,6 +5503,131 @@ begin
       Vouch(L, FChangeGen);
     L := nx;
   end;
+end;
+
+procedure TTyRichLayouter.DropBlockOf(APara: Integer);
+var
+  L, nx: TTyBlockLayout;
+begin
+  if APara < 0 then Exit;
+  // a layout held out of the cache that shows it cannot be told: stale by the count
+  Inc(FChangeGen);
+  L := FLruFirst;
+  while L <> nil do
+  begin
+    nx := L.FLruNext;
+    if (L.FFirstPara <= APara) and (L.FLastPara >= APara) then
+      CacheDrop(L, True)
+    else
+      Vouch(L, FChangeGen);
+    L := nx;
+  end;
+end;
+
+procedure TTyRichLayouter.SetComposition(APara, AOffset: Integer; const AText: UTF8String;
+  AFormat: TTyCharFormatId; ACaret, AClauseFrom, AClauseTo: Integer);
+var
+  n, old: Integer;
+begin
+  if (APara < 0) or (AText = '') then
+  begin
+    ClearComposition;
+    Exit;
+  end;
+  n := CharCountOf(AText);
+  old := FComp.Para;
+  FComp.Para := APara;
+  FComp.Offset := Max(0, AOffset);
+  FComp.Text := AText;
+  FComp.Format := AFormat;
+  FComp.Caret := Min(Max(0, ACaret), n);
+  FComp.ClauseFrom := Min(Max(0, AClauseFrom), n);
+  FComp.ClauseTo := Min(Max(FComp.ClauseFrom, AClauseTo), n);
+  if (old >= 0) and (old <> APara) then DropBlockOf(old);
+  DropBlockOf(APara);
+end;
+
+function TTyRichLayouter.SpliceComposition(var AText: RawByteString;
+  var ARuns: TTyRunArray): Integer;
+var
+  pos, chars, i, k, n, at, len, clen: Integer;
+  s: RawByteString;
+  runs: TTyRunArray;
+  fmtAt: TTyCharFormatId;
+begin
+  Result := 0;
+  // its byte: characters counted as the text storage counts them (a byte that is no text, one)
+  len := System.Length(AText);
+  pos := 1;
+  chars := 0;
+  while (chars < FComp.Offset) and (pos <= len) do
+  begin
+    Inc(pos, SeqLen(PByte(@AText[pos]), len - pos + 1));
+    Inc(chars);
+  end;
+  if chars < FComp.Offset then Exit;
+  at := chars;
+  n := CharCountOf(FComp.Text);
+  clen := System.Length(FComp.Text);
+  // the bytes put together by hand: no code page conversion of either string
+  s := '';
+  SetLength(s, len + clen);
+  if pos > 1 then Move(AText[1], s[1], pos - 1);
+  Move(FComp.Text[1], s[pos], clen);
+  if pos <= len then Move(AText[pos], s[pos + clen], len - pos + 1);
+  if len > 0 then SetCodePage(s, StringCodePage(AText), False);
+  AText := s;
+  // the runs: the composition one of its own; what follows it goes on in the format it had
+  runs := nil;
+  SetLength(runs, System.Length(ARuns) + 2);
+  if System.Length(ARuns) > 0 then fmtAt := ARuns[0].Format else fmtAt := 0;
+  k := 0;
+  i := 0;
+  while (i <= High(ARuns)) and (ARuns[i].Start < at) do
+  begin
+    runs[k] := ARuns[i];
+    fmtAt := ARuns[i].Format;
+    Inc(k);
+    Inc(i);
+  end;
+  runs[k].Start := at;
+  runs[k].Format := FComp.Format;
+  runs[k].Obj := nil;
+  Inc(k);
+  if (i > High(ARuns)) or (ARuns[i].Start > at) then
+  begin
+    runs[k].Start := at + n;
+    runs[k].Format := fmtAt;
+    runs[k].Obj := nil;
+    Inc(k);
+  end;
+  while i <= High(ARuns) do
+  begin
+    runs[k] := ARuns[i];
+    Inc(runs[k].Start, n);
+    Inc(k);
+    Inc(i);
+  end;
+  SetLength(runs, k);
+  ARuns := runs;
+  Result := n;
+end;
+
+procedure TTyRichLayouter.ClearComposition;
+var
+  p: Integer;
+begin
+  p := FComp.Para;
+  FComp.Para := -1;
+  FComp.Text := '';
+  if p >= 0 then DropBlockOf(p);
+end;
+
+procedure TTyRichLayouter.MoveComposition(APara, AOffset: Integer);
+begin
+  if FComp.Para < 0 then Exit;
+  FComp.Para := APara;
+  FComp.Offset := Max(0, AOffset);
 end;
 
 procedure TTyRichLayouter.DocumentChanged(const AChange: TTyRichChange; AFromLoad: Boolean);
@@ -5633,6 +5948,7 @@ var
   t: TTyRichText;
   start, len: TTyRichPos;
   text: RawByteString;
+  compLen: Integer;
 begin
   Result := TTyParaLayout.Create(Self);
   b := TParaBuilder.Create;
@@ -5667,22 +5983,33 @@ begin
       b.Zoom := AZoom;
       b.Width := AWidth;
       Inc(FParaBytesFetched, System.Length(text));
-      b.Decode(text, Min(len, CRichMaxParaLayoutChars + 1));
-      Inc(FParaCharsDecoded, b.N);
-      if len > CRichMaxParaLayoutChars then b.FullLen := len else b.FullLen := b.N;
+      compLen := 0;
+      if (FComp.Para = AIndex) and (FComp.Text <> '') then
+        compLen := SpliceComposition(text, b.Runs);
+      b.Decode(text, Min(len, CRichMaxParaLayoutChars + 1) + compLen);
+      Inc(FParaCharsDecoded, b.N - compLen);
+      if len > CRichMaxParaLayoutChars then b.FullLen := len + compLen else b.FullLen := b.N;
       Result.FLength := b.FullLen;
+      Result.FCompLen := compLen;
+      if compLen > 0 then
+      begin
+        Result.FCompAt := FComp.Offset;
+        Result.FCompCaret := FComp.Caret;
+        Result.FCompClauseFrom := FComp.ClauseFrom;
+        Result.FCompClauseTo := FComp.ClauseTo;
+      end;
       Result.FFirstPara := AIndex;
       Result.FLastPara := AIndex;
       Result.FLayoutWidth := AWidth;
       Result.FPPI := APPI;
       Result.FZoom := AZoom;
-      Result.FCharCount := b.FullLen + 1;
+      Result.FCharCount := b.FullLen - compLen + 1;
       b.Run;
       Result.FText := b.Txt;
       Result.FShown := b.N;
       // the characters laid out: the paragraph's and its separator, unless cut (then the
       // characters before the cut; the separator is not laid out)
-      if Result.FTruncated then Result.FShownChars := b.N
+      if Result.FTruncated then Result.FShownChars := Max(0, b.N - compLen)
       else Result.FShownChars := Result.FCharCount;
       Result.TakePaintFormats(ADoc, FBaseFontStyle);
     finally
@@ -5888,7 +6215,8 @@ begin
       R.FItems[j].Y := 0;
       R.FItems[j].Pos := pos;
       R.FItems[j].Cell := ci;
-      Inc(pos, P.FLength + 1);
+      // the document's length: a composition the paragraph shows has no positions of the row's
+      Inc(pos, P.Length + 1);
       if P.FNumbered then R.FNumbered := True;
       if P.FTruncated then R.FTruncated := True;
       Inc(shown, P.FShownChars);

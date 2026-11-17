@@ -294,6 +294,7 @@ uses
   test.richedit.layout,
   test.richedit.control,
   test.richedit.edit,
+  test.richedit.ime,
   test.richedit.perf;
 
 type
