@@ -720,6 +720,27 @@ msgstr ""
 msgid "This table row holds a nested table and is kept as the file has it: its text cannot be changed."
 msgstr ""
 
+#: tycontrols.strconsts.rsricheditrefusedrange
+msgid "This part of the document cannot be edited."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditrefusedcells
+msgid "A selection across table cells cannot be deleted or typed over (whole rows can)."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditrefusedlongpara
+msgid "This paragraph is too long to edit here: what is typed past the part shown would not be seen."
+msgstr ""
+
+#: tycontrols.strconsts.rsrichmodelnestedrow
+msgid "This row holds a nested table and is kept as the file has it: its text cannot be changed"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichmodelpartrefused
+#, object-pascal-format
+msgid "Part %d of the command (%s) cannot be carried out"
+msgstr ""
+
 #: tycontrols.strconsts.rsricheditparanotshown
 msgid "%s more characters of this paragraph are not shown."
 msgstr ""

@@ -37,6 +37,13 @@ const
 
 type
   ETyRichModel = class(Exception);
+  { The document refused a change and changed nothing (a command reverted what it had done):
+    FixedRow - a row that holds a nested table was in the way (TTyRichRow.HoldsNestedTable),
+    else the range could not be changed for another reason (a command's CanExecute). }
+  ETyRichRefused = class(ETyRichModel)
+  public
+    FixedRow: Boolean;
+  end;
 
   TTyCharFormatId = Integer;
   TTyParaFormatId = Integer;
@@ -1972,9 +1979,10 @@ end;
 
 procedure TTyRichDocument.SetDefaultPage;
 begin
-  // WordPad's page: US Letter, 1.25" left and right margins
-  FPaperWidth := 12240;
-  FPaperHeight := 15840;
+  { A new document's page, and one not read from RTF (a reader of RTF sets the file's):
+    A4 (R54: a control for Chinese users; Word's check said so), WordPad's 1.25" side margins }
+  FPaperWidth := 11906;
+  FPaperHeight := 16838;
   FMarginLeft := 1800;
   FMarginRight := 1800;
 end;
@@ -2290,9 +2298,11 @@ end;
 
 { ---- rows that hold a nested table ---- }
 
-const
-  SNestedRow = 'This row holds a nested table and is kept as the file has it: ' +
-    'its text cannot be changed';
+function NestedRowRefused: ETyRichRefused;
+begin
+  Result := ETyRichRefused.Create(rsRichModelNestedRow);
+  Result.FixedRow := True;
+end;
 
 function TTyRichDocument.FixedData(D: TTyRichParaData): Boolean;
 begin
@@ -2758,7 +2768,7 @@ begin
   if AText = '' then Exit(NewUndo(c));
   if CutSequence(AText) then
     raise ETyRichModel.Create('The text to insert starts or ends inside a UTF-8 sequence');
-  if ChangeRefused(APos, 0) then raise ETyRichModel.Create(SNestedRow);
+  if ChangeRefused(APos, 0) then raise NestedRowRefused;
   // new breaks take the document's majority kind, so saving writes the stored bytes as they
   // are: the breaks already there stay what they were in the file
   txt := WithBreaks(AText, FDominantLineBreak);
@@ -2868,7 +2878,7 @@ function TTyRichDocument.DeleteRange(APos, ALen: TTyRichPos): TTyRichUndoData;
 begin
   if (APos < 0) or (ALen < 0) or (APos + ALen > FText.Length) then
     raise ETyRichModel.CreateFmt('Range %d+%d out of 0..%d', [APos, ALen, FText.Length]);
-  if (ALen > 0) and ChangeRefused(APos, ALen) then raise ETyRichModel.Create(SNestedRow);
+  if (ALen > 0) and ChangeRefused(APos, ALen) then raise NestedRowRefused;
   // the values of the two end paragraphs are held while the other is read
   BeginRead;
   try

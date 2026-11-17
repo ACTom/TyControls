@@ -54,6 +54,9 @@ type
     // a save's progress handler that types (TestEveryRefusalThroughAKey)
     FSaveCalls, FSaveRefused, FSaveRaised: Integer;
     FSaveCancelAt: Integer;
+    // OnEditRefused (fix wave W11): calls, and what the handler does
+    FRefusedEvents: Integer;
+    FRefusedEdits: Boolean;
     procedure Changed(Sender: TObject);
     procedure SelChanged(Sender: TObject);
     procedure TypeWhileSaving(Sender: TObject; ADone, ATotal: Int64; var ACancel: Boolean);
@@ -75,6 +78,7 @@ type
     procedure ScaledProbe(AScale: Integer);
     procedure SetVariedLines(ACount: Integer; const ALong: string = ''; ALongAt: Integer = -1);
     procedure EdgeCases(AScale: Integer);
+    procedure RefusedEdits(Sender: TObject; const AReason: string);
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -113,6 +117,13 @@ type
     procedure TestTheSurfaceAfterAnEditAtTheViewsBottomIsAFullRedraw;
     procedure TestUndoPutsTheSelectionBackAsItWas;
     procedure TestATypingMistakeUndoneSavesTheFile;
+    procedure TestALineThatCannotBeAssignedStaysAsItWas;
+    procedure TestARefusalIsToldInTheControlsWordsAfterTheEdit;
+    procedure TestTableEdgesFromTheKeyboard;
+    procedure TestAtTheCutOfALongParagraph;
+    procedure TestTheMenuReadOnlyAndCtrlTabOfAnEditor;
+    procedure TestListItemsAndJoinsByKey;
+    procedure TestShiftEnterInATextDocumentMakesAParagraph;
   end;
 
 implementation
@@ -941,7 +952,8 @@ procedure TTyRichEditEditTest.TestShiftEnterInsertsALineBreak;
 var
   d: TTyRichDocument;
 begin
-  SetText('ab');
+  LoadRtf('{' + BS + 'rtf1' + BS + 'ansi' + BS + 'deff0{' + BS + 'fonttbl{' + BS + 'f0 Arial;}}' +
+    BS + 'pard' + BS + 'f0 ab' + BS + 'par}');
   d := FRich.Document;
   FRich.SelStart := 1;
   AssertEquals('taken', 0, FRich.KeyResult(VK_RETURN, [ssShift]));
@@ -1290,7 +1302,8 @@ begin
   ResetEvents;
   Chars('x');
   AssertEquals('at the caret: refused once', 1, FRich.Refused);
-  AssertTrue('the engine''s message', FRich.LastReason <> '');
+  // E-M3: the control's own reason, never the engine's sentence
+  AssertEquals('this range cannot be edited', rsRichEditRefusedRange, FRich.LastReason);
   AssertEquals('the caret stays', Int64(2), FRich.CaretPos);
   FRich.SelStart := 1;
   FRich.SelLength := 2;
@@ -1425,17 +1438,16 @@ begin
   KeystrokeCase(2);
 end;
 
-{ Tables, as far as 10a goes: a key does not cross a cell's edge (Backspace at a cell's start
-  and Delete at its end do nothing, as in Word and WordPad); a selection across cells is the
-  engine's rule (the paragraphs merge), and leaves a document that is whole, lays out, saves
-  and reads back; undo puts it back. }
+{ Tables: a key does not cross a cell's edge (Backspace at a cell's start and Delete at its
+  end do nothing, as in Word and WordPad); a selection across cells is not deleted or typed
+  over by a key (R57: refused and told, until Task 12) - the engine would leave a cell with no
+  paragraph. }
 procedure TTyRichEditEditTest.TestADeletionAcrossCellsLeavesAValidDocument;
 var
-  d, b: TTyRichDocument;
+  d: TTyRichDocument;
   t: TTyRichText;
   k0, k1, k: Integer;
   before: string;
-  st: TMemoryStream;
 begin
   LoadBytes(FixtureFile('re-zh-table.rtf'));
   FRich.FinishLoading;
@@ -1461,31 +1473,23 @@ begin
   AssertEquals('nothing changed', before, FRich.Lines.Text);
   AssertEquals('nothing on the history', 0, d.UndoDepth);
   AssertEquals('nothing refused', 0, FRich.Refused);
-  // across the cells: the engine's rule
+  // across the cells: refused (R57, until Task 12) - told, nothing changed
   FRich.SelStart := t.ParaStart(k0) + 1;
   FRich.SelLength := t.ParaStart(k1) + 1 - (t.ParaStart(k0) + 1);
+  ResetEvents;
   Press(VK_DELETE);
-  AssertEquals('the text is whole', '', t.CheckIntegrity);
-  AssertEquals('the caret at the join', t.ParaStart(k0) + 1, FRich.CaretPos);
-  FRich.UpdateView;
-  AssertTrue('it lays out', FRich.VisibleBlockCount > 0);
-  CheckSurface('across cells');
-  st := TMemoryStream.Create;
-  try
-    FRich.SaveToStream(st, rfRtf);
-    st.Position := 0;
-    b := TTyRichDocument.Create;
-    try
-      TyRichLoadRtfFull(b, st);
-      AssertTrue('read back', b.Text.ParaCount > 0);
-    finally
-      b.Free;
-    end;
-  finally
-    st.Free;
-  end;
-  FRich.Undo;
-  AssertEquals('undone', before, FRich.Lines.Text);
+  AssertEquals('Delete across cells: refused once', 1, FRich.Refused);
+  AssertEquals('why', rsRichEditRefusedCells, FRich.LastReason);
+  Chars('Q');
+  AssertEquals('typed over: refused too', 2, FRich.Refused);
+  FRich.ClipWrites := 0;
+  Press(VK_X, [ssCtrl]);
+  AssertEquals('cut: refused too, before copying', 3, FRich.Refused);
+  AssertEquals('nothing copied', 0, FRich.ClipWrites);
+  AssertEquals('nothing changed', before, FRich.Lines.Text);
+  AssertEquals('nothing on the history', 0, d.UndoDepth);
+  AssertEquals('no change event', 0, FChanges);
+  AssertEquals('the selection stays', t.ParaStart(k1) + 1 - (t.ParaStart(k0) + 1), FRich.SelLength);
 end;
 
 { An object is one character: typed over when it is selected, and back with the undo. }
@@ -1625,7 +1629,8 @@ begin
   finally
     st.Free;
   end;
-  AssertTrue('the page: ' + s, Pos(BS + 'paperw12240' + BS + 'paperh15840' + BS + 'margl1800' +
+  // A4 (R54)
+  AssertTrue('the page: ' + s, Pos(BS + 'paperw11906' + BS + 'paperh16838' + BS + 'margl1800' +
     BS + 'margr1800' + BS + 'margt1440' + BS + 'margb1440', s) > 0);
   AssertTrue('the font as f0: ' + s, Pos('{' + BS + 'f0' + BS + 'fnil' + BS + 'fcharset0 ' +
       name + ';}', s) > 0);
@@ -2064,6 +2069,447 @@ procedure TTyRichEditEditTest.TestATypingMistakeUndoneSavesTheFile;
 begin
   Check('word-list.rtf');
   Check('wp-zh-plain.rtf');
+end;
+
+{ E-M2: Lines[i] := S is never half done - a text the engine refuses (one that ends inside a
+  UTF-8 sequence: an ANSI 'cafe' with its accent, assigned by mistake) raises, and the line,
+  the history, Modified and OnChange are as they were; a good text replaces the line, one
+  step. }
+procedure TTyRichEditEditTest.TestALineThatCannotBeAssignedStaysAsItWas;
+var
+  d: TTyRichDocument;
+  r: RawByteString;
+  raised: Boolean;
+begin
+  SetText('one' + LineEnding + 'two' + LineEnding + 'three');
+  d := FRich.Document;
+  FRich.Modified := False;
+  ResetEvents;
+  r := 'caf' + #$E9;
+  SetCodePage(r, CP_UTF8, False);
+  raised := False;
+  try
+    FRich.Lines[1] := r;
+  except
+    on ETyRichModel do raised := True;
+  end;
+  AssertTrue('refused', raised);
+  AssertEquals('the line as it was', 'two', FRich.Lines[1]);
+  AssertEquals('no undo step', 0, d.UndoDepth);
+  AssertEquals('no OnChange', 0, FChanges);
+  AssertFalse('not modified', FRich.Modified);
+  FRich.Lines[1] := 'zwei';
+  AssertEquals('replaced', 'zwei', FRich.Lines[1]);
+  AssertEquals('the others stay', 'one', FRich.Lines[0]);
+  AssertEquals('one step', 1, d.UndoDepth);
+  AssertEquals('one change', 1, FChanges);
+  FRich.Lines[1] := '';
+  AssertEquals('emptied', '', FRich.Lines[1]);
+  AssertEquals('three lines still', 3, d.Text.ParaCount);
+end;
+
+procedure TTyRichEditEditTest.RefusedEdits(Sender: TObject; const AReason: string);
+begin
+  Inc(FRefusedEvents);
+  if not FRefusedEdits then Exit;
+  FRich.ForcedFormat := -1;
+  FRich.Document.Execute(TTyRichInsertText.Create(0, 'h'));
+end;
+
+{ E-M3, E-M5, E-M9: what OnEditRefused is told is one of the control's own reasons, never the
+  engine's sentence; it is raised once the edit is over - a handler that edits gets its own
+  OnChange; and from code the engine's refusal raises with its reason in the package's words. }
+procedure TTyRichEditEditTest.TestARefusalIsToldInTheControlsWordsAfterTheEdit;
+var
+  d: TTyRichDocument;
+  t: TTyRichText;
+  k, kf: Integer;
+  raised: Boolean;
+  fixed: Boolean;
+  msg: string;
+begin
+  SetText('abcdef');
+  d := FRich.Document;
+  FRich.OnEditRefused := @RefusedEdits;
+  FRefusedEvents := 0;
+  FRefusedEdits := True;
+  FRich.ForcedFormat := 999999;
+  FRich.SelStart := 2;
+  ResetEvents;
+  Chars('x');
+  AssertEquals('OnEditRefused once', 1, FRefusedEvents);
+  AssertEquals('the control''s reason', rsRichEditRefusedRange, FRich.LastReason);
+  AssertEquals('the handler''s edit went in', 'habcdef', FRich.Lines[0]);
+  AssertEquals('and was heard: its OnChange', 1, FChanges);
+  AssertEquals('one undo step: the handler''s', 1, d.UndoDepth);
+  FRefusedEdits := False;
+  FRich.ForcedFormat := -1;
+  // the review's case: a paragraph and its separator typed over where a fixed row follows
+  LoadBytes(FixtureFile('word-table-merged.rtf'));
+  FRich.FinishLoading;
+  FRich.UpdateView;
+  d := FRich.Document;
+  t := d.Text;
+  kf := -1;
+  for k := 1 to t.ParaCount - 1 do
+    if (d.CellAt(k) <> nil) and d.CellAt(k).Row.HoldsNestedTable and
+      ((d.CellAt(k - 1) = nil) or (d.CellAt(k - 1).Row <> d.CellAt(k).Row)) then
+    begin
+      kf := k;
+      Break;
+    end;
+  AssertTrue('a fixed row after another paragraph', kf > 0);
+  FRich.SelStart := t.ParaStart(kf - 1);
+  FRich.SelLength := t.ParaStart(kf) - t.ParaStart(kf - 1);
+  ResetEvents;
+  FRefusedEvents := 0;
+  Chars('Q');
+  AssertTrue('told in the control''s words: ' + FRich.LastReason,
+    (FRich.Refused = 0) or (FRich.LastReason = rsRichEditRefusedFixedRow) or
+    (FRich.LastReason = rsRichEditRefusedCells) or (FRich.LastReason = rsRichEditRefusedRange));
+  AssertEquals('as often as the event', FRich.Refused, FRefusedEvents);
+  // from code the engine refuses the part that lands in the row, in the package's words
+  if FRich.Refused = 0 then FRich.Undo;
+  FRich.SelStart := t.ParaStart(kf - 1);
+  FRich.SelLength := t.ParaStart(kf) - t.ParaStart(kf - 1);
+  raised := False;
+  fixed := False;
+  msg := '';
+  try
+    FRich.SelText := 'Q';
+  except
+    on E: ETyRichModel do
+    begin
+      raised := True;
+      fixed := (E is ETyRichRefused) and ETyRichRefused(E).FixedRow;
+      msg := E.Message;
+    end;
+  end;
+  AssertTrue('from code: raised', raised);
+  AssertTrue('a fixed row in the way', fixed);
+  AssertEquals('the package''s sentence', Format(rsRichModelPartRefused, [1, 'TTyRichInsertText']), msg);
+  FRich.OnEditRefused := nil;
+end;
+
+{ E-M4 (R57), until Task 12: a selection that begins before a table and ends where its first
+  row starts keeps its last separator when typed over or deleted (the paragraph before the
+  table stays, Word's way); whole rows, from a row's start to a row's end, a key deletes - and
+  the engine leaves a document that is whole, lays out, saves and reads back as it is. }
+procedure TTyRichEditEditTest.TestTableEdgesFromTheKeyboard;
+var
+  d, b: TTyRichDocument;
+  t: TTyRichText;
+  kt, m, k, n: Integer;
+  before, cell: string;
+  st: TMemoryStream;
+begin
+  LoadBytes(FixtureFile('re-zh-table.rtf'));
+  FRich.FinishLoading;
+  FRich.UpdateView;
+  d := FRich.Document;
+  t := d.Text;
+  kt := -1;
+  for k := 1 to t.ParaCount - 1 do
+    if (d.CellAt(k) <> nil) and (d.CellAt(k - 1) = nil) then
+    begin
+      kt := k;
+      Break;
+    end;
+  AssertTrue('a paragraph before a table', kt > 0);
+  before := FRich.Lines.Text;
+  cell := FRich.Lines[kt];
+  n := t.ParaCount;
+  // typed over with its separator: the text goes, the paragraph before the table stays
+  FRich.SelStart := t.ParaStart(kt - 1);
+  FRich.SelLength := t.ParaStart(kt) - t.ParaStart(kt - 1);
+  ResetEvents;
+  Chars('Q');
+  AssertEquals('not refused', 0, FRich.Refused);
+  AssertEquals('typed in the paragraph before', 'Q', FRich.Lines[kt - 1]);
+  AssertTrue('which is before the table still', d.CellAt(kt - 1) = nil);
+  AssertEquals('the first cell as it was', cell, FRich.Lines[kt]);
+  AssertEquals('as many paragraphs', n, t.ParaCount);
+  FRich.Undo;
+  AssertEquals('undone', before, FRich.Lines.Text);
+  FRich.SelStart := t.ParaStart(kt - 1);
+  FRich.SelLength := t.ParaStart(kt) - t.ParaStart(kt - 1);
+  Press(VK_DELETE);
+  AssertEquals('deleted: empty', '', FRich.Lines[kt - 1]);
+  AssertTrue('deleted: before the table still', d.CellAt(kt - 1) = nil);
+  AssertEquals('deleted: as many paragraphs', n, t.ParaCount);
+  FRich.Undo;
+  AssertEquals('undone again', before, FRich.Lines.Text);
+  // the first row, whole
+  m := kt;
+  while (m < t.ParaCount) and (d.CellAt(m) <> nil) and (d.CellAt(m).Row = d.CellAt(kt).Row) do
+    Inc(m);
+  FRich.SelStart := t.ParaStart(kt);
+  FRich.SelLength := t.ParaStart(m) - t.ParaStart(kt);
+  ResetEvents;
+  Press(VK_DELETE);
+  AssertEquals('whole rows: not refused', 0, FRich.Refused);
+  AssertEquals('the row''s paragraphs went', n - (m - kt), t.ParaCount);
+  AssertEquals('the text is whole', '', t.CheckIntegrity);
+  FRich.UpdateView;
+  CheckSurface('a row deleted');
+  st := TMemoryStream.Create;
+  try
+    FRich.SaveToStream(st, rfRtf);
+    st.Position := 0;
+    b := TTyRichDocument.Create;
+    try
+      TyRichLoadRtfFull(b, st);
+      AssertEquals('read back: the paragraphs', t.ParaCount, b.Text.ParaCount);
+      for k := 0 to t.ParaCount - 1 do
+      begin
+        AssertEquals(Format('read back: paragraph %d', [k]),
+          string(t.GetText(t.ParaStart(k), t.ParaLength(k))),
+          string(b.Text.GetText(b.Text.ParaStart(k), b.Text.ParaLength(k))));
+        AssertEquals(Format('read back: paragraph %d in a cell', [k]), d.CellAt(k) <> nil,
+          b.CellAt(k) <> nil);
+      end;
+    finally
+      b.Free;
+    end;
+  finally
+    st.Free;
+  end;
+  FRich.Undo;
+  AssertEquals('the row back', before, FRich.Lines.Text);
+end;
+
+{ E-M6 and E-M9: at the cut of a paragraph too long to lay out whole (CRichMaxParaLayoutChars
+  - the cap has no seam: a real one) typing is refused and told rather than going in unseen;
+  before the cut it goes in; an edit from code there leaves the caret at the cut, never in
+  the hidden tail; Delete at the cut and Backspace after a cut paragraph do nothing. }
+procedure TTyRichEditEditTest.TestAtTheCutOfALongParagraph;
+var
+  d: TTyRichDocument;
+  t: TTyRichText;
+begin
+  SetText(StringOfChar('a', CRichMaxParaLayoutChars) + LineEnding + 'b');
+  d := FRich.Document;
+  t := d.Text;
+  FRich.SelStart := CRichMaxParaLayoutChars;
+  ResetEvents;
+  Chars('x');
+  AssertEquals('at the cut: refused once', 1, FRich.Refused);
+  AssertEquals('why', rsRichEditRefusedLongPara, FRich.LastReason);
+  AssertEquals('nothing went in', Int64(CRichMaxParaLayoutChars), t.ParaLength(0));
+  AssertEquals('nothing on the history', 0, d.UndoDepth);
+  FRich.SelStart := 50000;
+  Chars('y');
+  AssertEquals('before the cut it goes in', Int64(CRichMaxParaLayoutChars + 1), t.ParaLength(0));
+  AssertEquals('the caret behind it', Int64(50001), FRich.CaretPos);
+  // the paragraph is cut now; code inserts in its hidden tail: the caret goes to the cut
+  FRich.SelStart := t.ParaLength(0);
+  FRich.SelText := 'z';
+  AssertEquals('code put it in', Int64(CRichMaxParaLayoutChars + 2), t.ParaLength(0));
+  AssertEquals('the caret at the cut, not in the tail', Int64(CRichMaxParaLayoutChars), FRich.CaretPos);
+  // Delete at the cut, Backspace after the cut paragraph: nothing, nothing told
+  ResetEvents;
+  FRich.SelStart := CRichMaxParaLayoutChars;
+  Press(VK_DELETE);
+  FRich.SelStart := t.ParaStart(1);
+  Press(VK_BACK);
+  AssertEquals('nothing deleted', Int64(CRichMaxParaLayoutChars + 2), t.ParaLength(0));
+  AssertEquals('two paragraphs still', 2, t.ParaCount);
+  AssertEquals('nothing told', 0, FRich.Refused);
+  AssertEquals('no change', 0, FChanges);
+end;
+
+{ E-M9: the menu of an editor - undo, redo and cut offered and acting, none of them with
+  ReadOnly; ReadOnly set ends the run of typing; Ctrl+Tab types a tab only with WantTabs (the
+  memo's way). }
+procedure TTyRichEditEditTest.TestTheMenuReadOnlyAndCtrlTabOfAnEditor;
+var
+  d: TTyRichDocument;
+  acts: ITyTextEditActions;
+  depth: Integer;
+begin
+  SetText('abc');
+  d := FRich.Document;
+  acts := FRich as ITyTextEditActions;
+  AssertFalse('nothing to undo yet', acts.TeCanUndo);
+  AssertFalse('the menu: an editor', acts.TeIsReadOnly);
+  FRich.SelStart := 3;
+  Chars('d');
+  AssertTrue('the menu offers undo', acts.TeCanUndo);
+  acts.TeUndo;
+  AssertEquals('the menu undid it', 'abc', FRich.Lines[0]);
+  AssertTrue('the menu offers redo', acts.TeCanRedo);
+  acts.TeRedo;
+  AssertEquals('the menu redid it', 'abcd', FRich.Lines[0]);
+  FRich.SelStart := 0;
+  FRich.SelLength := 1;
+  acts.TeCut;
+  AssertEquals('the menu cut it', 'bcd', FRich.Lines[0]);
+  AssertEquals('to the clipboard', 'a', FRich.ClipText);
+  FRich.Undo;
+  AssertTrue('both sides have a step', d.CanUndo and d.CanRedo);
+  FRich.ReadOnly := True;
+  AssertFalse('ReadOnly: no undo offered', acts.TeCanUndo);
+  AssertFalse('ReadOnly: no redo offered', acts.TeCanRedo);
+  acts.TeUndo;
+  acts.TeRedo;
+  AssertEquals('ReadOnly: the menu does nothing', 'abcd', FRich.Lines[0]);
+  FRich.ReadOnly := False;
+  // ReadOnly set and cleared between two characters: two steps
+  FRich.SelStart := 4;
+  depth := d.UndoDepth;
+  Chars('x');
+  FRich.ReadOnly := True;
+  FRich.ReadOnly := False;
+  Chars('y');
+  AssertEquals('ReadOnly ended the run', depth + 2, d.UndoDepth);
+  // Ctrl+Tab
+  FRich.WantTabs := False;
+  AssertEquals('Ctrl+Tab without WantTabs goes on', VK_TAB, FRich.KeyResult(VK_TAB, [ssCtrl]));
+  AssertEquals('nothing typed', 'abcdxy', FRich.Lines[0]);
+  FRich.WantTabs := True;
+  AssertEquals('Ctrl+Tab with WantTabs taken', 0, FRich.KeyResult(VK_TAB, [ssCtrl]));
+  AssertEquals('a tab typed', 'abcdxy' + #9, FRich.Lines[0]);
+end;
+
+{ E-M10 (R55 c, d): Enter on an empty list item makes the item itself a plain paragraph -
+  nothing added - its start indent and hanging offset 0, its right indent and alignment kept,
+  one undo step; Backspace at the start of an item (empty or not) first takes only its
+  numbering (the same reset, the caret stays, one step; a redo leaves the caret there), the
+  next joins it with the paragraph before, which keeps its own format; joining keeps the
+  first paragraph's format, the second's when the first is empty. Bulleted and numbered. }
+procedure TTyRichEditEditTest.TestListItemsAndJoinsByKey;
+var
+  d: TTyRichDocument;
+  t: TTyRichText;
+  pf, f: TTyParaFormat;
+  kind: TTyListKind;
+  what: string;
+
+  function FormatOf(AIndex: Integer): TTyParaFormat;
+  begin
+    Result := d.Formats.ParaFormat(d.ParaFormatOf(AIndex));
+  end;
+
+  procedure Aligned(AIndex: Integer; AAlign: TTyParaAlign);
+  var
+    v: TTyParaFormat;
+  begin
+    v := TyDefaultParaFormat;
+    v.Align := AAlign;
+    d.Execute(TTyRichSetParaFormat.Create(AIndex, AIndex, [pffAlign], v));
+  end;
+
+begin
+  for kind in [lkBullet, lkDecimal] do
+  begin
+    what := Format('list kind %d', [Ord(kind)]);
+    SetText('before' + LineEnding + 'item' + LineEnding);
+    d := FRich.Document;
+    t := d.Text;
+    if t.ParaCount < 3 then d.Execute(TTyRichInsertText.Create(t.Length, #10, TyRichInheritFormat, False));
+    AssertEquals(what + ': three paragraphs', 3, t.ParaCount);
+    pf := TyDefaultParaFormat;
+    pf.List.Kind := kind;
+    pf.LeftIndent := 720;
+    pf.FirstIndent := -360;
+    pf.RightIndent := 144;
+    pf.Align := paraCenter;
+    d.Execute(TTyRichSetParaFormat.Create(1, 2, [pffList, pffLeftIndent, pffFirstIndent,
+      pffRightIndent, pffAlign], pf));
+    d.ClearUndo;
+    // Enter on the empty item
+    FRich.SelStart := t.ParaStart(2);
+    Press(VK_RETURN);
+    f := FormatOf(2);
+    AssertEquals(what + ': Enter added nothing', 3, t.ParaCount);
+    AssertTrue(what + ': out of the list', f.List.Kind = lkNone);
+    AssertEquals(what + ': no start indent', 0, f.LeftIndent);
+    AssertEquals(what + ': no hanging offset', 0, f.FirstIndent);
+    AssertEquals(what + ': the right indent kept', 144, f.RightIndent);
+    AssertTrue(what + ': the alignment kept', f.Align = paraCenter);
+    AssertEquals(what + ': one step', 1, d.UndoDepth);
+    FRich.Undo;
+    AssertTrue(what + ': undone: an item again', FormatOf(2).List.Kind = kind);
+    AssertEquals(what + ': with its indent', 720, FormatOf(2).LeftIndent);
+    // Backspace at the start of an item with text: its numbering first
+    FRich.SelStart := t.ParaStart(1);
+    Press(VK_BACK);
+    f := FormatOf(1);
+    AssertEquals(what + ': Backspace joined nothing', 3, t.ParaCount);
+    AssertEquals(what + ': the text stays', 'item', FRich.Lines[1]);
+    AssertTrue(what + ': the numbering went', f.List.Kind = lkNone);
+    AssertEquals(what + ': indent reset', 0, f.LeftIndent);
+    AssertEquals(what + ': offset reset', 0, f.FirstIndent);
+    AssertEquals(what + ': the right indent kept', 144, f.RightIndent);
+    AssertEquals(what + ': the caret stays', t.ParaStart(1), FRich.CaretPos);
+    FRich.Undo;
+    AssertTrue(what + ': undone', FormatOf(1).List.Kind = kind);
+    FRich.SelStart := 0;
+    FRich.Redo;
+    AssertEquals(what + ': redone: the caret where the key left it', t.ParaStart(1), FRich.CaretPos);
+    AssertFalse(what + ': nothing selected', FRich.HasSelection);
+    // the next Backspace joins; the paragraph before keeps its own format
+    Press(VK_BACK);
+    AssertEquals(what + ': joined', 2, t.ParaCount);
+    AssertEquals(what + ': the text', 'beforeitem', FRich.Lines[0]);
+    AssertTrue(what + ': the first''s format', FormatOf(0).Align = paraLeft);
+    // an empty item: Backspace takes its numbering too
+    FRich.SelStart := t.ParaStart(1);
+    Press(VK_BACK);
+    AssertEquals(what + ': an empty item stays', 2, t.ParaCount);
+    AssertTrue(what + ': without its numbering', FormatOf(1).List.Kind = lkNone);
+  end;
+  // joining: the first paragraph's format; the second's when the first is empty
+  SetText('first' + LineEnding + 'second');
+  d := FRich.Document;
+  t := d.Text;
+  Aligned(0, paraCenter);
+  Aligned(1, paraRight);
+  FRich.SelStart := t.ParaStart(1);
+  Press(VK_BACK);
+  AssertTrue('Backspace: the first''s format', FormatOf(0).Align = paraCenter);
+  FRich.Undo;
+  FRich.SelStart := 5;
+  Press(VK_DELETE);
+  AssertTrue('Delete: the first''s format', FormatOf(0).Align = paraCenter);
+  SetText(' ' + LineEnding + 'second');
+  d := FRich.Document;
+  t := d.Text;
+  d.Execute(TTyRichDelete.Create(0, 1));
+  Aligned(0, paraCenter);
+  Aligned(1, paraRight);
+  AssertEquals('the first empty', Int64(0), t.ParaLength(0));
+  FRich.SelStart := t.ParaStart(1);
+  Press(VK_BACK);
+  AssertEquals('joined', 1, t.ParaCount);
+  AssertTrue('the first empty: the second''s format', FormatOf(0).Align = paraRight);
+end;
+
+{ E-M11: in a plain text document (set as text, read from a text file) Shift+Enter makes a
+  paragraph, as Enter - a text file has no line break inside a line, and a stored U+000B
+  would be saved as the byte 0B. }
+procedure TTyRichEditEditTest.TestShiftEnterInATextDocumentMakesAParagraph;
+var
+  d: TTyRichDocument;
+  st: TBytesStream;
+begin
+  SetText('ab');
+  d := FRich.Document;
+  FRich.SelStart := 1;
+  AssertEquals('taken', 0, FRich.KeyResult(VK_RETURN, [ssShift]));
+  AssertEquals('a paragraph', 2, d.Text.ParaCount);
+  AssertEquals('no line break stored', 0, Pos(#11, FRich.Lines.Text));
+  st := TBytesStream.Create(RawBytes('one' + #13#10 + 'two'));
+  try
+    FRich.LoadFromStream(st, rfText);
+  finally
+    st.Free;
+  end;
+  FRich.UpdateView;
+  d := FRich.Document;
+  FRich.SelStart := 2;
+  FRich.KeyResult(VK_RETURN, [ssShift]);
+  AssertEquals('a text file: a paragraph too', 3, d.Text.ParaCount);
 end;
 
 initialization

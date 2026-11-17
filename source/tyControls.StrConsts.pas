@@ -309,6 +309,13 @@ resourcestring
   rsRichEditRefusedIncomplete = 'The document holds only a part of its file (the load was cancelled): it cannot be changed.';
   rsRichEditRefusedSaving     = 'The document is being saved: it cannot be changed meanwhile.';
   rsRichEditRefusedFixedRow   = 'This table row holds a nested table and is kept as the file has it: its text cannot be changed.';
+  rsRichEditRefusedRange      = 'This part of the document cannot be edited.';
+  rsRichEditRefusedCells      = 'A selection across table cells cannot be deleted or typed over (whole rows can).';
+  rsRichEditRefusedLongPara   = 'This paragraph is too long to edit here: what is typed past the part shown would not be seen.';
+  { What the document's engine raises when a command cannot be carried out (an edit made
+    from code sees them; the control tells the user its own reasons above). }
+  rsRichModelNestedRow        = 'This row holds a nested table and is kept as the file has it: its text cannot be changed';
+  rsRichModelPartRefused      = 'Part %d of the command (%s) cannot be carried out';
   { The line under a paragraph too long to lay out whole (more than
     CRichMaxParaLayoutChars characters). %s is how many characters are not shown. }
   rsRichEditParaNotShown  = '%s more characters of this paragraph are not shown.';

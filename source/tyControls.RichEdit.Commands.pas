@@ -378,6 +378,7 @@ end;
 procedure TTyRichCompositeCommand.DoExecute(ADoc: TTyRichDocument);
 var
   c: TTyRichCommand;
+  e: ETyRichRefused;
 begin
   FDone := 0;
   while FDone < FItems.Count do
@@ -385,8 +386,12 @@ begin
     c := TTyRichCommand(FItems[FDone]);
     // asked at its turn: the parts before it have changed the document
     if not c.CanExecute(ADoc) then
-      raise ETyRichModel.CreateFmt('Part %d of the command (%s) cannot be carried out',
-        [FDone, c.ClassName]);
+    begin
+      e := ETyRichRefused.CreateFmt(rsRichModelPartRefused, [FDone, c.ClassName]);
+      // the built-in text commands ask only CanChange: a row that holds a nested table
+      e.FixedRow := (c is TTyRichInsertText) or (c is TTyRichDelete) or (c is TTyRichInsertObject);
+      raise e;
+    end;
     ExecuteChild(ADoc, c);
     Inc(FDone);
   end;

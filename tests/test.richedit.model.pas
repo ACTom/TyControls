@@ -1160,8 +1160,9 @@ var
 begin
   d := TDocAccess.Create;
   try
-    AssertEquals('paper width', 12240, d.PaperWidth);
-    AssertEquals('paper height', 15840, d.PaperHeight);
+    // A4 (R54)
+    AssertEquals('paper width', 11906, d.PaperWidth);
+    AssertEquals('paper height', 16838, d.PaperHeight);
     AssertEquals('left margin', 1800, d.MarginLeft);
     AssertEquals('right margin', 1800, d.MarginRight);
     f := d.DefaultCharFormat;

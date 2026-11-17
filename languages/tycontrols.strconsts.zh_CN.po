@@ -882,6 +882,27 @@ msgstr "文档正在保存，保存完之前不能修改。"
 msgid "This table row holds a nested table and is kept as the file has it: its text cannot be changed."
 msgstr "这一行表格里套着另一个表格，按文件原样保留，里面的文字不能修改。"
 
+#: tycontrols.strconsts.rsricheditrefusedrange
+msgid "This part of the document cannot be edited."
+msgstr "文档的这一部分不能编辑。"
+
+#: tycontrols.strconsts.rsricheditrefusedcells
+msgid "A selection across table cells cannot be deleted or typed over (whole rows can)."
+msgstr "跨越表格单元格的选区不能删除或改写（整行可以）。"
+
+#: tycontrols.strconsts.rsricheditrefusedlongpara
+msgid "This paragraph is too long to edit here: what is typed past the part shown would not be seen."
+msgstr "这个段落太长，不能在这里编辑：在显示部分之外输入的文字会看不到。"
+
+#: tycontrols.strconsts.rsrichmodelnestedrow
+msgid "This row holds a nested table and is kept as the file has it: its text cannot be changed"
+msgstr "这一行表格里套着另一个表格，按文件原样保留，里面的文字不能修改"
+
+#: tycontrols.strconsts.rsrichmodelpartrefused
+#, object-pascal-format
+msgid "Part %d of the command (%s) cannot be carried out"
+msgstr "命令的第 %d 部分（%s）无法执行"
+
 #: tycontrols.strconsts.rsricheditparanotshown
 msgid "%s more characters of this paragraph are not shown."
 msgstr "本段还有 %s 个字符没有显示。"

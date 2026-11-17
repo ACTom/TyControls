@@ -37,7 +37,7 @@ type
     procedure Report(const AWhat: string; AMs: Double);
     { The caret put on the line at the view's top (plus two), the view painted (not timed);
       then one character typed and the paint after it, timed. }
-    function Keystroke(ABitmap: TBitmap): Double;
+    function Keystroke(ABitmap: TBitmap; AAtEnd: Boolean): Double;
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -49,7 +49,7 @@ type
 implementation
 
 uses
-  LCLType, tyControls.RichEdit.RtfRead;
+  Math, LCLType, tyControls.RichEdit.Text, tyControls.RichEdit.RtfRead;
 
 {$IFDEF MSWINDOWS}
 type
@@ -322,19 +322,28 @@ begin
   WriteLn(Format('TTyRichEditPerfTest: %s: %.1f ms', [AWhat, AMs]));
 end;
 
-function TTyRichEditPerfTest.Keystroke(ABitmap: TBitmap): Double;
+function TTyRichEditPerfTest.Keystroke(ABitmap: TBitmap; AAtEnd: Boolean): Double;
 var
   t0: Double;
-  p: Integer;
+  p, depth: Integer;
+  at: TTyRichPos;
+  t: TTyRichText;
 begin
-  p := FRich.TopParagraph + 2;
-  if p >= FRich.Document.Text.ParaCount then p := FRich.Document.Text.ParaCount - 1;
-  FRich.SelStart := FRich.Document.Text.ParaStart(p) + 3;
+  t := FRich.Document.Text;
+  // in the middle: a line of the screen; at the end: the document's last line
+  if AAtEnd then p := t.ParaCount - 1 else p := FRich.TopParagraph + 2;
+  if p >= t.ParaCount then p := t.ParaCount - 1;
+  at := t.ParaStart(p) + Math.Min(Int64(3), t.ParaLength(p));
+  FRich.SelStart := at;
   TPerfRich(FRich).PaintInto(ABitmap);
+  depth := FRich.Document.UndoDepth;
   t0 := Clock;
   TPerfRich(FRich).TypeChar('x');
   TPerfRich(FRich).PaintInto(ABitmap);
   Result := Clock - t0;
+  // the key changed the document (a refused or filtered one would time a blit)
+  AssertEquals('the key typed its character', 'x', string(t.GetText(at, 1)));
+  AssertEquals('one more undo step', depth + 1, FRich.Document.UndoDepth);
 end;
 
 { A 100 MB txt: LoadFromFile to the end of the first paint within 3 s; then the scroll position
@@ -368,10 +377,10 @@ begin
     Report('txt: the middle set and painted', middle);
     AssertTrue('the view is in the middle', FRich.TopParagraph > FRich.Document.Text.ParaCount div 4);
     // a key in the middle, and at the end (Ctrl+End and its paint not timed)
-    keyMid := Keystroke(bmp);
+    keyMid := Keystroke(bmp, False);
     Report('txt: a character typed in the middle, to the end of its paint', keyMid);
     TPerfRich(FRich).Key(VK_END, [ssCtrl]);
-    keyEnd := Keystroke(bmp);
+    keyEnd := Keystroke(bmp, True);
     Report('txt: a character typed at the end, to the end of its paint', keyEnd);
     AssertTrue(Format('the first screen in %.0f ms', [first]), first <= CFirstScreenMs);
     AssertTrue(Format('the middle in %.0f ms', [middle]), middle <= CScrollMs);
@@ -434,12 +443,12 @@ begin
     whole := Clock - t0;
     Report('rtf: the middle of the whole document set and painted', whole);
     // a key in the middle and at the end of the loaded file (parsed on demand)
-    keyMid := Keystroke(bmp);
+    keyMid := Keystroke(bmp, False);
     Report('rtf: a character typed in the middle, to the end of its paint', keyMid);
     TPerfRich(FRich).Key(VK_END, [ssCtrl]);
     TPerfRich(FRich).PaintInto(bmp);
     parsed := TyRichRtfLoadOf(FRich.Document).ParsedBytes;
-    keyEnd := Keystroke(bmp);
+    keyEnd := Keystroke(bmp, True);
     parsed := TyRichRtfLoadOf(FRich.Document).ParsedBytes - parsed;
     Report(Format('rtf: a character typed at the end, to the end of its paint (%d bytes of ' +
       'the file parsed for it)', [parsed]), keyEnd);

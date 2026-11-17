@@ -63,6 +63,9 @@ type
     FSaveCalls, FSaveRefusedAt: Integer;
     procedure Changed(Sender: TObject);
     procedure SelChanged(Sender: TObject);
+    // fix wave W11: key-press handlers that clear characters
+    procedure ClearUtf8(Sender: TObject; var UTF8Key: TUTF8Char);
+    procedure ClearKey(Sender: TObject; var Key: Char);
     procedure CommitWhileSaving(Sender: TObject; ADone, ATotal: Int64; var ACancel: Boolean);
     function NewProbe: TImeProbe;
     procedure SetText(const S: string);
@@ -106,6 +109,9 @@ type
     procedure TestCocoasBridgeDrivesIt;
     procedure TestACodeEditMovesTheComposition;
     procedure TestAnUpdateInALargeDocumentTouchesOneParagraph;
+    // fix wave W11
+    procedure TestAWin32CommitPassesTheKeyPressEvents;
+    procedure TestACompositionPastTheRightEdgeIsScrolledTo;
   end;
 
 implementation
@@ -1373,6 +1379,105 @@ begin
   AssertTrue(Format('the cancel: %d blocks painted', [FRich.BlockPaints]), FRich.BlockPaints <= 3);
   WriteLn(Format('TTyRichEditImeTest: a composition update in the middle of %d lines: %d ' +
     'tree nodes, %d characters measured', [BigLines, n, FRich.Device.MeasuredChars]));
+end;
+
+{ ---- fix wave W11 ---- }
+
+var
+  GCleared: UTF8String;   // what the key-press handlers clear ('' none, '*' every character)
+
+procedure TTyRichEditImeTest.ClearUtf8(Sender: TObject; var UTF8Key: TUTF8Char);
+begin
+  if (GCleared = '*') or (UTF8Key = GCleared) then UTF8Key := '';
+end;
+
+procedure TTyRichEditImeTest.ClearKey(Sender: TObject; var Key: Char);
+begin
+  if Key = 'q' then Key := #0;
+end;
+
+{ E-X2: on win32 a committed composition passes the key-press events a typed character passes,
+  character by character, as the memo's commits do there: a handler that clears a character
+  keeps it out of the one insert (one undo step); one that clears them all leaves nothing - no
+  insert, no undo step, no OnChange. }
+procedure TTyRichEditImeTest.TestAWin32CommitPassesTheKeyPressEvents;
+var
+  d: TTyRichDocument;
+  depth: Integer;
+
+  procedure Commit(const AText: UnicodeString);
+  begin
+    FRich.Msg(WM_IME_STARTCOMPOSITION, 0);
+    FRich.CompStr := AText;
+    FRich.Msg(WM_IME_COMPOSITION, GCS_COMPSTR);
+    FRich.ResultStr := AText;
+    FRich.CompStr := '';
+    FRich.Msg(WM_IME_COMPOSITION, GCS_RESULTSTR or GCS_COMPSTR);
+    FRich.Msg(WM_IME_ENDCOMPOSITION, 0);
+  end;
+
+begin
+  SetText('ab');
+  d := FRich.Document;
+  FRich.OnUTF8KeyPress := @ClearUtf8;
+  FRich.OnKeyPress := @ClearKey;
+  FRich.SelStart := 1;
+  d.BreakMerge;
+  depth := d.UndoDepth;
+  // OnUTF8KeyPress clears the middle one of three
+  GCleared := U($597D);
+  ResetEvents;
+  Commit(W($4F60) + W($597D) + W($5417));
+  AssertEquals('the cleared one kept out', 'a' + U($4F60) + U($5417) + 'b', FRich.Lines[0]);
+  AssertEquals('one insert, one undo step', depth + 1, d.UndoDepth);
+  AssertEquals('one change', 1, FChanges);
+  // OnKeyPress clears an ASCII one
+  GCleared := '';
+  FRich.SelStart := 0;
+  d.BreakMerge;
+  depth := d.UndoDepth;
+  Commit('pqr');
+  AssertEquals('OnKeyPress cleared q', 'pr', Copy(FRich.Lines[0], 1, 2));
+  AssertEquals('one step', depth + 1, d.UndoDepth);
+  // every character cleared: nothing at all
+  GCleared := '*';
+  FRich.SelStart := 0;
+  depth := d.UndoDepth;
+  ResetEvents;
+  Commit(W($4F60) + W($597D));
+  AssertEquals('nothing inserted', 'pr' + 'a' + U($4F60) + U($5417) + 'b', FRich.Lines[0]);
+  AssertEquals('no undo step', depth, d.UndoDepth);
+  AssertEquals('no OnChange', 0, FChanges);
+  AssertFalse('the composition ended', FRich.Composing);
+  GCleared := '';
+  FRich.OnUTF8KeyPress := nil;
+  FRich.OnKeyPress := nil;
+end;
+
+{ E-X3: with no wrapping, a composition that grows past the right edge is followed as the caret
+  is (the least scroll across): its caret stays in the text, and so does the rectangle the
+  input method is told. }
+procedure TTyRichEditImeTest.TestACompositionPastTheRightEdgeIsScrolledTo;
+var
+  r, a: TRect;
+  x0: Integer;
+begin
+  FRich.WrapMode := rwmNone;
+  SetText(StringOfChar('a', 55) + LineEnding + 'b');
+  FRich.SelStart := 55;
+  PaintAll;
+  x0 := FRich.PositionRect(0).Left;
+  a := FRich.Area;
+  FRich.UpdateComposition(StringOfChar('w', 40));
+  PaintAll;
+  r := FRich.ImeRect;
+  AssertFalse('a rectangle', IsRectEmpty(r));
+  AssertTrue(Format('scrolled across (the text from %d to %d)', [x0, FRich.PositionRect(0).Left]),
+    FRich.PositionRect(0).Left < x0);
+  AssertTrue(Format('the composition''s caret in the text (%d..%d of %d..%d)', [r.Left, r.Right,
+    a.Left, a.Right]), (r.Left >= a.Left) and (r.Right <= a.Right));
+  AssertTrue('the candidate window there', EqualRect(r, FRich.LastPlace));
+  FRich.CancelComposition;
 end;
 
 initialization

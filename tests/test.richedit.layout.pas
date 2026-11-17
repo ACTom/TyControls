@@ -835,6 +835,8 @@ begin
   s := '';
   for i := 1 to 40 do s := s + 'aaaa ';
   d := NewDoc(s);
+  // a Letter page, whatever a new document's default (A4 since W11)
+  TBuilderAccess.SetPage(d, 12240, 15840, 1800, 1800);
   // "aaaa " is 45 px: four words fit 200 px (the fourth's space hangs), a fifth would end at 220
   AssertEquals('window width as given', 200, TyRichLayoutWidth(rwmWindow, 200, d, 96, 1));
   L := Lay(d, 0, TyRichLayoutWidth(rwmWindow, 200, d, 96, 1));
@@ -1664,6 +1666,8 @@ begin
   s := '';
   for i := 1 to 30 do s := s + 'word 中文 ';
   d := NewDoc(s);
+  // a page whose width is a whole number of pixels (Letter's text: 576 px)
+  TBuilderAccess.SetPage(d, 12240, 15840, 1800, 1800);
   d.OnChange := @DocChanged;
   fmts := d.Formats.CharCount;
   undo := d.UndoDepth;

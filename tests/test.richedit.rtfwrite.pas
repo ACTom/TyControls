@@ -4644,7 +4644,8 @@ end;
   (byte fidelity). }
 procedure TTyRtfWriteTest.TestADocumentOfOursNamesItsFontAndPage;
 const
-  Page = BS + 'paperw12240' + BS + 'paperh15840' + BS + 'margl1800' + BS + 'margr1800' + BS +
+  // A4 (R54)
+  Page = BS + 'paperw11906' + BS + 'paperh16838' + BS + 'margl1800' + BS + 'margr1800' + BS +
     'margt1440' + BS + 'margb1440';
 var
   d, b: TTyRichDocument;

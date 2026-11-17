@@ -605,6 +605,25 @@ type
     function RefusalReason: string;
     { AUser (a key, the menu): EditRefused; otherwise (code) ETyRichEdit is raised. }
     procedure Refuse(const AReason: string; AUser: Boolean);
+    function EngineRefusal(E: Exception): string;
+    { A user's insert of AText at APos would put its end past the cut of a paragraph too long
+      to lay out whole: refused (told), True. }
+    function LongParaRefused(APos: TTyRichPos; const AText: UTF8String): Boolean;
+    { A user's edit that deletes or replaces [AStart, AStart + ALen): a selection that ends at
+      a table's first row and begins before it keeps its last separator (ALen one less); one
+      that crosses a cell's or a row's edge is refused (told, False) unless it is whole rows. }
+    function UserRangeAllowed(var AStart, ALen: TTyRichPos): Boolean;
+    { [AFrom, ATo) is whole rows of one table: from a row's first paragraph's start to the
+      start of the paragraph after a row (or the text's end). Inside a read scope. }
+    function WholeRows(AFrom, ATo: TTyRichPos): Boolean;
+    { Paragraph AIndex out of its list: the numbering goes, the start indent and the hanging
+      offset go to 0 (msftedit's reset; the right indent and the alignment stay); one step. }
+    procedure LeaveList(AIndex: Integer);
+    { The committed text as the key-press events let it through (win32, as the memo's commits
+      arrive there): each character asked as a typed one is. }
+    function AskCommitKeys(const AText: UTF8String): UTF8String;
+    { The caret the user sees: the composition's while composing, else the caret's. }
+    function ShownCaretRaster(out ARect: TRect): Boolean;
     { The edit may run: the document takes edits now, and deleting ALen characters at APos
       (and, with AInsert, inserting at APos then) is not refused by a row that holds a nested
       table. Refused: Refuse, False. }
@@ -884,6 +903,10 @@ type
       at a paragraph's start the one's after it (TTyRichDocument.TypingFormatAt). The one
       place a pending format (a format chosen with nothing selected, Task 11) comes in. }
     function TypingFormat: TTyCharFormatId; virtual;
+    { The document is plain text - read from a text file, set as text (Lines), or saved as one
+      - where a key makes no line break inside a paragraph (Shift+Enter makes a paragraph). The
+      seam for the PlainText state Task 11 publishes. }
+    function PlainTextDocument: Boolean; virtual;
     { An edit the user asked for (a key, the menu) was not made: the document is loading,
       incomplete after a cancelled load or being saved, a row that holds a nested table
       cannot be changed, or the engine took no such range (AReason says which). Nothing is
@@ -1417,10 +1440,17 @@ begin
   t := d.Text;
   start := t.ParaStart(Index);
   len := t.ParaLength(Index);
+  { Never half done (review C-10a, Minor 2): what could refuse is asked before anything
+    changes - the row the line is in - and the insert goes first, behind the old text in the
+    format it would have got at the line's start, so that one the engine refuses (a text that
+    ends inside a UTF-8 sequence) leaves the line, the history and OnChange as they were. }
+  if not d.CanChange(start, len) or not d.CanChange(start + len, 0) then
+    raise ETyRichEdit.Create(rsRichEditCannotChange);
   d.BeginUpdate;
   try
+    if S <> '' then
+      Run(TTyRichInsertText.Create(start + len, S, d.TypingFormatAt(start), False));
     if len > 0 then Run(TTyRichDelete.Create(start, len));
-    if S <> '' then Run(TTyRichInsertText.Create(start, S, TyRichInheritFormat, False));
   finally
     d.EndUpdate;
   end;
@@ -2516,7 +2546,7 @@ begin
   if ViewBehind then Exit;
   Settle;
   if (FViewH <= 0) or (FBlockCount = 0) then Exit;
-  if not CaretRaster(FCaret, FCaretAtEnd, r) then
+  if not ShownCaretRaster(r) then
   begin
     // not laid out: to its paragraph by the height index, then to its line
     p := FDoc.Text.ParaOfPos(FCaret);
@@ -2536,7 +2566,8 @@ begin
   if FWidestSeen > FViewW then
   begin
     Settle;
-    if not CaretRaster(FCaret, FCaretAtEnd, r) then Exit;
+    // (while composing: the composition's caret, so that it follows past the right edge)
+    if not ShownCaretRaster(r) then Exit;
     margin := Math.Min(FEstimate, FViewW div 4);
     if r.Left < margin then SetScrollXRaster(FScrollX + r.Left - margin)
     else if r.Right > FViewW - margin then SetScrollXRaster(FScrollX + r.Right - (FViewW - margin));
@@ -3264,6 +3295,17 @@ begin
   else Result := '';
 end;
 
+{ What the user is told of a refusal the engine raised (an ETyRichModel the command reverted):
+  always a reason of the control's own, never the engine's sentence - the document's state, a
+  row that holds a nested table, else that the range cannot be edited. }
+function TTyCustomRichEdit.EngineRefusal(E: Exception): string;
+begin
+  Result := RefusalReason;
+  if Result <> '' then Exit;
+  if (E is ETyRichRefused) and ETyRichRefused(E).FixedRow then Result := rsRichEditRefusedFixedRow
+  else Result := rsRichEditRefusedRange;
+end;
+
 procedure TTyCustomRichEdit.Refuse(const AReason: string; AUser: Boolean);
 begin
   if AUser then EditRefused(AReason) else raise ETyRichEdit.Create(AReason);
@@ -3294,8 +3336,10 @@ var
   c, a: TTyRichPos;
   atEnd, wasModified, ok: Boolean;
   marks: TTyRichStepMarks;
+  refusal: string;
 begin
   Result := False;
+  refusal := '';
   c := FCaret;
   a := FSelAnchor;
   atEnd := FCaretAtEnd;
@@ -3323,12 +3367,18 @@ begin
         FCaretAtEnd := atEnd;
         FDoc.Modified := wasModified;
         if not AUser then raise;
-        EditRefused(E.Message);
-        Exit;
+        refusal := EngineRefusal(E);
       end;
     end;
   finally
     Dec(FEditing);
+  end;
+  { Told once the edit's bracket is closed: a handler that changes or loads the document is
+    heard as a change from elsewhere (its OnChange), not taken for this edit's. }
+  if refusal <> '' then
+  begin
+    EditRefused(refusal);
+    Exit;
   end;
   if not ok then
   begin
@@ -3349,6 +3399,13 @@ var
   q: TTyRichPos;
   marks: TTyRichStepMarks;
 begin
+  { The caret and the anchor an edit leaves obey the rule of a user's move: never in a cut
+    paragraph's hidden tail (back to the cut). A selection an undo puts back is taken as it was. }
+  if not ARestore then
+  begin
+    ACaret := OutOfTail(ACaret, False);
+    AAnchor := OutOfTail(AAnchor, False);
+  end;
   Inc(FEditing);
   try
     q := SnapPos(ACaret);
@@ -3407,6 +3464,9 @@ begin
   n := GetSelLength;
   if (AText = '') and (n = 0) then Exit;
   if not EditAllowed(s, n, AText <> '', AUser) then Exit;
+  if AUser and not UserRangeAllowed(s, n) then Exit;
+  if (AText = '') and (n = 0) then Exit;
+  if AUser and LongParaRefused(s, AText) then Exit;
   fmt := TypingFormat;
   if n = 0 then
     cmd := TTyRichInsertText.Create(s, AText, fmt, AMergeable)
@@ -3455,18 +3515,29 @@ procedure TTyCustomRichEdit.DeleteKey(AForward, AWord: Boolean);
 var
   t: TTyRichText;
   p: Integer;
-  ps, pe, a, b: TTyRichPos;
+  ps, pe, a, b, s, n: TTyRichPos;
   codes: TTyRichCodes;
 begin
   if HasSelection then
   begin
-    DeleteText(GetSelStart, GetSelStart + GetSelLength, True);
+    s := GetSelStart;
+    n := GetSelLength;
+    if not EditAllowed(s, n, False, True) or not UserRangeAllowed(s, n) then Exit;
+    DeleteText(s, s + n, True);
     Exit;
   end;
   t := FDoc.Text;
   p := t.ParaOfPos(FCaret);
   ps := t.ParaStart(p);
   pe := ps + t.ParaLength(p);
+  { Backspace at the start of a list item (empty or not) takes its numbering first, as
+    msftedit and Word do (R55 c); the next Backspace joins it with the paragraph before. }
+  if not AForward and (FCaret = ps) and
+    (FDoc.Formats.ParaFormat(FDoc.ParaFormatOf(p)).List.Kind <> lkNone) then
+  begin
+    LeaveList(p);
+    Exit;
+  end;
   if AForward then
   begin
     // at the document's end nothing happens, and nothing goes on the history
@@ -3541,18 +3612,157 @@ begin
     pf := FDoc.Formats.ParaFormat(FDoc.ParaFormatOf(p));
     if (pf.List.Kind <> lkNone) and (t.ParaLength(p) = 0) then
     begin
-      { An empty list item: Enter ends the list there - the item becomes a plain paragraph
-        (its list goes; its indents, alignment and spacing stay), the caret stays, as in
-        WordPad. }
-      if not EditAllowed(FCaret, 0, True, True) then Exit;
-      if RunEdit(TTyRichSetParaFormat.Create(p, p, [pffList], TyDefaultParaFormat), True) then
-        FinishEdit(FCaret, FCaret);
+      { An empty list item: Enter ends the list there - the item itself becomes a plain
+        paragraph, nothing is added (Word's way; msftedit adds one, R55 c), the caret stays. }
+      LeaveList(p);
       Exit;
     end;
   end;
   { A new paragraph: the engine gives both parts the paragraph's format (as WordPad), and a
     new empty paragraph the format given here - the typing format. }
   TypeText(#10, False, True);
+end;
+
+function TTyCustomRichEdit.PlainTextDocument: Boolean;
+begin
+  Result := FSourceFormat = rfText;
+end;
+
+function TTyCustomRichEdit.LongParaRefused(APos: TTyRichPos; const AText: UTF8String): Boolean;
+var
+  t: TTyRichText;
+begin
+  Result := False;
+  // a paragraph break puts the caret at the next paragraph's start, which is shown
+  if (AText = '') or (Pos(#10, AText) > 0) then Exit;
+  t := FDoc.Text;
+  { Past the cut the text would go in unseen, with the caret: the user is told instead (R52's
+    way) - the paragraph is too long to edit there. }
+  if APos - t.ParaStart(t.ParaOfPos(APos)) + UTF8Length(AText) <= CRichMaxParaLayoutChars then
+    Exit;
+  Result := True;
+  Refuse(rsRichEditRefusedLongPara, True);
+end;
+
+function TTyCustomRichEdit.WholeRows(AFrom, ATo: TTyRichPos): Boolean;
+var
+  t: TTyRichText;
+  k, m: Integer;
+  ck, cl, cn: TTyRichCell;
+begin
+  t := FDoc.Text;
+  Result := False;
+  k := t.ParaOfPos(AFrom);
+  ck := FDoc.CellAt(k);
+  if (ck = nil) or (AFrom <> t.ParaStart(k)) then Exit;
+  // from a row's first paragraph
+  if (k > 0) and (FDoc.CellAt(k - 1) <> nil) and (FDoc.CellAt(k - 1).Row = ck.Row) then Exit;
+  // to the start of the paragraph after a row of the same table (or the text's end)
+  if ATo >= t.Length then
+    m := t.ParaCount
+  else
+  begin
+    m := t.ParaOfPos(ATo);
+    if (m = 0) or (ATo <> t.ParaStart(m)) then Exit;
+  end;
+  cl := FDoc.CellAt(m - 1);
+  if (cl = nil) or (cl.Row.Table <> ck.Row.Table) then Exit;
+  if m < t.ParaCount then
+  begin
+    cn := FDoc.CellAt(m);
+    if (cn <> nil) and (cn.Row = cl.Row) then Exit;
+  end;
+  Result := True;
+end;
+
+function TTyCustomRichEdit.UserRangeAllowed(var AStart, ALen: TTyRichPos): Boolean;
+var
+  t: TTyRichText;
+  k, m: Integer;
+  ck, cm, cp: TTyRichCell;
+begin
+  Result := True;
+  if ALen <= 0 then Exit;
+  t := FDoc.Text;
+  // (the cells are compared inside one read: a document that parses on demand keeps them)
+  FDoc.BeginRead;
+  try
+    k := t.ParaOfPos(AStart);
+    m := t.ParaOfPos(AStart + ALen);
+    if m = k then Exit;
+    ck := FDoc.CellAt(k);
+    cm := FDoc.CellAt(m);
+    { Until Task 12 (R57). A selection that begins outside a table and ends exactly where its
+      first row starts keeps its last separator: the text goes, the paragraph before the
+      table stays (Word's way) - the engine would merge it into the first cell. }
+    if (cm <> nil) and (AStart + ALen = t.ParaStart(m)) and
+      ((ck = nil) or (ck.Row.Table <> cm.Row.Table)) then
+    begin
+      cp := FDoc.CellAt(m - 1);
+      if (cp = nil) or (cp.Row.Table <> cm.Row.Table) then
+      begin
+        Dec(ALen);
+        m := t.ParaOfPos(AStart + ALen);
+        if m = k then Exit;
+        cm := FDoc.CellAt(m);
+      end;
+    end;
+    { One that crosses a cell's or a row's edge is refused: the engine would merge paragraphs
+      of two cells and leave a cell with no paragraph, no place for the caret. Whole rows,
+      from a row's start to a row's end, the engine deletes cleanly. }
+    if (ck <> cm) and not WholeRows(AStart, AStart + ALen) then
+    begin
+      Result := False;
+      Refuse(rsRichEditRefusedCells, True);
+    end;
+  finally
+    FDoc.EndRead;
+  end;
+end;
+
+procedure TTyCustomRichEdit.LeaveList(AIndex: Integer);
+begin
+  if not EditAllowed(FDoc.Text.ParaStart(AIndex), 0, True, True) then Exit;
+  if RunEdit(TTyRichSetParaFormat.Create(AIndex, AIndex, [pffList, pffLeftIndent,
+    pffFirstIndent], TyDefaultParaFormat), True) then
+    FinishEdit(FCaret, FCaret, FCaretAtEnd);
+end;
+
+function TTyCustomRichEdit.AskCommitKeys(const AText: UTF8String): UTF8String;
+var
+  i, n: Integer;
+  k: TUTF8Char;
+  c: UTF8String;
+begin
+  Result := '';
+  i := 1;
+  while i <= Length(AText) do
+  begin
+    n := UTF8CodepointSize(@AText[i]);
+    if n < 1 then n := 1;
+    c := Copy(AText, i, n);
+    Inc(i, n);
+    { As LCL-win32 delivers a character typed (WM_CHAR, one UTF-16 unit): OnUTF8KeyPress, then
+      OnKeyPress for one that is a single byte, each may clear it (it does not go in) or change
+      it (the changed one goes in); a character outside the BMP comes as a surrogate pair,
+      which LCL-win32 passes by without either event - it goes in as it is. }
+    if n >= 4 then
+    begin
+      Result := Result + c;
+      Continue;
+    end;
+    k := c;
+    inherited UTF8KeyPress(k);
+    if k = '' then Continue;
+    if not TyAskKeyPress(Self, k) then Continue;
+    Result := Result + k;
+  end;
+end;
+
+function TTyCustomRichEdit.ShownCaretRaster(out ARect: TRect): Boolean;
+begin
+  if FComposing and (FCompText <> '') and CompositionRaster(ARect) then Exit(True);
+  Result := CaretRaster(FCaret, FCaretAtEnd, ARect);
 end;
 
 procedure TTyCustomRichEdit.CutSelection(AUser: Boolean);
@@ -3564,7 +3774,9 @@ begin
   n := GetSelLength;
   // refused before anything is copied: a cut that cannot delete is no cut
   if not EditAllowed(s, n, False, AUser) then Exit;
+  if AUser and not UserRangeAllowed(s, n) then Exit;
   CopyToClipboard;
+  if n = 0 then Exit;
   if RunEdit(TTyRichDelete.Create(s, n), AUser) then FinishEdit(FEditChange.Pos, FEditChange.Pos);
 end;
 
@@ -3605,11 +3817,17 @@ begin
       on E: ETyRichModel do
       begin
         if not AUser then raise;
-        EditRefused(E.Message);
+        reason := EngineRefusal(E);
       end;
     end;
   finally
     Dec(FEditing);
+  end;
+  // (told outside the bracket, as RunEdit tells it)
+  if reason <> '' then
+  begin
+    EditRefused(reason);
+    Exit;
   end;
   if not FEditHeard then Exit;
   { An undo puts the caret and the selection back as they were before the action, a redo
@@ -4072,6 +4290,8 @@ begin
       FCompCaret, FCompClauseFrom, FCompClauseTo);
   if (was >= 0) and (was <> p) then RefreshComposed(was);
   RefreshComposed(p);
+  // its caret kept in view as the caret is (the least scroll; across too, with no wrapping)
+  ScrollCaretIntoView;
   CaretMoved;
   PlaceImeWindows;
 end;
@@ -4157,7 +4377,8 @@ var
 begin
   s := GetSelStart;
   n := GetSelLength;
-  if not EditAllowed(s, n, True, True) then Exit;
+  if not EditAllowed(s, n, True, True) or not UserRangeAllowed(s, n) or
+    LongParaRefused(s, AText) then Exit;
   { Deliberately as typing: the memo commits as typing (uskTyping), which merges with the typing
     next to it - the engine merges mergeable inserts by their kind, so a commit, the typing
     before it and the typing after it are one undo step, as in the memo. A commit with a line
@@ -4389,7 +4610,13 @@ begin
   if (flags and GCS_RESULTSTR) <> 0 then
   begin
     ImeReadComposition(GCS_RESULTSTR, data);
-    CommitComposition(ImmUtf8(data));
+    { The commit passes the key-press events a typed character passes, character by
+      character, as the memo's win32 commit does (it arrives there as WM_CHAR typing): a
+      handler that clears a character keeps it out, and the rest is still one insert. On the
+      other widgetsets the memo's commits - and these - raise no key-press event (the hooks
+      and Cocoa's bridge hand the whole commit over): the difference between widgetsets is
+      the memo's and LCL's, kept on purpose. }
+    CommitComposition(AskCommitKeys(ImmUtf8(data)));
     if FImeRefused then Exit;
   end;
   if (flags and GCS_COMPSTR) <> 0 then
@@ -7851,7 +8078,11 @@ begin
           // as the memo: Shift+Delete cuts
           if Shift = [ssShift] then CutSelection(True) else DeleteKey(True, byWord);
         VK_RETURN:
-          if ssShift in Shift then TypeText(#11, False, True) else ParagraphKey;
+          { Shift+Enter: a line break in the paragraph - in a plain text document a paragraph,
+            as Enter (a text file has no line break inside a line: a stored U+000B would be
+            saved as the byte 0B) }
+          if (ssShift in Shift) and not PlainTextDocument then TypeText(#11, False, True)
+          else ParagraphKey;
         VK_TAB: TypeText(#9, True, True);
         VK_X: CutSelection(True);
         // Ctrl+Shift+Z redoes, as Ctrl+Y
