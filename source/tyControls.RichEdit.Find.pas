@@ -174,7 +174,7 @@ type
     FHidePictures: Boolean;           // the scan's group stack never overflowed
     // counts
     FParasFiltered, FParasRejected, FParasDecoded, FParasRead, FSteps: Int64;
-    FRawBytes, FTextBytes: Int64;
+    FRawBytes, FTextBytes, FPassedBytes: Int64;
     // the scan in progress
     FMode: Integer;                   // 0 first, 1 all, 2 last
     FScanEnd: TTyRichPos;             // matches end at or before it
@@ -258,11 +258,17 @@ type
       Matches and the step goes on to its budget. rfrNotFound: no match is left. rfrMore:
       call again (Waiting: what can be searched is, and the document is still loading). }
     function Step(ABudget: Int64): TTyRichFindResult;
-    { For a replace that walks the text range by range (a needle without
-      paragraph ends): the matches in paragraphs ALo .. AHi (leftmost, never overlapping),
-      read for about ABudget units (< 0: no bound) - rfrMore: call again with the same range;
-      rfrFound / rfrNotFound: the range is read and its matches are Matches. }
-    function CollectRange(ALo, AHi: Integer; ABudget: Int64): TTyRichFindResult;
+    { For a replace that walks the text range by range (a needle without paragraph ends): the
+      matches in paragraphs ALo .. AHi that lie in [AFrom, ATo] (ATo < 0: to AHi's end;
+      leftmost, never overlapping), read for about ABudget units (< 0: no bound) - rfrMore:
+      call again with the same range; rfrFound / rfrNotFound: the range is read and its
+      matches are Matches. }
+    function CollectRange(ALo, AHi: Integer; AFrom, ATo: TTyRichPos;
+      ABudget: Int64): TTyRichFindResult;
+    { A count that grows with everything a step does (text read, bytes lexed or passed,
+      paragraphs begun, the paragraph it stands in): a step that leaves it as it was did
+      nothing. }
+    function WorkDone: Int64;
     { Bytes the filter lexed, and bytes of pictures it passed over by their braces. }
     function FilterLooked: Int64;
     function FilterHidden: Int64;
@@ -305,13 +311,20 @@ type
   TTyRichReplaceTally = record
     Replaced, Skipped: Integer;
     Limited: Boolean;
+    { The walk could not go on (a part that made no progress - a guard, never the ordinary
+      way to end). }
+    Failed: Boolean;
+    { Where a run that did not get through its range may be run again from (see
+      TTyRichReplaceAllCommand.ResumeAt), and the characters from there to the range's end
+      (-1: to the text's end). }
+    ResumeAt, ResumeLength: TTyRichPos;
   end;
   PTyRichReplaceTally = ^TTyRichReplaceTally;
 
-  { Every match of AFind replaced by AReplace, as ONE command and one undo step, never merged
-    with another (R74).
+  { Every match of AFind in a range of the text replaced by AReplace, as ONE command and one
+    undo step, never merged with another.
 
-    The walk: through the text once, a range of paragraphs at a time (RangeChars characters):
+    The walk: through the range once, a range of paragraphs at a time (RangeChars characters):
     the range's matches are found on the text as it is (Prepare - it changes nothing, and goes
     on in pieces of a budget) and replaced right after (the command's run: Execute for the
     first range, TTyRichDocument.ExecutePart for each next one - the document consistent and
@@ -344,8 +357,10 @@ type
 
     The limit: when the step keeps CRichReplaceLimitFactor times the document's MaxUndoBytes
     (and that is > 0), the replace ends after the range that reached it - Limited: what was
-    replaced is the one step, and a caller runs it again for the rest. A redo replays what
-    the first run replaced, all of it at once. }
+    replaced is the one step. ResumeAt says where it stopped: right behind the last match it
+    dealt with, in the text as it is now; a new command from there (to the range's end,
+    ResumeLength) replaces the rest and nothing twice - also where a replacement holds the
+    needle. A redo replays what the first run replaced, all of it at once. }
   TTyRichReplaceAllCommand = class(TTyRichCommand)
   private
     FTarget: TTyRichDocument;
@@ -353,6 +368,9 @@ type
     FOptions: TTyRichFindOptions;
     FFinder: TTyRichFinder;
     FLen: TTyRichPos;
+    FFrom, FTo: TTyRichPos;           // the range, in the text it began on (FTo < 0: its end)
+    FResume: TTyRichPos;              // behind the last match dealt with, in the text as it is
+    FStuck: Boolean;
     FSimple: Boolean;                 // a paragraph end in the needle: every match first
     FFast: Boolean;                   // none in either: ReplaceInParas
     FAllAtOnce: Boolean;
@@ -383,26 +401,42 @@ type
     procedure Run(ADoc: TTyRichDocument);
     procedure Report;
     function Search(ABudget: Int64): Boolean;
+    procedure Fail;
+    function RangeEnd: TTyRichPos;
   protected
     procedure DoExecute(ADoc: TTyRichDocument); override;
     procedure DoContinue(ADoc: TTyRichDocument); override;
     procedure DoUndo(ADoc: TTyRichDocument); override;
     procedure DoRedo(ADoc: TTyRichDocument); override;
   public
-    { A replace in ADoc (the document it will run in). rfoBackward and rfoWrap are not looked
-      at. Nothing is searched before Prepare (or the first run). }
+    { A replace in ADoc (the document it will run in) of the matches that lie wholly in
+      [AStart, AStart + ALength) (ALength < 0, or past the end: to the text's end, also as
+      the replacements make it longer). rfoBackward and rfoWrap are not looked at. Nothing is
+      searched before Prepare (or the first run). }
     constructor Create(ADoc: TTyRichDocument; const AFind, AReplace: UTF8String;
-      AOptions: TTyRichFindOptions);
+      AOptions: TTyRichFindOptions; AStart: TTyRichPos = 0; ALength: TTyRichPos = -1);
     destructor Destroy; override;
-    { Searches on toward the text's start for about ABudget units (a finder's step's; < 0:
+    { Searches on toward the range's end for about ABudget units (a finder's step's; < 0:
       no bound) until the next range with a match the document lets change is found: True
       when that part is Ready - or when nothing is left (Finished). Changes nothing; the
-      document must not change between it and the run that replaces what it found. }
+      document must not change between it and the run that replaces what it found. A call
+      with a budget always gets on (a call that would not ends the walk: Failed). }
     function Prepare(ABudget: Int64): Boolean;
     { A part waits for the next run (Execute, then TTyRichDocument.ExecutePart). }
     function Ready: Boolean;
-    { Nothing is left to replace: the walk reached the text's start, or the limit ended it. }
+    { Nothing is left to replace: the walk reached the range's end, the limit ended it, or it
+      Failed. }
     function Finished: Boolean;
+    { Where a run again would go on from: right behind the last match of the last part that
+      ran, in the text as it is now - the range's start before any part ran; and the
+      characters from there to the range's end (-1: to the text's end). Run again from there,
+      what was replaced is not replaced twice (a match the document did not let change before
+      the place may be counted as Skipped again). }
+    property ResumeAt: TTyRichPos read FResume;
+    function ResumeLength: TTyRichPos;
+    { The walk could not go on: a part that made no progress ended it (a guard: an end that
+      the ordinary way never takes). }
+    property Failed: Boolean read FStuck;
     function Description: string; override;
     { What the step keeps, counted as its parts ran (no pass over its records). }
     function MemSize: Int64; override;
@@ -1264,6 +1298,7 @@ begin
       Inc(pos);
     end;
     Dec(FBudget, (p - AText) div 8 + 1);
+    Inc(FPassedBytes, p - AText);
     FCurByte := p - AText;
     FCurOff := pos;
   end;
@@ -1975,7 +2010,8 @@ begin
   until Result <> rfrMore;
 end;
 
-function TTyRichFinder.CollectRange(ALo, AHi: Integer; ABudget: Int64): TTyRichFindResult;
+function TTyRichFinder.CollectRange(ALo, AHi: Integer; AFrom, ATo: TTyRichPos;
+  ABudget: Int64): TTyRichFindResult;
 begin
   Inc(FSteps);
   if FNever then Exit(rfrNotFound);
@@ -1985,14 +2021,17 @@ begin
     FRangeHi := AHi;
     FNext := ALo;
     FPhase := 0;
-    FCurOff := 0;
-    FCurByte := 0;
     FK := 0;
     FPend := -1;
     FMatchCount := 0;
     FMin := FText.ParaStart(ALo);
+    if AFrom > FMin then FMin := AFrom;
+    // (a range that begins inside its first paragraph passes the characters before it first)
+    FCurOff := FMin - FText.ParaStart(ALo);
+    if FCurOff > 0 then FCurByte := -1 else FCurByte := 0;
   end;
   FScanEnd := FText.ParaStart(AHi) + FText.ParaLength(AHi);
+  if (ATo >= 0) and (ATo < FScanEnd) then FScanEnd := ATo;
   FMode := 1;
   FStop := False;
   if ABudget < 0 then FBudget := High(Int64) div 4 else FBudget := Max64(ABudget, 1);
@@ -2001,6 +2040,12 @@ begin
   FRangeLo := -1;
   FRangeHi := -1;
   if FMatchCount > 0 then Result := rfrFound else Result := rfrNotFound;
+end;
+
+function TTyRichFinder.WorkDone: Int64;
+begin
+  Result := FTextBytes + FPassedBytes + FilterLooked + FilterHidden + FParasRead +
+    FParasFiltered + FNext;
 end;
 
 function TTyRichFinder.FilterLooked: Int64;
@@ -2047,7 +2092,9 @@ begin
 end;
 
 constructor TTyRichReplaceAllCommand.Create(ADoc: TTyRichDocument; const AFind,
-  AReplace: UTF8String; AOptions: TTyRichFindOptions);
+  AReplace: UTF8String; AOptions: TTyRichFindOptions; AStart: TTyRichPos; ALength: TTyRichPos);
+var
+  len: TTyRichPos;
 begin
   inherited Create;
   FTarget := ADoc;
@@ -2060,8 +2107,37 @@ begin
   FHighPos := -1;
   FRedoTo := -1;
   FRangeLo := -1;
+  len := ADoc.Text.Length;
+  if AStart < 0 then AStart := 0;
+  if AStart > len then AStart := len;
+  FFrom := AStart;
+  if (ALength < 0) or (ALength > len - AStart) then FTo := -1 else FTo := AStart + ALength;
+  FResume := FFrom;
   Inc(GRichReplaceIds);
   FId := GRichReplaceIds;
+end;
+
+{ The range's end in the text as it is now. }
+function TTyRichReplaceAllCommand.RangeEnd: TTyRichPos;
+begin
+  if FTo < 0 then Result := FTarget.Text.Length else Result := FTo + FCharDelta;
+end;
+
+function TTyRichReplaceAllCommand.ResumeLength: TTyRichPos;
+begin
+  if FTo < 0 then Exit(-1);
+  Result := FTo + FCharDelta - FResume;
+  if Result < 0 then Result := 0;
+end;
+
+{ A search that could not get on: the walk ends there, told as Failed (what was replaced stays
+  the step). }
+procedure TTyRichReplaceAllCommand.Fail;
+begin
+  FStuck := True;
+  FWalkDone := True;
+  FReadyCount := 0;
+  FreeAndNil(FFinder);
 end;
 
 destructor TTyRichReplaceAllCommand.Destroy;
@@ -2112,9 +2188,27 @@ begin
 end;
 
 function TTyRichReplaceAllCommand.Prepare(ABudget: Int64): Boolean;
+var
+  mark: Int64;
+  allNext, nextPara, rangeLo: Integer;
+  collected: Boolean;
 begin
   try
+    if FFinder <> nil then mark := FFinder.WorkDone else mark := -1;
+    allNext := FAllNext;
+    nextPara := FNextPara;
+    rangeLo := FRangeLo;
+    collected := FCollected;
     Result := Search(ABudget);
+    { A search with a budget always gets on: one that left everything as it was would be
+      called again and again, for ever. The walk ends there instead (Failed). }
+    if not Result and FStarted and (FFinder <> nil) and (FFinder.WorkDone = mark) and
+      (FAllNext = allNext) and (FNextPara = nextPara) and (FRangeLo = rangeLo) and
+      (FCollected = collected) then
+    begin
+      Fail;
+      Result := True;
+    end;
   finally
     // (what it left - a match the document refuses - is told even when no part runs)
     Report;
@@ -2124,9 +2218,10 @@ end;
 function TTyRichReplaceAllCommand.Search(ABudget: Int64): Boolean;
 var
   t: TTyRichText;
-  limit, last: TTyRichPos;
+  limit, last, stop: TTyRichPos;
   i, k, hi: Integer;
   r: TTyRichFindResult;
+  mark: Int64;
 begin
   Result := True;
   if (FReadyCount > 0) or FWalkDone or FLimited then Exit;
@@ -2137,9 +2232,9 @@ begin
   if not FStarted then
   begin
     FStarted := True;
-    FTotal := t.Length;
-    FNextPara := 0;
-    FFinder := TTyRichFinder.Create(FTarget, FFind, FOptions);
+    if FTo < 0 then FTotal := t.Length - FFrom else FTotal := FTo - FFrom;
+    FNextPara := t.ParaOfPos(FFrom);
+    FFinder := TTyRichFinder.Create(FTarget, FFind, FOptions, FFrom, FTo);
     FFinder.Collect := True;
     FLen := FFinder.MatchLen;
     if FFinder.Never then
@@ -2155,7 +2250,14 @@ begin
     if not FCollected then
     begin
       repeat
+        mark := FFinder.WorkDone;
         if ABudget < 0 then r := FFinder.Step(1 shl 20) else r := FFinder.Step(ABudget);
+        // (a step that did nothing would be taken again for ever)
+        if (r = rfrMore) and (ABudget < 0) and (FFinder.WorkDone = mark) then
+        begin
+          Fail;
+          Exit;
+        end;
       until (r <> rfrMore) or (ABudget >= 0);
       if r = rfrMore then Exit(False);
       FAllCount := FFinder.MatchCount;
@@ -2174,13 +2276,19 @@ begin
       k := FAllNext;
       FTarget.BeginRead;
       try
-        while (k < FAllCount) and (FAll[k] + FLen - last <= FRangeChars) do
+        // (the first one whatever its length: a needle may be longer than the range)
+        while (k < FAllCount) and ((k = FAllNext) or (FAll[k] + FLen - last <= FRangeChars)) do
         begin
           Take(FAll[k] + FCharDelta);
           Inc(k);
         end;
       finally
         FTarget.EndRead;
+      end;
+      if k = FAllNext then
+      begin
+        Fail;
+        Exit;
       end;
       FAllNext := k;
       if FReadyCount > 0 then
@@ -2195,10 +2303,11 @@ begin
   end;
   // range by range from the start: each range's matches found on the text as it is, then replaced
   repeat
+    stop := RangeEnd;
     if FRangeLo < 0 then
     begin
-      if (FNextPara >= t.ParaCount) or ((FRedoTo >= 0) and
-        (t.ParaStart(FNextPara) - FCharDelta >= FRedoTo)) then
+      if (FNextPara >= t.ParaCount) or (t.ParaStart(FNextPara) + FLen > stop) or
+        ((FRedoTo >= 0) and (t.ParaStart(FNextPara) - FCharDelta >= FRedoTo)) then
       begin
         FWalkDone := True;
         FreeAndNil(FFinder);
@@ -2206,12 +2315,12 @@ begin
       end;
       FRangeLo := FNextPara;
       limit := t.ParaStart(FNextPara) + FRangeChars;
-      if limit > t.Length then limit := t.Length;
+      if limit > stop then limit := stop;
       hi := t.ParaOfPos(limit);
       if hi < FRangeLo then hi := FRangeLo;
       FRangeHi := hi;
     end;
-    r := FFinder.CollectRange(FRangeLo, FRangeHi, ABudget);
+    r := FFinder.CollectRange(FRangeLo, FRangeHi, FFrom, stop, ABudget);
     if r = rfrMore then Exit(False);
     // (one read scope for the range's checks: the loader trims once, when it ends)
     FTarget.BeginRead;
@@ -2288,6 +2397,9 @@ begin
   // where the first run ended, in the text it began on (what a redo replays to)
   FHighPos := FReady[n - 1] + FLen - FCharDelta;
   d := t.Length - len0;
+  { Behind the last match of the part, in the text as it is now: everything the part changed
+    lies before that place, so it moved by all of it. }
+  FResume := FReady[n - 1] + FLen + d;
   Inc(FCharDelta, d);
   // the others of the range, after what changed: moved by it
   for i := n to FReadyCount - 1 do FReady[i - n] := FReady[i] + d;
@@ -2312,6 +2424,9 @@ begin
   FTally^.Replaced := FReplaced;
   FTally^.Skipped := FSkipped;
   FTally^.Limited := FLimited;
+  FTally^.Failed := FStuck;
+  FTally^.ResumeAt := FResume;
+  FTally^.ResumeLength := ResumeLength;
 end;
 
 procedure TTyRichReplaceAllCommand.Run(ADoc: TTyRichDocument);
@@ -2412,7 +2527,7 @@ begin
   t := FTarget.Text;
   if not FStarted then
   begin
-    ATotal := t.Length;
+    if FTo < 0 then ATotal := t.Length - FFrom else ATotal := FTo - FFrom;
     if FSimple then ATotal := 2 * ATotal;
     ADone := 0;
     Exit;
@@ -2423,12 +2538,14 @@ begin
     ATotal := 2 * FTotal;
     if not FCollected then
     begin
-      if FFinder <> nil then ADone := FFinder.Reached else ADone := 0;
+      if FFinder <> nil then ADone := FFinder.Reached - FFrom else ADone := 0;
+      if ADone < 0 then ADone := 0;
+      if ADone > FTotal then ADone := FTotal;
       Exit;
     end;
     // the replacing, from the start on
     if Finished or (FAllNext >= FAllCount) then ADone := ATotal
-    else ADone := FTotal + FAll[FAllNext];
+    else ADone := FTotal + FAll[FAllNext] - FFrom;
     if ADone > ATotal then ADone := ATotal;
     Exit;
   end;
@@ -2441,7 +2558,7 @@ begin
     else if FRangeLo >= 0 then at := t.ParaStart(FRangeLo)
     else if FNextPara < t.ParaCount then at := t.ParaStart(FNextPara)
     else at := t.Length;
-    ADone := at - FCharDelta;
+    ADone := at - FCharDelta - FFrom;
   end;
   if ADone < 0 then ADone := 0;
   if ADone > ATotal then ADone := ATotal;

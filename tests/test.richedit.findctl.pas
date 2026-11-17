@@ -35,15 +35,18 @@ type
     FDonePos, FDoneLen: TTyRichPos;
     FDoneProgress: Int64;           // the last progress before the done-event
     FProgressLast: Int64;
+    FProgressTask: TTyRichFindTask;
+    FReplaceResult: TTyRichReplaceResult;
     FRestartFrom: Integer;          // 1: the progress handler starts FRestartWith, 2: the done one
     FRestartWith: string;
     FEditInHandler, FEditInChange: Boolean;
     procedure Changed(Sender: TObject);
     procedure SelChanged(Sender: TObject);
     procedure ChangedEdit(Sender: TObject);
-    procedure Progress(Sender: TObject; ADone, ATotal: Int64; var ACancel: Boolean);
+    procedure Progress(Sender: TObject; ATask: TTyRichFindTask; ADone, ATotal: Int64;
+      var ACancel: Boolean);
     procedure FindDone(Sender: TObject; AEnd: TTyRichFindEnd; APos, ALen: TTyRichPos);
-    procedure ReplaceDone(Sender: TObject; AEnd: TTyRichFindEnd; AReplaced, ASkipped: Integer);
+    procedure ReplaceDone(Sender: TObject; const AResult: TTyRichReplaceResult);
     procedure ResetEvents;
     procedure SetText(const S: string);
     procedure LoadBytes(const B: TBytes; AFinish: Boolean = True);
@@ -80,6 +83,8 @@ type
     procedure TestWrapReadsOnceAndIntegersCompile;
     procedure TestTheProgressEndsAtItsTotal;
     procedure TestTheEventsArePublished;
+    procedure TestALongNeedleWithAParagraphEndEnds;
+    procedure TestAReplaceGoesOnWhereItStopped;
   end;
 
   // the control's protected seams (the find's piece and batch, the first slice)
@@ -185,9 +190,10 @@ begin
   FRich.Document.Execute(TTyRichInsertText.Create(0, 'Q'));
 end;
 
-procedure TTyRichEditFindTest.Progress(Sender: TObject; ADone, ATotal: Int64;
-  var ACancel: Boolean);
+procedure TTyRichEditFindTest.Progress(Sender: TObject; ATask: TTyRichFindTask; ADone,
+  ATotal: Int64; var ACancel: Boolean);
 begin
+  FProgressTask := ATask;
   SetLength(FProgress, Length(FProgress) + 1);
   FProgress[High(FProgress)] := ADone;
   FProgressTotal := ATotal;
@@ -226,20 +232,21 @@ begin
   end;
 end;
 
-procedure TTyRichEditFindTest.ReplaceDone(Sender: TObject; AEnd: TTyRichFindEnd; AReplaced,
-  ASkipped: Integer);
+procedure TTyRichEditFindTest.ReplaceDone(Sender: TObject; const AResult: TTyRichReplaceResult);
 var
   s: string;
 begin
-  case AEnd of
-    rfeReplaced: s := 'ended';
-    rfeCancelled: s := 'cancelled';
-    rfeLimit: s := 'limit';
+  case AResult.Ending of
+    rreDone: s := 'ended';
+    rreCancelled: s := 'cancelled';
+    rreLimit: s := 'limit';
+    rreFailed: s := 'failed';
   else
     s := '?';
   end;
+  FReplaceResult := AResult;
   SetLength(FDone, Length(FDone) + 1);
-  FDone[High(FDone)] := Format('replace %d %d %s', [AReplaced, ASkipped, s]);
+  FDone[High(FDone)] := Format('replace %d %d %s', [AResult.Replaced, AResult.Skipped, s]);
   FDoneProgress := FProgressLast;
 end;
 
@@ -1258,8 +1265,8 @@ end;
   limit says so (the synchronous one in its result too). }
 procedure TTyRichEditFindTest.TestTheProgressEndsAtItsTotal;
 var
-  skipped, n: Integer;
-  fin: TTyRichFindEnd;
+  n: Integer;
+  res: TTyRichReplaceResult;
 begin
   SetText(Lines(3000, 'filler words '));
   FRich.SelStart := 0;
@@ -1288,13 +1295,13 @@ begin
   AssertEquals('...at its total', FProgressTotal, FDoneProgress);
   AssertEquals('one step', 1, FRich.Document.UndoDepth);
   ResetEvents;
-  n := FRich.ReplaceAll('filler', 'f', [], skipped, fin);
+  n := FRich.ReplaceAll('filler', 'f', [], 0, -1, res);
   AssertTrue('the synchronous one: some', n > 0);
-  AssertEquals('...at the limit', Ord(rfeLimit), Ord(fin));
+  AssertEquals('...at the limit', Ord(rreLimit), Ord(res.Ending));
   AssertEquals('...one change', 1, FChanges);
   FRich.Document.MaxUndoBytes := 0;
-  n := FRich.ReplaceAll('filler', 'f', [], skipped, fin);
-  AssertEquals('...and the rest', Ord(rfeReplaced), Ord(fin));
+  n := FRich.ReplaceAll('filler', 'f', [], res.ResumeAt, res.ResumeLength, res);
+  AssertEquals('...and the rest', Ord(rreDone), Ord(res.Ending));
   AssertEquals('none left', 0, Pos('filler', Text));
 end;
 
@@ -1303,6 +1310,127 @@ begin
   AssertTrue('OnFindProgress', IsPublishedProp(TTyRichEdit, 'OnFindProgress'));
   AssertTrue('OnFindDone', IsPublishedProp(TTyRichEdit, 'OnFindDone'));
   AssertTrue('OnReplaceDone', IsPublishedProp(TTyRichEdit, 'OnReplaceDone'));
+end;
+
+{ Text with LF for every paragraph end, and none after the last. }
+function Plain(const S: string): string;
+begin
+  Result := StringReplace(S, #13#10, #10, [rfReplaceAll]);
+  while (Result <> '') and (Result[Length(Result)] = #10) do SetLength(Result, Length(Result) - 1);
+end;
+
+{ "Replace All" with a needle of several long paragraphs - longer than the range a part reads:
+  it ends, in the background and synchronously (it went round for ever, the application
+  frozen). }
+procedure TTyRichEditFindTest.TestALongNeedleWithAParagraphEndEnds;
+var
+  needle: string;
+  res: TTyRichReplaceResult;
+  n: Integer;
+begin
+  needle := StringOfChar('a', 10000) + #10 + StringOfChar('b', 10000);
+  SetText('x' + #10 + needle + #10 + 'y');
+  ResetEvents;
+  FRich.ReplaceAllAsync(needle, 'z');
+  TurnUntilDone(10000);
+  AssertEquals('in the background', 'replace 1 0 ended', FDone[0]);
+  AssertEquals('...the text', 'x' + #10 + 'z' + #10 + 'y', Plain(Text));
+  needle := StringOfChar('a', 40000) + #10 + StringOfChar('b', 40000);
+  SetText('x' + #10 + needle + #10 + 'y');
+  n := FRich.ReplaceAll(needle, 'z', [], 0, -1, res);
+  AssertEquals('synchronously', 1, n);
+  AssertEquals('...done', Ord(rreDone), Ord(res.Ending));
+  AssertEquals('...the text', 'x' + #10 + 'z' + #10 + 'y', Plain(Text));
+end;
+
+{ Where a replace stopped (the limit, a cancel) is told, in the text as it is then, and a new
+  replace from there for the rest of the range replaces every match once - with a replacement
+  that holds the needle, where a run again from the start replaced the first part again and
+  again. A background replace cancelled by an edit before that place tells it moved by the
+  edit. }
+procedure TTyRichEditFindTest.TestAReplaceGoesOnWhereItStopped;
+var
+  src, want: string;
+  res: TTyRichReplaceResult;
+  runs, total, turns: Integer;
+  at: TTyRichPos;
+begin
+  // "MrMrMr...": a place one character off replaces a match twice or misses one
+  // the limit, synchronously (more text than one range of the synchronous call)
+  src := Lines(12000, 'MrMrMrMrMr ');
+  want := Plain(StringReplace(src, 'Mr', 'Mr.', [rfReplaceAll]));
+  SetText(src);
+  FRich.Document.MaxUndoBytes := 4096;
+  res.ResumeAt := 0;
+  res.ResumeLength := -1;
+  runs := 0;
+  total := 0;
+  repeat
+    Inc(runs);
+    Inc(total, FRich.ReplaceAll('Mr', 'Mr.', [], res.ResumeAt, res.ResumeLength, res));
+  until (res.Ending <> rreLimit) or (runs > 300);
+  AssertEquals('the limit: through', Ord(rreDone), Ord(res.Ending));
+  AssertTrue(Format('...in several runs (%d)', [runs]), runs > 2);
+  AssertEquals('...each once', 12000 * 5, total);
+  AssertEquals('...the text', want, Plain(Text));
+  FRich.Document.MaxUndoBytes := 0;
+  // cancelled in the background, started again from where it stopped (the turns by a clock
+  // of the test's: the same pieces every time)
+  src := Lines(1500, 'MrMrMrMrMr ');
+  want := Plain(StringReplace(src, 'Mr', 'Mr.', [rfReplaceAll]));
+  FRich.FakeClock := True;
+  FRich.ClockStep := 1;
+  try
+  SetText(src);
+  FReplaceResult.ResumeAt := 0;
+  FReplaceResult.ResumeLength := -1;
+  runs := 0;
+  total := 0;
+  at := 0;
+  repeat
+    Inc(runs);
+    ResetEvents;
+    FCancelAt := 4;
+    FRich.ReplaceAllAsync('Mr', 'Mr.', [], FReplaceResult.ResumeAt, FReplaceResult.ResumeLength);
+    TFindAccess(FRich).FindSlice := 512;
+    TurnUntilDone;
+    Inc(total, FReplaceResult.Replaced);
+    if FReplaceResult.Ending = rreCancelled then
+    begin
+      AssertTrue('on from no earlier', FReplaceResult.ResumeAt >= at);
+      at := FReplaceResult.ResumeAt;
+    end;
+  until (FReplaceResult.Ending <> rreCancelled) or (runs > 2000);
+  AssertEquals('cancelled: through', Ord(rreDone), Ord(FReplaceResult.Ending));
+  AssertTrue(Format('...in several runs (%d)', [runs]), runs > 2);
+  AssertEquals('...each once', 1500 * 5, total);
+  AssertEquals('...the text', want, Plain(Text));
+  // an edit before the place: the place moves with it
+  SetText(src);
+  ResetEvents;
+  FRich.ReplaceAllAsync('Mr', 'Mr.');
+  TFindAccess(FRich).FindSlice := 512;
+  turns := 0;
+  while FRich.FindRunning and (Pos('Mr.', Text) = 0) and (turns < 10000) do
+  begin
+    FRich.Turn;
+    Inc(turns);
+  end;
+  AssertTrue('a part went in', Pos('Mr.', Text) > 0);
+  FRich.Document.Execute(TTyRichInsertText.Create(0, 'xyz'));
+  FRich.Turn;
+  AssertFalse('the edit stopped it', FRich.FindRunning);
+  AssertEquals('...told', Ord(rreCancelled), Ord(FReplaceResult.Ending));
+  AssertTrue('...some replaced', FReplaceResult.Replaced > 0);
+  total := FReplaceResult.Replaced;
+  Inc(total, FRich.ReplaceAll('Mr', 'Mr.', [], FReplaceResult.ResumeAt,
+    FReplaceResult.ResumeLength, res));
+  AssertEquals('...the rest from the place told', Ord(rreDone), Ord(res.Ending));
+  AssertEquals('...each once', 1500 * 5, total);
+  AssertEquals('...the text', 'xyz' + want, Plain(Text));
+  finally
+    FRich.FakeClock := False;
+  end;
 end;
 
 initialization

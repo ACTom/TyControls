@@ -64,6 +64,8 @@ type
     procedure TestReplaceParsesEachIntervalOnce;
     procedure TestReplaceUndoneSavesTheFile;
     procedure TestReplaceKeepsR57AtATablesEdges;
+    procedure TestALongNeedleWithAParagraphEndEnds;
+    procedure TestARerunGoesOnWhereItStopped;
   end;
 
 implementation
@@ -2184,6 +2186,188 @@ begin
       AssertTrue(name + ': redone and undone, the file', SameBytes(bytes, SaveRtf(doc)));
     finally
       hitParas.Free;
+      doc.Free;
+    end;
+  end;
+end;
+
+{ A replace of [AStart, AStart + ALength) driven as the control's turns drive it: searched in
+  pieces of ABudget units (Prepare), each part run as it is found - at most AMaxCalls searches,
+  so a walk that would never end fails here instead of hanging. True: it finished. }
+function ReplaceBudgeted(ADoc: TTyRichDocument; const ANeedle, ARepl: UTF8String;
+  AOptions: TTyRichFindOptions; AStart, ALength: TTyRichPos; ARange, ABudget: Int64;
+  AMaxCalls: Integer; out ATally: TTyRichReplaceTally): Boolean;
+var
+  cmd: TTyRichReplaceAllCommand;
+  ran: Boolean;
+  calls: Integer;
+begin
+  ATally := Default(TTyRichReplaceTally);
+  cmd := TTyRichReplaceAllCommand.Create(ADoc, ANeedle, ARepl, AOptions, AStart, ALength);
+  cmd.Tally := @ATally;
+  cmd.RangeChars := ARange;
+  ran := False;
+  calls := 0;
+  Result := False;
+  try
+    while calls < AMaxCalls do
+    begin
+      if not cmd.Ready then
+      begin
+        Inc(calls);
+        cmd.Prepare(ABudget);
+        if cmd.Finished then
+        begin
+          Result := True;
+          Break;
+        end;
+        Continue;
+      end;
+      if not ran then
+      begin
+        ran := True;
+        if not ADoc.Execute(cmd) then Break;
+      end
+      else if not ADoc.ExecutePart(cmd) then
+        Break;
+      if cmd.Finished then
+      begin
+        Result := True;
+        Break;
+      end;
+    end;
+  finally
+    if not ran then cmd.Free;
+  end;
+end;
+
+function Unix(const S: RawByteString): RawByteString;
+begin
+  Result := StringReplace(S, #13#10, #10, [rfReplaceAll]);
+end;
+
+{ A needle with a paragraph end that is longer than the range a replace reads at a time: the
+  replace ends (it took nothing, and went round for ever) - searched in pieces as the turns
+  do it, and all at once as the synchronous call does it. }
+procedure TTyRichFindTest.TestALongNeedleWithAParagraphEndEnds;
+var
+  doc: TTyRichDocument;
+  needle, s: RawByteString;
+  tally: TTyRichReplaceTally;
+  cmd: TTyRichReplaceAllCommand;
+  k: Integer;
+begin
+  needle := StringOfChar('a', 300) + #10 + StringOfChar('b', 300);
+  s := 'x' + #10 + needle + #10 + 'y' + #10 + needle;
+  for k := 0 to 1 do
+  begin
+    doc := TextDoc(s);
+    try
+      if k = 0 then
+        AssertTrue('in pieces: it ends', ReplaceBudgeted(doc, needle, 'z', [], 0, -1, 64, 64,
+          10000, tally))
+      else
+      begin
+        tally := Default(TTyRichReplaceTally);
+        cmd := TTyRichReplaceAllCommand.Create(doc, needle, 'z', []);
+        cmd.Tally := @tally;
+        cmd.RangeChars := 64;
+        cmd.AllAtOnce := True;
+        doc.Execute(cmd);
+      end;
+      AssertFalse(Format('%d: not failed', [k]), tally.Failed);
+      AssertEquals(Format('%d: both replaced', [k]), 2, tally.Replaced);
+      AssertEquals(Format('%d: the text', [k]), 'x' + #10 + 'z' + #10 + 'y' + #10 + 'z',
+        Unix(doc.Text.GetText(0, doc.Text.Length)));
+      doc.Undo;
+      AssertEquals(Format('%d: undone', [k]), s, Unix(doc.Text.GetText(0, doc.Text.Length)));
+    finally
+      doc.Free;
+    end;
+  end;
+end;
+
+{ A replace stopped at its limit tells where it stopped (right behind the last match it dealt
+  with, in the text as it now is); run again from there, it replaces the rest and nothing
+  twice - also where the replacement holds the needle ("Mr" by "Mr.", ".<end>" by
+  ".<end><end>", "xx" by "xxx"), which a run again from the start replaced again and again.
+  In a range too:
+  what lies outside it stays. }
+procedure TTyRichFindTest.TestARerunGoesOnWhereItStopped;
+var
+  doc: TTyRichDocument;
+  s, want, rest: RawByteString;
+  i, runs, total, k, span: Integer;
+  tally: TTyRichReplaceTally;
+  at, len, from, upto: TTyRichPos;
+  needle, repl: RawByteString;
+begin
+  for k := 0 to 3 do
+  begin
+    s := '';
+    want := '';
+    case k of
+      3:
+        begin
+          // (a place a character off would find a match in the last replacement again)
+          for i := 0 to 1999 do s := s + 'xxxxxxxx' + #10;
+          needle := 'xx';
+          repl := 'xxx';
+        end;
+      0, 2:
+        begin
+          for i := 0 to 1999 do s := s + 'Mr Smith met Mr Jones' + #10;
+          needle := 'Mr';
+          repl := 'Mr.';
+        end;
+    else
+      for i := 0 to 599 do s := s + 'Line ' + IntToStr(i) + '.' + #10;
+      needle := '.' + #10;
+      repl := '.' + #10 + #10;
+    end;
+    if k = 2 then
+    begin
+      // lines 100 .. 1099 only
+      from := 100 * 22;
+      upto := 1100 * 22;
+      want := Copy(s, 1, from) + StringReplace(Copy(s, from + 1, upto - from), needle, repl,
+        [rfReplaceAll]) + Copy(s, upto + 1, MaxInt);
+    end
+    else
+    begin
+      from := 0;
+      upto := -1;
+      want := StringReplace(s, needle, repl, [rfReplaceAll]);
+    end;
+    doc := TextDoc(s);
+    try
+      doc.MaxUndoBytes := 4096;
+      at := from;
+      if upto < 0 then len := -1 else len := upto - from;
+      runs := 0;
+      total := 0;
+      repeat
+        Inc(runs);
+        AssertTrue(Format('%d: run %d ends', [k, runs]), ReplaceBudgeted(doc, needle, repl, [],
+          at, len, 1024, 4096, 100000, tally));
+        AssertFalse('not failed', tally.Failed);
+        Inc(total, tally.Replaced);
+        if tally.Limited then
+        begin
+          AssertTrue(Format('%d: run %d replaced some', [k, runs]), tally.Replaced > 0);
+          AssertTrue('on from further on', tally.ResumeAt > at);
+          at := tally.ResumeAt;
+          len := tally.ResumeLength;
+          if upto < 0 then AssertEquals('to the end', -1, len);
+        end;
+      until not tally.Limited or (runs >= 400);
+      AssertFalse(Format('%d: through in %d runs', [k, runs]), tally.Limited);
+      AssertTrue(Format('%d: more than one run (%d)', [k, runs]), runs > 2);
+      rest := Unix(doc.Text.GetText(0, doc.Text.Length));
+      AssertEquals(Format('%d: each replaced once', [k]), want, rest);
+      if upto < 0 then span := MaxInt else span := upto - from;
+      AssertEquals(Format('%d: the count', [k]), CountOf(needle, Copy(s, from + 1, span)), total);
+    finally
       doc.Free;
     end;
   end;
