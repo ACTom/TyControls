@@ -38,7 +38,8 @@ type
     procedure ResetEvents;
     procedure LoadRtf(const S: RawByteString);
     procedure LoadBytes(const B: TBytes);
-    procedure SetText(const S: string);
+    { A document typed in (rich: RichDocument); APlain - a plain text document (R60). }
+    procedure SetText(const S: string; APlain: Boolean = False);
     procedure Clip(const ARtf: RawByteString; const AText: string; const APicture: TBytes = nil;
       AKind: TTyRichImageKind = rikPng);
     function Para(AIndex: Integer): RawByteString;
@@ -73,6 +74,8 @@ type
     procedure TestCanPasteReadsNothing;
     procedure TestAOneLinePasteInALargeDocumentTouchesOneParagraph;
     procedure TestTheWaitCursorOverTheThreshold;
+    // fix wave W13 (R60)
+    procedure TestAPlainTextDocumentPastesTextOnly;
   end;
 
 implementation
@@ -575,8 +578,9 @@ begin
   ResetEvents;
 end;
 
-procedure TTyRichEditPasteTest.SetText(const S: string);
+procedure TTyRichEditPasteTest.SetText(const S: string; APlain: Boolean);
 begin
+  FRich.RichDocument := not APlain;
   FRich.Lines.Text := S;
   FRich.UpdateView;
   ResetEvents;
@@ -1415,7 +1419,7 @@ begin
   AssertEquals('the caret behind it', d.Text.ParaStart(5) + 7, FRich.CaretPos);
   AssertEquals('one step', 1, d.UndoDepth);
   // a plain-text document: U+000B a paragraph
-  SetText('ab');
+  SetText('ab', True);
   FRich.SelStart := 1;
   Clip('', 'x'#11'y');
   FRich.PasteFromClipboard;
@@ -1553,6 +1557,77 @@ begin
   AssertTrue('(the paste failed)', raised);
   AssertEquals('failed: one more', 3, FRich.Waits);
   AssertEquals('failed: put back', 3, FRich.WaitEnds);
+end;
+
+{ R60 (fix wave W13, Q-X1): in a plain text document - where formats and pictures cannot be
+  saved - a paste takes text only. RTF and text: the text (the RTF not even read); RTF alone:
+  its text, as plain paragraphs (no format, no object, a table's cells each a paragraph); a
+  picture alone: refused through OnEditRefused, nothing read; an explicit RTF or picture from
+  code: refused the same way. CanPaste answers so. }
+procedure TTyRichEditPasteTest.TestAPlainTextDocumentPastesTextOnly;
+var
+  pic: TBytes;
+  d: TTyRichDocument;
+  i: Integer;
+begin
+  pic := MakePng(4, 3, BGRA(200, 10, 10, 255));
+  SetText('ab', True);
+  d := FRich.Document;
+  FRich.SelStart := 1;
+  Clip(ClipBold, 'text', pic);
+  AssertTrue('can paste', FRich.CanPaste);
+  FRich.PasteFromClipboard;
+  AssertEquals('the text, not the RTF', 'atextb', Para(0));
+  AssertEquals('the RTF not read', 0, FRich.RtfReads);
+  AssertEquals('the picture not read', 0, FRich.PictureReads);
+  // RTF alone: its text, plain
+  SetText('ab', True);
+  FRich.SelStart := 1;
+  Clip(ClipBold, '');
+  FRich.PasteFromClipboard;
+  AssertEquals('the RTF''s text', 'aRTb', Para(0));
+  AssertFalse('no format: not bold', fsBold in CharFormatAt(1).Style);
+  // RTF alone, with a picture and a table: paragraphs of text, no object
+  SetText('ab', True);
+  FRich.SelStart := 1;
+  Clip('{' + BS + 'rtf1 x{' + BS + 'pict' + BS + 'pngblip 00}y' + BS + 'par ' + BS + 'trowd' +
+    BS + 'cellx1000' + BS + 'cellx2000 c1' + BS + 'cell c2' + BS + 'cell' + BS + 'row}', '');
+  FRich.PasteFromClipboard;
+  for i := 0 to d.Text.ParaCount - 1 do
+    AssertTrue(Format('paragraph %d in no table', [i]), d.CellAt(i) = nil);
+  AssertEquals('no object', 0, Pos(TyRichObjectChar, FRich.Lines.Text));
+  AssertEquals('the text before', 'axy', Para(0));
+  AssertEquals('the first cell', 'c1', Para(1));
+  AssertEquals('the second cell', 'c2', Para(2));
+  // a picture alone: refused, nothing read
+  SetText('ab', True);
+  FRich.SelStart := 1;
+  Clip('', '', pic);
+  AssertFalse('a picture alone: cannot paste', FRich.CanPaste);
+  FRich.ClipReset;
+  Clip('', '', pic);
+  FRich.PasteFromClipboard;
+  AssertEquals('refused', 1, FRich.Refused);
+  AssertEquals('in the control''s words', rsRichEditRefusedPlainPaste, FRich.LastReason);
+  AssertEquals('nothing pasted', 'ab', Para(0));
+  AssertEquals('the picture not read', 0, FRich.PictureReads);
+  // explicit RTF or picture from code: refused
+  Clip(ClipBold, 'text', pic);
+  ResetEvents;
+  FRich.Refused := 0;
+  FRich.PasteFromClipboard(rpaRtf);
+  AssertEquals('as RTF: refused', 1, FRich.Refused);
+  FRich.PasteFromClipboard(rpaPicture);
+  AssertEquals('as a picture: refused', 2, FRich.Refused);
+  AssertEquals('nothing pasted', 'ab', Para(0));
+  FRich.PasteFromClipboard(rpaText);
+  AssertEquals('as text: pasted', 'atextb', Para(0));
+  // a rich document still prefers the RTF
+  SetText('ab');
+  FRich.SelStart := 1;
+  Clip(ClipBold, 'text', pic);
+  FRich.PasteFromClipboard;
+  AssertEquals('a rich document: the RTF', 'aRTb', Para(0));
 end;
 
 initialization

@@ -89,6 +89,8 @@ type
     // fix wave W13: key-press events counted (none may come while the control goes)
     procedure CountUtf8(Sender: TObject; var UTF8Key: TUTF8Char);
     procedure CountKey(Sender: TObject; var Key: Char);
+    // a form's key preview that counts and keeps 'b' out
+    procedure FormKeys(Sender: TObject; var UTF8Key: TUTF8Char);
     procedure CommitWhileSaving(Sender: TObject; ADone, ATotal: Int64; var ACancel: Boolean);
     function NewProbe: TImeProbe;
     procedure SetText(const S: string);
@@ -154,6 +156,9 @@ type
     // fix wave W13
     procedure TestAPressIsPlacedOnWhatTheUserSaw;
     procedure TestAPressAfterScrollingAwayStaysThere;
+    procedure TestReadOnlyChangedWhileFocusedTellsTheContext;
+    procedure TestThePublicActionsCommitTheCompositionFirst;
+    procedure TestAWin32CommitPassesTheFormsKeyPreview;
   end;
 
 implementation
@@ -1519,6 +1524,12 @@ begin
   Inc(GKeyPresses);
 end;
 
+procedure TTyRichEditImeTest.FormKeys(Sender: TObject; var UTF8Key: TUTF8Char);
+begin
+  Inc(GKeyPresses);
+  if UTF8Key = 'b' then UTF8Key := '';
+end;
+
 { E-X2: on win32 a committed composition passes the key-press events a typed character passes,
   character by character, as the memo's commits do there: a handler that clears a character
   keeps it out of the one insert (one undo step); one that clears them all leaves nothing - no
@@ -1725,6 +1736,8 @@ begin
   AssertEquals('the context going: as it came', 0, FRich.Msg(WM_IME_SETCONTEXT, ISC_SHOWUIALL, 0));
   AssertEquals('not handed on here', 0, FRich.SetContexts);
   FRich.ReadOnly := True;
+  // (set while focused, the context was told once there - Q-M3's test)
+  FRich.SetContexts := 0;
   AssertEquals('read-only: as it came', 0, FRich.Msg(WM_IME_SETCONTEXT, ISC_SHOWUIALL, 1));
   AssertEquals('read-only: not handed on here', 0, FRich.SetContexts);
 end;
@@ -2545,6 +2558,111 @@ begin
     FRich.Answer := False;
     FRich.Late := False;
     FRich.AnswerWith := '';
+  end;
+end;
+
+{ Q-M3: ReadOnly changed while the control keeps the focus tells the input context at once
+  whether the system's composition window is wanted - as the window's activation tells it, with
+  what the activation asked to show: read-only, the system's window shows what is typed;
+  editable again, the composition is in the text. Unfocused: nothing (the next activation tells
+  it). }
+procedure TTyRichEditImeTest.TestReadOnlyChangedWhileFocusedTellsTheContext;
+var
+  n: Integer;
+begin
+  SetText('ab');
+  FRich.SetContexts := 0;
+  FRich.Msg(WM_IME_SETCONTEXT, ISC_SHOWUIALL, 1);
+  AssertEquals('the activation', 1, FRich.SetContexts);
+  FRich.ReadOnly := True;
+  AssertEquals('read-only: told', 2, FRich.SetContexts);
+  AssertEquals('read-only: with the system''s composition window', ISC_SHOWUIALL,
+    FRich.SetContextL);
+  FRich.ReadOnly := False;
+  AssertEquals('editable: told', 3, FRich.SetContexts);
+  AssertEquals('editable: without it', ISC_SHOWUIALL and not ISC_SHOWUICOMPOSITIONWINDOW,
+    FRich.SetContextL);
+  // what the last activation asked to show is what is told again
+  FRich.Msg(WM_IME_SETCONTEXT, ISC_SHOWUICOMPOSITIONWINDOW or 1, 1);
+  FRich.ReadOnly := True;
+  AssertEquals('as the activation asked', ISC_SHOWUICOMPOSITIONWINDOW or 1, FRich.SetContextL);
+  FRich.ForceFocus := False;
+  n := FRich.SetContexts;
+  FRich.ReadOnly := False;
+  AssertEquals('unfocused: nothing told', n, FRich.SetContexts);
+end;
+
+{ Q-M4: the public methods that are a user's actions in an application's hands (an action
+  list's shortcut, a toolbar button that never takes the focus) end a composition first, as
+  their keys do: Undo, Redo, CutToClipboard (PasteFromClipboard: the paste suite). SelectAll from
+  code does not (J-M4's test). }
+procedure TTyRichEditImeTest.TestThePublicActionsCommitTheCompositionFirst;
+var
+  writes: Integer;
+begin
+  SetText('ab');
+  FRich.Document.BreakMerge;
+  FRich.SelStart := 1;
+  FRich.UpdateComposition('XY');
+  FRich.Undo;
+  AssertFalse('Undo: ended', FRich.Composing);
+  AssertEquals('Undo: the commit went in first, then was undone', 'ab', FRich.Lines[0]);
+  AssertEquals('Undo: nothing shown', -1, FRich.Layouter.Composition.Para);
+  FRich.Redo;
+  AssertEquals('redone', 'aXYb', FRich.Lines[0]);
+  FRich.Undo;
+  FRich.SelStart := 1;
+  FRich.UpdateComposition('Q');
+  FRich.Redo;
+  AssertFalse('Redo: ended', FRich.Composing);
+  AssertEquals('Redo: the commit went in (a new step: nothing left to redo)', 'aQb',
+    FRich.Lines[0]);
+  FRich.SelStart := 3;
+  FRich.UpdateComposition('Z');
+  writes := FRich.ClipWrites;
+  FRich.CutToClipboard;
+  AssertFalse('CutToClipboard: ended', FRich.Composing);
+  AssertEquals('CutToClipboard: the commit went in, nothing selected to cut', 'aQbZ',
+    FRich.Lines[0]);
+  AssertEquals('nothing copied', writes, FRich.ClipWrites);
+end;
+
+{ Q-M9: on win32 a committed character passes a form's key preview as a typed one does (LCL's
+  DoUTF8KeyPress asks each parent form with KeyPreview before the control): the form's
+  OnUTF8KeyPress sees each committed character and one it clears stays out. Without KeyPreview
+  the form is not asked. }
+procedure TTyRichEditImeTest.TestAWin32CommitPassesTheFormsKeyPreview;
+var
+  F: TForm;
+begin
+  NeedWidgetSet;
+  F := TForm.CreateNew(nil);
+  try
+    F.KeyPreview := True;
+    F.OnUTF8KeyPress := @FormKeys;
+    FRich.Parent := F;
+    AssertFalse('the form is not shown', F.Visible);
+    SetText('');
+    GKeyPresses := 0;
+    ComposeByMessages(FRich, 'abc');
+    FRich.ResultStr := 'abc';
+    FRich.CompStr := '';
+    FRich.Msg(WM_IME_COMPOSITION, GCS_RESULTSTR or GCS_COMPSTR);
+    FRich.Msg(WM_IME_ENDCOMPOSITION, 0);
+    AssertEquals('the form saw each committed character', 3, GKeyPresses);
+    AssertEquals('the one it took stays out', 'ac', FRich.Lines[0]);
+    F.KeyPreview := False;
+    GKeyPresses := 0;
+    ComposeByMessages(FRich, 'b');
+    FRich.ResultStr := 'b';
+    FRich.CompStr := '';
+    FRich.Msg(WM_IME_COMPOSITION, GCS_RESULTSTR or GCS_COMPSTR);
+    FRich.Msg(WM_IME_ENDCOMPOSITION, 0);
+    AssertEquals('no key preview: the form is not asked', 0, GKeyPresses);
+    AssertEquals('so it goes in', 'acb', FRich.Lines[0]);
+  finally
+    FRich.Parent := nil;
+    F.Free;
   end;
 end;
 

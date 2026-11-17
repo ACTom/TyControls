@@ -449,6 +449,9 @@ type
     FPressPos, FPressObj: TTyRichPos;
     FPressAfter, FPressCarry, FCompBefore: Boolean;
     FNoEditScroll, FEditQuiet: Boolean;
+    { The lParam of the last WM_IME_SETCONTEXT that activated the window (what the system
+      asked to show; ISC_SHOWUIALL until one came). }
+    FImeContextL: PtrInt;
     { Cocoa's bridge: its session is open (ImeSessionBegin .. ImeSessionEnd), one of its calls
       runs (FInBridge), the control ended the session's composition itself (FCocoaSwallow:
       Cocoa keeps its marked text, so what the bridge sends until the session's end goes
@@ -660,7 +663,7 @@ type
       that crosses a cell's or a row's edge is refused (told, False) unless it is whole rows. }
     function UserRangeAllowed(var AStart, ALen: TTyRichPos): Boolean;
     { [AFrom, ATo) is whole rows of one table: from a row's first paragraph's start to the
-      start of the paragraph after a row (or the text's end). Inside a read scope. }
+      start of the paragraph after a row (never the text's end). Inside a read scope. }
     function WholeRows(AFrom, ATo: TTyRichPos): Boolean;
     { Paragraph AIndex out of its list: the numbering goes, the start indent and the hanging
       offset go to 0 (msftedit's reset; the right indent and the alignment stay); one step. }
@@ -674,12 +677,6 @@ type
       (and, with AInsert, inserting at APos then) is not refused by a row that holds a nested
       table. Refused: Refuse, False. }
     function EditAllowed(APos, ALen: TTyRichPos; AInsert, AUser: Boolean): Boolean;
-    { Runs ACmd (the document owns it from here) as the control's own edit: True when it ran
-      and changed something - FEditChange is what it changed, the caret has not been placed.
-      The step it became carries the selection before it (its marks; the selection after it
-      is FinishEdit's). Refused by the engine (CanExecute, an ETyRichModel the command
-      reverted): the caret, the selection and Modified stay as they were, and Refuse. }
-    function RunEdit(ACmd: TTyRichCommand; AUser: Boolean): Boolean;
     { After an edit of the control's own: the selection AAnchor .. ACaret (put on caret places,
       never in a cut paragraph's hidden tail, AAtEnd the caret's affinity where it stays put,
       the wished x forgotten), scrolled into view, the caret shown, then the one OnChange and
@@ -711,6 +708,8 @@ type
     { Enter: a new paragraph, or on an empty list item the item out of the list. }
     procedure ParagraphKey;
     procedure CutSelection(AUser: Boolean);
+    { What a copy puts on the clipboard, of [AStart, AStart + ALen): both flavours. }
+    procedure CopyRange(AStart, ALen: TTyRichPos);
     { A clipboard's text made fit to insert (see PasteFromClipboard). }
     function PastedText(const AText: RawByteString): UTF8String;
     { The width a picture pasted at APos may take, in twips: the view's text width (0 when
@@ -777,6 +776,18 @@ type
     {$ENDIF}
   protected
     function GetStyleTypeKey: string; override;
+    { Runs ACmd (the document owns it from here) as the control's own edit: True when it ran
+      and changed something - FEditChange is what it changed, the caret has not been placed.
+      The step it became carries the selection before it (its marks; the selection after it
+      is FinishEdit's). Refused by the engine (CanExecute, an ETyRichModel the command
+      reverted): the caret, the selection and Modified stay as they were, and Refuse with
+      the reason that holds (CommandRefusal, EngineRefusal). AUser: told (OnEditRefused),
+      else raised (ETyRichEdit). Protected for a descendant's own commands (fix wave W13). }
+    function RunEdit(ACmd: TTyRichCommand; AUser: Boolean): Boolean;
+    { Why ACmd's CanExecute would refuse it: the engine's own text commands (an insert, a
+      deletion, an object, a fragment) refuse only where a row holds a nested table; any
+      other command's reasons are its own - told as a range that cannot be edited. }
+    function CommandRefusal(ACmd: TTyRichCommand): string; virtual;
     { The parts a descendant may make its own: the document (called once, from the
       constructor), the device the layout measures and draws with, the layouter. }
     function CreateDocument: TTyRichDocument; virtual;
@@ -1438,6 +1449,7 @@ const
   IMR_QUERYCHARPOSITION = $0006;
   WM_IME_SETCONTEXT = $0281;
   ISC_SHOWUICOMPOSITIONWINDOW = PtrInt($80000000);
+  ISC_SHOWUIALL = PtrInt($C000000F);
 
 type
   TTyImmCompositionForm = record
@@ -1711,6 +1723,7 @@ begin
   TabStop := True;
   FZoom := 100;
   FWrapMode := rwmWindow;
+  FImeContextL := ISC_SHOWUIALL;
   FReadOnly := False;
   FWantTabs := False;
   FTextEncoding := teAuto;
@@ -1938,6 +1951,13 @@ begin
   FDoc.BreakMerge;
   // what is being composed cannot go in any more: it goes, and the input method drops it
   if AValue then EndComposition(False);
+  { A focused control's input context was told at the window's activation whether the
+    system's composition window is wanted (WMImeSetContext); no activation comes now, so it
+    is told again: read-only, the system's window shows what is typed (the memo's way);
+    editable, the composition is shown in the text. }
+  if HasCaretFocus and not (csDestroying in ComponentState) then
+    if ImeIsReadOnly then ImeSetContextDefault(1, FImeContextL)
+    else ImeSetContextDefault(1, FImeContextL and not ISC_SHOWUICOMPOSITIONWINDOW);
 end;
 
 procedure TTyCustomRichEdit.SetScrollBarAutoHide(AValue: TTyScrollBarAutoHide);
@@ -3671,6 +3691,13 @@ begin
 end;
 
 procedure TTyCustomRichEdit.CopyToClipboard;
+begin
+  // nothing selected: nothing put there, the clipboard keeps what it had
+  if not HasSelection then Exit;
+  CopyRange(GetSelStart, GetSelLength);
+end;
+
+procedure TTyCustomRichEdit.CopyRange(AStart, ALen: TTyRichPos);
 var
   s, n: TTyRichPos;
   rtf: RawByteString;
@@ -3678,10 +3705,8 @@ var
   st: TTyRichStringOut;
   wait: Boolean;
 begin
-  // nothing selected: nothing put there, the clipboard keeps what it had
-  if not HasSelection then Exit;
-  s := GetSelStart;
-  n := GetSelLength;
+  s := AStart;
+  n := ALen;
   wait := n > FCopyWaitChars;
   if wait then BeginWait;
   try
@@ -3768,10 +3793,12 @@ var
   c, a: TTyRichPos;
   atEnd, wasModified, ok: Boolean;
   marks: TTyRichStepMarks;
-  refusal: string;
+  refusal, cannot: string;
 begin
   Result := False;
   refusal := '';
+  // (asked before: a command the document refuses is freed by it)
+  cannot := CommandRefusal(ACmd);
   c := FCaret;
   a := FSelAnchor;
   atEnd := FCaretAtEnd;
@@ -3814,8 +3841,8 @@ begin
   end;
   if not ok then
   begin
-    // CanExecute said no: the built-in commands ask CanChange, a row that holds a nested table
-    Refuse(rsRichEditRefusedFixedRow, AUser);
+    // CanExecute said no: the reason that holds for that command
+    Refuse(cannot, AUser);
     Exit;
   end;
   // (a command that changed nothing is not kept and reported nothing: the caret stays)
@@ -3823,6 +3850,16 @@ begin
   { The step it became - its own, or the run of typing it merged into: the newest of the
     history (inside the document's update it went into the update's block: no step yet). }
   if Result and not FDoc.Updating then FEditStep := FDoc.UndoStep;
+end;
+
+function TTyCustomRichEdit.CommandRefusal(ACmd: TTyRichCommand): string;
+begin
+  // (the engine's composite says FixedRow for the same parts: tyControls.RichEdit.Commands)
+  if (ACmd is TTyRichInsertText) or (ACmd is TTyRichDelete) or (ACmd is TTyRichInsertObject) or
+    (ACmd is TTyRichInsertFragment) then
+    Result := rsRichEditRefusedFixedRow
+  else
+    Result := rsRichEditRefusedRange;
 end;
 
 procedure TTyCustomRichEdit.FinishEdit(AAnchor, ACaret: TTyRichPos; AAtEnd: Boolean;
@@ -4111,14 +4148,14 @@ begin
   if (ck = nil) or (AFrom <> t.ParaStart(k)) then Exit;
   // from a row's first paragraph
   if (k > 0) and (FDoc.CellAt(k - 1) <> nil) and (FDoc.CellAt(k - 1).Row = ck.Row) then Exit;
-  // to the start of the paragraph after a row of the same table (or the text's end)
-  if ATo >= t.Length then
-    m := t.ParaCount
-  else
-  begin
-    m := t.ParaOfPos(ATo);
-    if (m = 0) or (ATo <> t.ParaStart(m)) then Exit;
-  end;
+  { To the start of the paragraph after a row of the same table. Not to the text's end: a
+    range that ends there ends inside a table that ends the text (only code makes one: a
+    file read from RTF ends after its last row), whose last paragraph has no separator to
+    go with it - the engine would leave it in its cell and the row's other cells with no
+    paragraph. Refused, until Task 12's table editing. }
+  if ATo >= t.Length then Exit;
+  m := t.ParaOfPos(ATo);
+  if (m = 0) or (ATo <> t.ParaStart(m)) then Exit;
   cl := FDoc.CellAt(m - 1);
   if (cl = nil) or (cl.Row.Table <> ck.Row.Table) then Exit;
   if m < t.ParaCount then
@@ -4164,14 +4201,13 @@ begin
     { One that crosses a cell's or a row's edge is refused: the engine would merge paragraphs
       of two cells and leave a cell with no paragraph, no place for the caret. Whole rows,
       from a row's start to a row's end, the engine deletes cleanly. }
-    if (ck <> cm) and not WholeRows(AStart, AStart + ALen) then
-    begin
-      Result := False;
-      Refuse(rsRichEditRefusedCells, True);
-    end;
+    if (ck <> cm) and not WholeRows(AStart, AStart + ALen) then Result := False;
   finally
     FDoc.EndRead;
   end;
+  { Told once the read scope is closed: a handler that loads a document (or waits on a
+    dialog) must not meet it open. }
+  if not Result then Refuse(rsRichEditRefusedCells, True);
 end;
 
 procedure TTyCustomRichEdit.LeaveList(AIndex: Integer);
@@ -4180,6 +4216,27 @@ begin
   if RunEdit(TTyRichSetParaFormat.Create(AIndex, AIndex, [pffList, pffLeftIndent,
     pffFirstIndent], TyDefaultParaFormat), True) then
     FinishEdit(FCaret, FCaret, FCaretAtEnd);
+end;
+
+type
+  // a form's own key-press dispatch (protected in TWinControl)
+  TRichKeyAccess = class(TWinControl)
+  end;
+
+{ A form among AControl's parents with KeyPreview took AKey (its DoUTF8KeyPress: the form's
+  OnUTF8KeyPress cleared it), as LCL asks them before a control's own key-press event. }
+function FormsTakeKey(AControl: TWinControl; var AKey: TUTF8Char): Boolean;
+var
+  p: TWinControl;
+begin
+  Result := False;
+  p := AControl.Parent;
+  while p <> nil do
+  begin
+    if (p is TCustomForm) and TCustomForm(p).KeyPreview and
+      TRichKeyAccess(p).DoUTF8KeyPress(AKey) then Exit(True);
+    p := p.Parent;
+  end;
 end;
 
 function TTyCustomRichEdit.AskCommitKeys(const AText: UTF8String): UTF8String;
@@ -4206,6 +4263,9 @@ begin
       Continue;
     end;
     k := c;
+    { As LCL's DoUTF8KeyPress asks a typed character: each parent form with KeyPreview first
+      (its OnUTF8KeyPress may take it, or change it), then the control's own. }
+    if FormsTakeKey(Self, k) then Continue;
     inherited UTF8KeyPress(k);
     if k = '' then Continue;
     if not TyAskKeyPress(Self, k) then Continue;
@@ -4229,13 +4289,18 @@ begin
   // refused before anything is copied: a cut that cannot delete is no cut
   if not EditAllowed(s, n, False, AUser) then Exit;
   if AUser and not UserRangeAllowed(s, n) then Exit;
-  CopyToClipboard;
+  { The clipboard gets what is removed: the range R57 may have shortened (the paragraph end
+    kept before a table stays, and is not copied); a selection that was only that end
+    removes nothing and copies nothing. }
   if n = 0 then Exit;
+  CopyRange(s, n);
   if RunEdit(TTyRichDelete.Create(s, n), AUser) then FinishEdit(FEditChange.Pos, FEditChange.Pos);
 end;
 
 procedure TTyCustomRichEdit.CutToClipboard;
 begin
+  // a user's action in an application's hands (EndCompositionForUser's list)
+  EndCompositionForUser;
   CutSelection(False);
 end;
 
@@ -4373,9 +4438,40 @@ begin
   Result := Integer(Min(w, Int64(High(Integer))));
 end;
 
+{ The text of RTF from a clipboard, for a plain text document: its paragraphs (a table's cells
+  each one, as they are in the text) with no format and no object; a paragraph mark at its end
+  is a line break at the end. '' when it is no RTF or holds no text. }
+function RtfAsText(const ARtf: RawByteString): RawByteString;
+var
+  b: TBytes;
+  d: TTyRichDocument;
+  ends: Boolean;
+begin
+  Result := '';
+  if ARtf = '' then Exit;
+  b := nil;
+  SetLength(b, Length(ARtf));
+  Move(ARtf[1], b[0], Length(ARtf));
+  d := TyRichReadRtfFragment(b, ends);
+  if d = nil then Exit;
+  try
+    Result := d.Text.GetText(0, d.Text.Length);
+    Result := StringReplace(Result, TyRichObjectChar, '', [rfReplaceAll]);
+    if ends then Result := Result + #10;
+  finally
+    d.Free;
+  end;
+end;
+
 function TTyCustomRichEdit.CanPaste: Boolean;
 begin
-  Result := not FReadOnly and IsEnabled and (RefusalReason = '') and (ClipboardFlavours <> []);
+  Result := not FReadOnly and IsEnabled and (RefusalReason = '');
+  if not Result then Exit;
+  // a plain text document takes text only: a picture alone is no paste (R60)
+  if PlainTextDocument then
+    Result := ClipboardFlavours * [rcfRtf, rcfText] <> []
+  else
+    Result := ClipboardFlavours <> [];
 end;
 
 procedure TTyCustomRichEdit.PasteFromClipboard(AAs: TTyRichPasteAs);
@@ -4435,9 +4531,41 @@ begin
   waiting := False;
   cmd := nil;
   try
+    { A plain text document (R60): its formats and pictures cannot be saved, so a paste takes
+      text only - the text flavour, else the RTF's text (no formats, no objects, a table's
+      cells as paragraphs); a picture is refused, and so is an explicit RTF or picture. }
+    if PlainTextDocument then
+    begin
+      if AAs in [rpaRtf, rpaPicture] then
+      begin
+        EditRefused(rsRichEditRefusedPlainPaste);
+        Exit;
+      end;
+      if Wanted(rcfText) then
+      begin
+        raw := ReadClipboardText;
+        Wait(Length(raw));
+        txt := PastedText(raw);
+        raw := '';
+      end;
+      if (txt = '') and Wanted(rcfRtf) then
+      begin
+        rtf := ReadClipboardRtf;
+        Wait(Length(rtf));
+        txt := PastedText(RtfAsText(rtf));
+        rtf := '';
+      end;
+      if txt <> '' then
+        cmd := TTyRichInsertText.Create(s, txt, fmt, False)
+      else if rcfPicture in have then
+      begin
+        EditRefused(rsRichEditRefusedPlainPaste);
+        Exit;
+      end;
+    end;
     { RTF cannot be used when it is no RTF (no signature), reading it raised, or it holds no
       character and no paragraph mark: the next flavour then. }
-    if Wanted(rcfRtf) then
+    if (cmd = nil) and not PlainTextDocument and Wanted(rcfRtf) then
     begin
       rtf := ReadClipboardRtf;
       Wait(Length(rtf));
@@ -4456,7 +4584,7 @@ begin
       end;
     end;
     { A picture cannot be used when its bytes do not decode; one too large is refused. }
-    if (cmd = nil) and Wanted(rcfPicture) then
+    if (cmd = nil) and not PlainTextDocument and Wanted(rcfPicture) then
     begin
       bytes := ReadClipboardPicture(kind);
       Wait(Length(bytes));
@@ -4471,7 +4599,7 @@ begin
         end;
       bytes := nil;
     end;
-    if (cmd = nil) and Wanted(rcfText) then
+    if (cmd = nil) and not PlainTextDocument and Wanted(rcfText) then
     begin
       raw := ReadClipboardText;
       Wait(Length(raw));
@@ -4564,11 +4692,14 @@ end;
 
 procedure TTyCustomRichEdit.Undo;
 begin
+  // a user's action in an application's hands (EndCompositionForUser's list)
+  EndCompositionForUser;
   RunHistory(False, False);
 end;
 
 procedure TTyCustomRichEdit.Redo;
 begin
+  EndCompositionForUser;
   RunHistory(True, False);
 end;
 
@@ -5344,7 +5475,12 @@ end;
   ends first, committed as a press commits it (what the input method has goes in where it was
   shown), so that the action works on the document the user sees: never on the text under a
   composition, nor a commit on a selection the action made (Ctrl+A, then a commit replacing
-  everything). Copying, moving the caret, scrolling and zooming do not end it. }
+  everything). Copying, moving the caret, scrolling and zooming do not end it.
+  The public methods that are a user's actions in an application's hands - an action list's
+  shortcut (the form takes it before KeyDown), a toolbar button that never takes the focus -
+  come through it too (fix wave W13): CutToClipboard, PasteFromClipboard, Undo, Redo. Not the
+  ones that are code: SelText :=, SelectAll, the setters, Lines, the document's own API (a
+  composition follows such a change, and its commit goes where it moved). }
 procedure TTyCustomRichEdit.EndCompositionForUser;
 begin
   if FComposing or FImeRefused then EndComposition(True);
@@ -5621,6 +5757,8 @@ end;
 
 procedure TTyCustomRichEdit.WMImeSetContext(var Message: TLMessage);
 begin
+  // what the activation asks to show, told again when ReadOnly changes (SetReadOnly)
+  if Message.WParam <> 0 then FImeContextL := Message.LParam;
   if (csDestroying in ComponentState) or (Message.WParam = 0) or ImeIsReadOnly then
   begin
     // as it came (read-only: the system's window shows the composition, as the memo's does)

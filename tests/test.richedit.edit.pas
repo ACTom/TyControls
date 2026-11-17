@@ -33,6 +33,7 @@ type
   protected
     procedure EditRefused(const AReason: string); override;
     function TypingFormat: TTyCharFormatId; override;
+    function PlainTextDocument: Boolean; override;
   public
     Refused: Integer;
     LastReason: string;
@@ -42,6 +43,12 @@ type
     { One character typed (UTF8KeyPress, as LCL delivers it). }
     procedure Key8(const AChar: RawByteString);
     procedure Leave;
+  public
+    { A document set through Lines.Text taken as a rich one (fix wave W13: R60 makes a plain
+      text document paste text only; the paste suite's documents typed in are rich ones). }
+    RichDocument: Boolean;
+    { RunEdit as a user's edit (fix wave W13: a command of the application's own). }
+    function RunUser(ACmd: TTyRichCommand): Boolean;
   end;
 
   TTyRichEditEditTest = class(TTestCase)
@@ -79,6 +86,8 @@ type
     procedure SetVariedLines(ACount: Integer; const ALong: string = ''; ALongAt: Integer = -1);
     procedure EdgeCases(AScale: Integer);
     procedure RefusedEdits(Sender: TObject; const AReason: string);
+    // fix wave W13: an OnEditRefused that loads a document
+    procedure LoadOnRefusal(Sender: TObject; const AReason: string);
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -124,6 +133,11 @@ type
     procedure TestTheMenuReadOnlyAndCtrlTabOfAnEditor;
     procedure TestListItemsAndJoinsByKey;
     procedure TestShiftEnterInATextDocumentMakesAParagraph;
+    // fix wave W13
+    procedure TestARefusalAcrossCellsIsToldOutsideTheReadScope;
+    procedure TestWholeRowsAtTheTextsEndAreRefused;
+    procedure TestACutCopiesWhatItRemoves;
+    procedure TestARefusedCommandIsToldItsOwnReason;
   end;
 
 implementation
@@ -275,6 +289,16 @@ procedure TEditProbe.Leave;
 begin
   Perform(LM_KILLFOCUS, 0, 0);
   DoExit;
+end;
+
+function TEditProbe.PlainTextDocument: Boolean;
+begin
+  Result := inherited PlainTextDocument and not RichDocument;
+end;
+
+function TEditProbe.RunUser(ACmd: TTyRichCommand): Boolean;
+begin
+  Result := RunEdit(ACmd, True);
 end;
 
 { ---- the suite ---- }
@@ -2514,6 +2538,168 @@ begin
   FRich.SelStart := 2;
   FRich.KeyResult(VK_RETURN, [ssShift]);
   AssertEquals('a text file: a paragraph too', 3, d.Text.ParaCount);
+end;
+
+{ ---- fix wave W13 ---- }
+
+type
+  // a command of an application's own whose CanExecute refuses (not a fixed row)
+  TRefusingCommand = class(TTyRichCommand)
+  protected
+    procedure DoExecute(ADoc: TTyRichDocument); override;
+  public
+    function CanExecute(ADoc: TTyRichDocument): Boolean; override;
+  end;
+
+  // MarkTable, which only a command may call otherwise
+  TEditDocAccess = class(TTyRichDocument)
+  end;
+
+procedure TRefusingCommand.DoExecute(ADoc: TTyRichDocument);
+begin
+end;
+
+function TRefusingCommand.CanExecute(ADoc: TTyRichDocument): Boolean;
+begin
+  Result := False;
+end;
+
+procedure TTyRichEditEditTest.LoadOnRefusal(Sender: TObject; const AReason: string);
+begin
+  Inc(FRefusedEvents);
+  FRich.Lines.Text := 'loaded by the handler';
+end;
+
+{ Q-M5: the across-cells refusal is told after the read scope closed: a handler that loads a
+  document there loads it (before: ETyRichModel out of the key). }
+procedure TTyRichEditEditTest.TestARefusalAcrossCellsIsToldOutsideTheReadScope;
+var
+  d: TTyRichDocument;
+  t: TTyRichText;
+  k: Integer;
+begin
+  LoadBytes(FixtureFile('re-zh-table.rtf'));
+  FRich.FinishLoading;
+  FRich.UpdateView;
+  d := FRich.Document;
+  t := d.Text;
+  k := -1;
+  for k := 0 to t.ParaCount - 2 do
+    if (d.CellAt(k) <> nil) and (d.CellAt(k + 1) <> nil) and (d.CellAt(k) <> d.CellAt(k + 1)) and
+      (t.ParaLength(k + 1) > 0) then Break;
+  AssertTrue('two cells side by side', (k >= 0) and (k < t.ParaCount - 1));
+  FRich.SelStart := t.ParaStart(k);
+  FRich.SelLength := t.ParaStart(k + 1) + 1 - t.ParaStart(k);
+  FRefusedEvents := 0;
+  FRich.OnEditRefused := @LoadOnRefusal;
+  try
+    Press(VK_DELETE);
+  finally
+    FRich.OnEditRefused := nil;
+  end;
+  AssertEquals('told once', 1, FRefusedEvents);
+  AssertEquals('the handler loaded its document', 'loaded by the handler', Trim(FRich.Lines.Text));
+end;
+
+{ Q-M6: whole rows of a table that ends the text (made by code: no RTF file ends inside a
+  table) are refused until Task 12 - its last paragraph has no separator to go with it, and the
+  engine would leave the row's other cells with none. The first row of the same table is whole
+  rows the engine deletes cleanly. }
+procedure TTyRichEditEditTest.TestWholeRowsAtTheTextsEndAreRefused;
+var
+  d: TTyRichDocument;
+  t: TTyRichText;
+  tb: TTyRichTable;
+  i: Integer;
+begin
+  SetText('a' + LineEnding + 'b' + LineEnding + 'c' + LineEnding + 'd');
+  d := FRich.Document;
+  t := d.Text;
+  tb := TTyRichTable.Create([1440, 2880]);
+  tb.AddRow(2, '\trowd\trgaph108\cellx1440\cellx2880');
+  tb.AddRow(2, '\trowd\trgaph108\cellx1440\cellx2880');
+  TEditDocAccess(d).MarkTable(0, tb, [1, 1, 1, 1]).Free;
+  FRich.UpdateView;
+  AssertTrue('the last paragraph is in a cell', d.CellAt(3) <> nil);
+  // the last row, to the text's end
+  FRich.SelStart := t.ParaStart(2);
+  FRich.SelLength := t.Length - t.ParaStart(2);
+  ResetEvents;
+  Press(VK_DELETE);
+  AssertEquals('the last row: refused', 1, FRich.Refused);
+  AssertEquals('across cells', rsRichEditRefusedCells, FRich.LastReason);
+  AssertEquals('nothing deleted', 4, t.ParaCount);
+  for i := 0 to 3 do AssertTrue(Format('paragraph %d in its cell', [i]), d.CellAt(i) <> nil);
+  // everything
+  FRich.SelectAll;
+  ResetEvents;
+  Press(VK_DELETE);
+  AssertEquals('everything: refused', 1, FRich.Refused);
+  AssertEquals('everything: nothing deleted', 4, t.ParaCount);
+  // the first row: whole rows, deleted
+  FRich.SelStart := 0;
+  FRich.SelLength := t.ParaStart(2);
+  ResetEvents;
+  Press(VK_DELETE);
+  AssertEquals('the first row: not refused', 0, FRich.Refused);
+  AssertEquals('the first row went', 2, t.ParaCount);
+  AssertTrue('the second row''s cells keep their paragraphs',
+    (d.CellAt(0) <> nil) and (d.CellAt(1) <> nil) and (d.CellAt(0) <> d.CellAt(1)));
+  AssertEquals('the text is whole', '', t.CheckIntegrity);
+end;
+
+{ Q-M10: when R57 keeps the paragraph end before a table (a selection from the text before it
+  to the start of its first row), a cut puts on the clipboard what it removes - without that
+  separator; a selection that is only that separator removes nothing and copies nothing. }
+procedure TTyRichEditEditTest.TestACutCopiesWhatItRemoves;
+var
+  d: TTyRichDocument;
+  t: TTyRichText;
+  kt, k, writes: Integer;
+  wanted: string;
+begin
+  LoadBytes(FixtureFile('re-zh-table.rtf'));
+  FRich.FinishLoading;
+  FRich.UpdateView;
+  d := FRich.Document;
+  t := d.Text;
+  kt := -1;
+  for k := 1 to t.ParaCount - 1 do
+    if (d.CellAt(k) <> nil) and (d.CellAt(k - 1) = nil) and (t.ParaLength(k - 1) > 0) then
+    begin
+      kt := k;
+      Break;
+    end;
+  AssertTrue('a paragraph with text before a table', kt > 0);
+  wanted := FRich.Lines[kt - 1];
+  FRich.SelStart := t.ParaStart(kt - 1);
+  FRich.SelLength := t.ParaStart(kt) - t.ParaStart(kt - 1);
+  writes := FRich.ClipWrites;
+  Press(VK_X, [ssCtrl]);
+  AssertEquals('cut', writes + 1, FRich.ClipWrites);
+  AssertEquals('the clipboard has what went: the text, not the end kept', wanted, FRich.ClipText);
+  AssertEquals('the paragraph before the table stays, empty', '', FRich.Lines[kt - 1]);
+  AssertTrue('before the table still', d.CellAt(kt - 1) = nil);
+  // only that separator: nothing removed, nothing copied
+  FRich.SelStart := t.ParaStart(kt) - 1;
+  FRich.SelLength := 1;
+  writes := FRich.ClipWrites;
+  Press(VK_X, [ssCtrl]);
+  AssertEquals('only the end kept: nothing copied', writes, FRich.ClipWrites);
+  AssertTrue('before the table still', d.CellAt(kt - 1) = nil);
+end;
+
+{ Q-O2: a command whose CanExecute refuses for a reason of its own (a command of Task 11, of an
+  application) is told as a range that cannot be edited - not as a row with a nested table,
+  which stays the reason of the engine's own text commands. }
+procedure TTyRichEditEditTest.TestARefusedCommandIsToldItsOwnReason;
+begin
+  SetText('abc');
+  ResetEvents;
+  AssertFalse('refused', FRich.RunUser(TRefusingCommand.Create));
+  AssertEquals('told once', 1, FRich.Refused);
+  AssertEquals('as a range that cannot be edited', rsRichEditRefusedRange, FRich.LastReason);
+  AssertEquals('nothing changed', 'abc', FRich.Lines[0]);
 end;
 
 initialization
