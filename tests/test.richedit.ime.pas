@@ -1974,7 +1974,9 @@ begin
   AssertTrue('the caret was snapped', base <> 1);
   ime.ImeReplace(base, 0, 'n');
   ime.ImeReplace(base, 1, 'ni');
-  AssertEquals('counted from the snapped caret', 'ni', string(FRich.CompositionText));
+  // (the snap may go back, where a clamp hides the difference: one more past it shows it)
+  ime.ImeReplace(base + 2, 0, 'h');
+  AssertEquals('counted from the snapped caret', 'nih', string(FRich.CompositionText));
   ime.ImeSessionEnd;
 end;
 
@@ -2354,6 +2356,16 @@ begin
   AssertEquals('committed in the cell', 'abcdXY efgh', FRich.Lines[0]);
   AssertTrue('still in it', d.CellAt(0) <> nil);
   AssertEquals('the caret behind it', Int64(6), FRich.CaretPos);
+  // in the second cell: the rectangle told is that cell's (its offset in the row applied)
+  c2 := t.ParaStart(1);
+  cell1 := FRich.PositionRect(c2 + 2);
+  FRich.SelStart := c2 + 2;
+  FRich.UpdateComposition('XY');
+  r := FRich.ImeRect;
+  AssertTrue(Format('the caret told in the second cell (%d, behind %d)', [r.Left, cell1.Left]),
+    r.Left > cell1.Left);
+  AssertEquals('in its line', cell1.Top, r.Top);
+  FRich.CancelComposition;
 end;
 
 initialization
