@@ -5167,7 +5167,7 @@ begin
   FRich.SelectAll;
   PaintAll(True);
   AssertTrue('all selected: more', SurfaceCount(sel) > part);
-  FRich.ClearSelection;
+  FRich.CollapseSelection;
   PaintAll(True);
   AssertEquals('none again', 0, SurfaceCount(sel));
 end;

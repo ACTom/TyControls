@@ -1186,7 +1186,7 @@ type
     Count: Integer;
   end;
 const
-  CAllowed: array[0..4] of TAllowed = (
+  CAllowed: array[0..5] of TAllowed = (
     { TyConfigureMeasureFont itself: a pixel Height, the only measuring font there is.
       And two copies of BGRA's own scratch-canvas steps on the surfaces the painter keeps
       (measuring, and turned text): each sets the kept canvas's font Height to the Height
@@ -1203,7 +1203,11 @@ const
     { The tree's OnPaintText (#166): the canvas handed to the host carries the size the text
       will be drawn at, and the size the host leaves on it is read back. Nothing is measured
       with that font. }
-    (Name: 'tyControls.TreeView.pas'; Count: 1));
+    (Name: 'tyControls.TreeView.pas'; Count: 1),
+    { The rich edit's DefAttributes.Size (Task 11a): the application's value for the control's
+      own Font, as Delphi's DefAttributes writes it - the base the text is shown in, which the
+      theme's resolve reads; nothing is measured with it there. }
+    (Name: 'tyControls.RichEdit.pas'; Count: 1));
 var
   files, sl, bad: TStringList;
   i, k, n, want, seen: Integer;

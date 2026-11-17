@@ -926,6 +926,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.RichEdit.RowFormat"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.RichEdit.Attrs.pas"/>
+        <UnitName Value="tyControls.RichEdit.Attrs"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.RichEdit.pas"/>
         <UnitName Value="tyControls.RichEdit"/>
       </Item>

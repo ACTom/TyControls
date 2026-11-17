@@ -67,7 +67,7 @@ uses
   tyControls.ScrollBar, tyControls.TextMenu, tyControls.Controller,
   tyControls.RichEdit.Text, tyControls.RichEdit.Model, tyControls.RichEdit.Commands,
   tyControls.RichEdit.TextIO, tyControls.RichEdit.RtfRead, tyControls.RichEdit.RtfWrite,
-  tyControls.RichEdit.Layout;
+  tyControls.RichEdit.Layout, tyControls.RichEdit.Attrs;
 
 const
   CRichZoomMin = 10;
@@ -244,6 +244,17 @@ type
     procedure Clear; override;
     procedure Delete(Index: Integer); override;
     procedure Insert(Index: Integer; const S: string); override;
+    { As Delphi's TRichEdit.Lines (Task 11a): the control's load and save without a format
+      (LoadFromFile, LoadFromStream, SaveToFile, SaveToStream with rfAuto) - plain text as
+      PlainText says, else by the file (RTF by its signature, else text; SaveToFile by the
+      extension, else as the content came, SaveToStream as the content came). So a rich control's Lines.SaveToFile writes RTF and
+      its Lines.LoadFromFile reads one, and the load decides PlainText (the document follows
+      the file, R65). Inside the lines' BeginUpdate .. EndUpdate they read and write the lines
+      as TStrings does. }
+    procedure LoadFromFile(const FileName: string); overload; override;
+    procedure LoadFromStream(Stream: TStream); overload; override;
+    procedure SaveToFile(const FileName: string); overload; override;
+    procedure SaveToStream(Stream: TStream); overload; override;
   end;
 
   { A block the view holds: its layout (with a reference), the paragraphs it covers as the
@@ -488,6 +499,53 @@ type
       nowhere - it went in, or was dropped, when the control ended it). }
     FCocoaSession, FCocoaSwallow: Boolean;
     FInBridge: Integer;
+    { The format API (Task 11a): the two façades' objects; the plain-text state (R65); the
+      pending typing format - a format chosen with nothing selected, for the next typed text
+      at FPendingAt (FHasPendingFmt); inside a façade's write (FApiWrite: the selection is
+      kept as it is and the pending format with it, the view does not scroll). }
+    FSelAttributes, FDefAttributes: TTyRichTextAttributes;
+    FParagraph: TTyRichParaAttributes;
+    FPlainText: Boolean;
+    { PlainText was set True by code or the Object Inspector (not by a text file's load): only
+      then does a load without a format read text whatever the file is. }
+    FPlainTextAsked: Boolean;
+    FPendingFmt: TTyCharFormatId;
+    FHasPendingFmt: Boolean;
+    FPendingAt: TTyRichPos;
+    FApiWrite: Integer;
+    FOnModifiedChange: TNotifyEvent;
+    procedure DocModifiedChanged(Sender: TObject);
+    procedure SetSelAttributes(AValue: TTyRichTextAttributes);
+    procedure SetDefAttributes(AValue: TTyRichTextAttributes);
+    procedure SetParagraph(AValue: TTyRichParaAttributes);
+    procedure SetPlainTextState(AValue: Boolean);
+    { The base text without a format of its own is shown in (the control's Font over the
+      theme): name, size in half points, style, colour, charset. }
+    function BaseCharFormat: TTyCharFormat;
+    { The base size in half points (the layouter's BaseFontSizeHalfPt) for AStyle. }
+    function BaseHalfPt(const AStyle: TTyStyleSet): Integer;
+    { ... and its name: never '' (the Font's when neither the theme nor the platform names
+      one). }
+    function BaseFontName(const AStyle: TTyStyleSet): string;
+    procedure SetBaseCharFormat(AMask: TTyCharFormatMask; const AValue: TTyCharFormat);
+    { AFormat with the base filled in where it has none of its own (a name, a size). }
+    function ResolvedFormat(const AFormat: TTyCharFormat): TTyCharFormat;
+    { The format of the character at APos (the paragraph's last run's at its end). }
+    function CharFormatIdAt(APos: TTyRichPos): TTyCharFormatId;
+    { The fields that are the same over [AStart, AStart + ALen): the paragraphs' runs walked
+      until every field differed. }
+    function RangeConsistency(AStart, ALen: TTyRichPos): TTyCharFormatMask;
+    { The paragraphs [AStart, AStart + ALen) touches: a range that ends at a paragraph's very
+      start does not touch it; an empty range, its paragraph. }
+    procedure ParasOfRange(AStart, ALen: TTyRichPos; out AFirst, ALast: Integer);
+    { The one door of the façades' writes: see the façades' declarations. }
+    procedure RunApiEdit(ACmd: TTyRichCommand; AChars: TTyRichPos);
+    procedure ApiCharFormat(AStart, ALen: TTyRichPos; AMask: TTyCharFormatMask;
+      const AValue: TTyCharFormat);
+    procedure ApiParaFormat(AStart, ALen: TTyRichPos; AMask: TTyParaFormatMask;
+      const AValue: TTyParaFormat);
+    function ParaFormatAt(APos: TTyRichPos; out AFormat: TTyParaFormat): Boolean;
+  private
     // events
     FOnSelectionChange: TNotifyEvent;
     FOnChange: TNotifyEvent;
@@ -1071,12 +1129,12 @@ type
     procedure UTF8KeyPress(var UTF8Key: TUTF8Char); override;
     { The character format the next typed text gets: with a selection, its first
       character's (it is typed over); else the character's before the caret in its paragraph,
-      at a paragraph's start the one's after it (TTyRichDocument.TypingFormatAt). The one
-      place a pending format (a format chosen with nothing selected, Task 11) comes in. }
+      at a paragraph's start the one's after it (TTyRichDocument.TypingFormatAt) - unless a
+      pending format was chosen at the caret with nothing selected (Task 11a: see the format
+      API), which comes first. }
     function TypingFormat: TTyCharFormatId; virtual;
-    { The document is plain text - read from a text file, set as text (Lines), or saved as one
-      - where a key makes no line break inside a paragraph (Shift+Enter makes a paragraph). The
-      seam for the PlainText state Task 11 publishes. }
+    { The document is plain text (PlainText, R65): a key makes no line break inside a
+      paragraph (Shift+Enter makes a paragraph), a paste takes text only (R60). }
     function PlainTextDocument: Boolean; virtual;
     { An edit the user asked for (a key, the menu) was not made: the document is loading,
       incomplete after a cancelled load or being saved, a row that holds a nested table
@@ -1204,7 +1262,13 @@ type
       move. Nothing is laid out or walked: only what is on screen is painted again. Inside an
       update: as SelStart (the end is the text's end at that moment, clamped when it ends). }
     procedure SelectAll;
-    { The selection collapses onto the caret. }
+    { The selection collapses onto the caret: the text stays (what ClearSelection did before
+      Task 11a; Delphi's and LCL's ClearSelection delete the selection). }
+    procedure CollapseSelection;
+    { Deletes the selection, as the Delete key does - a user's action (R66): an open
+      composition ends first; with ReadOnly or disabled nothing happens; a refusal is told
+      (EditRefused), never raised; one undo step. Nothing selected: nothing. As Delphi's
+      TCustomEdit.ClearSelection. }
     procedure ClearSelection;
     { The least scroll that shows the caret's line whole (and, where the text scrolls across,
       the caret with a line's height of room). }
@@ -1240,9 +1304,19 @@ type
       of its own (on Windows the text again as UTF-16, and each flavour in a global block) -
       a copy of a very large selection needs several times its size for a moment. }
     procedure CopyToClipboard;
-    { Copy, then the selection goes: one undo step. Nothing selected: nothing. An edit from
-      code (ReadOnly does not stop it; a refusal raises ETyRichEdit, before anything is
-      copied). }
+    { Copy, then the selection goes: one undo step. Nothing selected: nothing. A user's action
+      (R66), as Ctrl+X: an open composition ends first; with ReadOnly or disabled nothing
+      happens (nothing is copied); a refusal is told (EditRefused) before anything is
+      copied, never raised.
+
+      Two kinds of public methods change the document. The USER's actions - CutToClipboard,
+      PasteFromClipboard, ClearSelection, Undo, Redo, what an application wires to its
+      toolbar and menu - behave as their keys: they respect ReadOnly (and do nothing on a
+      disabled control) and never raise for a refusal, which is told through EditRefused.
+      CopyToClipboard and SelectAll always work. The document API - SelText :=, Lines, the
+      two format façades (SelAttributes, DefAttributes, Paragraph, SetTextAttributes and the
+      other RichMemo-style methods), Document.Execute - edits regardless of ReadOnly and
+      raises what the engine raises (ETyRichEdit for a refusal). }
     procedure CutToClipboard;
     { Ctrl+V, Shift+Insert and the menu's Paste: the user's paste, and an application's (its
       own menu item, "paste as plain text" with rpaText). A user's action from any of them:
@@ -1281,12 +1355,13 @@ type
     { The control can be edited by the user now (not ReadOnly, enabled, the document taking
       edits) and the clipboard holds a flavour it takes. Reads nothing (ClipboardFlavours). }
     function CanPaste: Boolean;
-    { One step of the document's history back / forward (Ctrl+Z, Ctrl+Y). After an undo the
-      text the step put back is selected (an undone deletion, a typing over a selection) or,
-      when it put back none (an undone insertion), the caret is where that text was; after a
-      redo the caret is at the end of what the step changed. Nothing to undo / redo: nothing.
-      From code: not refused by ReadOnly; while the document is being saved (or is loading,
-      or incomplete) it raises ETyRichEdit. }
+    { One step of the document's history back / forward (Ctrl+Z, Ctrl+Y). An undo puts the
+      selection back as it was before the step (a step made by code: what it put back is
+      selected); after a redo the caret is where the step left it. Nothing to undo / redo:
+      nothing. A user's action (R66), as the keys: an open composition ends first; with
+      ReadOnly or disabled nothing happens; while the document is being saved (or is loading,
+      or incomplete) the refusal is told (EditRefused), never raised. Code that must undo on
+      a read-only control calls Document.Undo. }
     procedure Undo;
     procedure Redo;
     { The document's: there is a step to undo / redo now. }
@@ -1354,6 +1429,117 @@ type
     procedure ImeSessionBegin;
     procedure ImeSessionEnd;
     procedure ImeReplace(AStart, ALen: Integer; const AText: string);
+
+    { ---- the format API (Task 11a) ----
+
+      Two façades over the same engine, Delphi's TRichEdit (SelAttributes, DefAttributes,
+      Paragraph) and Lazarus' RichMemo (SetTextAttributes .. GetParaTabs): thin layers - each
+      write is ONE command of the document (TTyRichSetCharFormat / TTyRichSetParaFormat) that
+      changes the attributes it names and leaves the others as each character or paragraph
+      has them, one undo step; the reads ask the document's formats. They are the document
+      API: called from code they edit regardless of ReadOnly (R53: ReadOnly is the user
+      interface's) and raise what the engine raises - ETyRichEdit when the document takes no
+      edit now (loading, incomplete after a cancelled load, being saved), with that reason.
+      An application's toolbar calls them as the user's actions, and so every write behaves
+      as one: an open composition ends first (committed where it was shown); the step keeps
+      the selection from before it (an undo puts it back, R55) and the selection stays as it
+      is (a selection in a cut paragraph's hidden tail too - Select All has it); the view does
+      not scroll; one OnChange, and OnSelectionChange only when the selection changed (the
+      commit of a composition moves it). A write over more than CopyWaitChars characters
+      shows the wait cursor meanwhile (BeginWait); it costs what the command costs: in
+      proportion to the paragraphs it touches - a whole lazily read RTF file is parsed by it.
+      Inside the document's own update (Document.BeginUpdate) a write is a command of that
+      update, reported at its end.
+      What a format write does where the engine keeps things as they are: paragraphs of a
+      table row that holds a nested table are passed over (the rest of the range changes; a
+      range wholly inside such a row changes nothing, but is still one - empty - undo step); a
+      range across cells formats every cell's text in it; a cut paragraph's hidden tail is
+      formatted as the rest of it (it is not shown, but it is saved so).
+
+      The pending typing format: with NOTHING selected, a write of a character attribute
+      (SelAttributes, or SetTextAttributes / SetRangeParams / SetRangeColor of length 0 at the
+      caret) changes no text - it is the format the next typed text gets (TypingFormat), and
+      what SelAttributes reads. No command, no undo step, no OnChange. It lasts until the
+      selection is set again (even to the same place: msftedit's way, fact 6 - the caret then
+      takes its neighbour's format again), an edit other than typing, a change from code, an
+      undo or a redo, or a new content; typing, an input method's commit and a paste of plain
+      text use it once, and the text they put in carries it. A paragraph write with nothing
+      selected changes the caret's paragraph at once (a command). }
+
+    { Delphi's SelAttributes: the selection's character format - reading answers for the
+      selection's first character (nothing selected: the format the next typed text gets),
+      ConsistentAttributes says which attributes the whole selection shares; writing one
+      attribute formats the selection (or sets the pending format). A name or a size the
+      text has none of its own of reads as the base's (DefAttributes). Assign: all at once. }
+    property SelAttributes: TTyRichTextAttributes read FSelAttributes write SetSelAttributes;
+    { Delphi's DefAttributes: what text without a font, a size, a style or a colour of its
+      own is shown in - the control's Font, laid over the theme (TyApplyControlFont): one
+      truth, not two. Reading gives the base as resolved (the theme's font when Font was not
+      set); writing sets Font's name, size, style, colour or charset (no command, no undo
+      step - Delphi's DefAttributes is not undone either - and the whole view laid out
+      again). Its BackColor and VertAlign are always clNone / vaNone: writing them raises
+      ETyRichEdit. A document read from RTF names its own default font and size (\deff,
+      \fs: content, kept and saved), which its plain text shows instead: DefAttributes then
+      reaches only text without a font of its own (text typed in a new document or a text
+      file). }
+    property DefAttributes: TTyRichTextAttributes read FDefAttributes write SetDefAttributes;
+    { Delphi's Paragraph: the paragraph format of the paragraphs the selection touches (see
+      TTyRichParaAttributes; points). }
+    property Paragraph: TTyRichParaAttributes read FParagraph write SetParagraph;
+
+    { RichMemo's style. Positions are this control's: characters as the engine counts them
+      (TTyRichPos - a code point, a paragraph separator one), not RichMemo's UTF-16 units. }
+    { The characters [AStart, AStart + ALen) take AParams' name, size, colour, styles,
+      highlight (HasBkClr False: none) and vertical position, in one command; ALen 0 at the
+      caret with nothing selected: the pending format. ALen 0 elsewhere: nothing. }
+    procedure SetTextAttributes(AStart, ALen: TTyRichPos; const AParams: TTyFontParams); overload;
+    { ... a TFont's name, size, styles, colour and charset. }
+    procedure SetTextAttributes(AStart, ALen: TTyRichPos; AFont: TFont); overload;
+    { The format of the character at APos (at a paragraph's end, its last run's): False when
+      APos is outside the text. Name and size resolved as SelAttributes reads them. }
+    function GetTextAttributes(APos: TTyRichPos; var AParams: TTyFontParams): Boolean;
+    procedure SetRangeColor(AStart, ALen: TTyRichPos; AColor: TColor);
+    { Only what AModifyMask names: tmm_Name the name, tmm_Size the size, tmm_Color the colour,
+      tmm_BackColor the highlight (AParams' HasBkClr / BkColor), tmm_Styles AAddFontStyle
+      put on and ARemoveFontStyle taken off (the other styles each character keeps). }
+    procedure SetRangeParams(AStart, ALen: TTyRichPos; AModifyMask: TTyTextModifyMask;
+      const AFontName: string; AFontSize: Integer; AFontColor: TColor;
+      AAddFontStyle, ARemoveFontStyle: TFontStyles); overload;
+    procedure SetRangeParams(AStart, ALen: TTyRichPos; AModifyMask: TTyTextModifyMask;
+      const AParams: TTyFontParams; AAddFontStyle, ARemoveFontStyle: TFontStyles); overload;
+    { The paragraph APos is in (False: outside the text); the Set methods change the
+      paragraphs [AStart, AStart + ALen) touches, one command each. Points. }
+    function GetParaAlignment(APos: TTyRichPos; var AAlign: TTyParaAlign): Boolean; overload;
+    function GetParaAlignment(APos: TTyRichPos): TTyParaAlign; overload;
+    procedure SetParaAlignment(AStart, ALen: TTyRichPos; AAlign: TTyParaAlign);
+    function GetParaMetric(APos: TTyRichPos; var AMetric: TTyParaMetric): Boolean;
+    { Indents, spaces and the line spacing at once; an exact or at-least spacing the
+      paragraphs have becomes the multiple AMetric gives. }
+    procedure SetParaMetric(AStart, ALen: TTyRichPos; const AMetric: TTyParaMetric);
+    function GetParaNumbering(APos: TTyRichPos; var ANumber: TTyParaNumbering): Boolean;
+    procedure SetParaNumbering(AStart, ALen: TTyRichPos; const ANumber: TTyParaNumbering);
+    function GetParaTabs(APos: TTyRichPos; var AStopList: TTyTabStopList): Boolean;
+    procedure SetParaTabs(AStart, ALen: TTyRichPos; const AStopList: TTyTabStopList);
+    { LoadFromStream(AStream, rfRtf) / SaveToStream(AStream, rfRtf): False when it raised
+      (what the document had stays). }
+    function LoadRichText(AStream: TStream): Boolean;
+    function SaveRichText(AStream: TStream): Boolean;
+    { Delphi's PlainText, the plain-text document state (R65): True - SaveToFile and
+      SaveToStream without an explicit format (and Lines.SaveToFile / SaveToStream) write
+      plain text, a key makes no line break inside a paragraph (Shift+Enter makes a
+      paragraph) and a paste takes text only (R60); set True from code or the Object
+      Inspector, the loads without an explicit format (LoadFromFile, LoadFromStream,
+      Lines.LoadFromFile) read plain text too, whatever the file is, as Delphi's. False - a
+      load goes by the file (RTF by its signature) and a save as the content came
+      (SaveToFile: by the extension first). Only two things set it: a load through the
+      control (the document follows the file: a text file makes it True, an RTF file False;
+      a load that went by the file leaves the next load going by the file - an application
+      that opens a .txt and then a .rtf gets the RTF) and this property. Lines.Text, Text and SelText leave it alone (a rich control filled
+      through Lines stays rich and saves RTF); a new control is rich. Setting it changes no
+      content: a document with formats keeps them, and a save as text then writes its
+      characters only (fonts, colours, paragraph formats, pictures and tables' structure do
+      not go into a text file - a cell's paragraphs as lines). }
+    property PlainText: Boolean read FPlainText write SetPlainTextState default False;
     property Document: TTyRichDocument read FDoc;
     property Layouter: TTyRichLayouter read FLayouter;
     { The view's top in pixels of the document's heights (measured and estimated); -1 inside
@@ -1368,11 +1554,18 @@ type
     property TopOffset: Int64 read GetTopOffset;
     property Loading: Boolean read GetLoading;
     property Incomplete: Boolean read GetIncomplete;
-    { Cleared by SaveToFile in a format that keeps the content (RTF; text for a text
-      document); an RTF document saved as text is an export and stays Modified, with its
+    { The document's (TTyRichDocument.Modified, R59): False exactly when the content is the
+      one last loaded or saved - an undo back to it or a redo forward to it makes it False
+      again; True for good once the history let go of the way back. Cleared by SaveToFile in
+      a format that keeps the content (RTF; text for a text document) - the saved point is
+      set there; an RTF document saved as text is an export and stays Modified, with its
       SourceFile and SourceFormat. SaveToStream never touches Modified, SourceFile or
-      SourceFormat. }
+      SourceFormat. Modified := False sets the saved point at the content as it is. }
     property Modified: Boolean read GetModified write SetModified;
+    { Modified turned (TTyRichDocument.OnModifiedChange: at the end of the edit, the undo,
+      the redo, the load or the save that turned it); OnChange is not raised by Modified
+      alone. }
+    property OnModifiedChange: TNotifyEvent read FOnModifiedChange write FOnModifiedChange;
     { The file the content was loaded from or last saved to ('' when none). }
     property SourceFile: string read FSourceFile;
     property SourceFormat: TTyRichFormat read FSourceFormat;
@@ -1446,8 +1639,10 @@ type
     property TextEncoding;
     property TextCodePage;
     property ScrollBarAutoHide;
+    property PlainText;
     property OnChange;
     property OnSelectionChange;
+    property OnModifiedChange;
     property OnZoomChange;
     property OnEditRefused;
     property OnLoadProgress;
@@ -1808,6 +2003,125 @@ begin
   end;
 end;
 
+{ As Delphi's TRichEdit.Lines: the control's load and save (see the declaration). }
+procedure TTyRichEditLines.LoadFromFile(const FileName: string);
+begin
+  if FUpdating then inherited LoadFromFile(FileName) else FOwner.LoadFromFile(FileName);
+end;
+
+procedure TTyRichEditLines.LoadFromStream(Stream: TStream);
+begin
+  if FUpdating then inherited LoadFromStream(Stream) else FOwner.LoadFromStream(Stream);
+end;
+
+procedure TTyRichEditLines.SaveToFile(const FileName: string);
+begin
+  if FUpdating then inherited SaveToFile(FileName) else FOwner.SaveToFile(FileName);
+end;
+
+procedure TTyRichEditLines.SaveToStream(Stream: TStream);
+begin
+  if FUpdating then inherited SaveToStream(Stream) else FOwner.SaveToStream(Stream);
+end;
+
+{ ---- the format façades' objects (Task 11a) ----
+
+  They hold the control and nothing else: a read asks it, a write is its door's (RunApiEdit). }
+
+type
+  TTyRichSelAttrs = class(TTyRichTextAttributes)
+  protected
+    FOwner: TTyCustomRichEdit;
+    function GetFormat: TTyCharFormat; override;
+    function GetConsistent: TTyCharFormatMask; override;
+    procedure SetFormat(AMask: TTyCharFormatMask; const AValue: TTyCharFormat); override;
+    function GetPPI: Integer; override;
+  public
+    constructor Create(AOwner: TTyCustomRichEdit);
+  end;
+
+  TTyRichDefAttrs = class(TTyRichSelAttrs)
+  protected
+    function GetFormat: TTyCharFormat; override;
+    function GetConsistent: TTyCharFormatMask; override;
+    procedure SetFormat(AMask: TTyCharFormatMask; const AValue: TTyCharFormat); override;
+  end;
+
+  TTyRichParaAttrs = class(TTyRichParaAttributes)
+  protected
+    FOwner: TTyCustomRichEdit;
+    function GetFormat: TTyParaFormat; override;
+    procedure SetFormat(AMask: TTyParaFormatMask; const AValue: TTyParaFormat); override;
+  public
+    constructor Create(AOwner: TTyCustomRichEdit);
+  end;
+
+const
+  CAllCharFields = CTyFontMask + [cffHighlight, cffVertAlign];
+
+constructor TTyRichSelAttrs.Create(AOwner: TTyCustomRichEdit);
+begin
+  inherited Create;
+  FOwner := AOwner;
+end;
+
+function TTyRichSelAttrs.GetFormat: TTyCharFormat;
+begin
+  // the selection's first character, or what the next typed text gets (a pending format)
+  Result := FOwner.ResolvedFormat(FOwner.FDoc.Formats.CharFormat(FOwner.TypingFormat));
+end;
+
+function TTyRichSelAttrs.GetConsistent: TTyCharFormatMask;
+begin
+  if not FOwner.HasSelection then Exit(CAllCharFields);
+  Result := FOwner.RangeConsistency(FOwner.GetSelStart, FOwner.GetSelLength);
+end;
+
+procedure TTyRichSelAttrs.SetFormat(AMask: TTyCharFormatMask; const AValue: TTyCharFormat);
+begin
+  // the selection as it is once a composition went in
+  FOwner.EndCompositionForUser;
+  FOwner.ApiCharFormat(FOwner.GetSelStart, FOwner.GetSelLength, AMask, AValue);
+end;
+
+function TTyRichSelAttrs.GetPPI: Integer;
+begin
+  Result := FOwner.Font.PixelsPerInch;
+  if Result <= 0 then Result := 96;
+end;
+
+function TTyRichDefAttrs.GetFormat: TTyCharFormat;
+begin
+  Result := FOwner.BaseCharFormat;
+end;
+
+function TTyRichDefAttrs.GetConsistent: TTyCharFormatMask;
+begin
+  Result := CAllCharFields;
+end;
+
+procedure TTyRichDefAttrs.SetFormat(AMask: TTyCharFormatMask; const AValue: TTyCharFormat);
+begin
+  FOwner.SetBaseCharFormat(AMask, AValue);
+end;
+
+constructor TTyRichParaAttrs.Create(AOwner: TTyCustomRichEdit);
+begin
+  inherited Create;
+  FOwner := AOwner;
+end;
+
+function TTyRichParaAttrs.GetFormat: TTyParaFormat;
+begin
+  if not FOwner.ParaFormatAt(FOwner.GetSelStart, Result) then Result := TyDefaultParaFormat;
+end;
+
+procedure TTyRichParaAttrs.SetFormat(AMask: TTyParaFormatMask; const AValue: TTyParaFormat);
+begin
+  FOwner.EndCompositionForUser;
+  FOwner.ApiParaFormat(FOwner.GetSelStart, FOwner.GetSelLength, AMask, AValue);
+end;
+
 { ---- the control ---- }
 
 constructor TTyCustomRichEdit.Create(AOwner: TComponent);
@@ -1838,6 +2152,11 @@ begin
   FText := FDoc.Text;
   FDoc.OnChange := @DocChanged;
   FDoc.OnUpdatingEnd := @DocUpdatingEnded;
+  FDoc.OnModifiedChange := @DocModifiedChanged;
+  FSelAttributes := TTyRichSelAttrs.Create(Self);
+  FDefAttributes := TTyRichDefAttrs.Create(Self);
+  FParagraph := TTyRichParaAttrs.Create(Self);
+  FPlainText := False;
   FLayouter := CreateLayouter;
   FLayouter.Document := FDoc;
   // the layouter empties its caches when the list changes; the view must drop its blocks too
@@ -1892,7 +2211,11 @@ begin
   begin
     FDoc.OnChange := nil;
     FDoc.OnUpdatingEnd := nil;
+    FDoc.OnModifiedChange := nil;
   end;
+  FreeAndNil(FSelAttributes);
+  FreeAndNil(FDefAttributes);
+  FreeAndNil(FParagraph);
   if FLayouter <> nil then FLayouter.FallbackFonts.OnChange := FFallbackListChange;
   FreeAndNil(FLayouter);
   FreeAndNil(FDoc);
@@ -2251,11 +2574,19 @@ begin
   DoSelectionChange;
 end;
 
-procedure TTyCustomRichEdit.ClearSelection;
+procedure TTyCustomRichEdit.CollapseSelection;
 begin
   Select(FCaret, FCaret, FCaretAtEnd);
   CaretMoved;
   DoSelectionChange;
+end;
+
+procedure TTyCustomRichEdit.ClearSelection;
+begin
+  // a user's action (R66): the Delete key's, with its every check
+  EndCompositionForUser;
+  if FReadOnly or not IsEnabled or ViewBehind or not HasSelection then Exit;
+  DeleteKey(True, False);
 end;
 
 procedure TTyCustomRichEdit.DoSelectionChange;
@@ -2650,6 +2981,9 @@ begin
     click, a setter, a change from elsewhere): the next typing is an undo step of its own, as
     the memo's caret moves end its run (S-M9's place: the edits place the caret themselves). }
   if (FEditing = 0) and ((AAnchor <> FSelAnchor) or (ACaret <> FCaret)) then FDoc.BreakMerge;
+  { The selection set again - also to the same place, and by an edit's own placing - ends a
+    pending format (msftedit, fact 6); a façade's write keeps the selection and it. }
+  if FApiWrite = 0 then FHasPendingFmt := False;
   FSelAnchor := AAnchor;
   FCaret := ACaret;
   FCaretAtEnd := AAtEnd;
@@ -4089,7 +4423,9 @@ var
   marks: TTyRichStepMarks;
 begin
   { The caret and the anchor an edit leaves obey the rule of a user's move: never in a cut
-    paragraph's hidden tail (back to the cut). A selection an undo puts back is taken as it was. }
+    paragraph's hidden tail (back to the cut). A selection an undo puts back is taken as it was,
+    and so is the one a façade's format write keeps. }
+  if FApiWrite > 0 then ARestore := True;
   if not ARestore then
   begin
     ACaret := OutOfTail(ACaret, False);
@@ -4120,7 +4456,8 @@ begin
   FWishValid := False;
   { Not for a commit a press caused (the view stays where the user clicked) nor for a late
     result (the selection it puts back is not at the commit; it reports once itself). }
-  if not FNoEditScroll and not FEditQuiet then ScrollCaretIntoView;
+  // (nor for a façade's format write: the selection stays where it is, and so does the view)
+  if not FNoEditScroll and not FEditQuiet and (FApiWrite = 0) then ScrollCaretIntoView;
   CaretMoved;
   if FEditQuiet then Exit;
   DoChange;
@@ -4221,6 +4558,9 @@ var
   s: TTyRichPos;
   p: Integer;
 begin
+  // a format chosen with nothing selected, at this very caret (Task 11a)
+  if FHasPendingFmt and (FCaret = FSelAnchor) and (FCaret = FPendingAt) then
+    Exit(FPendingFmt);
   t := FDoc.Text;
   s := GetSelStart;
   if HasSelection then
@@ -4433,7 +4773,7 @@ end;
 
 function TTyCustomRichEdit.PlainTextDocument: Boolean;
 begin
-  Result := FSourceFormat = rfText;
+  Result := FPlainText;
 end;
 
 function TTyCustomRichEdit.LongParaRefused(APos: TTyRichPos; const AText: UTF8String): Boolean;
@@ -4622,9 +4962,10 @@ end;
 
 procedure TTyCustomRichEdit.CutToClipboard;
 begin
-  // a user's action in an application's hands (EndCompositionForUser's list)
+  // a user's action in an application's hands (EndCompositionForUser's list; R66)
   EndCompositionForUser;
-  CutSelection(False);
+  if FReadOnly or not IsEnabled or ViewBehind then Exit;
+  CutSelection(True);
 end;
 
 { ---- pasting (Task 10c) ---- }
@@ -5103,15 +5444,17 @@ end;
 
 procedure TTyCustomRichEdit.Undo;
 begin
-  // a user's action in an application's hands (EndCompositionForUser's list)
+  // a user's action in an application's hands (EndCompositionForUser's list; R66)
   EndCompositionForUser;
-  RunHistory(False, False);
+  if FReadOnly or not IsEnabled or ViewBehind then Exit;
+  RunHistory(False, True);
 end;
 
 procedure TTyCustomRichEdit.Redo;
 begin
   EndCompositionForUser;
-  RunHistory(True, False);
+  if FReadOnly or not IsEnabled or ViewBehind then Exit;
+  RunHistory(True, True);
 end;
 
 function TTyCustomRichEdit.CanUndo: Boolean;
@@ -5135,6 +5478,497 @@ var
 begin
   s := AValue;
   TypeText(s, False, False);
+end;
+
+{ ---- the format API (Task 11a) ----
+
+  Both façades come here: a read asks the document's formats (RunsOf, ParaFormatOf), a write
+  is one command through RunApiEdit - the door of a user's edit (RunMade, EditWith, RunEdit,
+  FinishEdit: the selection's record kept with the step, one OnChange) without its ReadOnly
+  question, refusals raised. Nothing here changes the model another way: a pending format is
+  an id of the format pool, which only interns values. }
+
+procedure TTyCustomRichEdit.DocModifiedChanged(Sender: TObject);
+begin
+  if [csLoading, csDestroying] * ComponentState <> [] then Exit;
+  if Assigned(FOnModifiedChange) then FOnModifiedChange(Self);
+end;
+
+procedure TTyCustomRichEdit.SetSelAttributes(AValue: TTyRichTextAttributes);
+begin
+  FSelAttributes.Assign(AValue);
+end;
+
+procedure TTyCustomRichEdit.SetDefAttributes(AValue: TTyRichTextAttributes);
+begin
+  FDefAttributes.Assign(AValue);
+end;
+
+procedure TTyCustomRichEdit.SetParagraph(AValue: TTyRichParaAttributes);
+begin
+  FParagraph.Assign(AValue);
+end;
+
+procedure TTyCustomRichEdit.SetPlainTextState(AValue: Boolean);
+begin
+  // a state, not a change: the content and its formats stay as they are
+  FPlainText := AValue;
+  FPlainTextAsked := AValue;
+end;
+
+function TTyCustomRichEdit.BaseHalfPt(const AStyle: TTyStyleSet): Integer;
+var
+  size: Integer;
+begin
+  size := ResolveFontSize(AStyle);
+  if TyFontSizeIsPx(size) then
+    Result := Round(TyFontPxOf(size) * 72 / 96 * 2)
+  else
+    Result := size * 2;
+  if Result < 1 then Result := 20;
+end;
+
+function TTyCustomRichEdit.BaseFontName(const AStyle: TTyStyleSet): string;
+begin
+  // the theme's, else the platform's fallback, else the Font's ('default': the system's)
+  Result := TyEffectiveFontName(AStyle.FontName);
+  if Result = '' then Result := Font.Name;
+end;
+
+function TTyCustomRichEdit.BaseCharFormat: TTyCharFormat;
+var
+  s: TTyStyleSet;
+begin
+  // what the layouter is given (CheckLayoutParams) and the text colour the paint takes
+  s := CurrentStyle;
+  Result := TyDefaultCharFormat;
+  Result.FontName := BaseFontName(s);
+  Result.SizeHalfPt := BaseHalfPt(s);
+  Result.Style := BaseFontStyle(s) - [fsStrikeOut];
+  Result.Strike := fsStrikeOut in BaseFontStyle(s);
+  if tpTextColor in s.Present then Result.Color := TyColorToLCL(s.TextColor);
+  Result.Charset := Font.CharSet;
+end;
+
+procedure TTyCustomRichEdit.SetBaseCharFormat(AMask: TTyCharFormatMask;
+  const AValue: TTyCharFormat);
+var
+  st: TFontStyles;
+begin
+  // the base has neither (an Assign from SelAttributes carries clNone and vaNone: nothing)
+  if ((cffHighlight in AMask) and (AValue.HighlightColor <> clNone)) or
+    ((cffVertAlign in AMask) and (AValue.VertAlign <> vaNone)) then
+    raise ETyRichEdit.Create('DefAttributes has no background colour and no vertical position');
+  // the control's Font is the base (TyApplyControlFont lays it over the theme): one truth
+  Font.BeginUpdate;
+  try
+    if cffFontName in AMask then Font.Name := AValue.FontName;
+    if cffSize in AMask then Font.Size := AValue.SizeHalfPt div 2;
+    if AMask * CTyCharStyleMask <> [] then
+    begin
+      st := Font.Style;
+      if cffBold in AMask then
+        if fsBold in AValue.Style then Include(st, fsBold) else Exclude(st, fsBold);
+      if cffItalic in AMask then
+        if fsItalic in AValue.Style then Include(st, fsItalic) else Exclude(st, fsItalic);
+      if cffUnderline in AMask then
+        if fsUnderline in AValue.Style then Include(st, fsUnderline)
+        else Exclude(st, fsUnderline);
+      if cffStrike in AMask then
+        if AValue.Strike or (fsStrikeOut in AValue.Style) then Include(st, fsStrikeOut)
+        else Exclude(st, fsStrikeOut);
+      Font.Style := st;
+    end;
+    if cffColor in AMask then Font.Color := AValue.Color;
+    if cffCharset in AMask then Font.CharSet := AValue.Charset;
+  finally
+    Font.EndUpdate;
+  end;
+end;
+
+function TTyCustomRichEdit.ResolvedFormat(const AFormat: TTyCharFormat): TTyCharFormat;
+var
+  s: TTyStyleSet;
+begin
+  Result := AFormat;
+  if (Result.FontName <> '') and (Result.SizeHalfPt > 0) then Exit;
+  s := CurrentStyle;
+  if Result.FontName = '' then Result.FontName := BaseFontName(s);
+  if Result.SizeHalfPt <= 0 then Result.SizeHalfPt := BaseHalfPt(s);
+end;
+
+function TTyCustomRichEdit.CharFormatIdAt(APos: TTyRichPos): TTyCharFormatId;
+var
+  t: TTyRichText;
+  k, i: Integer;
+  off: TTyRichPos;
+  runs: TTyRunArray;
+begin
+  t := FDoc.Text;
+  if (APos < 0) or (APos > t.Length) then Exit(-1);
+  k := t.ParaOfPos(APos);
+  off := APos - t.ParaStart(k);
+  runs := FDoc.RunsOf(k);
+  i := High(runs);
+  while (i > 0) and (runs[i].Start > off) do Dec(i);
+  Result := runs[i].Format;
+end;
+
+function TTyCustomRichEdit.RangeConsistency(AStart, ALen: TTyRichPos): TTyCharFormatMask;
+var
+  t: TTyRichText;
+  e, ps, pl, a, b, rs, re: TTyRichPos;
+  first, last, k, i: Integer;
+  runs: TTyRunArray;
+  base: TTyCharFormat;
+  baseId: TTyCharFormatId;
+  have: Boolean;
+begin
+  Result := CAllCharFields;
+  t := FDoc.Text;
+  if ALen <= 0 then Exit;
+  e := AStart + ALen;
+  ParasOfRange(AStart, ALen, first, last);
+  have := False;
+  baseId := -1;
+  for k := first to last do
+  begin
+    ps := t.ParaStart(k);
+    pl := t.ParaLength(k);
+    a := Math.Max(AStart, ps) - ps;
+    b := Math.Min(e, ps + pl) - ps;
+    runs := FDoc.RunsOf(k);
+    for i := 0 to High(runs) do
+    begin
+      rs := runs[i].Start;
+      if i < High(runs) then re := runs[i + 1].Start else re := pl;
+      { The characters of the range: an empty paragraph whose separator is in it counts with
+        its one run (a format write formats it, ApplyCharFormat's rule). }
+      if pl = 0 then
+      begin
+        if i > 0 then Break;
+      end
+      else if (re <= a) or (rs >= b) or (re <= rs) then
+        Continue;
+      if have and (runs[i].Format = baseId) then Continue;
+      if not have then
+      begin
+        baseId := runs[i].Format;
+        base := FDoc.Formats.CharFormat(baseId);
+        have := True;
+        Continue;
+      end;
+      Result := Result - TyRichCharDiff(base, FDoc.Formats.CharFormat(runs[i].Format));
+      // nothing left to find out: the rest of the selection is not read
+      if Result = [] then Exit;
+    end;
+  end;
+end;
+
+procedure TTyCustomRichEdit.ParasOfRange(AStart, ALen: TTyRichPos; out AFirst, ALast: Integer);
+var
+  t: TTyRichText;
+begin
+  t := FDoc.Text;
+  AFirst := t.ParaOfPos(AStart);
+  ALast := AFirst;
+  if ALen <= 0 then Exit;
+  ALast := t.ParaOfPos(AStart + ALen);
+  if (ALast > AFirst) and (t.ParaStart(ALast) = AStart + ALen) then Dec(ALast);
+end;
+
+function TTyCustomRichEdit.ParaFormatAt(APos: TTyRichPos; out AFormat: TTyParaFormat): Boolean;
+var
+  t: TTyRichText;
+begin
+  t := FDoc.Text;
+  Result := (APos >= 0) and (APos <= t.Length);
+  if Result then AFormat := FDoc.Formats.ParaFormat(FDoc.ParaFormatOf(t.ParaOfPos(APos)))
+  else AFormat := TyDefaultParaFormat;
+end;
+
+{ The façades' writes: one command, through the door of a user's edit but for its ReadOnly
+  question (R53, R66), refusals raised (ETyRichEdit). AChars: how many characters it formats
+  (the wait cursor's threshold). }
+procedure TTyCustomRichEdit.RunApiEdit(ACmd: TTyRichCommand; AChars: TTyRichPos);
+var
+  reason: string;
+  cmd: TTyRichCommand;
+  place: TTyRichEditPlace;
+  wait: Boolean;
+begin
+  try
+    // a user's action in an application's hands: what is being composed goes in first
+    EndCompositionForUser;
+    if ViewBehind then
+    begin
+      // a command of the document's own update: reported when the update ends, as code's
+      cmd := ACmd;
+      ACmd := nil;
+      if not FDoc.Execute(cmd) then
+      begin
+        reason := RefusalReason;
+        if reason = '' then reason := rsRichEditRefusedRange;
+        raise ETyRichEdit.Create(reason);
+      end;
+      Exit;
+    end;
+    reason := RefusalReason;
+    if reason <> '' then raise ETyRichEdit.Create(reason);
+  except
+    ACmd.Free;
+    raise;
+  end;
+  // the selection stays (also in a hidden tail), and with it a pending format
+  place := Default(TTyRichEditPlace);
+  place.Anchor := CRichPlaceStays;
+  place.Caret := CRichPlaceStays;
+  place.AtLineEnd := FCaretAtEnd;
+  wait := AChars > FCopyWaitChars;
+  if wait then BeginWait;
+  Inc(FApiWrite);
+  try
+    RunMade(ACmd, place, False);
+  finally
+    Dec(FApiWrite);
+    if wait then EndWait;
+  end;
+end;
+
+procedure TTyCustomRichEdit.ApiCharFormat(AStart, ALen: TTyRichPos; AMask: TTyCharFormatMask;
+  const AValue: TTyCharFormat);
+var
+  f: TTyCharFormat;
+begin
+  if AMask = [] then Exit;
+  if ALen <= 0 then
+  begin
+    { Nothing selected at the caret: the format the next typed text gets (no command, no
+      undo step, no OnChange), merged over what it would get now. }
+    if (AStart = FCaret) and not HasSelection then
+    begin
+      f := TyMergeCharFormat(FDoc.Formats.CharFormat(TypingFormat), AMask, AValue);
+      FPendingFmt := FDoc.Formats.InternChar(f);
+      FPendingAt := FCaret;
+      FHasPendingFmt := True;
+    end;
+    Exit;
+  end;
+  RunApiEdit(TTyRichSetCharFormat.Create(TyRichRange(AStart, ALen), AMask, AValue), ALen);
+end;
+
+procedure TTyCustomRichEdit.ApiParaFormat(AStart, ALen: TTyRichPos; AMask: TTyParaFormatMask;
+  const AValue: TTyParaFormat);
+var
+  first, last: Integer;
+begin
+  if AMask = [] then Exit;
+  ParasOfRange(AStart, ALen, first, last);
+  RunApiEdit(TTyRichSetParaFormat.Create(first, last, AMask, AValue), ALen);
+end;
+
+{ RichMemo's positions, clamped to the text (as its controls clamp them). }
+procedure ClampRange(ALength: TTyRichPos; var AStart, ALen: TTyRichPos);
+begin
+  if AStart < 0 then AStart := 0;
+  if AStart > ALength then AStart := ALength;
+  if ALen < 0 then ALen := 0;
+  if ALen > ALength - AStart then ALen := ALength - AStart;
+end;
+
+procedure TTyCustomRichEdit.SetTextAttributes(AStart, ALen: TTyRichPos;
+  const AParams: TTyFontParams);
+begin
+  EndCompositionForUser;
+  ClampRange(FDoc.Text.Length, AStart, ALen);
+  ApiCharFormat(AStart, ALen, CTyFontParamsMask, TyRichCharFormatOf(AParams));
+end;
+
+procedure TTyCustomRichEdit.SetTextAttributes(AStart, ALen: TTyRichPos; AFont: TFont);
+var
+  f: TTyCharFormat;
+begin
+  EndCompositionForUser;
+  ClampRange(FDoc.Text.Length, AStart, ALen);
+  f := TyDefaultCharFormat;
+  f.FontName := AFont.Name;
+  f.SizeHalfPt := Math.Max(0, AFont.Size) * 2;
+  f.Style := AFont.Style - [fsStrikeOut];
+  f.Strike := fsStrikeOut in AFont.Style;
+  f.Color := AFont.Color;
+  f.Charset := AFont.CharSet;
+  ApiCharFormat(AStart, ALen, CTyFontMask, f);
+end;
+
+function TTyCustomRichEdit.GetTextAttributes(APos: TTyRichPos; var AParams: TTyFontParams): Boolean;
+var
+  id: TTyCharFormatId;
+begin
+  id := CharFormatIdAt(APos);
+  Result := id >= 0;
+  if Result then AParams := TyRichFontParamsOf(ResolvedFormat(FDoc.Formats.CharFormat(id)));
+end;
+
+procedure TTyCustomRichEdit.SetRangeColor(AStart, ALen: TTyRichPos; AColor: TColor);
+var
+  f: TTyCharFormat;
+begin
+  EndCompositionForUser;
+  ClampRange(FDoc.Text.Length, AStart, ALen);
+  f := TyDefaultCharFormat;
+  f.Color := AColor;
+  ApiCharFormat(AStart, ALen, [cffColor], f);
+end;
+
+procedure TTyCustomRichEdit.SetRangeParams(AStart, ALen: TTyRichPos;
+  AModifyMask: TTyTextModifyMask; const AFontName: string; AFontSize: Integer;
+  AFontColor: TColor; AAddFontStyle, ARemoveFontStyle: TFontStyles);
+var
+  p: TTyFontParams;
+begin
+  p := Default(TTyFontParams);
+  p.Name := AFontName;
+  p.Size := AFontSize;
+  p.Color := AFontColor;
+  p.BkColor := clNone;
+  SetRangeParams(AStart, ALen, AModifyMask, p, AAddFontStyle, ARemoveFontStyle);
+end;
+
+procedure TTyCustomRichEdit.SetRangeParams(AStart, ALen: TTyRichPos;
+  AModifyMask: TTyTextModifyMask; const AParams: TTyFontParams;
+  AAddFontStyle, ARemoveFontStyle: TFontStyles);
+const
+  Fields: array[TFontStyle] of TTyCharFormatField = (cffBold, cffItalic, cffUnderline, cffStrike);
+var
+  f: TTyCharFormat;
+  m: TTyCharFormatMask;
+  st: TFontStyle;
+begin
+  EndCompositionForUser;
+  ClampRange(FDoc.Text.Length, AStart, ALen);
+  f := TyRichCharFormatOf(AParams);
+  m := [];
+  if tmm_Name in AModifyMask then Include(m, cffFontName);
+  if tmm_Size in AModifyMask then Include(m, cffSize);
+  if tmm_Color in AModifyMask then Include(m, cffColor);
+  if tmm_BackColor in AModifyMask then Include(m, cffHighlight);
+  f.Style := [];
+  f.Strike := False;
+  if tmm_Styles in AModifyMask then
+    for st := Low(TFontStyle) to High(TFontStyle) do
+      if st in AAddFontStyle + ARemoveFontStyle then
+      begin
+        // only the styles named change; one both added and removed goes (RichMemo's order)
+        Include(m, Fields[st]);
+        if (st in AAddFontStyle) and not (st in ARemoveFontStyle) then
+          if st = fsStrikeOut then f.Strike := True else Include(f.Style, st);
+      end;
+  ApiCharFormat(AStart, ALen, m, f);
+end;
+
+function TTyCustomRichEdit.GetParaAlignment(APos: TTyRichPos; var AAlign: TTyParaAlign): Boolean;
+var
+  f: TTyParaFormat;
+begin
+  Result := ParaFormatAt(APos, f);
+  if Result then AAlign := f.Align;
+end;
+
+function TTyCustomRichEdit.GetParaAlignment(APos: TTyRichPos): TTyParaAlign;
+begin
+  Result := paraLeft;
+  GetParaAlignment(APos, Result);
+end;
+
+procedure TTyCustomRichEdit.SetParaAlignment(AStart, ALen: TTyRichPos; AAlign: TTyParaAlign);
+var
+  f: TTyParaFormat;
+begin
+  EndCompositionForUser;
+  ClampRange(FDoc.Text.Length, AStart, ALen);
+  f := TyDefaultParaFormat;
+  f.Align := AAlign;
+  ApiParaFormat(AStart, ALen, [pffAlign], f);
+end;
+
+function TTyCustomRichEdit.GetParaMetric(APos: TTyRichPos; var AMetric: TTyParaMetric): Boolean;
+var
+  f: TTyParaFormat;
+begin
+  Result := ParaFormatAt(APos, f);
+  if Result then AMetric := TyRichMetricOf(f);
+end;
+
+procedure TTyCustomRichEdit.SetParaMetric(AStart, ALen: TTyRichPos; const AMetric: TTyParaMetric);
+begin
+  EndCompositionForUser;
+  ClampRange(FDoc.Text.Length, AStart, ALen);
+  ApiParaFormat(AStart, ALen, [pffLeftIndent, pffFirstIndent, pffRightIndent, pffSpaceBefore,
+    pffSpaceAfter, pffLineSpacing], TyRichParaFormatOfMetric(AMetric));
+end;
+
+function TTyCustomRichEdit.GetParaNumbering(APos: TTyRichPos;
+  var ANumber: TTyParaNumbering): Boolean;
+var
+  f: TTyParaFormat;
+begin
+  Result := ParaFormatAt(APos, f);
+  if Result then ANumber := TyRichNumberingOf(f.List);
+end;
+
+procedure TTyCustomRichEdit.SetParaNumbering(AStart, ALen: TTyRichPos;
+  const ANumber: TTyParaNumbering);
+var
+  f, cur: TTyParaFormat;
+begin
+  EndCompositionForUser;
+  ClampRange(FDoc.Text.Length, AStart, ALen);
+  ParaFormatAt(AStart, cur);
+  f := TyDefaultParaFormat;
+  f.List := TyRichListOf(ANumber, cur.List);
+  ApiParaFormat(AStart, ALen, [pffList], f);
+end;
+
+function TTyCustomRichEdit.GetParaTabs(APos: TTyRichPos; var AStopList: TTyTabStopList): Boolean;
+var
+  f: TTyParaFormat;
+begin
+  Result := ParaFormatAt(APos, f);
+  if Result then AStopList := TyRichTabListOf(f.Tabs);
+end;
+
+procedure TTyCustomRichEdit.SetParaTabs(AStart, ALen: TTyRichPos; const AStopList: TTyTabStopList);
+var
+  f, cur: TTyParaFormat;
+begin
+  EndCompositionForUser;
+  ClampRange(FDoc.Text.Length, AStart, ALen);
+  ParaFormatAt(AStart, cur);
+  f := TyDefaultParaFormat;
+  f.Tabs := TyRichTabsOf(AStopList, cur.Tabs);
+  ApiParaFormat(AStart, ALen, [pffTabs], f);
+end;
+
+function TTyCustomRichEdit.LoadRichText(AStream: TStream): Boolean;
+begin
+  try
+    LoadFromStream(AStream, rfRtf);
+    Result := True;
+  except
+    on E: EOutOfMemory do raise;
+    on E: Exception do Result := False;
+  end;
+end;
+
+function TTyCustomRichEdit.SaveRichText(AStream: TStream): Boolean;
+begin
+  try
+    SaveToStream(AStream, rfRtf);
+    Result := True;
+  except
+    on E: EOutOfMemory do raise;
+    on E: Exception do Result := False;
+  end;
 end;
 
 function TTyCustomRichEdit.IsEditKey(AKey: Word; AShift: TShiftState): Boolean;
@@ -5406,20 +6240,17 @@ end;
 // (the menu's actions are a user's: through EndCompositionForUser first)
 procedure TTyCustomRichEdit.TeUndo;
 begin
-  EndCompositionForUser;
-  if not FReadOnly then RunHistory(False, True);
+  Undo;
 end;
 
 procedure TTyCustomRichEdit.TeRedo;
 begin
-  EndCompositionForUser;
-  if not FReadOnly then RunHistory(True, True);
+  Redo;
 end;
 
 procedure TTyCustomRichEdit.TeCut;
 begin
-  EndCompositionForUser;
-  if not FReadOnly then CutSelection(True);
+  CutToClipboard;
 end;
 
 procedure TTyCustomRichEdit.TeCopy;
@@ -6413,7 +7244,7 @@ end;
 procedure TTyCustomRichEdit.CheckLayoutParams(APPI: Integer);
 var
   s: TTyStyleSet;
-  size, halfPt, w, est, k, rppi: Integer;
+  halfPt, w, est, k, rppi: Integer;
   z: Single;
   factor: Double;
   area: TRect;
@@ -6423,12 +7254,7 @@ begin
   if APPI <= 0 then APPI := 96;
   FViewPPI := APPI;
   s := CurrentStyle;
-  size := ResolveFontSize(s);
-  if TyFontSizeIsPx(size) then
-    halfPt := Round(TyFontPxOf(size) * 72 / 96 * 2)
-  else
-    halfPt := size * 2;
-  if halfPt < 1 then halfPt := 20;
+  halfPt := BaseHalfPt(s);
   style := BaseFontStyle(s);
   fontDiff := (s.FontName <> FLayoutFont) or (halfPt <> FLayoutFontSize) or
     (style <> FLayoutFontStyle);
@@ -6785,6 +7611,8 @@ begin
   if (FLines <> nil) and (FDoc.Text.Length > 0) then FLines.FEmptyLine := False;
   // the slices a lazy load adds are its progress, not changes of the content
   if loadOwn then Exit;
+  // a change made elsewhere ends a pending format (the control's own edits place the caret)
+  if FEditing = 0 then FHasPendingFmt := False;
   if FEditing > 0 then
   begin
     // the control's own edit: it places the caret and reports when the command has run
@@ -6855,7 +7683,8 @@ begin
   FScrollX := 0;
   FWidestSeen := 0;
   FViewValid := False;
-  // a new content: the caret at its start, nothing selected
+  // a new content: the caret at its start, nothing selected, no pending format
+  FHasPendingFmt := False;
   FCaret := 0;
   FSelAnchor := 0;
   FCaretAtEnd := False;
@@ -8423,6 +9252,8 @@ begin
     FSourceFormat := rfText;
     FRtfPrefix := nil;
   end;
+  // the document follows the file (R65): one of the two things that set PlainText
+  FPlainText := AFormat <> rfRtf;
   FLinesStored := False;
   FSourceFile := '';
   if HasBackgroundWork then StartBackground;
@@ -8432,7 +9263,9 @@ end;
 
 procedure TTyCustomRichEdit.LoadFromStream(AStream: TStream; AFormat: TTyRichFormat);
 begin
-  if AFormat = rfAuto then AFormat := DetectFormat(AStream);
+  if AFormat = rfAuto then
+    if FPlainText and FPlainTextAsked then AFormat := rfText
+    else AFormat := DetectFormat(AStream);
   LoadAs(AStream, AFormat);
 end;
 
@@ -8444,7 +9277,7 @@ begin
   // the bytes are read to the end at once and nothing is kept: a writer elsewhere is no harm
   fs := TFileStream.Create(AFileName, fmOpenRead or fmShareDenyNone);
   try
-    LoadAs(fs, DetectFormat(fs));
+    LoadFromStream(fs, rfAuto);
   finally
     fs.Free;
   end;
@@ -8473,7 +9306,9 @@ begin
   // a text of one line break is one empty line, no text at all is none
   FLines.FEmptyLine := (AText <> '') and (FDoc.Text.Length = 0);
   FRtfPrefix := nil;
-  FSourceFormat := rfText;
+  { Text set as lines leaves PlainText as it is (R65): a rich control stays rich and saves
+    RTF as it came, a plain one text. }
+  if FPlainText then FSourceFormat := rfText else FSourceFormat := rfRtf;
   FSourceFile := '';
   FLinesStored := True;
 end;
@@ -8540,7 +9375,8 @@ begin
   if FInStep then raise ETyRichEdit.Create(rsRichEditBusy);
   FinishLoading;
   if FDoc.Incomplete then raise ETyRichEdit.Create(rsRichEditIncomplete);
-  if AFormat = rfAuto then AFormat := FSourceFormat;
+  if AFormat = rfAuto then
+    if FPlainText then AFormat := rfText else AFormat := FSourceFormat;
   // a document of ours names the font its plain text is shown in (RtfWrite's \f0)
   FDoc.BaseFontName := TyEffectiveFontName(CurrentStyle.FontName);
   Inc(FSaving);
@@ -8674,6 +9510,7 @@ begin
   full := RealTarget(ExpandFileName(AFileName));
   FinishLoading;
   if FDoc.Incomplete then raise ETyRichEdit.Create(rsRichEditIncomplete);
+  if (AFormat = rfAuto) and FPlainText then AFormat := rfText;
   if AFormat = rfAuto then
   begin
     ext := LowerCase(ExtractFileExt(full));
@@ -8711,7 +9548,7 @@ begin
     raise ETyRichEdit.CreateFmt(rsRichEditCannotReplace, [full]);
   end;
   // RTF keeps the content; text keeps a text document's: an RTF document saved as text is an export
-  keeps := (AFormat = rfRtf) or (FSourceFormat = rfText);
+  keeps := (AFormat = rfRtf) or (FSourceFormat = rfText) or FPlainText;
   if keeps then
   begin
     FDoc.Modified := False;

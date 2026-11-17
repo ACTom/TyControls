@@ -33,7 +33,6 @@ type
   protected
     procedure EditRefused(const AReason: string); override;
     function TypingFormat: TTyCharFormatId; override;
-    function PlainTextDocument: Boolean; override;
   public
     Refused: Integer;
     LastReason: string;
@@ -43,10 +42,6 @@ type
     { One character typed (UTF8KeyPress, as LCL delivers it). }
     procedure Key8(const AChar: RawByteString);
     procedure Leave;
-  public
-    { A document set through Lines.Text taken as a rich one (fix wave W13: R60 makes a plain
-      text document paste text only; the paste suite's documents typed in are rich ones). }
-    RichDocument: Boolean;
     { A command of the application's own through the door of a user's edit (RunUserEdit; fix
       wave W13, the door W15's). }
     function RunUser(ACmd: TTyRichCommand): Boolean;
@@ -299,11 +294,6 @@ procedure TEditProbe.Leave;
 begin
   Perform(LM_KILLFOCUS, 0, 0);
   DoExit;
-end;
-
-function TEditProbe.PlainTextDocument: Boolean;
-begin
-  Result := inherited PlainTextDocument and not RichDocument;
 end;
 
 function TEditProbe.RunUser(ACmd: TTyRichCommand): Boolean;
@@ -716,8 +706,11 @@ begin
   // code is not stopped
   FRich.SelText := 'Q';
   AssertEquals('SelText from code', 'xQc', FRich.Lines[0]);
+  // Undo is a user's action (R66): nothing on a viewer; the document's own is code's
   FRich.Undo;
-  AssertEquals('Undo from code', 'xabc', FRich.Lines[0]);
+  AssertEquals('Undo, a user''s action: nothing', 'xQc', FRich.Lines[0]);
+  FRich.Document.Undo;
+  AssertEquals('the document''s Undo from code', 'xabc', FRich.Lines[0]);
 end;
 
 { The design's hard line, by count: typing in the middle of a 2,000,000-line document lays out
@@ -2549,7 +2542,16 @@ var
   d: TTyRichDocument;
   st: TBytesStream;
 begin
+  // text set as lines is a rich document (R65): a line break
   SetText('ab');
+  d := FRich.Document;
+  FRich.SelStart := 1;
+  AssertEquals('rich: taken', 0, FRich.KeyResult(VK_RETURN, [ssShift]));
+  AssertEquals('rich: one paragraph', 1, d.Text.ParaCount);
+  AssertTrue('rich: a line break', Pos(#11, FRich.Lines.Text) > 0);
+  // made a plain text document by PlainText
+  SetText('ab');
+  FRich.PlainText := True;
   d := FRich.Document;
   FRich.SelStart := 1;
   AssertEquals('taken', 0, FRich.KeyResult(VK_RETURN, [ssShift]));
@@ -2753,7 +2755,6 @@ begin
     else TyForceDeviceScaleForTest(0, False);
     FPaintScale := scale;
     FRich := NewProbe;
-    FRich.RichDocument := True;
     SetLinesOf(60);
     t := FRich.Document.Text;
     PaintAll;

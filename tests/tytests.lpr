@@ -296,6 +296,7 @@ uses
   test.richedit.edit,
   test.richedit.ime,
   test.richedit.paste,
+  test.richedit.api,
   test.richedit.perf;
 
 type

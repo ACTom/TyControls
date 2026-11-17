@@ -39,7 +39,7 @@ type
     procedure ResetEvents;
     procedure LoadRtf(const S: RawByteString);
     procedure LoadBytes(const B: TBytes);
-    { A document typed in (rich: RichDocument); APlain - a plain text document (R60). }
+    { A document typed in (set as lines: rich, R65); APlain - a plain text document (R60). }
     procedure SetText(const S: string; APlain: Boolean = False);
     procedure Clip(const ARtf: RawByteString; const AText: string; const APicture: TBytes = nil;
       AKind: TTyRichImageKind = rikPng);
@@ -1206,8 +1206,8 @@ end;
 
 procedure TTyRichEditPasteTest.SetText(const S: string; APlain: Boolean);
 begin
-  FRich.RichDocument := not APlain;
   FRich.Lines.Text := S;
+  FRich.PlainText := APlain;
   FRich.UpdateView;
   ResetEvents;
 end;
