@@ -1431,6 +1431,12 @@ uses
   tyControls.PlatformWS, tyControls.Animation
   {$IFDEF LCLCocoa}, tyControls.CocoaWS{$ENDIF};
 
+{ WM_IME_SETCONTEXT's flags: what the input context asks to show (ImeSetContextDefault, a
+  seam on every widgetset; only win32's does something with them). }
+const
+  ISC_SHOWUICOMPOSITIONWINDOW = PtrInt($80000000);
+  ISC_SHOWUIALL = PtrInt($C000000F);
+
 {$IFDEF LCLWin32}
 { IMM32, which FPC's Windows unit does not declare (as tyControls.Win32WS declares it for the
   memo's composition window). }
@@ -1448,8 +1454,6 @@ const
   CFS_EXCLUDE = $0080;
   IMR_QUERYCHARPOSITION = $0006;
   WM_IME_SETCONTEXT = $0281;
-  ISC_SHOWUICOMPOSITIONWINDOW = PtrInt($80000000);
-  ISC_SHOWUIALL = PtrInt($C000000F);
 
 type
   TTyImmCompositionForm = record
