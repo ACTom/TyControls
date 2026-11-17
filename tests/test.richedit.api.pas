@@ -16,9 +16,10 @@ interface
 uses
   Classes, SysUtils, Types, Math, TypInfo, fpcunit, testregistry, Controls, Graphics, LCLType,
   Forms, BGRABitmap, BGRABitmapTypes,
-  tyControls.Controller, tyControls.Painter, tyControls.StrConsts,
+  tyControls.Controller, tyControls.BuiltinThemes, tyControls.Painter, tyControls.StrConsts,
   tyControls.RichEdit.Text, tyControls.RichEdit.Model, tyControls.RichEdit.Commands,
-  tyControls.RichEdit.Layout, tyControls.RichEdit.Attrs, tyControls.RichEdit,
+  tyControls.RichEdit.Layout, tyControls.RichEdit.RtfRead, tyControls.RichEdit.Attrs,
+  tyControls.RichEdit,
   test.richedit.control, test.richedit.edit;
 
 type
@@ -88,6 +89,22 @@ type
     procedure TestPlainTextIsOneState;
     procedure TestTheSaveRuleWithoutAFormat;
     procedure TestALinesLoadInsideAnUpdate;
+    procedure TestDelphisDefaultIdiomsWriteNoneOfTheirOwn;
+    procedure TestTheDefaultIdiomsThroughRichMemo;
+    procedure TestAnAssignToTheBaseLeavesWhatItCannotHold;
+    procedure TestTheDelphiSurfaceAsTheVcl;
+    procedure TestDelphisTabIdiom;
+    procedure TestNumberingAsDelphiAndWordPad;
+    procedure TestIndentWritesKeepEachParagraphsOwn;
+    procedure TestRichMemosMetricOnItsScale;
+    procedure TestTheReadIsTheFirstCharacterTheWriteFormats;
+    procedure TestAStyleInBothSetsGoes;
+    procedure TestTheSmallerRichMemoMethods;
+    procedure TestConsistentAttributesIsBoundedAndRemembered;
+  end;
+
+  // the control's protected test seams (the consistency budget)
+  TConsAccess = class(TTyCustomRichEdit)
   end;
 
 implementation
@@ -454,7 +471,7 @@ begin
   FRich.SelAttributes.Color := clGreen;
   FRich.SelAttributes.Style := [fsItalic];
   FRich.SelAttributes.BackColor := clNone;
-  FRich.SelAttributes.VertAlign := vaNone;
+  FRich.SelAttributes.Subscript := sstNone;
   AssertEquals('a whole font either way', viaMemo, Dump);
   FRich.Undo;
   FRich.Undo;
@@ -464,12 +481,12 @@ begin
   FRich.Undo;
   // the paragraph, both ways
   Sel(2, 9);
-  FRich.Paragraph.Alignment := paraCenter;
+  FRich.Paragraph.ParaAlign := paraCenter;
   viaDelphi := Dump;
   AssertTrue('a paragraph format command', FRich.Document.UndoStep is TTyRichSetParaFormat);
   FRich.Undo;
   AssertEquals('the paragraphs undone', before, Dump);
-  FRich.SetParaAlignment(2, 9, paraCenter);
+  FRich.SetParaAlignment(2, 9, paCenter);
   AssertEquals('the paragraphs either way', viaDelphi, Dump);
   AssertTrue('RichMemo''s: a paragraph format command',
     FRich.Document.UndoStep is TTyRichSetParaFormat);
@@ -492,7 +509,7 @@ const
     (Field: cffUnderline; Attr: caUnderline), (Field: cffStrike; Attr: caStrikeOut),
     (Field: cffFontName; Attr: caFace), (Field: cffSize; Attr: caSize),
     (Field: cffColor; Attr: caColor), (Field: cffCharset; Attr: caCharset),
-    (Field: cffHighlight; Attr: caBackColor), (Field: cffVertAlign; Attr: caVertAlign));
+    (Field: cffHighlight; Attr: caBackColor), (Field: cffVertAlign; Attr: caSubscript));
   All = [Low(TTyRichConsistentAttribute)..High(TTyRichConsistentAttribute)];
 var
   i: Integer;
@@ -636,9 +653,9 @@ begin
   CheckOthers('BackColor', []);
   MixedRuns;
   Sel(0, 6);
-  FRich.SelAttributes.VertAlign := vaSub;
+  FRich.SelAttributes.Subscript := sstSubscript;
   for i := 0 to 5 do AssertTrue('subscript everywhere', Fmt(i).VertAlign = vaSub);
-  AssertTrue('read back', FRich.SelAttributes.VertAlign = vaSub);
+  AssertTrue('read back', FRich.SelAttributes.Subscript = sstSubscript);
   CheckOthers('VertAlign', []);
   // Assign from a TFont: name, size, styles, colour, charset at once - one step
   MixedRuns;
@@ -826,9 +843,9 @@ begin
   AssertEquals('read', 20, FRich.Paragraph.LineSpacing);
   FRich.Paragraph.LineSpacingRule := lsExact;
   AssertEquals('exactly: the height kept', 400, PFmt(1).LineSpacingValue);
-  FRich.Paragraph.Alignment := paraRight;
+  FRich.Paragraph.ParaAlign := paraRight;
   AssertTrue('right-aligned', PFmt(1).Align = paraRight);
-  AssertTrue('read', FRich.Paragraph.Alignment = paraRight);
+  AssertTrue('read', FRich.Paragraph.ParaAlign = paraRight);
   FRich.Paragraph.Numbering := lkUpperRoman;
   AssertTrue('a list', PFmt(0).List.Kind = lkUpperRoman);
   AssertEquals('it starts at 1', 1, FRich.Paragraph.NumberingStart);
@@ -846,12 +863,11 @@ begin
   FRich.Paragraph.TabCount := 1;
   AssertEquals('cut to one', 1, Length(PFmt(1).Tabs));
   AssertEquals('the first kept', 720, PFmt(1).Tabs[0].Position);
-  try
-    FRich.Paragraph.TabCount := 5;
-    Fail('more stops than there are');
-  except
-    on EListError do ;
-  end;
+  // Delphi's idiom: a larger count appends stops at 0, set next; a read past the count is 0
+  FRich.Paragraph.TabCount := 3;
+  AssertEquals('three now', 3, FRich.Paragraph.TabCount);
+  AssertEquals('the new ones at 0', 0, PFmt(1).Tabs[2].Position);
+  AssertEquals('a read past the count', 0, FRich.Paragraph.Tab[7]);
   // rounding of twips to points: half a point away from zero
   FRich.Document.Execute(TTyRichSetParaFormat.Create(0, 0, [pffRightIndent],
     TyRichParaFormatOfMetric(Default(TTyParaMetric))));
@@ -866,7 +882,7 @@ var
   m: TTyParaMetric;
   n: TTyParaNumbering;
   tl: TTyTabStopList;
-  al: TTyParaAlign;
+  al: TTyParaAlignment;
   f: TTyParaFormat;
 begin
   SetText('one'#10'two'#10'three');
@@ -876,7 +892,7 @@ begin
   m.TailIndent := 9.5;
   m.SpaceBefore := 1.5;
   m.SpaceAfter := 3;
-  m.LineSpacing := 2.0;
+  m.LineSpacing := DoubleLineSpacing;
   FRich.SetParaMetric(0, 5, m);
   f := PFmt(1);
   AssertEquals('head: li', 360, f.LeftIndent);
@@ -892,19 +908,19 @@ begin
   AssertEquals('head read', 18.0, m.HeadIndent, 0.0001);
   AssertEquals('tail read', 9.5, m.TailIndent, 0.0001);
   AssertEquals('before read', 1.5, m.SpaceBefore, 0.0001);
-  AssertEquals('spacing read', 2.0, m.LineSpacing, 0.0001);
+  AssertEquals('spacing read on RichMemo''s scale', 2.4, m.LineSpacing, 0.0001);
   AssertFalse('outside', FRich.GetParaMetric(1000, m));
-  m.LineSpacing := 1.2;
+  m.LineSpacing := 1.4;
   FRich.SetParaMetric(0, 0, m);
-  AssertTrue('1.2: the nearest of the rules', PFmt(0).LineSpacing = ls115);
+  AssertTrue('1.4: the nearest of the rules (1.15 is 1.38)', PFmt(0).LineSpacing = ls115);
   // alignment
-  FRich.SetParaAlignment(4, 0, paraJustify);
+  FRich.SetParaAlignment(4, 0, paJustify);
   AssertTrue('justified', PFmt(1).Align = paraJustify);
   AssertTrue('the first not', PFmt(0).Align = paraLeft);
-  al := paraLeft;
+  al := paLeft;
   AssertTrue('read', FRich.GetParaAlignment(5, al));
-  AssertTrue('its value', al = paraJustify);
-  AssertTrue('the function', FRich.GetParaAlignment(5) = paraJustify);
+  AssertTrue('its value', al = paJustify);
+  AssertTrue('the function', FRich.GetParaAlignment(5) = paJustify);
   // numbering
   n := Default(TTyParaNumbering);
   n.Style := pnLowLetter;
@@ -924,9 +940,9 @@ begin
   tl.Count := 2;
   SetLength(tl.Tabs, 2);
   tl.Tabs[0].Offset := 36;
-  tl.Tabs[0].Align := ttaCenter;
+  tl.Tabs[0].Align := tabCenter;
   tl.Tabs[1].Offset := 72.5;
-  tl.Tabs[1].Align := ttaDecimal;
+  tl.Tabs[1].Align := tabDecimal;
   FRich.SetParaTabs(0, 0, tl);
   AssertEquals('two stops', 2, Length(PFmt(0).Tabs));
   AssertEquals('the second', 1450, PFmt(0).Tabs[1].Position);
@@ -936,7 +952,7 @@ begin
   AssertTrue('read', FRich.GetParaTabs(1, tl));
   AssertEquals('count', 2, tl.Count);
   AssertEquals('offset', 72.5, tl.Tabs[1].Offset, 0.0001);
-  AssertTrue('alignment', tl.Tabs[0].Align = ttaCenter);
+  AssertTrue('alignment', tl.Tabs[0].Align = tabCenter);
 end;
 
 { A paragraph write with nothing selected changes the caret's paragraph at once: a command,
@@ -948,14 +964,14 @@ begin
   SetText('one'#10'two'#10'three');
   FRich.SelStart := 5;
   depth := FRich.Document.UndoDepth;
-  FRich.Paragraph.Alignment := paraCenter;
+  FRich.Paragraph.ParaAlign := paraCenter;
   AssertTrue('the caret''s paragraph', PFmt(1).Align = paraCenter);
   AssertTrue('only it', (PFmt(0).Align = paraLeft) and (PFmt(2).Align = paraLeft));
   AssertEquals('a step', depth + 1, FRich.Document.UndoDepth);
   AssertEquals('one OnChange', 1, FChanges);
   // a selection that ends at a paragraph's very start does not touch that paragraph
   Sel(0, 4);
-  FRich.Paragraph.Alignment := paraRight;
+  FRich.Paragraph.ParaAlign := paraRight;
   AssertTrue('the first', PFmt(0).Align = paraRight);
   AssertTrue('not the second', PFmt(1).Align = paraCenter);
 end;
@@ -994,8 +1010,7 @@ begin
   AssertEquals('the paint''s text colour', 255, FRich.Style.TextColor.red);
   AssertEquals('no undo step', depth, FRich.Document.UndoDepth);
   AssertFalse('not a change of the content', FRich.Modified);
-  AssertTrue('every attribute consistent', FRich.DefAttributes.ConsistentAttributes =
-    [Low(TTyRichConsistentAttribute)..High(TTyRichConsistentAttribute)]);
+  AssertTrue('none, as Delphi''s DefAttributes', FRich.DefAttributes.ConsistentAttributes = []);
   try
     FRich.DefAttributes.BackColor := clYellow;
     Fail('the base has no highlight');
@@ -1003,7 +1018,7 @@ begin
     on ETyRichEdit do ;
   end;
   try
-    FRich.DefAttributes.VertAlign := vaSuper;
+    FRich.DefAttributes.Subscript := sstSuperscript;
     Fail('the base has no vertical position');
   except
     on ETyRichEdit do ;
@@ -1212,7 +1227,7 @@ begin
   // a paragraph write keeps it
   FRich.SelStart := 1;
   Pend;
-  FRich.Paragraph.Alignment := paraCenter;
+  FRich.Paragraph.ParaAlign := paraCenter;
   AssertTrue('a paragraph write keeps it', fsBold in FRich.SelAttributes.Style);
   Chars('k');
   AssertTrue('typed bold after it', fsBold in Fmt(1).Style);
@@ -1323,7 +1338,7 @@ procedure TTyRichEditApiTest.TestALazyParagraphFormattedAndUndoneSavesTheFile;
     FRich.Undo;
     AssertTrue(AName + ': SetRangeColor, undone: the file', SameBytes(AOrig, SavedRtf));
     Sel(ps, 0);
-    FRich.Paragraph.Alignment := paraCenter;
+    FRich.Paragraph.ParaAlign := paraCenter;
     FRich.Undo;
     AssertTrue(AName + ': a paragraph, undone: the file', SameBytes(AOrig, SavedRtf));
     pr := Default(TTyFontParams);
@@ -1350,7 +1365,7 @@ begin
   FRich.SelAttributes.Style := [fsBold];
   AssertEquals('one OnChange', 1, FChanges);
   AssertEquals('no OnSelectionChange', 0, FSelChanges);
-  FRich.Paragraph.Alignment := paraCenter;
+  FRich.Paragraph.ParaAlign := paraCenter;
   AssertEquals('one more', 2, FChanges);
   FRich.SetRangeColor(0, 8, clRed);
   AssertEquals('RichMemo''s: one more', 3, FChanges);
@@ -1359,14 +1374,14 @@ begin
   FRich.SelAttributes.Size := 20;
   AssertEquals('ReadOnly: written', 40, Fmt(2).SizeHalfPt);
   AssertEquals('ReadOnly: one OnChange', 4, FChanges);
-  FRich.SetParaAlignment(0, 0, paraRight);
+  FRich.SetParaAlignment(0, 0, paRight);
   AssertTrue('ReadOnly: RichMemo''s written', PFmt(0).Align = paraRight);
   // a composition open: it goes in first, which moves the selection
   FRich.ReadOnly := False;
   FRich.SelStart := 1;
   FRich.UpdateComposition('zz');
   ResetEvents;
-  FRich.Paragraph.Alignment := paraLeft;
+  FRich.Paragraph.ParaAlign := paraLeft;
   AssertEquals('the composition went in', 'azzbcdef', FRich.Lines[0]);
   AssertTrue('the selection moved: reported', FSelChanges >= 1);
 end;
@@ -1383,9 +1398,9 @@ var
     try
       case AWay of
         0: FRich.SelAttributes.Style := [fsBold];
-        1: FRich.Paragraph.Alignment := paraCenter;
+        1: FRich.Paragraph.ParaAlign := paraCenter;
         2: FRich.SetRangeColor(0, 3, clRed);
-        3: FRich.SetParaAlignment(0, 3, paraRight);
+        3: FRich.SetParaAlignment(0, 3, paRight);
       end;
     except
       on E: ETyRichEdit do raised := E.Message;
@@ -1769,7 +1784,7 @@ begin
   FRich.SelAttributes.Style := [fsItalic];
   AssertEquals('large: the wait cursor', 1, FRich.Waits);
   AssertEquals('and its end', 1, FRich.WaitEnds);
-  FRich.SetParaAlignment(0, 10, paraCenter);
+  FRich.SetParaAlignment(0, 10, paCenter);
   AssertEquals('RichMemo''s too', 2, FRich.Waits);
 end;
 
@@ -1795,7 +1810,7 @@ begin
   FRich.SelAttributes.Style := [fsBold];
   FRich.UpdateView;
   AssertEquals('a character write: the view stays', 0, FRich.TopParagraph);
-  FRich.Paragraph.Alignment := paraCenter;
+  FRich.Paragraph.ParaAlign := paraCenter;
   FRich.UpdateView;
   AssertEquals('a paragraph write: the view stays', 0, FRich.TopParagraph);
   AssertTrue('written', fsBold in Fmt(FRich.Document.Text.ParaStart(150)).Style);
@@ -2032,6 +2047,567 @@ begin
   FRich.FinishLoading;
   AssertTrue('a line added after the load: refused', raised);
   AssertEquals('the load', 'Paragraph 0 of the file.', FRich.Lines[0]);
+end;
+
+{ R70: Delphi's "default" idioms write the engine's "none of its own" - nothing of the base or
+  the theme is frozen into the content or the file. }
+procedure TTyRichEditApiTest.TestDelphisDefaultIdiomsWriteNoneOfTheirOwn;
+var
+  plainId: TTyCharFormatId;
+  f: TTyCharFormat;
+  s: RawByteString;
+  fnt: TFont;
+  lightText, darkText: TBGRAPixel;
+  names: TStringArray;
+  i: Integer;
+begin
+  SetText('abc def ghi');
+  plainId := FRich.Document.RunsOf(0)[0].Format;
+  // formatted: a font, a size, bold, a colour, a highlight, superscript
+  Sel(0, 3);
+  FRich.SelAttributes.Name := 'Courier New';
+  FRich.SelAttributes.Size := 14;
+  FRich.SelAttributes.Style := [fsBold, fsItalic];
+  FRich.SelAttributes.Color := clRed;
+  FRich.SelAttributes.BackColor := clYellow;
+  FRich.SelAttributes.Subscript := sstSuperscript;
+  // Delphi's reset: SelAttributes := DefAttributes
+  FRich.SelAttributes.Assign(FRich.DefAttributes);
+  f := Fmt(0);
+  AssertEquals('no name of its own', '', f.FontName);
+  AssertEquals('no size of its own', 0, f.SizeHalfPt);
+  AssertTrue('no style', (f.Style = []) and not f.Strike);
+  AssertEquals('the automatic colour', clDefault, f.Color);
+  AssertEquals('no highlight', clNone, f.HighlightColor);
+  AssertTrue('no vertical position', f.VertAlign = vaNone);
+  AssertEquals('the very format of text never formatted', plainId,
+    FRich.Document.RunsOf(0)[0].Format);
+  s := StrOf(SavedRtf);
+  AssertEquals('the file has no colour table entry', 0, Pos(BS + 'red', s));
+  AssertEquals('...and no colour reference', 0, Pos(BS + 'cf1', s));
+  AssertEquals('...nor the theme''s font', 0, Pos(FRich.DefAttributes.Name + ';', s));
+  // read: the effective name and size, the automatic colour as clDefault on both sides
+  AssertEquals('Name reads what it is shown in', FRich.DefAttributes.Name,
+    FRich.SelAttributes.Name);
+  AssertEquals('Size too', FRich.DefAttributes.Size, FRich.SelAttributes.Size);
+  AssertEquals('automatic: SelAttributes.Color', clDefault, FRich.SelAttributes.Color);
+  AssertEquals('...equals DefAttributes.Color', FRich.DefAttributes.Color,
+    FRich.SelAttributes.Color);
+  AssertEquals('BackColor reads clNone', clNone, FRich.SelAttributes.BackColor);
+  // the theme changes and the text follows: it has nothing of its own
+  TyRegisterBuiltinThemes;
+  names := TyBuiltinThemeNames;
+  // the first built-in theme whose text colour differs between its modes
+  for i := 0 to High(names) do
+  begin
+    FCtl.ThemeName := names[i];
+    FCtl.Mode := 'light';
+    FRich.UpdateView;
+    lightText := FRich.Style.TextColor;
+    FCtl.Mode := 'dark';
+    FRich.UpdateView;
+    darkText := FRich.Style.TextColor;
+    if (lightText.red <> darkText.red) or (lightText.green <> darkText.green) then Break;
+  end;
+  AssertFalse('the theme''s text colour changed with the mode',
+    (lightText.red = darkText.red) and (lightText.green = darkText.green) and
+    (lightText.blue = darkText.blue));
+  AssertEquals('dark: still automatic', clDefault, Fmt(0).Color);
+  AssertEquals('dark: still the plain format', plainId, FRich.Document.RunsOf(0)[0].Format);
+  AssertEquals('dark: still equal', FRich.DefAttributes.Color, FRich.SelAttributes.Color);
+  FCtl.Mode := 'light';
+  // Color := clWindowText and BackColor := clWindow are Delphi's "automatic" and "none"
+  Sel(4, 3);
+  FRich.SelAttributes.Color := clBlue;
+  FRich.SelAttributes.BackColor := clYellow;
+  FRich.SelAttributes.Color := clWindowText;
+  FRich.SelAttributes.BackColor := clWindow;
+  AssertEquals('clWindowText: automatic', clDefault, Fmt(4).Color);
+  AssertEquals('clWindow: none', clNone, Fmt(4).HighlightColor);
+  FRich.SelAttributes.BackColor := clYellow;
+  FRich.SelAttributes.BackColor := clDefault;
+  AssertEquals('clDefault: none', clNone, Fmt(4).HighlightColor);
+  FRich.SelAttributes.Color := clBlue;
+  FRich.SelAttributes.Color := clDefault;
+  AssertEquals('clDefault: automatic', clDefault, Fmt(4).Color);
+  AssertTrue('the plain format again',
+    FRich.Document.Formats.CharFormat(plainId).Equals(Fmt(4)));
+  // a TFont nobody named: LCL's 'default' is no name
+  fnt := TFont.Create;
+  try
+    AssertTrue('LCL''s default name', fnt.Name = 'default');
+    fnt.Size := 12;
+    Sel(8, 3);
+    FRich.SelAttributes.Assign(fnt);
+    AssertEquals('Assign(TFont): no name of its own', '', Fmt(8).FontName);
+    AssertEquals('...its size', 24, Fmt(8).SizeHalfPt);
+    AssertEquals('...the automatic colour', clDefault, Fmt(8).Color);
+    FRich.SelAttributes.Name := 'default';
+    AssertEquals('Name := ''default'': none', '', Fmt(8).FontName);
+  finally
+    fnt.Free;
+  end;
+  s := StrOf(SavedRtf);
+  AssertEquals('no font called default in the file', 0, Pos(' default;', s));
+  AssertEquals('no colour table entry', 0, Pos(BS + 'red', s));
+  // DefAttributes with a colour of its own reads it
+  FRich.DefAttributes.Color := clGreen;
+  AssertEquals('the base''s own colour', clGreen, FRich.DefAttributes.Color);
+  AssertEquals('automatic text still reads clDefault', clDefault, FRich.SelAttributes.Color);
+  FRich.DefAttributes.Color := clWindowText;
+  AssertEquals('the base automatic again', clDefault, FRich.DefAttributes.Color);
+  AssertEquals('...the control''s font', clDefault, FRich.Font.Color);
+  // a negative Height (a TFont's character height) is its absolute value (F-M12)
+  Sel(0, 3);
+  FRich.SelAttributes.Height := -16;
+  AssertEquals('Height -16 at 96: 12 pt', 24, Fmt(0).SizeHalfPt);
+end;
+
+{ R70 for the RichMemo façade: a TFont, the colours of TFontParams, SetRangeColor. }
+procedure TTyRichEditApiTest.TestTheDefaultIdiomsThroughRichMemo;
+var
+  fnt: TFont;
+  p: TTyFontParams;
+begin
+  SetText('abc def ghi');
+  fnt := TFont.Create;
+  try
+    fnt.Size := 11;
+    fnt.Color := clWindowText;
+    FRich.SetTextAttributes(0, 3, fnt);
+    AssertEquals('a TFont nobody named: no name', '', Fmt(0).FontName);
+    AssertEquals('clWindowText: automatic', clDefault, Fmt(0).Color);
+    FRich.SetTextAttributes(0, 3, TFont(nil));
+    AssertEquals('nil: nothing', 22, Fmt(0).SizeHalfPt);
+  finally
+    fnt.Free;
+  end;
+  FRich.SetRangeColor(4, 3, clRed);
+  FRich.SetRangeColor(4, 3, clWindowText);
+  AssertEquals('SetRangeColor(clWindowText): automatic', clDefault, Fmt(4).Color);
+  p := Default(TTyFontParams);
+  p.Name := 'default';
+  p.Size := 10;
+  p.Color := clWindowText;
+  p.HasBkClr := True;
+  p.BkColor := clWindow;
+  FRich.SetTextAttributes(8, 3, p);
+  AssertEquals('TFontParams: no name', '', Fmt(8).FontName);
+  AssertEquals('TFontParams: automatic', clDefault, Fmt(8).Color);
+  AssertEquals('TFontParams: clWindow is no highlight', clNone, Fmt(8).HighlightColor);
+  FRich.SetRangeParams(8, 3, [tmm_Name, tmm_Color], 'default', 0, clWindowText, [], []);
+  AssertEquals('SetRangeParams: no name', '', Fmt(8).FontName);
+  AssertEquals('SetRangeParams: automatic', clDefault, Fmt(8).Color);
+end;
+
+{ F-M10: an assignment to DefAttributes leaves out what the base cannot hold; only the direct
+  writes of BackColor and Subscript raise. }
+procedure TTyRichEditApiTest.TestAnAssignToTheBaseLeavesWhatItCannotHold;
+var
+  raised: Boolean;
+begin
+  SetText('abc');
+  Sel(0, 3);
+  FRich.SelAttributes.BackColor := clYellow;
+  FRich.SelAttributes.Subscript := sstSuperscript;
+  FRich.SelAttributes.Size := 15;
+  FRich.DefAttributes.Assign(FRich.SelAttributes);
+  AssertEquals('the size went into the base', 15, FRich.DefAttributes.Size);
+  AssertEquals('no highlight there', clNone, FRich.DefAttributes.BackColor);
+  AssertTrue('no vertical position there', FRich.DefAttributes.Subscript = sstNone);
+  raised := False;
+  try
+    FRich.DefAttributes.BackColor := clYellow;
+  except
+    on ETyRichEdit do raised := True;
+  end;
+  AssertTrue('a direct write of BackColor raises', raised);
+  raised := False;
+  try
+    FRich.DefAttributes.Subscript := sstSubscript;
+  except
+    on ETyRichEdit do raised := True;
+  end;
+  AssertTrue('a direct write of Subscript raises', raised);
+end;
+
+{ F-I4: Delphi's names and meanings - TAlignment, the four one-style Booleans, Subscript,
+  Paragraph.ConsistentAttributes. }
+procedure TTyRichEditApiTest.TestTheDelphiSurfaceAsTheVcl;
+var
+  f: TTyCharFormat;
+begin
+  SetText('abcdef'#10'two'#10'three');
+  Sel(0, 1);
+  FRich.Paragraph.Alignment := taCenter;
+  AssertTrue('taCenter', PFmt(0).Align = paraCenter);
+  FRich.Paragraph.Alignment := taRightJustify;
+  AssertTrue('taRightJustify', PFmt(0).Align = paraRight);
+  AssertTrue('reads taRightJustify', FRich.Paragraph.Alignment = taRightJustify);
+  FRich.Paragraph.ParaAlign := paraJustify;
+  AssertTrue('justified reads taLeftJustify', FRich.Paragraph.Alignment = taLeftJustify);
+  AssertTrue('...and paraJustify through ParaAlign', FRich.Paragraph.ParaAlign = paraJustify);
+  FRich.Paragraph.Alignment := taLeftJustify;
+  AssertTrue('taLeftJustify', PFmt(0).Align = paraLeft);
+  // Bold := True changes bold only; the others as each character has them
+  Sel(0, 3);
+  FRich.SelAttributes.Italic := True;
+  Sel(2, 4);
+  FRich.SelAttributes.Underline := True;
+  Sel(0, 6);
+  FRich.SelAttributes.Bold := True;
+  AssertTrue('bold everywhere', (fsBold in Fmt(0).Style) and (fsBold in Fmt(5).Style));
+  AssertTrue('italic kept where it was', (fsItalic in Fmt(0).Style) and not (fsItalic in Fmt(4).Style));
+  AssertTrue('underline kept where it was', not (fsUnderline in Fmt(0).Style) and (fsUnderline in Fmt(4).Style));
+  AssertTrue('reads Bold', FRich.SelAttributes.Bold);
+  AssertFalse('caItalic: mixed', caItalic in FRich.SelAttributes.ConsistentAttributes);
+  AssertTrue('caBold: the same', caBold in FRich.SelAttributes.ConsistentAttributes);
+  FRich.SelAttributes.Italic := False;
+  AssertFalse('italic off', fsItalic in Fmt(0).Style);
+  AssertTrue('bold stays', fsBold in Fmt(0).Style);
+  FRich.SelAttributes.Strikeout := True;
+  f := Fmt(1);
+  AssertTrue('strike-through', f.Strike);
+  AssertTrue('reads Strikeout', FRich.SelAttributes.Strikeout);
+  FRich.SelAttributes.Underline := False;
+  AssertFalse('underline off', fsUnderline in Fmt(4).Style);
+  // Subscript, Delphi's TSubscriptType
+  Sel(0, 2);
+  FRich.SelAttributes.Subscript := sstSubscript;
+  AssertTrue('subscript', Fmt(0).VertAlign = vaSub);
+  Sel(0, 4);
+  AssertFalse('caSubscript: mixed', caSubscript in FRich.SelAttributes.ConsistentAttributes);
+  FRich.SelAttributes.Subscript := sstSuperscript;
+  AssertTrue('superscript', FRich.SelAttributes.Subscript = sstSuperscript);
+  AssertTrue('caSubscript: the same', caSubscript in FRich.SelAttributes.ConsistentAttributes);
+  // Paragraph.ConsistentAttributes
+  SetText('one'#10'two'#10'three');
+  Sel(0, 9);
+  AssertTrue('all the same', FRich.Paragraph.ConsistentAttributes =
+    [cpaAlignment, cpaNumbering, cpaFirstIndent, cpaLeftIndent, cpaRightIndent, cpaTabStops]);
+  Sel(4, 0);
+  FRich.Paragraph.Alignment := taCenter;
+  FRich.Paragraph.RightIndent := 10;
+  Sel(0, 9);
+  AssertTrue('alignment and right indent differ', FRich.Paragraph.ConsistentAttributes =
+    [cpaNumbering, cpaFirstIndent, cpaLeftIndent, cpaTabStops]);
+  Sel(0, 0);
+  FRich.Paragraph.LeftIndent := 5;
+  FRich.Paragraph.Tab[0] := 36;
+  Sel(0, 9);
+  AssertTrue('the offset and the stops too', FRich.Paragraph.ConsistentAttributes =
+    [cpaNumbering, cpaFirstIndent]);
+  Sel(0, 2);
+  AssertTrue('one paragraph: all', FRich.Paragraph.ConsistentAttributes =
+    [cpaAlignment, cpaNumbering, cpaFirstIndent, cpaLeftIndent, cpaRightIndent, cpaTabStops]);
+end;
+
+{ F-I4: TabCount := N then Tab[0..N-1] - the one tab idiom that works in Delphi; a read past the
+  count gives 0; the file gets the stops in order of position, none at 0. }
+procedure TTyRichEditApiTest.TestDelphisTabIdiom;
+var
+  s: RawByteString;
+begin
+  SetText('one'#10'two');
+  Sel(0, 0);
+  AssertEquals('no stops', 0, FRich.Paragraph.TabCount);
+  FRich.Paragraph.TabCount := 2;
+  AssertEquals('two now', 2, FRich.Paragraph.TabCount);
+  AssertEquals('at 0 until set', 0, FRich.Paragraph.Tab[1]);
+  FRich.Paragraph.Tab[0] := 72;
+  FRich.Paragraph.Tab[1] := 144;
+  AssertEquals('first', 1440, PFmt(0).Tabs[0].Position);
+  AssertEquals('second', 2880, PFmt(0).Tabs[1].Position);
+  AssertEquals('a read past the count', 0, FRich.Paragraph.Tab[31]);
+  FRich.Paragraph.TabCount := 1;
+  AssertEquals('one left', 1, Length(PFmt(0).Tabs));
+  FRich.Paragraph.TabCount := 100;
+  AssertEquals('at most Delphi''s 32', CTyMaxTabStops, FRich.Paragraph.TabCount);
+  FRich.Paragraph.TabCount := -1;
+  AssertEquals('none', 0, FRich.Paragraph.TabCount);
+  // out of order and one left at 0: kept as written, the file in order without the 0
+  FRich.Paragraph.TabCount := 3;
+  FRich.Paragraph.Tab[1] := 72;
+  FRich.Paragraph.Tab[0] := 144;
+  AssertEquals('kept as written', 2880, PFmt(0).Tabs[0].Position);
+  s := StrOf(SavedRtf);
+  AssertTrue('the file: in order', Pos(BS + 'tx1440' + BS + 'tx2880', s) > 0);
+  AssertEquals('...and no stop at 0', 0, Pos(BS + 'tx0', s));
+end;
+
+{ F-M5 / F-I4: nsBullet / nsNone compile and mean Delphi's; on gives a paragraph without an
+  indent WordPad's hanging indent, off takes it back: the plain format again. }
+procedure TTyRichEditApiTest.TestNumberingAsDelphiAndWordPad;
+var
+  plain: TTyParaFormatId;
+begin
+  SetText('one'#10'two'#10'three');
+  plain := FRich.Document.ParaFormatOf(0);
+  Sel(0, 5);
+  FRich.Paragraph.Numbering := nsBullet;
+  AssertTrue('bullets', PFmt(0).List.Kind = lkBullet);
+  AssertEquals('the hanging indent: others', CTyListLeftIndent, PFmt(1).LeftIndent);
+  AssertEquals('the hanging indent: first', CTyListFirstIndent, PFmt(1).FirstIndent);
+  AssertTrue('reads nsBullet', FRich.Paragraph.Numbering = nsBullet);
+  FRich.Paragraph.Numbering := lkDecimal;
+  AssertTrue('a numbered kind through the same property', PFmt(0).List.Kind = lkDecimal);
+  AssertEquals('the indent stays', CTyListLeftIndent, PFmt(0).LeftIndent);
+  FRich.Paragraph.Numbering := nsNone;
+  AssertEquals('plain again: the very format', plain, FRich.Document.ParaFormatOf(0));
+  AssertEquals('...the second too', plain, FRich.Document.ParaFormatOf(1));
+  // a paragraph with an indent of its own keeps it when it becomes a list item
+  Sel(10, 0);
+  FRich.Paragraph.FirstIndent := 18;
+  FRich.Paragraph.Numbering := nsBullet;
+  AssertEquals('its own indent', 360, PFmt(2).LeftIndent + PFmt(2).FirstIndent);
+  // RichMemo's SetParaNumbering follows the same rule
+  FRich.SetParaNumbering(0, 0, Default(TTyParaNumbering));
+  AssertEquals('RichMemo off on a plain paragraph: nothing', plain, FRich.Document.ParaFormatOf(0));
+end;
+
+{ F-M1: an indent write over paragraphs that differ moves the one meaning written in each and
+  keeps the other (the review's B2). }
+procedure TTyRichEditApiTest.TestIndentWritesKeepEachParagraphsOwn;
+var
+  f: TTyParaFormat;
+  m: TTyParaMetric;
+begin
+  SetText('zero'#10'one');
+  // paragraph 1: its first line at 36 pt, its other lines at 36 pt
+  f := TyDefaultParaFormat;
+  f.LeftIndent := 720;
+  FRich.Document.Execute(TTyRichSetParaFormat.Create(1, 1, [pffLeftIndent], f));
+  Sel(0, 6);
+  FRich.Paragraph.LeftIndent := 18;
+  AssertEquals('0: its first line stays at 0', 0, PFmt(0).LeftIndent + PFmt(0).FirstIndent);
+  AssertEquals('0: its other lines 18 pt from it', 360, PFmt(0).LeftIndent);
+  AssertEquals('1: its first line stays at 36 pt', 720, PFmt(1).LeftIndent + PFmt(1).FirstIndent);
+  AssertEquals('1: its other lines 18 pt from it', 1080, PFmt(1).LeftIndent);
+  FRich.Paragraph.FirstIndent := 36;
+  AssertEquals('0: the first line at 36', 720, PFmt(0).LeftIndent + PFmt(0).FirstIndent);
+  AssertEquals('0: its offset kept', -360, PFmt(0).FirstIndent);
+  AssertEquals('1: the first line at 36', 720, PFmt(1).LeftIndent + PFmt(1).FirstIndent);
+  AssertEquals('1: its offset kept', -360, PFmt(1).FirstIndent);
+  AssertEquals('one undo step each', 3, FRich.Document.UndoDepth);
+  // RichMemo's SetRangeParaParams: only what the mask names, per paragraph
+  m := Default(TTyParaMetric);
+  m.FirstLine := 5;
+  FRich.SetRangeParaParams(0, 6, [pmm_FirstLine], m);
+  AssertEquals('FirstLine: the first lines', 100, PFmt(1).LeftIndent + PFmt(1).FirstIndent);
+  AssertEquals('FirstLine: the other lines stay', 1080, PFmt(1).LeftIndent);
+  AssertEquals('...in each paragraph', 1080, PFmt(0).LeftIndent);
+  m.HeadIndent := 2;
+  FRich.SetRangeParaParams(0, 6, [pmm_HeadIndent], m);
+  AssertEquals('HeadIndent: the other lines', 40, PFmt(1).LeftIndent);
+  AssertEquals('HeadIndent: the first line stays', 100, PFmt(1).LeftIndent + PFmt(1).FirstIndent);
+  m.TailIndent := 3;
+  FRich.SetRangeParaParams(0, 6, [pmm_TailIndent], m);
+  AssertEquals('TailIndent alone', 60, PFmt(0).RightIndent);
+  AssertEquals('the rest as it was', 40, PFmt(1).LeftIndent);
+end;
+
+{ F-M4: RichMemo's scale (single 1.2), its constants, 0 leaves the spacing alone, and the read
+  of an exact spacing written back leaves it as it was. }
+procedure TTyRichEditApiTest.TestRichMemosMetricOnItsScale;
+var
+  m: TTyParaMetric;
+  f: TTyParaFormat;
+begin
+  SetText('one'#10'two');
+  InitParaMetric(m);
+  AssertEquals('InitParaMetric: single', 1.2, m.LineSpacing, 0.0001);
+  AssertEquals('SingleLineSpacing', DefLineSpacing, SingleLineSpacing, 0.0001);
+  m.LineSpacing := OneHalfLineSpacing;
+  FRich.SetParaMetric(0, 0, m);
+  AssertTrue('1.8: one and a half', PFmt(0).LineSpacing = ls15);
+  m.LineSpacing := DoubleLineSpacing;
+  FRich.SetParaMetric(0, 0, m);
+  AssertTrue('2.4: double', PFmt(0).LineSpacing = lsDouble);
+  m.LineSpacing := SingleLineSpacing;
+  FRich.SetParaMetric(0, 0, m);
+  AssertTrue('1.2: single', PFmt(0).LineSpacing = lsSingle);
+  // exactly 20 pt: read 0, written back - it stays
+  f := TyDefaultParaFormat;
+  f.LineSpacing := lsExact;
+  f.LineSpacingValue := 400;
+  FRich.Document.Execute(TTyRichSetParaFormat.Create(0, 0, [pffLineSpacing], f));
+  AssertTrue('read', FRich.GetParaMetric(0, m));
+  AssertEquals('an exact spacing reads 0', 0, m.LineSpacing, 0.0001);
+  m.SpaceAfter := 6;
+  FRich.SetParaMetric(0, 0, m);
+  AssertTrue('the idiom: still exactly', PFmt(0).LineSpacing = lsExact);
+  AssertEquals('...20 pt', 400, PFmt(0).LineSpacingValue);
+  AssertEquals('...the field changed', 120, PFmt(0).SpaceAfter);
+  m.LineSpacing := -1;
+  FRich.SetRangeParaParams(0, 0, [pmm_LineSpacing], m);
+  AssertTrue('less than 0: left alone', PFmt(0).LineSpacing = lsExact);
+end;
+
+{ F-M6: a selection from a paragraph's end over the next paragraph reads the first character a
+  write formats - and agrees with ConsistentAttributes. }
+procedure TTyRichEditApiTest.TestTheReadIsTheFirstCharacterTheWriteFormats;
+begin
+  SetText('ab'#10'cd');
+  Sel(0, 2);
+  FRich.SelAttributes.Bold := True;
+  Sel(2, 3);
+  AssertFalse('reads cd''s: not bold', FRich.SelAttributes.Bold);
+  AssertTrue('and all of it is the same', caBold in FRich.SelAttributes.ConsistentAttributes);
+  FRich.SelAttributes.Italic := True;
+  AssertFalse('the write formatted nothing of ab', fsItalic in Fmt(1).Style);
+  AssertTrue('...but cd', fsItalic in Fmt(3).Style);
+  Sel(2, 1);
+  AssertTrue('the separator alone: the character before (nothing is formatted)',
+    FRich.SelAttributes.Bold);
+end;
+
+{ F-M3: RichMemo's statement is Style + Add - Remove: a style in both sets ends up off. }
+procedure TTyRichEditApiTest.TestAStyleInBothSetsGoes;
+begin
+  SetText('abc');
+  FRich.SetRangeParams(0, 3, [tmm_Styles], '', 0, clDefault, [fsBold, fsItalic], []);
+  FRich.SetRangeParams(0, 3, [tmm_Styles], '', 0, clDefault, [fsBold], [fsBold]);
+  AssertFalse('in both: off', fsBold in Fmt(1).Style);
+  AssertTrue('the other kept', fsItalic in Fmt(1).Style);
+end;
+
+{ F-M4: the RichMemo methods provided now. }
+procedure TTyRichEditApiTest.TestTheSmallerRichMemoMethods;
+var
+  rs, rl, ps, pl: TTyRichPos;
+  r: TTyParaRange;
+  depth: Integer;
+  tl: TTyTabStopList;
+  fp: TTyFontParams;
+  n: TTyParaNumbering;
+begin
+  SetText('abcdef'#10'gh');
+  FRich.SetRangeColor(2, 2, clRed);
+  AssertTrue('style range', FRich.GetStyleRange(3, rs, rl));
+  AssertEquals('its start', 2, rs);
+  AssertEquals('its length', 2, rl);
+  AssertTrue('before it', FRich.GetStyleRange(0, rs, rl));
+  AssertEquals('from 0', 0, rs);
+  AssertEquals('two', 2, rl);
+  AssertFalse('outside', FRich.GetStyleRange(100, rs, rl));
+  AssertTrue('para range', FRich.GetParaRange(3, r));
+  AssertEquals('start', 0, r.start);
+  AssertEquals('without the break', 6, r.lengthNoBr);
+  AssertEquals('with it', 7, r.length);
+  AssertTrue('the last', FRich.GetParaRange(8, ps, pl));
+  AssertEquals('the last: start', 7, ps);
+  AssertEquals('the last: no break', 2, pl);
+  AssertEquals('GetText', 'cde', FRich.GetText(2, 3));
+  AssertTrue('GetUText', FRich.GetUText(5, 3) = UnicodeString('f' + sLineBreak + 'g'));
+  // InDelText: one undo step, the format of the first character replaced
+  Sel(8, 0);
+  depth := FRich.Document.UndoDepth;
+  AssertEquals('inserted', 3, FRich.InDelText('XYZ', 2, 2));
+  AssertEquals('replaced', 'abXYZef', FRich.Lines[0]);
+  AssertEquals('one step', depth + 1, FRich.Document.UndoDepth);
+  AssertEquals('in the replaced text''s format', clRed, Fmt(3).Color);
+  AssertEquals('the caret followed the text', 9, FRich.SelStart);
+  FRich.Undo;
+  AssertEquals('undone', 'abcdef', FRich.Lines[0]);
+  AssertEquals('UTF-8 in, characters out', 2, FRich.InDelText(#$E4#$B8#$AD#$E6#$96#$87, 0, 0));
+  FRich.ReadOnly := True;
+  AssertEquals('the document API: not ReadOnly''s', 0, FRich.InDelText('', 0, 2));
+  AssertEquals('deleted regardless', 'abcdef', FRich.Lines[0]);
+  FRich.ReadOnly := False;
+  FRich.ZoomFactor := 1.5;
+  AssertEquals('ZoomFactor', 150, FRich.Zoom);
+  AssertEquals('read', 1.5, FRich.ZoomFactor, 0.0001);
+  FRich.ZoomFactor := 1;
+  Sel(0, 0);
+  FRich.SetSelLengthFor(#$E4#$B8#$AD'a');
+  AssertEquals('SetSelLengthFor: characters', 2, FRich.SelLength);
+  // the records
+  InitFontParams(fp);
+  AssertEquals('InitFontParams', 0, fp.Size);
+  InitParaNumbering(n);
+  AssertTrue('InitParaNumbering', n.Style = pnNone);
+  InitTabStopList(tl);
+  AssertEquals('InitTabStopList', 0, tl.Count);
+  tl.Count := 1;
+  SetLength(tl.Tabs, 1);
+  tl.Tabs[0].Offset := 36;
+  tl.Tabs[0].Align := tabWordBar;
+  FRich.SetParaTabs(0, 0, tl);
+  AssertTrue('a bar tab is a left stop', PFmt(0).Tabs[0].Align = ttaLeft);
+end;
+
+{ F-I1: ConsistentAttributes is remembered for (selection, content) and bounded by its budget -
+  counts of what a read parses on a lazily read file, never a time. }
+procedure TTyRichEditApiTest.TestConsistentAttributesIsBoundedAndRemembered;
+var
+  acc: TConsAccess;
+  load: TTyRtfLoad;
+  p0, p1, maxInterval: Int64;
+  walks, i: Integer;
+  a: TTyRichConsistentAttributes;
+  pa: TTyRichConsistentParaAttributes;
+begin
+  acc := TConsAccess(FRich);
+  LoadBytes(PlainRtf(20000));
+  load := TyRichRtfLoadOf(FRich.Document);
+  AssertTrue('read lazily', load <> nil);
+  maxInterval := 0;
+  for i := 0 to load.IntervalCount - 2 do
+    maxInterval := Math.Max(maxInterval, load.IntervalStart(i + 1) - load.IntervalStart(i));
+  AssertTrue('more than one interval', load.IntervalCount > 4);
+  acc.ConsistencyBudgetBytes := 2 * maxInterval;
+  // Select All and a read: at most the budget parsed (a parse begun is finished)
+  FRich.SelectAll;
+  p0 := load.ParsedBytes;
+  walks := acc.ConsistencyWalks;
+  a := FRich.SelAttributes.ConsistentAttributes;
+  p1 := load.ParsedBytes;
+  AssertTrue('parsed within the budget and one interval',
+    p1 - p0 <= acc.ConsistencyBudgetBytes + 2 * maxInterval);
+  AssertTrue('the file is all plain, but the walk was cut: reported mixed (a lower bound)',
+    a = []);
+  AssertEquals('one walk', walks + 1, acc.ConsistencyWalks);
+  // a second read parses nothing and walks nothing
+  a := FRich.SelAttributes.ConsistentAttributes;
+  AssertEquals('second read: nothing parsed', p1, load.ParsedBytes);
+  AssertEquals('second read: no walk', walks + 1, acc.ConsistencyWalks);
+  // the paragraphs' answer: the same bound
+  p0 := load.ParsedBytes;
+  AssertTrue('Paragraph: cut too', FRich.Paragraph.ConsistentAttributes = []);
+  AssertTrue('Paragraph: within the budget',
+    load.ParsedBytes - p0 <= acc.ConsistencyBudgetBytes + 2 * maxInterval);
+  p0 := load.ParsedBytes;
+  pa := FRich.Paragraph.ConsistentAttributes;
+  AssertTrue('Paragraph, second read: the same', pa = []);
+  AssertEquals('Paragraph, second read: nothing parsed', p0, load.ParsedBytes);
+  // a small selection answers exactly
+  Sel(FRich.Document.Text.ParaStart(10000), 200);
+  AssertTrue('a small selection: exact', FRich.SelAttributes.ConsistentAttributes =
+    [Low(TTyRichConsistentAttribute)..High(TTyRichConsistentAttribute)]);
+  // the paragraph budget, on a document whose values are all there
+  SetText('');
+  FRich.Lines.BeginUpdate;
+  try
+    for i := 0 to 99 do FRich.Lines.Add('line ' + IntToStr(i));
+  finally
+    FRich.Lines.EndUpdate;
+  end;
+  acc.ConsistencyBudgetParas := 10;
+  FRich.SelectAll;
+  AssertTrue('past the paragraphs'' budget: a lower bound', FRich.SelAttributes.ConsistentAttributes = []);
+  AssertTrue('Paragraph too', FRich.Paragraph.ConsistentAttributes = []);
+  Sel(0, 30);
+  AssertTrue('within it: exact', caBold in FRich.SelAttributes.ConsistentAttributes);
+  // a change of the content asks again
+  acc.ConsistencyBudgetParas := CRichConsistParas;
+  FRich.SelectAll;
+  walks := acc.ConsistencyWalks;
+  AssertTrue('all the same', caBold in FRich.SelAttributes.ConsistentAttributes);
+  Sel(0, 2);
+  FRich.SelAttributes.Bold := True;
+  FRich.SelectAll;
+  AssertFalse('after a write: mixed', caBold in FRich.SelAttributes.ConsistentAttributes);
+  AssertEquals('two walks', walks + 2, acc.ConsistencyWalks);
 end;
 
 initialization

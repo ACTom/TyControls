@@ -114,6 +114,13 @@ const
   CRichWordWindow = 4096;
   { A copy of more characters than this shows the wait cursor while it is made. }
   CRichCopyWaitChars = 1000000;
+  { The budget of one read of ConsistentAttributes (SelAttributes' and Paragraph's, F-I1):
+    at most this many paragraphs walked, and at most this many bytes of a lazily read file
+    parsed for it (a parse already begun is finished; the first paragraph is always read),
+    about 30 ms on a 100 MB file. A selection larger than that is answered with a lower
+    bound: every attribute not proven the same within the budget is "not consistent". }
+  CRichConsistParas = 200000;
+  CRichConsistParseBytes = 192 * 1024;
   { The most bytes of image a picture is made from (a paste, TyRichMakePicture): 128 MB. With
     CRichPictureMaxPixels (32 Mi pixels: the most the layouter decodes - a bigger picture
     would only ever show as a placeholder - and 128 MB once decoded) it bounds what one paste
@@ -524,6 +531,25 @@ type
     FConsBase: TTyCharFormat;
     FConsMask: TTyCharFormatMask;
     FConsLast: Integer;
+    // the walks' budget (F-I1): paragraphs seen, the loader's parsed bytes at the start, cut
+    FConsBudgetParas: Integer;
+    FConsBudgetBytes: Int64;
+    FConsSeen: Integer;
+    FConsParsed0: Int64;
+    FConsCut: Boolean;
+    FConsWalks: Integer;
+    // the last answers, by selection and content (a repeated read is free)
+    FCharConsValid: Boolean;
+    FCharConsStart, FCharConsLen, FCharConsState: Int64;
+    FCharConsResult: TTyCharFormatMask;
+    FParaConsValid: Boolean;
+    FParaConsStart, FParaConsLen, FParaConsState: Int64;
+    FParaConsResult: TTyRichConsistentParaAttributes;
+    // the paragraph walk: the first format met and what is still the same
+    FParaConsHave: Boolean;
+    FParaConsBaseId: TTyParaFormatId;
+    FParaConsBase: TTyParaFormat;
+    FParaConsMask: TTyRichConsistentParaAttributes;
     FOnModifiedChange: TNotifyEvent;
     procedure DocModifiedChanged(Sender: TObject);
     procedure SetSelAttributes(AValue: TTyRichTextAttributes);
@@ -551,6 +577,23 @@ type
     procedure ConsistencyAdd(AFormat: TTyCharFormatId);
     procedure ConsistencyWalk(AIndex: Integer; AData: Pointer; ASrcOffset, ASrcBytes: Int64;
       var AContinue: Boolean);
+    { The budget of a consistency walk (F-I1): ConsistencyBegin starts one; ConsistencyGo
+      counts a paragraph (AUnparsed: reading it parses) and says whether the walk may read
+      it - False once the budget is spent (FConsCut). }
+    procedure ConsistencyBegin;
+    function ConsistencyGo(AUnparsed: Boolean): Boolean;
+    function ParsedSoFar: Int64;
+    { Delphi's Paragraph.ConsistentAttributes over the paragraphs [AStart, AStart + ALen)
+      touches: bounded and remembered as RangeConsistency. }
+    function ParaConsistency(AStart, ALen: TTyRichPos): TTyRichConsistentParaAttributes;
+    procedure ParaConsistencyWalk(AIndex: Integer; AData: Pointer; ASrcOffset,
+      ASrcBytes: Int64; var AContinue: Boolean);
+    { The format SelAttributes reads: with a selection, of the first character a format write
+      formats (one that starts at a paragraph's separator formats nothing of that paragraph:
+      the next one's first character, F-M6); else TypingFormat. }
+    function SelFormatId: TTyCharFormatId;
+    function GetZoomFactor: Double;
+    procedure SetZoomFactor(AValue: Double);
     { The paragraphs [AStart, AStart + ALen) touches: a range that ends at a paragraph's very
       start does not touch it; an empty range, its paragraph. }
     procedure ParasOfRange(AStart, ALen: TTyRichPos; out AFirst, ALast: Integer);
@@ -1193,6 +1236,11 @@ type
       step by hand): StepBytes. A test seam (it records what the loader was asked). }
     function SliceBytes: Int64; virtual;
     property PendingPictureCount: Integer read FPendingCount;
+    { The budget of a ConsistentAttributes read (CRichConsistParas, CRichConsistParseBytes;
+      a test seam) and the walks made so far (a remembered answer makes none). }
+    property ConsistencyBudgetParas: Integer read FConsBudgetParas write FConsBudgetParas;
+    property ConsistencyBudgetBytes: Int64 read FConsBudgetBytes write FConsBudgetBytes;
+    property ConsistencyWalks: Integer read FConsWalks;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -1527,23 +1575,58 @@ type
       AAddFontStyle, ARemoveFontStyle: TFontStyles); overload;
     procedure SetRangeParams(AStart, ALen: TTyRichPos; AModifyMask: TTyTextModifyMask;
       const AParams: TTyFontParams; AAddFontStyle, ARemoveFontStyle: TFontStyles); overload;
+    { The run of characters around APos that share its format, inside its paragraph (a
+      paragraph's end: its last run): False outside the text. }
+    function GetStyleRange(APos: TTyRichPos; var ARangeStart, ARangeLen: TTyRichPos): Boolean;
     { The paragraph APos is in (False: outside the text); the Set methods change the
-      paragraphs [AStart, AStart + ALen) touches, one command each. Points. }
-    function GetParaAlignment(APos: TTyRichPos; var AAlign: TTyParaAlign): Boolean; overload;
-    function GetParaAlignment(APos: TTyRichPos): TTyParaAlign; overload;
-    procedure SetParaAlignment(AStart, ALen: TTyRichPos; AAlign: TTyParaAlign);
+      paragraphs [AStart, AStart + ALen) touches, one command each. Points.
+      TTyParaAlignment is RichMemo's TParaAlignment (paLeft, paRight, paCenter, paJustify):
+      in a unit that also uses Menus (whose TPopupAlignment has paLeft, paRight, paCenter),
+      the unit used last decides what a bare paLeft means - qualify the name there. }
+    function GetParaAlignment(APos: TTyRichPos; var AAlign: TTyParaAlignment): Boolean; overload;
+    function GetParaAlignment(APos: TTyRichPos): TTyParaAlignment; overload;
+    procedure SetParaAlignment(AStart, ALen: TTyRichPos; AAlign: TTyParaAlignment);
     function GetParaMetric(APos: TTyRichPos; var AMetric: TTyParaMetric): Boolean;
-    { Indents, spaces and the line spacing at once; an exact or at-least spacing the
-      paragraphs have becomes the multiple AMetric gives. }
+    { Indents, spaces and the line spacing at once (SetRangeParaParams with every field);
+      a LineSpacing of 0 or less leaves the paragraphs' spacing as it is. }
     procedure SetParaMetric(AStart, ALen: TTyRichPos; const AMetric: TTyParaMetric);
+    { Only what AModifyMask names, per paragraph (RichMemo's: each paragraph's metric read,
+      the named fields changed, written back): pmm_FirstLine moves each first line, the
+      other lines staying; pmm_HeadIndent the other lines, each first line staying; both: as
+      given. pmm_LineSpacing with 0 or less: nothing. One command. }
+    procedure SetRangeParaParams(AStart, ALen: TTyRichPos; AModifyMask: TTyParaModifyMask;
+      const AMetric: TTyParaMetric);
     function GetParaNumbering(APos: TTyRichPos; var ANumber: TTyParaNumbering): Boolean;
+    { As Paragraph.Numbering: a list turned on gives a paragraph without an indent the
+      default hanging indent, turned off takes the indents back to 0 (CTyListMask). }
     procedure SetParaNumbering(AStart, ALen: TTyRichPos; const ANumber: TTyParaNumbering);
+    { RichMemo's GetParaRange: the paragraph APos is in - its first character, its length
+      without and with its separator (the last paragraph has none). False outside the
+      text. }
+    function GetParaRange(APos: TTyRichPos; var ARange: TTyParaRange): Boolean; overload;
+    function GetParaRange(APos: TTyRichPos; var AStart, ALength: TTyRichPos): Boolean; overload;
     function GetParaTabs(APos: TTyRichPos; var AStopList: TTyTabStopList): Boolean;
     procedure SetParaTabs(AStart, ALen: TTyRichPos; const AStopList: TTyTabStopList);
     { LoadFromStream(AStream, rfRtf) / SaveToStream(AStream, rfRtf): False when it raised
       (what the document had stays). }
     function LoadRichText(AStream: TStream): Boolean;
     function SaveRichText(AStream: TStream): Boolean;
+    { RichMemo's GetText / GetUText: RangeText of the clamped range (UTF-8 / UTF-16). }
+    function GetText(AStart, ALen: TTyRichPos): string;
+    function GetUText(AStart, ALen: TTyRichPos): UnicodeString;
+    { RichMemo's InDelText: the characters [AStart, AStart + AReplaceLen) replaced by AText
+      (line breaks make paragraphs) in the format of the first character replaced (nothing
+      replaced: the format typing there would get), as ONE undo step; a document-API write
+      (not refused by ReadOnly; raises ETyRichEdit when the document takes no edit). The
+      selection follows the text as it does for any change elsewhere. Returns the number of
+      characters inserted (this control's characters). }
+    function InDelText(const AText: string; AStart, AReplaceLen: TTyRichPos): TTyRichPos;
+    { RichMemo's CharAtPos: the position at client point (X, Y) (PositionAtPoint). }
+    function CharAtPos(X, Y: Integer): TTyRichPos;
+    { RichMemo's SetSelLengthFor: SelLength := the number of characters of AText. }
+    procedure SetSelLengthFor(const AText: string);
+    { RichMemo's ZoomFactor: Zoom / 100 (written: rounded to Zoom's whole percent). }
+    property ZoomFactor: Double read GetZoomFactor write SetZoomFactor;
     { Delphi's PlainText, the plain-text document state (R65, R69) - one state, one rule.
       True: a key makes no line break inside a paragraph (Shift+Enter makes a paragraph), a
       paste takes text only (R60), and SaveToStream without a format (Lines.SaveToStream too)
@@ -2127,6 +2210,7 @@ type
   protected
     FOwner: TTyCustomRichEdit;
     function GetFormat: TTyCharFormat; override;
+    function GetRawFormat: TTyCharFormat; override;
     function GetConsistent: TTyCharFormatMask; override;
     procedure SetFormat(AMask: TTyCharFormatMask; const AValue: TTyCharFormat); override;
     function GetPPI: Integer; override;
@@ -2137,6 +2221,9 @@ type
   TTyRichDefAttrs = class(TTyRichSelAttrs)
   protected
     function GetFormat: TTyCharFormat; override;
+    function GetRawFormat: TTyCharFormat; override;
+    function IsBase: Boolean; override;
+    function AssignMask: TTyCharFormatMask; override;
     function GetConsistent: TTyCharFormatMask; override;
     procedure SetFormat(AMask: TTyCharFormatMask; const AValue: TTyCharFormat); override;
   end;
@@ -2145,6 +2232,7 @@ type
   protected
     FOwner: TTyCustomRichEdit;
     function GetFormat: TTyParaFormat; override;
+    function GetConsistentPara: TTyRichConsistentParaAttributes; override;
     procedure SetFormat(AMask: TTyParaFormatMask; const AValue: TTyParaFormat); override;
   public
     constructor Create(AOwner: TTyCustomRichEdit);
@@ -2161,8 +2249,13 @@ end;
 
 function TTyRichSelAttrs.GetFormat: TTyCharFormat;
 begin
-  // the selection's first character, or what the next typed text gets (a pending format)
-  Result := FOwner.ResolvedFormat(FOwner.FDoc.Formats.CharFormat(FOwner.TypingFormat));
+  // the first character a write formats, or what the next typed text gets (a pending format)
+  Result := FOwner.ResolvedFormat(FOwner.FDoc.Formats.CharFormat(FOwner.SelFormatId));
+end;
+
+function TTyRichSelAttrs.GetRawFormat: TTyCharFormat;
+begin
+  Result := FOwner.FDoc.Formats.CharFormat(FOwner.SelFormatId);
 end;
 
 function TTyRichSelAttrs.GetConsistent: TTyCharFormatMask;
@@ -2187,11 +2280,31 @@ end;
 function TTyRichDefAttrs.GetFormat: TTyCharFormat;
 begin
   Result := FOwner.BaseCharFormat;
+  { The automatic colour reads clDefault here too (R70), so that it equals what automatic
+    text reads through SelAttributes; a colour the application gave the base is its own. }
+  Result.Color := TyRichTextColorIn(FOwner.Font.Color);
+end;
+
+function TTyRichDefAttrs.GetRawFormat: TTyCharFormat;
+begin
+  Result := GetFormat;
+end;
+
+function TTyRichDefAttrs.IsBase: Boolean;
+begin
+  Result := True;
+end;
+
+function TTyRichDefAttrs.AssignMask: TTyCharFormatMask;
+begin
+  // the base holds neither: an Assign leaves them out (F-M10), a direct write raises
+  Result := CTyFontMask;
 end;
 
 function TTyRichDefAttrs.GetConsistent: TTyCharFormatMask;
 begin
-  Result := CAllCharFields;
+  // as Delphi's DefAttributes: no selection, nothing to be consistent over
+  Result := [];
 end;
 
 procedure TTyRichDefAttrs.SetFormat(AMask: TTyCharFormatMask; const AValue: TTyCharFormat);
@@ -2208,6 +2321,11 @@ end;
 function TTyRichParaAttrs.GetFormat: TTyParaFormat;
 begin
   if not FOwner.ParaFormatAt(FOwner.GetSelStart, Result) then Result := TyDefaultParaFormat;
+end;
+
+function TTyRichParaAttrs.GetConsistentPara: TTyRichConsistentParaAttributes;
+begin
+  Result := FOwner.ParaConsistency(FOwner.GetSelStart, FOwner.GetSelLength);
 end;
 
 procedure TTyRichParaAttrs.SetFormat(AMask: TTyParaFormatMask; const AValue: TTyParaFormat);
@@ -2259,6 +2377,8 @@ begin
   FLines := TTyRichEditLines.Create(Self);
   FCaretShown := True;
   FCopyWaitChars := CRichCopyWaitChars;
+  FConsBudgetParas := CRichConsistParas;
+  FConsBudgetBytes := CRichConsistParseBytes;
   {$IFDEF LCLCocoa}
   { Before the handle: LCL-Cocoa asks for it (LM_IM_COMPOSITION) inside CreateHandle. It holds
     the control as an ITyImeEditable whose _AddRef does nothing (the memo's way). }
@@ -4999,8 +5119,9 @@ begin
   place.Anchor := CRichPlaceChangeEnd;
   place.Caret := CRichPlaceStays;
   place.AtLineEnd := FCaretAtEnd;
-  RunMade(TTyRichSetParaFormat.Create(AIndex, AIndex, [pffList, pffLeftIndent,
-    pffFirstIndent], TyDefaultParaFormat), place, True);
+  // the list's own rule, the one Paragraph.Numbering := nsNone follows (CTyListMask)
+  RunMade(TTyRichSetParaFormat.Create(AIndex, AIndex, CTyListMask,
+    TyRichListValue(TyDefaultParaFormat.List)), place, True);
 end;
 
 type
@@ -5685,7 +5806,9 @@ begin
   // the control's Font is the base (TyApplyControlFont lays it over the theme): one truth
   Font.BeginUpdate;
   try
-    if cffFontName in AMask then Font.Name := AValue.FontName;
+    // none of its own: LCL's default font, which the theme's font then stands for
+    if cffFontName in AMask then
+      if AValue.FontName = '' then Font.Name := 'default' else Font.Name := AValue.FontName;
     if cffSize in AMask then Font.Size := AValue.SizeHalfPt div 2;
     if AMask * CTyCharStyleMask <> [] then
     begin
@@ -5750,6 +5873,30 @@ begin
   FConsMask := FConsMask - TyRichCharDiff(FConsBase, FDoc.Formats.CharFormat(AFormat));
 end;
 
+function TTyCustomRichEdit.ParsedSoFar: Int64;
+var
+  load: TTyRtfLoad;
+begin
+  load := TyRichRtfLoadOf(FDoc);
+  if load = nil then Result := 0 else Result := load.ParsedBytes;
+end;
+
+procedure TTyCustomRichEdit.ConsistencyBegin;
+begin
+  Inc(FConsWalks);
+  FConsSeen := 0;
+  FConsCut := False;
+  FConsParsed0 := ParsedSoFar;
+end;
+
+function TTyCustomRichEdit.ConsistencyGo(AUnparsed: Boolean): Boolean;
+begin
+  Inc(FConsSeen);
+  if FConsSeen > FConsBudgetParas then FConsCut := True
+  else if AUnparsed and (ParsedSoFar - FConsParsed0 >= FConsBudgetBytes) then FConsCut := True;
+  Result := not FConsCut;
+end;
+
 procedure TTyCustomRichEdit.ConsistencyWalk(AIndex: Integer; AData: Pointer; ASrcOffset,
   ASrcBytes: Int64; var AContinue: Boolean);
 var
@@ -5757,14 +5904,22 @@ var
   runs: TTyRunArray;
   cell: TTyRichCell;
   i: Integer;
+  parsed: Boolean;
 begin
   if AIndex > FConsLast then
   begin
     AContinue := False;
     Exit;
   end;
+  parsed := FDoc.ReadValue(AData, pf, runs, cell);
+  // the budget: past it the walk stops and the answer is a lower bound (F-I1)
+  if not ConsistencyGo(not parsed) then
+  begin
+    AContinue := False;
+    Exit;
+  end;
   // a whole paragraph: every run; one not parsed yet is read (parsed) by its index
-  if not FDoc.ReadValue(AData, pf, runs, cell) then runs := FDoc.RunsOf(AIndex);
+  if not parsed then runs := FDoc.RunsOf(AIndex);
   for i := 0 to High(runs) do
   begin
     ConsistencyAdd(runs[i].Format);
@@ -5812,21 +5967,120 @@ begin
   Result := CAllCharFields;
   t := FDoc.Text;
   if ALen <= 0 then Exit;
+  // the same selection over the same content: the answer is known (F-I1)
+  if FCharConsValid and (FCharConsStart = AStart) and (FCharConsLen = ALen) and
+    (FCharConsState = FDoc.ContentState) then Exit(FCharConsResult);
   e := AStart + ALen;
   ParasOfRange(AStart, ALen, first, last);
   FConsHave := False;
   FConsBaseId := -1;
   FConsMask := CAllCharFields;
+  ConsistencyBegin;
+  // (the first paragraph is always read: its parse is the read's least)
+  ConsistencyGo(False);
   Edge(first);
   { The paragraphs between: one walk of the text (no lookup per paragraph), ended as soon as
-    every field was found to differ - the rest of the selection is not read. }
+    every field was found to differ - the rest of the selection is not read - or when the
+    budget is spent. }
   if (FConsMask <> []) and (last > first + 1) then
   begin
     FConsLast := last - 1;
     t.WalkParas(first + 1, @ConsistencyWalk);
   end;
-  if (FConsMask <> []) and (last > first) then Edge(last);
-  Result := FConsMask;
+  if (FConsMask <> []) and (last > first) and not FConsCut and ConsistencyGo(True) then
+    Edge(last);
+  // cut short: what was not proven the same is reported as not (a lower bound)
+  if FConsCut then Result := [] else Result := FConsMask;
+  FCharConsValid := True;
+  FCharConsStart := AStart;
+  FCharConsLen := ALen;
+  FCharConsState := FDoc.ContentState;
+  FCharConsResult := Result;
+end;
+
+procedure TTyCustomRichEdit.ParaConsistencyWalk(AIndex: Integer; AData: Pointer; ASrcOffset,
+  ASrcBytes: Int64; var AContinue: Boolean);
+var
+  pf: TTyParaFormatId;
+  runs: TTyRunArray;
+  cell: TTyRichCell;
+  parsed: Boolean;
+begin
+  if AIndex > FConsLast then
+  begin
+    AContinue := False;
+    Exit;
+  end;
+  parsed := FDoc.ReadValue(AData, pf, runs, cell);
+  // the first paragraph is always read; past the budget the walk stops (F-I1)
+  if FParaConsHave and not ConsistencyGo(not parsed) then
+  begin
+    AContinue := False;
+    Exit;
+  end;
+  if not parsed then pf := FDoc.ParaFormatOf(AIndex);
+  if not FParaConsHave then
+  begin
+    FParaConsHave := True;
+    FParaConsBaseId := pf;
+    FParaConsBase := FDoc.Formats.ParaFormat(pf);
+  end
+  else if pf <> FParaConsBaseId then
+    FParaConsMask := FParaConsMask - TyRichParaDiff(FParaConsBase, FDoc.Formats.ParaFormat(pf));
+  AContinue := FParaConsMask <> [];
+end;
+
+function TTyCustomRichEdit.ParaConsistency(AStart, ALen: TTyRichPos): TTyRichConsistentParaAttributes;
+const
+  All = [Low(TTyRichConsistentParaAttribute)..High(TTyRichConsistentParaAttribute)];
+var
+  first, last: Integer;
+begin
+  Result := All;
+  ParasOfRange(AStart, ALen, first, last);
+  if last <= first then Exit;
+  if FParaConsValid and (FParaConsStart = AStart) and (FParaConsLen = ALen) and
+    (FParaConsState = FDoc.ContentState) then Exit(FParaConsResult);
+  FParaConsHave := False;
+  FParaConsMask := All;
+  ConsistencyBegin;
+  FConsLast := last;
+  FDoc.Text.WalkParas(first, @ParaConsistencyWalk);
+  if FConsCut then Result := [] else Result := FParaConsMask;
+  FParaConsValid := True;
+  FParaConsStart := AStart;
+  FParaConsLen := ALen;
+  FParaConsState := FDoc.ContentState;
+  FParaConsResult := Result;
+end;
+
+function TTyCustomRichEdit.SelFormatId: TTyCharFormatId;
+var
+  t: TTyRichText;
+  s, e: TTyRichPos;
+  p: Integer;
+begin
+  if not HasSelection then Exit(TypingFormat);
+  t := FDoc.Text;
+  s := GetSelStart;
+  e := s + GetSelLength;
+  p := t.ParaOfPos(s);
+  { At a paragraph's separator (Shift+Down from a line's end) a write formats nothing of that
+    paragraph: the first character it formats is the next paragraph's (or that paragraph's
+    one run when it is empty), when the selection reaches past its start. }
+  if (t.ParaLength(p) > 0) and (s = t.ParaStart(p) + t.ParaLength(p)) and (s + 1 < e) then
+    Inc(s);
+  Result := CharFormatIdAt(s);
+end;
+
+function TTyCustomRichEdit.GetZoomFactor: Double;
+begin
+  Result := FZoom / 100;
+end;
+
+procedure TTyCustomRichEdit.SetZoomFactor(AValue: Double);
+begin
+  SetZoom(Round(AValue * 100));
 end;
 
 procedure TTyCustomRichEdit.ParasOfRange(AStart, ALen: TTyRichPos; out AFirst, ALast: Integer);
@@ -5953,15 +6207,10 @@ var
   f: TTyCharFormat;
 begin
   EndCompositionForUser;
+  // RichMemo's: nothing for no font
+  if AFont = nil then Exit;
   ClampRange(FDoc.Text.Length, AStart, ALen);
-  f := TyDefaultCharFormat;
-  f.FontName := AFont.Name;
-  f.SizeHalfPt := Math.Max(0, AFont.Size) * 2;
-  f.Style := AFont.Style - [fsStrikeOut];
-  f.Strike := fsStrikeOut in AFont.Style;
-  f.Color := AFont.Color;
-  f.Charset := AFont.CharSet;
-  ApiCharFormat(AStart, ALen, CTyFontMask, f);
+  ApiCharFormat(AStart, ALen, CTyFontMask, TyRichCharFormatOfFont(AFont));
 end;
 
 function TTyCustomRichEdit.GetTextAttributes(APos: TTyRichPos; var AParams: TTyFontParams): Boolean;
@@ -5980,7 +6229,7 @@ begin
   EndCompositionForUser;
   ClampRange(FDoc.Text.Length, AStart, ALen);
   f := TyDefaultCharFormat;
-  f.Color := AColor;
+  f.Color := TyRichTextColorIn(AColor);
   ApiCharFormat(AStart, ALen, [cffColor], f);
 end;
 
@@ -6022,7 +6271,8 @@ begin
     for st := Low(TFontStyle) to High(TFontStyle) do
       if st in AAddFontStyle + ARemoveFontStyle then
       begin
-        // only the styles named change; one both added and removed goes (RichMemo's order)
+        { only the styles named change; one in both sets ends up off - RichMemo's own
+          statement is "Style := Style + AddFontStyle - RemoveFontStyle" (F-M3) }
         Include(m, Fields[st]);
         if (st in AAddFontStyle) and not (st in ARemoveFontStyle) then
           if st = fsStrikeOut then f.Strike := True else Include(f.Style, st);
@@ -6030,29 +6280,81 @@ begin
   ApiCharFormat(AStart, ALen, m, f);
 end;
 
-function TTyCustomRichEdit.GetParaAlignment(APos: TTyRichPos; var AAlign: TTyParaAlign): Boolean;
+function TTyCustomRichEdit.GetStyleRange(APos: TTyRichPos; var ARangeStart,
+  ARangeLen: TTyRichPos): Boolean;
+var
+  t: TTyRichText;
+  k, i, lo, hi: Integer;
+  ps, pl, off, e: TTyRichPos;
+  runs: TTyRunArray;
+begin
+  t := FDoc.Text;
+  Result := (APos >= 0) and (APos <= t.Length);
+  if not Result then Exit;
+  k := t.ParaOfPos(APos);
+  ps := t.ParaStart(k);
+  pl := t.ParaLength(k);
+  off := APos - ps;
+  runs := FDoc.RunsOf(k);
+  i := High(runs);
+  while (i > 0) and (runs[i].Start > off) do Dec(i);
+  lo := i;
+  while (lo > 0) and (runs[lo - 1].Format = runs[i].Format) do Dec(lo);
+  hi := i;
+  while (hi < High(runs)) and (runs[hi + 1].Format = runs[i].Format) do Inc(hi);
+  if hi < High(runs) then e := runs[hi + 1].Start else e := pl;
+  ARangeStart := ps + runs[lo].Start;
+  ARangeLen := e - runs[lo].Start;
+end;
+
+function TTyCustomRichEdit.GetParaAlignment(APos: TTyRichPos; var AAlign: TTyParaAlignment): Boolean;
 var
   f: TTyParaFormat;
 begin
   Result := ParaFormatAt(APos, f);
-  if Result then AAlign := f.Align;
+  if Result then AAlign := TyRichParaAlignmentOf(f.Align);
 end;
 
-function TTyCustomRichEdit.GetParaAlignment(APos: TTyRichPos): TTyParaAlign;
+function TTyCustomRichEdit.GetParaAlignment(APos: TTyRichPos): TTyParaAlignment;
 begin
-  Result := paraLeft;
+  Result := TyRichParaAlignmentOf(paraLeft);
   GetParaAlignment(APos, Result);
 end;
 
-procedure TTyCustomRichEdit.SetParaAlignment(AStart, ALen: TTyRichPos; AAlign: TTyParaAlign);
+procedure TTyCustomRichEdit.SetParaAlignment(AStart, ALen: TTyRichPos; AAlign: TTyParaAlignment);
 var
   f: TTyParaFormat;
 begin
   EndCompositionForUser;
   ClampRange(FDoc.Text.Length, AStart, ALen);
   f := TyDefaultParaFormat;
-  f.Align := AAlign;
+  f.Align := TyRichParaAlignOf(AAlign);
   ApiParaFormat(AStart, ALen, [pffAlign], f);
+end;
+
+function TTyCustomRichEdit.GetParaRange(APos: TTyRichPos; var ARange: TTyParaRange): Boolean;
+var
+  t: TTyRichText;
+  k: Integer;
+begin
+  t := FDoc.Text;
+  Result := (APos >= 0) and (APos <= t.Length);
+  if not Result then Exit;
+  k := t.ParaOfPos(APos);
+  ARange.start := t.ParaStart(k);
+  ARange.lengthNoBr := t.ParaLength(k);
+  ARange.length := ARange.lengthNoBr;
+  if k < t.ParaCount - 1 then Inc(ARange.length);
+end;
+
+function TTyCustomRichEdit.GetParaRange(APos: TTyRichPos; var AStart, ALength: TTyRichPos): Boolean;
+var
+  r: TTyParaRange;
+begin
+  Result := GetParaRange(APos, r);
+  if not Result then Exit;
+  AStart := r.start;
+  ALength := r.length;
 end;
 
 function TTyCustomRichEdit.GetParaMetric(APos: TTyRichPos; var AMetric: TTyParaMetric): Boolean;
@@ -6065,10 +6367,17 @@ end;
 
 procedure TTyCustomRichEdit.SetParaMetric(AStart, ALen: TTyRichPos; const AMetric: TTyParaMetric);
 begin
+  SetRangeParaParams(AStart, ALen, [pmm_FirstLine, pmm_HeadIndent, pmm_TailIndent,
+    pmm_SpaceBefore, pmm_SpaceAfter, pmm_LineSpacing], AMetric);
+end;
+
+procedure TTyCustomRichEdit.SetRangeParaParams(AStart, ALen: TTyRichPos;
+  AModifyMask: TTyParaModifyMask; const AMetric: TTyParaMetric);
+begin
   EndCompositionForUser;
   ClampRange(FDoc.Text.Length, AStart, ALen);
-  ApiParaFormat(AStart, ALen, [pffLeftIndent, pffFirstIndent, pffRightIndent, pffSpaceBefore,
-    pffSpaceAfter, pffLineSpacing], TyRichParaFormatOfMetric(AMetric));
+  ApiParaFormat(AStart, ALen, TyRichMetricMask(AModifyMask, AMetric),
+    TyRichParaFormatOfMetric(AMetric));
 end;
 
 function TTyCustomRichEdit.GetParaNumbering(APos: TTyRichPos;
@@ -6088,9 +6397,8 @@ begin
   EndCompositionForUser;
   ClampRange(FDoc.Text.Length, AStart, ALen);
   ParaFormatAt(AStart, cur);
-  f := TyDefaultParaFormat;
-  f.List := TyRichListOf(ANumber, cur.List);
-  ApiParaFormat(AStart, ALen, [pffList], f);
+  // Paragraph.Numbering's rule: the default hanging indent on, the indents away off
+  ApiParaFormat(AStart, ALen, CTyListMask, TyRichListValue(TyRichListOf(ANumber, cur.List)));
 end;
 
 function TTyCustomRichEdit.GetParaTabs(APos: TTyRichPos; var AStopList: TTyTabStopList): Boolean;
@@ -6122,6 +6430,47 @@ begin
     on E: EOutOfMemory do raise;
     on E: Exception do Result := False;
   end;
+end;
+
+function TTyCustomRichEdit.GetText(AStart, ALen: TTyRichPos): string;
+begin
+  ClampRange(FDoc.Text.Length, AStart, ALen);
+  Result := RangeText(AStart, ALen);
+end;
+
+function TTyCustomRichEdit.GetUText(AStart, ALen: TTyRichPos): UnicodeString;
+begin
+  Result := UTF8Decode(GetText(AStart, ALen));
+end;
+
+function TTyCustomRichEdit.InDelText(const AText: string; AStart,
+  AReplaceLen: TTyRichPos): TTyRichPos;
+var
+  comp: TTyRichCompositeCommand;
+  fmt: TTyCharFormatId;
+  len0: TTyRichPos;
+begin
+  Result := 0;
+  EndCompositionForUser;
+  ClampRange(FDoc.Text.Length, AStart, AReplaceLen);
+  if (AText = '') and (AReplaceLen = 0) then Exit;
+  if AReplaceLen > 0 then fmt := CharFormatIdAt(AStart) else fmt := FDoc.TypingFormatAt(AStart);
+  len0 := FDoc.Text.Length;
+  comp := TTyRichCompositeCommand.Create(rsRichUndoInsertText);
+  if AReplaceLen > 0 then comp.Add(TTyRichDelete.Create(AStart, AReplaceLen));
+  if AText <> '' then comp.Add(TTyRichInsertText.Create(AStart, AText, fmt, False));
+  RunApiEdit(comp, AReplaceLen + Length(AText));
+  Result := FDoc.Text.Length - len0 + AReplaceLen;
+end;
+
+function TTyCustomRichEdit.CharAtPos(X, Y: Integer): TTyRichPos;
+begin
+  Result := PositionAtPoint(X, Y);
+end;
+
+procedure TTyCustomRichEdit.SetSelLengthFor(const AText: string);
+begin
+  SetSelLength(UTF8Length(AText));
 end;
 
 function TTyCustomRichEdit.SaveRichText(AStream: TStream): Boolean;

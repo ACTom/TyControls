@@ -126,8 +126,27 @@ type
     function Hash: Cardinal;
   end;
 
+  { The fields of a paragraph format a write sets (TyMergeParaFormat). The last five set no
+    field of their own: they move one indent meaning per paragraph and keep another, each
+    paragraph from its own values (F-M1) - LeftIndent is where the lines after the first
+    start, LeftIndent + FirstIndent where the first line starts; AValue gives them in those
+    terms:
+    pffStartIndent  the first line at AValue.LeftIndent + AValue.FirstIndent, the other lines
+                    keeping their offset from it (the paragraph moves: Delphi's FirstIndent);
+    pffOffset       the first line's offset from the other lines becomes AValue.FirstIndent,
+                    the first line staying where it is (Delphi's LeftIndent);
+    pffFirstLine    the first line at AValue.LeftIndent + AValue.FirstIndent, the other lines
+                    staying (RichMemo's FirstLine);
+    pffHeadIndent   the other lines at AValue.LeftIndent, the first line staying (RichMemo's
+                    HeadIndent);
+    pffListIndents  with pffList: a paragraph that becomes a list item and has no indent
+                    (both 0) takes AValue's LeftIndent and FirstIndent - the default hanging
+                    indent; one that stops being a list item gets both back to 0 (msftedit's
+                    and WordPad's rule, fact 4); others keep theirs.
+    They are applied after the absolute fields, in this order. }
   TTyParaFormatField = (pffAlign, pffLeftIndent, pffRightIndent, pffFirstIndent,
-    pffSpaceBefore, pffSpaceAfter, pffLineSpacing, pffTabs, pffList, pffRtlPar, pffExtra);
+    pffSpaceBefore, pffSpaceAfter, pffLineSpacing, pffTabs, pffList, pffRtlPar, pffExtra,
+    pffStartIndent, pffOffset, pffFirstLine, pffHeadIndent, pffListIndents);
   TTyParaFormatMask = set of TTyParaFormatField;
 
   { Equal formats get the same id; ids are never reused, so an id an undo record keeps stays
@@ -1024,6 +1043,11 @@ type
       the load or the assignment that turned it; an edit straight on Text is noticed at the
       next of these). }
     property OnModifiedChange: TNotifyEvent read FOnModifiedChange write FOnModifiedChange;
+    { The number of the content as it is now (Modified's): a step, an undo, a redo, a load
+      or an edit outside the history gives another one; the same number is the same
+      content. What a reader may remember an answer by (the control's ConsistentAttributes,
+      F-I1). A lazy load's slices and parses change no content and keep it. }
+    property ContentState: Int64 read FState;
     property OnChange: TTyRichChangeEvent read FOnChange write FOnChange;
 
     { Where the content came from, so a text file goes back out as it came in; set by the
@@ -1360,6 +1384,9 @@ end;
 
 function TyMergeParaFormat(const ABase: TTyParaFormat; AMask: TTyParaFormatMask;
   const AValue: TTyParaFormat): TTyParaFormat;
+var
+  first: Integer;
+  wasList, isList: Boolean;
 begin
   Result := ABase;
   if pffAlign in AMask then Result.Align := AValue.Align;
@@ -1377,6 +1404,38 @@ begin
   if pffList in AMask then Result.List := AValue.List;
   if pffRtlPar in AMask then Result.RtlPar := AValue.RtlPar;
   if pffExtra in AMask then Result.Extra := AValue.Extra;
+  // the relative indent fields (see TTyParaFormatField), each from this paragraph's values
+  if pffStartIndent in AMask then
+    Result.LeftIndent := AValue.LeftIndent + AValue.FirstIndent - Result.FirstIndent;
+  if pffOffset in AMask then
+  begin
+    first := Result.LeftIndent + Result.FirstIndent;
+    Result.FirstIndent := AValue.FirstIndent;
+    Result.LeftIndent := first - AValue.FirstIndent;
+  end;
+  if pffFirstLine in AMask then
+    Result.FirstIndent := AValue.LeftIndent + AValue.FirstIndent - Result.LeftIndent;
+  if pffHeadIndent in AMask then
+  begin
+    first := Result.LeftIndent + Result.FirstIndent;
+    Result.LeftIndent := AValue.LeftIndent;
+    Result.FirstIndent := first - AValue.LeftIndent;
+  end;
+  if pffListIndents in AMask then
+  begin
+    wasList := ABase.List.Kind <> lkNone;
+    isList := Result.List.Kind <> lkNone;
+    if isList and not wasList and (Result.LeftIndent = 0) and (Result.FirstIndent = 0) then
+    begin
+      Result.LeftIndent := AValue.LeftIndent;
+      Result.FirstIndent := AValue.FirstIndent;
+    end
+    else if wasList and not isList then
+    begin
+      Result.LeftIndent := 0;
+      Result.FirstIndent := 0;
+    end;
+  end;
 end;
 
 { ---- TTyFormatPool ---- }

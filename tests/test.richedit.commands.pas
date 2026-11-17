@@ -113,6 +113,8 @@ type
     procedure TestAPictureTwoStepsHoldCountsInEach;
     procedure TestTheObjectCountTakesOnePass;
     procedure TestATableMadeAgainIsLetGoWhenItsRowsFail;
+    // fix wave W17
+    procedure TestTheRelativeIndentFields;
   end;
 
 implementation
@@ -2014,6 +2016,94 @@ begin
       (after <= before) or (after - before < 2048));
     AssertEquals('the document as it was', text, AllText(d));
     AssertEquals('no step', 0, d.UndoDepth);
+  finally
+    d.Free;
+  end;
+end;
+
+{ F-M1 / F-M5 (W17): the paragraph mask's relative fields move one indent meaning per
+  paragraph, from each paragraph's own values, and keep the other. }
+procedure TTyRichCommandsTest.TestTheRelativeIndentFields;
+var
+  a, b, v, r: TTyParaFormat;
+  d: TTyRichDocument;
+  before0, before1: TTyParaFormatId;
+begin
+  // a: first line at 0, the others at 0; b: hanging - others at 720, the first at 360
+  a := TyDefaultParaFormat;
+  b := TyDefaultParaFormat;
+  b.LeftIndent := 720;
+  b.FirstIndent := -360;
+  v := TyDefaultParaFormat;
+  // pffStartIndent: the first line at 720, the offset kept
+  v.LeftIndent := 720;
+  v.FirstIndent := 0;
+  r := TyMergeParaFormat(a, [pffStartIndent], v);
+  AssertEquals('start a: first', 720, r.LeftIndent + r.FirstIndent);
+  AssertEquals('start a: offset kept', 0, r.FirstIndent);
+  r := TyMergeParaFormat(b, [pffStartIndent], v);
+  AssertEquals('start b: first', 720, r.LeftIndent + r.FirstIndent);
+  AssertEquals('start b: offset kept', -360, r.FirstIndent);
+  // pffOffset: the first line's offset -200, the first line staying
+  v := TyDefaultParaFormat;
+  v.FirstIndent := -200;
+  r := TyMergeParaFormat(b, [pffOffset], v);
+  AssertEquals('offset b: first stays', 360, r.LeftIndent + r.FirstIndent);
+  AssertEquals('offset b: the offset', -200, r.FirstIndent);
+  // pffFirstLine: the first line at 100, the other lines staying
+  v := TyDefaultParaFormat;
+  v.LeftIndent := 40;
+  v.FirstIndent := 60;
+  r := TyMergeParaFormat(b, [pffFirstLine], v);
+  AssertEquals('first line b: others stay', 720, r.LeftIndent);
+  AssertEquals('first line b: the first', 100, r.LeftIndent + r.FirstIndent);
+  // pffHeadIndent: the other lines at 40, the first line staying
+  r := TyMergeParaFormat(b, [pffHeadIndent], v);
+  AssertEquals('head b: others', 40, r.LeftIndent);
+  AssertEquals('head b: first stays', 360, r.LeftIndent + r.FirstIndent);
+  // both: as given
+  r := TyMergeParaFormat(b, [pffFirstLine, pffHeadIndent], v);
+  AssertEquals('both: others', 40, r.LeftIndent);
+  AssertEquals('both: first', 100, r.LeftIndent + r.FirstIndent);
+  // pffListIndents: on - a paragraph without indents takes the hanging one, one with keeps its
+  v := TyDefaultParaFormat;
+  v.List.Kind := lkBullet;
+  v.List.StartAt := 1;
+  v.LeftIndent := 720;
+  v.FirstIndent := -360;
+  r := TyMergeParaFormat(a, [pffList, pffListIndents], v);
+  AssertTrue('on: a list', r.List.Kind = lkBullet);
+  AssertEquals('on: the hanging indent', 720, r.LeftIndent);
+  AssertEquals('on: the hanging indent''s first line', -360, r.FirstIndent);
+  r := TyMergeParaFormat(b, [pffList, pffListIndents], v);
+  AssertEquals('on: its own indent kept', 720, r.LeftIndent);
+  AssertEquals('on: its own first line kept', -360, r.FirstIndent);
+  // off: back to 0, the list record the default: the plain format again
+  r := TyMergeParaFormat(a, [pffList, pffListIndents], v);
+  v := TyDefaultParaFormat;
+  r := TyMergeParaFormat(r, [pffList, pffListIndents], v);
+  AssertTrue('on, then off: plain again', r.Equals(a));
+  // a paragraph that was no list item keeps its indents when the list is turned off
+  r := TyMergeParaFormat(b, [pffList, pffListIndents], v);
+  AssertEquals('off, no list before: kept', 720, r.LeftIndent);
+  // one command over two paragraphs that differ, each moved from its own values; undone
+  d := TTyRichDocument.CreateFromUtf8(Bytes('one'#10'two'));
+  try
+    d.Execute(TTyRichSetParaFormat.Create(1, 1, [pffLeftIndent, pffFirstIndent], b));
+    d.ClearUndo;
+    before0 := d.ParaFormatOf(0);
+    before1 := d.ParaFormatOf(1);
+    v := TyDefaultParaFormat;
+    v.FirstIndent := -200;
+    d.Execute(TTyRichSetParaFormat.Create(0, 1, [pffOffset], v));
+    r := d.Formats.ParaFormat(d.ParaFormatOf(0));
+    AssertEquals('para 0: first stays at 0', 0, r.LeftIndent + r.FirstIndent);
+    r := d.Formats.ParaFormat(d.ParaFormatOf(1));
+    AssertEquals('para 1: first stays at 360', 360, r.LeftIndent + r.FirstIndent);
+    AssertEquals('para 1: the offset', -200, r.FirstIndent);
+    d.Undo;
+    AssertEquals('undone 0', before0, d.ParaFormatOf(0));
+    AssertEquals('undone 1', before1, d.ParaFormatOf(1));
   finally
     d.Free;
   end;

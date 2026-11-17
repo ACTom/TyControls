@@ -1,11 +1,13 @@
 unit tyControls.RichEdit.Attrs;
 
-{ The format API of TTyRichEdit in Delphi's style (Task 11a): TTyRichTextAttributes - the
-  SelAttributes and DefAttributes of Vcl.ComCtrls.TRichEdit - and TTyRichParaAttributes - its
-  Paragraph -, and the records of the RichMemo style (TTyFontParams, TTyParaMetric, ...). They
-  hold nothing: every read asks the control, every write is one command of the document run
-  by the control (tyControls.RichEdit), so these classes only translate units and names. The
-  control makes its own subclasses of them; an application never creates one.
+{ The format API of TTyRichEdit in Delphi's style (Task 11a, fix wave W17): TTyRichTextAttributes
+  - the SelAttributes and DefAttributes of Vcl.ComCtrls.TRichEdit - and TTyRichParaAttributes -
+  its Paragraph -, and the records of the RichMemo style (TTyFontParams, TTyParaMetric, ...).
+  Names and meanings are the originals' wherever the engine can mean the same; this control's
+  richer values have names of their own beside them (ParaAlign, NumberingStart, SpaceBefore ..).
+  They hold nothing: every read asks the control, every write is one command of the document
+  run by the control (tyControls.RichEdit), so these classes only translate units and names.
+  The control makes its own subclasses of them; an application never creates one.
 
   Units: sizes in points (the engine keeps half points); indents, spaces and tab positions in
   points as Delphi has them (the engine keeps twips: a read rounds to the nearest point, a
@@ -19,24 +21,62 @@ uses
   Classes, SysUtils, Graphics, tyControls.RichEdit.Text, tyControls.RichEdit.Model;
 
 type
-  { Which attributes are the same over the whole selection (Delphi's TConsistentAttribute,
-    with the engine's three more: charset, background and vertical position). Delphi's
-    caProtected has no counterpart: the engine holds no protected text. }
+  { Which attributes are the same over the whole selection: Delphi's TConsistentAttribute
+    without the members the engine cannot answer (caProtected, caDisabled, caHidden, caLink,
+    caOffset, caRevAuthor, caWeight - the engine holds none of them). The ordinals differ
+    from Delphi's; the names mean the same. }
   TTyRichConsistentAttribute = (caBold, caColor, caFace, caItalic, caSize, caStrikeOut,
-    caUnderline, caCharset, caBackColor, caVertAlign);
+    caUnderline, caBackColor, caCharset, caSubscript);
   TTyRichConsistentAttributes = set of TTyRichConsistentAttribute;
 
+  { Delphi's TSubscriptType. }
+  TTySubscriptType = (sstNone, sstSubscript, sstSuperscript);
+
+  { Delphi's TConsistentParaAttribute: which paragraph attributes are the same over every
+    paragraph the selection touches. }
+  TTyRichConsistentParaAttribute = (cpaAlignment, cpaNumbering, cpaFirstIndent, cpaLeftIndent,
+    cpaRightIndent, cpaTabStops);
+  TTyRichConsistentParaAttributes = set of TTyRichConsistentParaAttribute;
+
+const
+  { Delphi's TNumberingStyle values as the engine's list kinds: Paragraph.Numbering :=
+    nsBullet compiles and means Delphi's, and the numbered kinds (lkDecimal ..) stay
+    reachable through the same property. }
+  nsNone = lkNone;
+  nsBullet = lkBullet;
+  { The hanging indent a paragraph that becomes a list item gets when it has no indent
+    (WordPad's \fi-360\li720, msftedit fact 4), twips. }
+  CTyListLeftIndent = 720;
+  CTyListFirstIndent = -360;
+  { A list written as the user's list button writes it: the list record and the indents that
+    go with it (pffListIndents) - one rule with leaving a list by Enter or Backspace. }
+  CTyListMask = [pffList, pffListIndents];
+  { At most this many stops a TabCount write makes (Delphi's MAX_TAB_STOPS). }
+  CTyMaxTabStops = 32;
+
+type
   { The character format of the selection (SelAttributes) or the control's base
     (DefAttributes) - see the control's properties for what each answers for. Reading a value
-    of a selection whose characters differ gives the selection's first character's
-    (ConsistentAttributes says which differ). Each write changes that one attribute and
-    leaves the others as each character has them: one command (one undo step), or - with
-    nothing selected - the format the next typed text gets. Assign takes a TFont or another
-    TTyRichTextAttributes (all of their attributes, one write); AssignTo fills a TFont. }
+    of a selection whose characters differ gives the value of the first character a write
+    would format (ConsistentAttributes says which differ). Each write changes that one
+    attribute and leaves the others as each character has them: one command (one undo
+    step), or - with nothing selected - the format the next typed text gets. Assign takes a
+    TFont or another TTyRichTextAttributes (all of their attributes, one write); AssignTo
+    fills a TFont. }
   TTyRichTextAttributes = class(TPersistent)
   protected
     { The format the reads answer with: FontName and SizeHalfPt resolved (never '' or 0). }
     function GetFormat: TTyCharFormat; virtual; abstract;
+    { The format as the text has it: '' and 0 where it has no name or size of its own (what
+      an Assign between two selections copies). GetFormat unless overridden. }
+    function GetRawFormat: TTyCharFormat; virtual;
+    { This is the base (DefAttributes): an assignment from it is "reset to default" - it
+      writes the engine's "none of its own" for everything the base supplies (R70); one to
+      it takes the source's values as shown. }
+    function IsBase: Boolean; virtual;
+    { The fields an assignment writes here (the base has no highlight and no vertical
+      position: an assignment leaves them out, only a direct write of them raises). }
+    function AssignMask: TTyCharFormatMask; virtual;
     function GetConsistent: TTyCharFormatMask; virtual; abstract;
     procedure SetFormat(AMask: TTyCharFormatMask; const AValue: TTyCharFormat); virtual; abstract;
     { The pixels per inch Height counts with (the control's font's). }
@@ -51,49 +91,75 @@ type
     procedure SetHeight(AValue: Integer);
     function GetStyle: TFontStyles;
     procedure SetStyle(AValue: TFontStyles);
+    function GetStyleFlag(AIndex: Integer): Boolean;
+    procedure SetStyleFlag(AIndex: Integer; AValue: Boolean);
     function GetColor: TColor;
     procedure SetColor(AValue: TColor);
     function GetCharset: TFontCharset;
     procedure SetCharset(AValue: TFontCharset);
     function GetBackColor: TColor;
     procedure SetBackColor(AValue: TColor);
-    function GetVertAlign: TTyVertAlign;
-    procedure SetVertAlign(AValue: TTyVertAlign);
+    function GetSubscript: TTySubscriptType;
+    procedure SetSubscript(AValue: TTySubscriptType);
     function GetConsistentAttributes: TTyRichConsistentAttributes;
   public
     procedure Assign(Source: TPersistent); override;
-    { The font's name. }
+    { The font's name - read: the one the text is shown in (the base's for text without a
+      name of its own); written: a name LCL takes for its default font ('default', '';
+      IsFontNameDefault) is "none of its own" - the text follows the base (R70). }
     property Name: TFontName read GetName write SetName;
-    { Points (the engine's half points: a read of 10.5 pt says 10, as Delphi's). }
+    { Points (the engine's half points: a read of 10.5 pt says 10, as Delphi's) - read: the
+      size the text is shown in; written 0: none of its own. }
     property Size: Integer read GetSize write SetSize;
-    { Pixels at the control's PPI: Size * PPI / 72, as Delphi's. }
+    { Pixels at the control's PPI: Size * PPI / 72, as Delphi's; a negative height (a
+      TFont's character height) is taken as its absolute value. }
     property Height: Integer read GetHeight write SetHeight;
-    { Bold, italic, underline, strike-through (fsStrikeOut is the engine's Strike). }
+    { Bold, italic, underline, strike-through (fsStrikeOut is the engine's Strike). A write
+      sets all four. }
     property Style: TFontStyles read GetStyle write SetStyle;
-    { clDefault: the theme's text colour (Delphi's "auto" colour). }
+    { Delphi's one-style properties: a write changes that one style and leaves the others as
+      each character has them (what a toolbar's Bold button wants). }
+    property Bold: Boolean index 0 read GetStyleFlag write SetStyleFlag;
+    property Italic: Boolean index 1 read GetStyleFlag write SetStyleFlag;
+    property Underline: Boolean index 2 read GetStyleFlag write SetStyleFlag;
+    property Strikeout: Boolean index 3 read GetStyleFlag write SetStyleFlag;
+    { The automatic colour - the base's, which follows the theme - reads clDefault (Delphi
+      reads clWindowText); writing clDefault or clWindowText makes the text automatic again
+      (Delphi's clWindowText), any other colour is the text's own. DefAttributes reads
+      clDefault too unless the application gave it a colour of its own, so
+      SelAttributes.Color = DefAttributes.Color holds for automatic text. }
     property Color: TColor read GetColor write SetColor;
     property Charset: TFontCharset read GetCharset write SetCharset;
-    { The text's highlight; clNone: none. }
+    { The text's highlight: none reads clNone (Delphi reads clWindow); writing clNone,
+      clDefault or clWindow (Delphi's way) takes it away. }
     property BackColor: TColor read GetBackColor write SetBackColor;
-    { Superscript, subscript or neither. }
-    property VertAlign: TTyVertAlign read GetVertAlign write SetVertAlign;
-    { The attributes that are the same over the whole selection: walks the selection's
-      paragraphs until every attribute was found to differ (a cost in proportion to the
-      selection, at most). Everything for an empty selection. }
+    { Delphi's Subscript: superscript, subscript or neither. }
+    property Subscript: TTySubscriptType read GetSubscript write SetSubscript;
+    { The attributes that are the same over the whole selection (everything for an empty
+      selection; DefAttributes: none, as Delphi's). Remembered for the selection and the
+      content (a repeated read is free) and BOUNDED: the walk reads at most the control's
+      budget (CRichConsistParas paragraphs and CRichConsistParseBytes bytes of a lazily read
+      file not parsed yet, about 30 ms); over a larger selection the answer is a lower bound -
+      every attribute not proven the same within the budget is reported as not consistent
+      ("mixed", the safe answer for a toolbar). }
     property ConsistentAttributes: TTyRichConsistentAttributes read GetConsistentAttributes;
   end;
 
   { The paragraph format of the paragraphs the selection touches (Delphi's Paragraph): reads
     answer for the first of them, each write is one command over all of them (the caret's
     paragraph when nothing is selected; a selection that ends at a paragraph's very start
-    does not touch that paragraph). Units: points. }
+    does not touch that paragraph) that changes the one attribute written and leaves the
+    others as each paragraph has them (F-M1). Units: points. }
   TTyRichParaAttributes = class(TPersistent)
   protected
     function GetFormat: TTyParaFormat; virtual; abstract;
     procedure SetFormat(AMask: TTyParaFormatMask; const AValue: TTyParaFormat); virtual; abstract;
+    function GetConsistentPara: TTyRichConsistentParaAttributes; virtual; abstract;
   private
-    function GetAlignment: TTyParaAlign;
-    procedure SetAlignment(AValue: TTyParaAlign);
+    function GetAlignment: TAlignment;
+    procedure SetAlignment(AValue: TAlignment);
+    function GetParaAlign: TTyParaAlign;
+    procedure SetParaAlign(AValue: TTyParaAlign);
     function GetFirstIndent: Integer;
     procedure SetFirstIndent(AValue: Integer);
     function GetLeftIndent: Integer;
@@ -116,25 +182,40 @@ type
     procedure SetLineSpacingRule(AValue: TTyLineSpacing);
     function GetLineSpacing: Integer;
     procedure SetLineSpacing(AValue: Integer);
+    function GetConsistentAttributes: TTyRichConsistentParaAttributes;
   public
     procedure Assign(Source: TPersistent); override;
-    property Alignment: TTyParaAlign read GetAlignment write SetAlignment;
-    { As Delphi's: FirstIndent is where the first line starts, from the left margin;
-      LeftIndent is where the other lines start, from the first line's start (negative:
-      a hanging indent); RightIndent from the right margin. Points. A write keeps the other
-      two meanings: FirstIndent moves the whole paragraph (the other lines keep their offset
-      from the first), LeftIndent moves the other lines only. }
+    { Delphi's TAlignment (taLeftJustify, taRightJustify, taCenter); a justified paragraph
+      reads taLeftJustify here - ParaAlign has all four. }
+    property Alignment: TAlignment read GetAlignment write SetAlignment;
+    { The engine's four alignments: paraLeft, paraCenter, paraRight, paraJustify. }
+    property ParaAlign: TTyParaAlign read GetParaAlign write SetParaAlign;
+    { As Delphi's: FirstIndent is where the first line starts, from the left margin
+      (dxStartIndent); LeftIndent is where the other lines start, from the first line's start
+      (dxOffset; negative: they start left of it); RightIndent from the right margin. Points.
+      In the engine's terms (\li the other lines, \fi the first line's offset from them):
+      FirstIndent = li + fi, LeftIndent = -fi. A write moves its one meaning per paragraph and
+      keeps the other: FirstIndent moves each whole paragraph, each keeping its own offset
+      (pffStartIndent); LeftIndent moves the other lines, each first line staying where it
+      is (pffOffset). }
     property FirstIndent: Integer read GetFirstIndent write SetFirstIndent;
     property LeftIndent: Integer read GetLeftIndent write SetLeftIndent;
     property RightIndent: Integer read GetRightIndent write SetRightIndent;
-    { None, bullets or one of the numbered kinds the engine holds. }
+    { nsNone / nsBullet as Delphi's, or one of the numbered kinds (lkDecimal ..). Turning a
+      list on gives each paragraph that has no indent the default hanging indent (WordPad's
+      \fi-360\li720; Delphi: at least 10 pt of offset); turning it off takes its indents
+      back to 0 and the list record to its default, so a plain paragraph is plain again -
+      the rule Enter and Backspace on an empty item follow (CTyListMask). }
     property Numbering: TTyListKind read GetNumbering write SetNumbering;
     { The number the list starts at. }
     property NumberingStart: Integer read GetNumberingStart write SetNumberingStart;
-    { Tab stop AIndex (0-based), points from the left indent's origin; a write past the last
-      adds left-aligned stops up to it. TabCount := N keeps the first N (more: new ones at 0
-      are not added - a write of TabCount above the count raises EListError, as no position
-      for them is known). }
+    { Tab stop AIndex (0-based), points from the left indent's origin. A read past the count
+      gives 0 (as Delphi's); a write past the last adds left-aligned stops at 0 up to it
+      (Delphi's needs TabCount first). TabCount := N sets the count as Delphi's: a larger
+      count appends stops at 0, to be set next (at most CTyMaxTabStops); a smaller one
+      removes the last. The stops stay as written in the paragraph's format; where they are
+      used - the layout and a file written - they are taken in order of position, and a stop
+      at 0 or less is none (a stop at 0 is not written into a file). }
     property Tab[AIndex: Byte]: Integer read GetTab write SetTab;
     property TabCount: Integer read GetTabCount write SetTabCount;
     property SpaceBefore: Integer read GetSpaceBefore write SetSpaceBefore;
@@ -143,9 +224,15 @@ type
       the line's height in points (LineSpacing; 0 for the other rules). }
     property LineSpacingRule: TTyLineSpacing read GetLineSpacingRule write SetLineSpacingRule;
     property LineSpacing: Integer read GetLineSpacing write SetLineSpacing;
+    { Delphi's: the attributes every paragraph the selection touches shares (alignment as
+      ParaAlign, numbering, first and left indent, right indent, tab stops). Remembered and
+      bounded as SelAttributes.ConsistentAttributes is (a lower bound over a selection larger
+      than the budget). }
+    property ConsistentAttributes: TTyRichConsistentParaAttributes read GetConsistentAttributes;
   end;
 
-  { ---- RichMemo's records (TFontParams, TParaMetric, ...), in points ---- }
+  { ---- RichMemo's records (TFontParams, TParaMetric, ...), in points; type names prefixed,
+    member names RichMemo's ---- }
 
   TTyVScriptPos = (vpNormal, vpSubScript, vpSuperScript);
 
@@ -163,10 +250,16 @@ type
   TTyTextModifyMaskItem = (tmm_Color, tmm_Name, tmm_Size, tmm_Styles, tmm_BackColor);
   TTyTextModifyMask = set of TTyTextModifyMaskItem;
 
+  { RichMemo's TParaAlignment, its order. }
+  TTyParaAlignment = (paLeft, paRight, paCenter, paJustify);
+
   { RichMemo's TParaMetric, points: FirstLine where the first line starts, HeadIndent where
     the other lines start (both from the left margin), TailIndent from the right margin;
-    LineSpacing a multiple of a single line (1.0, 1.15, 1.5, 2.0: the engine's rules; a
-    read of an exact or at-least spacing says 0). }
+    LineSpacing RichMemo's multiplier, on its scale: SingleLineSpacing (DefLineSpacing, 1.2)
+    is single, OneHalfLineSpacing 1.8, DoubleLineSpacing 2.4 (the engine's 1.15 reads 1.38).
+    A write takes the nearest of the engine's four multiples; 0 or less leaves the
+    paragraphs' spacing as it is. An exact or at-least spacing reads 0 - so that GetParaMetric,
+    one field changed, SetParaMetric leaves it as it was. }
   TTyParaMetric = record
     FirstLine: Double;
     TailIndent: Double;
@@ -175,6 +268,10 @@ type
     SpaceAfter: Double;
     LineSpacing: Double;
   end;
+
+  TTyParaModifyMaskItem = (pmm_FirstLine, pmm_HeadIndent, pmm_TailIndent, pmm_SpaceBefore,
+    pmm_SpaceAfter, pmm_LineSpacing);
+  TTyParaModifyMask = set of TTyParaModifyMaskItem;
 
   TTyParaNumStyle = (pnNone, pnBullet, pnNumber, pnLowLetter, pnLowRoman, pnUpLetter,
     pnUpRoman, pnCustomChar);
@@ -191,9 +288,14 @@ type
     ForceNewNum: Boolean;
   end;
 
+  { RichMemo's TTabAlignment; the engine has no bar tab: tabWordBar is written as a left
+    stop. }
+  TTyTabAlignment = (tabLeft, tabCenter, tabRight, tabDecimal, tabWordBar);
+
+  { RichMemo's TTabStop (the name TTyTabStop is the engine's). }
   TTyRichTabStop = record
     Offset: Double;          // points from the left indent's origin
-    Align: TTyTabAlign;
+    Align: TTyTabAlignment;
   end;
 
   TTyTabStopList = record
@@ -201,13 +303,33 @@ type
     Tabs: array of TTyRichTabStop;
   end;
 
+  { RichMemo's TParaRange, in this control's positions: the paragraph's first character, its
+    length without its separator and with it (the last paragraph has none: equal). }
+  TTyParaRange = record
+    start: TTyRichPos;
+    lengthNoBr: TTyRichPos;
+    length: TTyRichPos;
+  end;
+
 const
+  { RichMemo's line spacing scale. }
+  DefLineSpacing = Double(1.2);
+  SingleLineSpacing = DefLineSpacing;
+  OneHalfLineSpacing = Double(1.8);
+  DoubleLineSpacing = Double(2.4);
+
   CTyCharStyleMask = [cffBold, cffItalic, cffUnderline, cffStrike];
   { What RichMemo's SetTextAttributes and an Assign from a TFont write. }
   CTyFontParamsMask = [cffFontName, cffSize, cffBold, cffItalic, cffUnderline, cffStrike,
     cffColor, cffHighlight, cffVertAlign];
   CTyFontMask = [cffFontName, cffSize, cffBold, cffItalic, cffUnderline, cffStrike, cffColor,
     cffCharset];
+
+{ RichMemo's Init routines: the record zeroed (InitParaMetric: LineSpacing DefLineSpacing). }
+procedure InitFontParams(out AParams: TTyFontParams);
+procedure InitParaMetric(out AMetric: TTyParaMetric);
+procedure InitParaNumbering(out ANumbering: TTyParaNumbering);
+procedure InitTabStopList(out AList: TTyTabStopList);
 
 { Points and twips (the engine's unit for indents, spaces and tabs). }
 function TyRichPtToTwips(APoints: Double): Integer;
@@ -216,20 +338,125 @@ function TyRichTwipsToPt(ATwips: Integer): Integer;
   one). }
 function TyRichCharDiff(const A, B: TTyCharFormat): TTyCharFormatMask;
 function TyRichConsistentOf(AMask: TTyCharFormatMask): TTyRichConsistentAttributes;
+{ Delphi's paragraph attributes in which A and B differ. }
+function TyRichParaDiff(const A, B: TTyParaFormat): TTyRichConsistentParaAttributes;
+{ The colours and names Delphi's and LCL's "default" idioms use, as the engine's "none of its
+  own" (R70): clWindowText and clDefault are the automatic text colour (clDefault);
+  clWindow, clDefault and clNone no highlight (clNone); a name IsFontNameDefault holds for
+  is no name (''). }
+function TyRichTextColorIn(AColor: TColor): TColor;
+function TyRichBackColorIn(AColor: TColor): TColor;
+function TyRichFontNameIn(const AName: string): string;
+{ Alignment between the engine, Delphi (a justified paragraph is taLeftJustify) and
+  RichMemo. }
+function TyRichAlignmentOf(AAlign: TTyParaAlign): TAlignment;
+function TyRichParaAlignOfAlignment(AAlign: TAlignment): TTyParaAlign;
+function TyRichParaAlignmentOf(AAlign: TTyParaAlign): TTyParaAlignment;
+function TyRichParaAlignOf(AAlign: TTyParaAlignment): TTyParaAlign;
 { RichMemo's records to and from the engine's formats. }
 function TyRichFontParamsOf(const AFormat: TTyCharFormat): TTyFontParams;
 function TyRichCharFormatOf(const AParams: TTyFontParams): TTyCharFormat;
+{ A TFont's name, size, styles, colour and charset (Delphi's and RichMemo's Assign / TFont
+  overloads), the default idioms translated (TyRichFontNameIn, TyRichTextColorIn). }
+function TyRichCharFormatOfFont(AFont: TFont): TTyCharFormat;
 function TyRichMetricOf(const AFormat: TTyParaFormat): TTyParaMetric;
+{ AMetric in the engine's terms (LeftIndent the head indent, FirstIndent the first line's
+  offset from it), and the fields AModify names as TyMergeParaFormat's mask: FirstLine and
+  HeadIndent each alone move that one per paragraph (pffFirstLine, pffHeadIndent); a line
+  spacing of 0 or less is left out. }
 function TyRichParaFormatOfMetric(const AMetric: TTyParaMetric): TTyParaFormat;
+function TyRichMetricMask(AModify: TTyParaModifyMask; const AMetric: TTyParaMetric): TTyParaFormatMask;
 function TyRichNumberingOf(const AList: TTyListFormat): TTyParaNumbering;
 function TyRichListOf(const ANumbering: TTyParaNumbering; const AOld: TTyListFormat): TTyListFormat;
+{ A paragraph format value for CTyListMask: AList and the default hanging indent. }
+function TyRichListValue(const AList: TTyListFormat): TTyParaFormat;
 function TyRichTabListOf(const ATabs: TTyTabStops): TTyTabStopList;
 function TyRichTabsOf(const AList: TTyTabStopList; const AOld: TTyTabStops): TTyTabStops;
 
 implementation
 
 uses
-  Math;
+  Math, LCLProc;
+
+procedure InitFontParams(out AParams: TTyFontParams);
+begin
+  AParams := Default(TTyFontParams);
+end;
+
+procedure InitParaMetric(out AMetric: TTyParaMetric);
+begin
+  AMetric := Default(TTyParaMetric);
+  AMetric.LineSpacing := DefLineSpacing;
+end;
+
+procedure InitParaNumbering(out ANumbering: TTyParaNumbering);
+begin
+  ANumbering := Default(TTyParaNumbering);
+end;
+
+procedure InitTabStopList(out AList: TTyTabStopList);
+begin
+  AList := Default(TTyTabStopList);
+end;
+
+function TyRichTextColorIn(AColor: TColor): TColor;
+begin
+  if (AColor = clWindowText) or (AColor = clDefault) then Result := clDefault
+  else Result := AColor;
+end;
+
+function TyRichBackColorIn(AColor: TColor): TColor;
+begin
+  if (AColor = clWindow) or (AColor = clDefault) or (AColor = clNone) then Result := clNone
+  else Result := AColor;
+end;
+
+function TyRichFontNameIn(const AName: string): string;
+begin
+  if IsFontNameDefault(AName) then Result := '' else Result := AName;
+end;
+
+function TyRichAlignmentOf(AAlign: TTyParaAlign): TAlignment;
+begin
+  case AAlign of
+    paraCenter: Result := taCenter;
+    paraRight: Result := taRightJustify;
+  else
+    Result := taLeftJustify;
+  end;
+end;
+
+function TyRichParaAlignOfAlignment(AAlign: TAlignment): TTyParaAlign;
+begin
+  case AAlign of
+    taCenter: Result := paraCenter;
+    taRightJustify: Result := paraRight;
+  else
+    Result := paraLeft;
+  end;
+end;
+
+function TyRichParaAlignmentOf(AAlign: TTyParaAlign): TTyParaAlignment;
+begin
+  case AAlign of
+    paraCenter: Result := paCenter;
+    paraRight: Result := paRight;
+    paraJustify: Result := paJustify;
+  else
+    Result := paLeft;
+  end;
+end;
+
+function TyRichParaAlignOf(AAlign: TTyParaAlignment): TTyParaAlign;
+begin
+  case AAlign of
+    paCenter: Result := paraCenter;
+    paRight: Result := paraRight;
+    paJustify: Result := paraJustify;
+  else
+    Result := paraLeft;
+  end;
+end;
 
 function TyRichPtToTwips(APoints: Double): Integer;
 begin
@@ -270,10 +497,49 @@ begin
   if cffUnderline in AMask then Include(Result, caUnderline);
   if cffCharset in AMask then Include(Result, caCharset);
   if cffHighlight in AMask then Include(Result, caBackColor);
-  if cffVertAlign in AMask then Include(Result, caVertAlign);
+  if cffVertAlign in AMask then Include(Result, caSubscript);
+end;
+
+function SameTabs(const A, B: TTyTabStops): Boolean;
+var
+  i: Integer;
+begin
+  Result := Length(A) = Length(B);
+  if Result then
+    for i := 0 to High(A) do
+      if (A[i].Position <> B[i].Position) or (A[i].Align <> B[i].Align) or
+        (A[i].Leader <> B[i].Leader) then Exit(False);
+end;
+
+function TyRichParaDiff(const A, B: TTyParaFormat): TTyRichConsistentParaAttributes;
+begin
+  Result := [];
+  if A.Align <> B.Align then Include(Result, cpaAlignment);
+  if (A.List.Kind <> B.List.Kind) or ((A.List.Kind <> lkNone) and
+    (A.List.StartAt <> B.List.StartAt)) then Include(Result, cpaNumbering);
+  if A.LeftIndent + A.FirstIndent <> B.LeftIndent + B.FirstIndent then
+    Include(Result, cpaFirstIndent);
+  if A.FirstIndent <> B.FirstIndent then Include(Result, cpaLeftIndent);
+  if A.RightIndent <> B.RightIndent then Include(Result, cpaRightIndent);
+  if not SameTabs(A.Tabs, B.Tabs) then Include(Result, cpaTabStops);
 end;
 
 { ---- TTyRichTextAttributes ---- }
+
+function TTyRichTextAttributes.GetRawFormat: TTyCharFormat;
+begin
+  Result := GetFormat;
+end;
+
+function TTyRichTextAttributes.IsBase: Boolean;
+begin
+  Result := False;
+end;
+
+function TTyRichTextAttributes.AssignMask: TTyCharFormatMask;
+begin
+  Result := CTyFontMask + [cffHighlight, cffVertAlign];
+end;
 
 function TTyRichTextAttributes.GetName: TFontName;
 begin
@@ -285,7 +551,7 @@ var
   f: TTyCharFormat;
 begin
   f := TyDefaultCharFormat;
-  f.FontName := AValue;
+  f.FontName := TyRichFontNameIn(AValue);
   SetFormat([cffFontName], f);
 end;
 
@@ -314,7 +580,8 @@ var
   f: TTyCharFormat;
 begin
   f := TyDefaultCharFormat;
-  if AValue < 0 then AValue := 0;
+  // a TFont's Height is negative for a character height: the same size either way
+  AValue := Abs(AValue);
   // to whole points, as Size counts them
   f.SizeHalfPt := Round(AValue * Int64(72) / GetPPI) * 2;
   SetFormat([cffSize], f);
@@ -339,6 +606,26 @@ begin
   SetFormat(CTyCharStyleMask, f);
 end;
 
+const
+  CFlagStyles: array[0..3] of TFontStyle = (fsBold, fsItalic, fsUnderline, fsStrikeOut);
+  CFlagFields: array[0..3] of TTyCharFormatField = (cffBold, cffItalic, cffUnderline, cffStrike);
+
+function TTyRichTextAttributes.GetStyleFlag(AIndex: Integer): Boolean;
+begin
+  Result := CFlagStyles[AIndex] in GetStyle;
+end;
+
+procedure TTyRichTextAttributes.SetStyleFlag(AIndex: Integer; AValue: Boolean);
+var
+  f: TTyCharFormat;
+begin
+  f := TyDefaultCharFormat;
+  if AValue then
+    if CFlagStyles[AIndex] = fsStrikeOut then f.Strike := True
+    else Include(f.Style, CFlagStyles[AIndex]);
+  SetFormat([CFlagFields[AIndex]], f);
+end;
+
 function TTyRichTextAttributes.GetColor: TColor;
 begin
   Result := GetFormat.Color;
@@ -349,7 +636,7 @@ var
   f: TTyCharFormat;
 begin
   f := TyDefaultCharFormat;
-  f.Color := AValue;
+  f.Color := TyRichTextColorIn(AValue);
   SetFormat([cffColor], f);
 end;
 
@@ -377,21 +664,31 @@ var
   f: TTyCharFormat;
 begin
   f := TyDefaultCharFormat;
-  f.HighlightColor := AValue;
+  f.HighlightColor := TyRichBackColorIn(AValue);
   SetFormat([cffHighlight], f);
 end;
 
-function TTyRichTextAttributes.GetVertAlign: TTyVertAlign;
+function TTyRichTextAttributes.GetSubscript: TTySubscriptType;
 begin
-  Result := GetFormat.VertAlign;
+  case GetFormat.VertAlign of
+    vaSuper: Result := sstSuperscript;
+    vaSub: Result := sstSubscript;
+  else
+    Result := sstNone;
+  end;
 end;
 
-procedure TTyRichTextAttributes.SetVertAlign(AValue: TTyVertAlign);
+procedure TTyRichTextAttributes.SetSubscript(AValue: TTySubscriptType);
 var
   f: TTyCharFormat;
 begin
   f := TyDefaultCharFormat;
-  f.VertAlign := AValue;
+  case AValue of
+    sstSuperscript: f.VertAlign := vaSuper;
+    sstSubscript: f.VertAlign := vaSub;
+  else
+    f.VertAlign := vaNone;
+  end;
   SetFormat([cffVertAlign], f);
 end;
 
@@ -403,24 +700,29 @@ end;
 procedure TTyRichTextAttributes.Assign(Source: TPersistent);
 var
   f: TTyCharFormat;
-  fnt: TFont;
+  src: TTyRichTextAttributes;
 begin
   if Source is TFont then
-  begin
-    fnt := TFont(Source);
-    f := TyDefaultCharFormat;
-    f.FontName := fnt.Name;
-    f.SizeHalfPt := Max(0, fnt.Size) * 2;
-    f.Style := fnt.Style - [fsStrikeOut];
-    f.Strike := fsStrikeOut in fnt.Style;
-    f.Color := fnt.Color;
-    f.Charset := fnt.CharSet;
-    SetFormat(CTyFontMask, f);
-  end
+    SetFormat(CTyFontMask * AssignMask, TyRichCharFormatOfFont(TFont(Source)))
   else if Source is TTyRichTextAttributes then
   begin
-    f := TTyRichTextAttributes(Source).GetFormat;
-    SetFormat(CTyFontMask + [cffHighlight, cffVertAlign], f);
+    src := TTyRichTextAttributes(Source);
+    if src = Self then Exit;
+    if IsBase then
+      // the base takes what the source shows
+      f := src.GetFormat
+    else if src.IsBase then
+    begin
+      { Delphi's "reset to default" (R70): none of its own for everything the base supplies -
+        name, size, styles, colour, highlight, position; the text follows the base and the
+        theme again, nothing of them is frozen into it. }
+      SetFormat(AssignMask - [cffCharset], TyDefaultCharFormat);
+      Exit;
+    end
+    else
+      // between selections: as the text has it (no name or size of its own stays none)
+      f := src.GetRawFormat;
+    SetFormat(AssignMask, f);
   end
   else
     inherited Assign(Source);
@@ -428,16 +730,17 @@ end;
 
 procedure TTyRichTextAttributes.AssignTo(Dest: TPersistent);
 var
-  fnt: TFont;
+  destFont: TFont;
 begin
   if Dest is TFont then
   begin
-    fnt := TFont(Dest);
-    fnt.Name := Name;
-    fnt.Size := Size;
-    fnt.Style := Style;
-    fnt.Color := Color;
-    fnt.CharSet := Charset;
+    // the application's TFont (a font dialog's): its values, nothing measured with it
+    destFont := TFont(Dest);
+    destFont.Name := Name;
+    destFont.Size := Size;
+    destFont.Style := Style;
+    destFont.Color := Color;
+    destFont.CharSet := Charset;
   end
   else
     inherited AssignTo(Dest);
@@ -445,12 +748,22 @@ end;
 
 { ---- TTyRichParaAttributes ---- }
 
-function TTyRichParaAttributes.GetAlignment: TTyParaAlign;
+function TTyRichParaAttributes.GetAlignment: TAlignment;
+begin
+  Result := TyRichAlignmentOf(GetFormat.Align);
+end;
+
+procedure TTyRichParaAttributes.SetAlignment(AValue: TAlignment);
+begin
+  SetParaAlign(TyRichParaAlignOfAlignment(AValue));
+end;
+
+function TTyRichParaAttributes.GetParaAlign: TTyParaAlign;
 begin
   Result := GetFormat.Align;
 end;
 
-procedure TTyRichParaAttributes.SetAlignment(AValue: TTyParaAlign);
+procedure TTyRichParaAttributes.SetParaAlign(AValue: TTyParaAlign);
 var
   f: TTyParaFormat;
 begin
@@ -469,14 +782,13 @@ end;
 
 procedure TTyRichParaAttributes.SetFirstIndent(AValue: Integer);
 var
-  f, cur: TTyParaFormat;
+  f: TTyParaFormat;
 begin
-  // the first line at AValue, the other lines keeping their offset from it: the engine's
-  // first-line offset stays, its left indent moves
-  cur := GetFormat;
+  // each paragraph's first line at AValue, its other lines keeping their offset from it
   f := TyDefaultParaFormat;
-  f.LeftIndent := TyRichPtToTwips(AValue) - cur.FirstIndent;
-  SetFormat([pffLeftIndent], f);
+  f.LeftIndent := TyRichPtToTwips(AValue);
+  f.FirstIndent := 0;
+  SetFormat([pffStartIndent], f);
 end;
 
 function TTyRichParaAttributes.GetLeftIndent: Integer;
@@ -486,16 +798,12 @@ end;
 
 procedure TTyRichParaAttributes.SetLeftIndent(AValue: Integer);
 var
-  f, cur: TTyParaFormat;
-  first: Integer;
+  f: TTyParaFormat;
 begin
-  // the first line stays where it is, the other lines go AValue from it
-  cur := GetFormat;
-  first := cur.LeftIndent + cur.FirstIndent;
+  // each paragraph's other lines AValue from its first line, which stays where it is
   f := TyDefaultParaFormat;
   f.FirstIndent := -TyRichPtToTwips(AValue);
-  f.LeftIndent := first - f.FirstIndent;
-  SetFormat([pffLeftIndent, pffFirstIndent], f);
+  SetFormat([pffOffset], f);
 end;
 
 function TTyRichParaAttributes.GetRightIndent: Integer;
@@ -517,15 +825,28 @@ begin
   Result := GetFormat.List.Kind;
 end;
 
+function TyRichListValue(const AList: TTyListFormat): TTyParaFormat;
+begin
+  Result := TyDefaultParaFormat;
+  Result.List := AList;
+  Result.LeftIndent := CTyListLeftIndent;
+  Result.FirstIndent := CTyListFirstIndent;
+end;
+
 procedure TTyRichParaAttributes.SetNumbering(AValue: TTyListKind);
 var
-  f: TTyParaFormat;
+  l: TTyListFormat;
 begin
-  f := TyDefaultParaFormat;
-  f.List := GetFormat.List;
-  f.List.Kind := AValue;
-  if (AValue <> lkNone) and (f.List.StartAt <= 0) then f.List.StartAt := 1;
-  SetFormat([pffList], f);
+  if AValue = lkNone then
+    // the list record at its default: a paragraph that was plain is plain again
+    l := TyDefaultParaFormat.List
+  else
+  begin
+    l := GetFormat.List;
+    l.Kind := AValue;
+    if l.StartAt <= 0 then l.StartAt := 1;
+  end;
+  SetFormat(CTyListMask, TyRichListValue(l));
 end;
 
 function TTyRichParaAttributes.GetNumberingStart: Integer;
@@ -548,8 +869,8 @@ var
   f: TTyParaFormat;
 begin
   f := GetFormat;
-  if AIndex >= Length(f.Tabs) then
-    raise EListError.CreateFmt('Tab index %d out of 0..%d', [AIndex, Length(f.Tabs) - 1]);
+  // past the count: 0, as Delphi's (its Assign reads all 32)
+  if AIndex >= Length(f.Tabs) then Exit(0);
   Result := TyRichTwipsToPt(f.Tabs[AIndex].Position);
 end;
 
@@ -583,12 +904,21 @@ end;
 procedure TTyRichParaAttributes.SetTabCount(AValue: Integer);
 var
   f: TTyParaFormat;
+  i, n: Integer;
 begin
   f := TyDefaultParaFormat;
   f.Tabs := Copy(GetFormat.Tabs);
-  if (AValue < 0) or (AValue > Length(f.Tabs)) then
-    raise EListError.CreateFmt('Tab count %d out of 0..%d', [AValue, Length(f.Tabs)]);
+  n := Length(f.Tabs);
+  if AValue < 0 then AValue := 0;
+  // more: stops at 0, to be set next (Delphi's idiom: TabCount := N, then Tab[0..N-1])
+  if AValue > n then AValue := Min(AValue, Max(n, CTyMaxTabStops));
   SetLength(f.Tabs, AValue);
+  for i := n to AValue - 1 do
+  begin
+    f.Tabs[i].Position := 0;
+    f.Tabs[i].Align := ttaLeft;
+    f.Tabs[i].Leader := ttlNone;
+  end;
   SetFormat([pffTabs], f);
 end;
 
@@ -660,6 +990,11 @@ begin
   SetFormat([pffLineSpacing], f);
 end;
 
+function TTyRichParaAttributes.GetConsistentAttributes: TTyRichConsistentParaAttributes;
+begin
+  Result := GetConsistentPara;
+end;
+
 procedure TTyRichParaAttributes.Assign(Source: TPersistent);
 var
   f: TTyParaFormat;
@@ -697,12 +1032,12 @@ end;
 function TyRichCharFormatOf(const AParams: TTyFontParams): TTyCharFormat;
 begin
   Result := TyDefaultCharFormat;
-  Result.FontName := AParams.Name;
+  Result.FontName := TyRichFontNameIn(AParams.Name);
   Result.SizeHalfPt := Max(0, AParams.Size) * 2;
-  Result.Color := AParams.Color;
+  Result.Color := TyRichTextColorIn(AParams.Color);
   Result.Style := AParams.Style - [fsStrikeOut];
   Result.Strike := fsStrikeOut in AParams.Style;
-  if AParams.HasBkClr then Result.HighlightColor := AParams.BkColor
+  if AParams.HasBkClr then Result.HighlightColor := TyRichBackColorIn(AParams.BkColor)
   else Result.HighlightColor := clNone;
   case AParams.VScriptPos of
     vpSuperScript: Result.VertAlign := vaSuper;
@@ -712,8 +1047,20 @@ begin
   end;
 end;
 
+function TyRichCharFormatOfFont(AFont: TFont): TTyCharFormat;
+begin
+  Result := TyDefaultCharFormat;
+  Result.FontName := TyRichFontNameIn(AFont.Name);
+  Result.SizeHalfPt := Max(0, AFont.Size) * 2;
+  Result.Style := AFont.Style - [fsStrikeOut];
+  Result.Strike := fsStrikeOut in AFont.Style;
+  Result.Color := TyRichTextColorIn(AFont.Color);
+  Result.Charset := AFont.CharSet;
+end;
+
 const
-  CSpacingRules: array[lsSingle..lsDouble] of Double = (1.0, 1.15, 1.5, 2.0);
+  { The engine's multiples on RichMemo's scale (single is DefLineSpacing). }
+  CSpacingRules: array[lsSingle..lsDouble] of Double = (1.2, 1.38, 1.8, 2.4);
 
 function TyRichMetricOf(const AFormat: TTyParaFormat): TTyParaMetric;
 begin
@@ -723,6 +1070,7 @@ begin
   Result.TailIndent := AFormat.RightIndent / 20;
   Result.SpaceBefore := AFormat.SpaceBefore / 20;
   Result.SpaceAfter := AFormat.SpaceAfter / 20;
+  // exactly / at least: 0, which written back leaves the spacing as it is
   if AFormat.LineSpacing in [lsSingle..lsDouble] then
     Result.LineSpacing := CSpacingRules[AFormat.LineSpacing]
   else
@@ -739,12 +1087,24 @@ begin
   Result.RightIndent := TyRichPtToTwips(AMetric.TailIndent);
   Result.SpaceBefore := TyRichPtToTwips(AMetric.SpaceBefore);
   Result.SpaceAfter := TyRichPtToTwips(AMetric.SpaceAfter);
-  // the nearest of the engine's multiples (0 or less: single)
+  // the nearest of the engine's multiples on RichMemo's scale
   best := lsSingle;
   for r := lsSingle to lsDouble do
     if Abs(CSpacingRules[r] - AMetric.LineSpacing) < Abs(CSpacingRules[best] - AMetric.LineSpacing) then
       best := r;
   Result.LineSpacing := best;
+end;
+
+function TyRichMetricMask(AModify: TTyParaModifyMask; const AMetric: TTyParaMetric): TTyParaFormatMask;
+begin
+  Result := [];
+  if pmm_FirstLine in AModify then Include(Result, pffFirstLine);
+  if pmm_HeadIndent in AModify then Include(Result, pffHeadIndent);
+  if pmm_TailIndent in AModify then Include(Result, pffRightIndent);
+  if pmm_SpaceBefore in AModify then Include(Result, pffSpaceBefore);
+  if pmm_SpaceAfter in AModify then Include(Result, pffSpaceAfter);
+  if (pmm_LineSpacing in AModify) and (AMetric.LineSpacing > 0) then
+    Include(Result, pffLineSpacing);
 end;
 
 function TyRichNumberingOf(const AList: TTyListFormat): TTyParaNumbering;
@@ -776,9 +1136,15 @@ begin
   else
     Result.Kind := lkNone;
   end;
+  if Result.Kind = lkNone then Exit(TyDefaultParaFormat.List);
   Result.StartAt := ANumbering.NumberStart;
-  if (Result.Kind <> lkNone) and (Result.StartAt <= 0) then Result.StartAt := 1;
+  if Result.StartAt <= 0 then Result.StartAt := 1;
 end;
+
+const
+  CTabAligns: array[TTyTabAlign] of TTyTabAlignment = (tabLeft, tabCenter, tabRight, tabDecimal);
+  CTabAlignsBack: array[TTyTabAlignment] of TTyTabAlign = (ttaLeft, ttaCenter, ttaRight,
+    ttaDecimal, ttaLeft);
 
 function TyRichTabListOf(const ATabs: TTyTabStops): TTyTabStopList;
 var
@@ -790,7 +1156,7 @@ begin
   for i := 0 to Result.Count - 1 do
   begin
     Result.Tabs[i].Offset := ATabs[i].Position / 20;
-    Result.Tabs[i].Align := ATabs[i].Align;
+    Result.Tabs[i].Align := CTabAligns[ATabs[i].Align];
   end;
 end;
 
@@ -804,7 +1170,7 @@ begin
   for i := 0 to n - 1 do
   begin
     Result[i].Position := TyRichPtToTwips(AList.Tabs[i].Offset);
-    Result[i].Align := AList.Tabs[i].Align;
+    Result[i].Align := CTabAlignsBack[AList.Tabs[i].Align];
     // a stop that was there keeps its leader (RichMemo's records have none)
     if i < Length(AOld) then Result[i].Leader := AOld[i].Leader else Result[i].Leader := ttlNone;
   end;

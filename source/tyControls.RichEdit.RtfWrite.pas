@@ -2043,9 +2043,11 @@ const
   TabAlignWord: array[TTyTabAlign] of string = ('', 'tqc', 'tqr', 'tqdec');
   TabLeaderWord: array[TTyTabLeader] of string = ('', 'tldot', 'tlhyph', 'tlul', 'tlth', 'tleq');
 var
-  i: Integer;
+  i, j, n: Integer;
   inPn, pnDone, pnUc: Boolean;
   list: TTyListFormat;
+  stops: TTyTabStops;
+  t: TTyTabStop;
 
   procedure ClosePn;
   begin
@@ -2149,11 +2151,30 @@ begin
           Word('slmult0');
         end;
     end;
+    { The stops as the layout takes them (F-I4): in order of position, none at 0 or less -
+      a stop at 0 is Delphi's TabCount's "to be set next", no stop at all. The format keeps
+      them as written. }
+    stops := nil;
+    SetLength(stops, Length(Tabs));
+    n := 0;
     for i := 0 to High(Tabs) do
+      if Tabs[i].Position > 0 then
+      begin
+        t := Tabs[i];
+        j := n;
+        while (j > 0) and (stops[j - 1].Position > t.Position) do
+        begin
+          stops[j] := stops[j - 1];
+          Dec(j);
+        end;
+        stops[j] := t;
+        Inc(n);
+      end;
+    for i := 0 to n - 1 do
     begin
-      if Tabs[i].Align <> ttaLeft then Word(TabAlignWord[Tabs[i].Align]);
-      if Tabs[i].Leader <> ttlNone then Word(TabLeaderWord[Tabs[i].Leader]);
-      WordN('tx', Tabs[i].Position);
+      if stops[i].Align <> ttaLeft then Word(TabAlignWord[stops[i].Align]);
+      if stops[i].Leader <> ttlNone then Word(TabLeaderWord[stops[i].Leader]);
+      WordN('tx', stops[i].Position);
     end;
     if RtlPar then Word('rtlpar');
   end;
