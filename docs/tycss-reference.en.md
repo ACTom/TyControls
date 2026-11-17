@@ -1237,6 +1237,7 @@ States: `:disabled` only (`opacity`).
 | `TyRichEditSelection` | The rich text selection's ground, reads `background`; a `color`, when written, is the selected text's; by default the memo's `--selection` | `TTyRichEdit` | `:focus` is the selection while the control has focus, the stateless one after it lost focus (the same by default) |
 | `TyRichEditObject` | A selected picture's frame (`border-color`) and handles (`background`) | `TTyRichEdit` | none |
 | `TyRichEditPlaceholder` | A picture that cannot be shown (WMF/EMF and the like): `background` fills it, `border-color` frames it | `TTyRichEdit` | none |
+| `TyRichEditComposition` | The underline under what an input method is composing (not in the document yet): `border-color` (default `--on-surface`, the text's colour); the clause being converted is underlined twice as thick | `TTyRichEdit` | none |
 
 #### 8.2.5 Checks, switches, sliders, progress
 

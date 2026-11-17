@@ -1203,6 +1203,7 @@ TyLColorPicker, TyHSColorPicker, TyMeterTick, TyAnalogClockHand, TyGearDialTeeth
 | `TyRichEditSelection` | 富文本的选区底色,读 `background`,写了 `color` 时选中的字用它;默认是 Memo 的 `--selection` | `TTyRichEdit` | `:focus` 是有焦点时的选区,无状态那份是失去焦点后的(默认一样) |
 | `TyRichEditObject` | 选中图片的框(`border-color`)和手柄(`background`) | `TTyRichEdit` | 无状态 |
 | `TyRichEditPlaceholder` | 显示不了的图片(WMF/EMF 等)的占位:`background` 填底,`border-color` 画框 | `TTyRichEdit` | 无状态 |
+| `TyRichEditComposition` | 输入法正在组的字(还没进文档)下面那条下划线的颜色(`border-color`;默认 `--on-surface`,正文的颜色),正在转换的那一段加粗一倍 | `TTyRichEdit` | 无状态 |
 
 #### 8.2.5 勾选、开关、滑杆、进度
 

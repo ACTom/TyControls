@@ -973,6 +973,8 @@ begin
     'TyRichEditSelection:focus { background: var(--selection); }' + LineEnding +
     'TyRichEditObject          { background: var(--surface); border-color: var(--accent); }' + LineEnding +
     'TyRichEditPlaceholder     { background: var(--surface-sunk); border-color: var(--border); }' + LineEnding +
+    '/* 输入法正在组的字(还没进文档):画在光标处,下面一条下划线(border-color,默认是正文的颜色);输入法正在转换的那一段下划线加粗一倍。 */' + LineEnding +
+    'TyRichEditComposition     { border-color: var(--on-surface); }' + LineEnding +
     'TyTabClose      { background: var(--overlay-hover); border-radius: var(--radius); }' + LineEnding +
     '' + LineEnding +
     'TyScrollThumb { background: var(--scroll-handle); border-radius: var(--radius-scroll); }' + LineEnding +
