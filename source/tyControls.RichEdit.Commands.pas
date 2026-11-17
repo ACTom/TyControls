@@ -112,18 +112,23 @@ type
     what the history keeps is the fragment - its text and its paragraph values (MemSize).
     Not mergeable. Refused (CanExecute) where the text cannot change (CanChange: a row that
     holds a nested table). Nothing to insert (an empty source that does not end with a
-    paragraph mark): it changes nothing and is not kept. }
+    paragraph mark): it changes nothing and is not kept. AFilter (nil: none) is the
+    fragment's (TTyRichFragment): what of the source's kept bytes may go into this target -
+    for a source whose header tables are not the target file's (RtfRead's
+    TyRichFragmentFilterFor says which). The command takes it over too, and frees it with
+    the source. }
   TTyRichInsertFragment = class(TTyRichCommand)
   private
     FPos: TTyRichPos;
     FSource: TTyRichDocument;
+    FFilter: TTyRichFragmentFilter;
     FFragment: TTyRichFragment;
     FEnds, FFlatten: Boolean;
   protected
     procedure DoExecute(ADoc: TTyRichDocument); override;
   public
     constructor Create(APos: TTyRichPos; ASource: TTyRichDocument; AEndsWithParagraph: Boolean;
-      AFlatten: Boolean = False);
+      AFlatten: Boolean = False; AFilter: TTyRichFragmentFilter = nil);
     destructor Destroy; override;
     function CanExecute(ADoc: TTyRichDocument): Boolean; override;
     function Description: string; override;
@@ -354,13 +359,17 @@ end;
 { ---- TTyRichInsertFragment ---- }
 
 constructor TTyRichInsertFragment.Create(APos: TTyRichPos; ASource: TTyRichDocument;
-  AEndsWithParagraph: Boolean; AFlatten: Boolean);
+  AEndsWithParagraph: Boolean; AFlatten: Boolean; AFilter: TTyRichFragmentFilter);
 begin
   inherited Create;
   if ASource = nil then
+  begin
+    AFilter.Free;
     raise ETyRichModel.Create('TTyRichInsertFragment needs a source');
+  end;
   FPos := APos;
   FSource := ASource;
+  FFilter := AFilter;
   FEnds := AEndsWithParagraph;
   FFlatten := AFlatten;
 end;
@@ -370,6 +379,7 @@ begin
   // the fragment's values are the target's: the history frees this before its document
   FFragment.Free;
   FSource.Free;
+  FFilter.Free;
   inherited Destroy;
 end;
 
@@ -382,9 +392,10 @@ procedure TTyRichInsertFragment.DoExecute(ADoc: TTyRichDocument);
 begin
   if FFragment = nil then
   begin
-    FFragment := TTyRichFragment.Create(ADoc, FPos, FSource, FEnds, FFlatten);
+    FFragment := TTyRichFragment.Create(ADoc, FPos, FSource, FEnds, FFlatten, FFilter);
     // what was read is in the fragment now: the source (and the bytes it was read from) go
     FreeAndNil(FSource);
+    FreeAndNil(FFilter);
   end;
   InsertFragment(ADoc, FPos, FFragment);
 end;

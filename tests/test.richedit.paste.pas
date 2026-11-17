@@ -76,6 +76,13 @@ type
     procedure TestTheWaitCursorOverTheThreshold;
     // fix wave W13 (R60)
     procedure TestAPlainTextDocumentPastesTextOnly;
+    // fix wave W14
+    procedure TestAPasteIntoAnotherFileLeavesTheSourcesNumbersBehind;
+    procedure TestAPasteIntoANewOrAWordPadDocumentKeepsAFieldsChinese;
+    procedure TestAPasteInsideOneFileKeepsEverything;
+    procedure TestPastedListItemsDoNotJoinTheTargetsList;
+    procedure TestTheControlPastesAcrossDocumentsThroughTheFilter;
+    procedure TestTheTablesAgreeOnlyWhereEveryTableDoes;
   end;
 
 implementation
@@ -413,6 +420,446 @@ begin
         cb.Index, cb.Row.CellCount]));
   end;
   Result := '';
+end;
+
+{ ABytes read as a clipboard's RTF and inserted at APos of ADoc as the control does it between
+  documents: through the filter TyRichFragmentFilterFor gives (nil when the tables agree);
+  AFiltered says whether there was one. }
+function PasteAcross(ADoc: TTyRichDocument; APos: TTyRichPos; const ABytes: TBytes;
+  out AFiltered: Boolean): Boolean;
+var
+  src: TTyRichDocument;
+  ends: Boolean;
+  f: TTyRichFragmentFilter;
+begin
+  AFiltered := False;
+  src := TyRichReadRtfFragment(ABytes, ends);
+  Result := src <> nil;
+  if not Result then Exit;
+  f := TyRichFragmentFilterFor(src, ADoc);
+  AFiltered := f <> nil;
+  Result := ADoc.Execute(TTyRichInsertFragment.Create(APos, src, ends, False, f));
+end;
+
+function PosRaw(const ASub, S: RawByteString): Integer;
+var
+  i: Integer;
+begin
+  for i := 1 to Length(S) - Length(ASub) + 1 do
+    if CompareMem(@S[i], @ASub[1], Length(ASub)) then Exit(i);
+  Result := 0;
+end;
+
+function CountRaw(const ASub, S: RawByteString): Integer;
+var
+  i: Integer;
+begin
+  Result := 0;
+  for i := 1 to Length(S) - Length(ASub) + 1 do
+    if CompareMem(@S[i], @ASub[1], Length(ASub)) then Inc(Result);
+end;
+
+// ADoc saved: the bytes after its header (what the body holds).
+function SavedBody(ADoc: TTyRichDocument; out AAll: TBytes): RawByteString;
+var
+  s: TBytesStream;
+  info: TTyRtfWriteInfo;
+begin
+  s := TBytesStream.Create;
+  try
+    TyRichSaveRtf(ADoc, s, info);
+    AAll := Copy(s.Bytes, 0, s.Size);
+  finally
+    s.Free;
+  end;
+  Result := Copy(StrOfBytes(AAll), info.HeaderStop + 1, MaxInt);
+end;
+
+// The first opaque object of ADoc's paragraphs (nil none).
+function FirstOpaque(ADoc: TTyRichDocument): TTyRichOpaque;
+var
+  k, i: Integer;
+  runs: TTyRunArray;
+begin
+  for k := 0 to ADoc.Text.ParaCount - 1 do
+  begin
+    runs := ADoc.RunsOf(k);
+    for i := 0 to High(runs) do
+      if runs[i].Obj is TTyRichOpaque then Exit(TTyRichOpaque(runs[i].Obj));
+  end;
+  Result := nil;
+end;
+
+// Any Extra fragment of ADoc's formats in use (paragraph and runs) names a header table's
+// entry, or a row's definition does.
+function AnyTableNumber(ADoc: TTyRichDocument; out AWhat: string): Boolean;
+var
+  k, i, j: Integer;
+  runs: TTyRunArray;
+  pf: TTyParaFormat;
+  cf: TTyCharFormat;
+  c: TTyRichCell;
+begin
+  Result := True;
+  for k := 0 to ADoc.Text.ParaCount - 1 do
+  begin
+    pf := ADoc.Formats.ParaFormat(ADoc.ParaFormatOf(k));
+    for i := 0 to pf.Extra.Count - 1 do
+      if TyRtfNamesTableEntry(pf.Extra.Item(i)) then
+      begin
+        AWhat := Format('paragraph %d: %s', [k, Shown(pf.Extra.Item(i))]);
+        Exit;
+      end;
+    runs := ADoc.RunsOf(k);
+    for i := 0 to High(runs) do
+    begin
+      cf := ADoc.Formats.CharFormat(runs[i].Format);
+      for j := 0 to cf.Extra.Count - 1 do
+        if TyRtfNamesTableEntry(cf.Extra.Item(j)) then
+        begin
+          AWhat := Format('paragraph %d run %d: %s', [k, i, Shown(cf.Extra.Item(j))]);
+          Exit;
+        end;
+    end;
+    c := ADoc.CellAt(k);
+    if (c <> nil) and TyRtfNamesTableEntry(c.Row.RawFormat) then
+    begin
+      AWhat := Format('paragraph %d''s row: %s', [k, Shown(c.Row.RawFormat)]);
+      Exit;
+    end;
+  end;
+  Result := False;
+end;
+
+const
+  // the review's probe C: the source's f1 a Chinese font, colour 1 red, colour 2 blue, style 3
+  // and character style 5; a field whose result is Chinese in f1
+  SrcIdx = '{' + BS + 'rtf1' + BS + 'ansi' + BS + 'ansicpg1252' + BS + 'deff0{' + BS + 'fonttbl{' +
+    BS + 'f0' + BS + 'fswiss' + BS + 'fcharset0 Arial;}{' + BS + 'f1' + BS + 'fnil' + BS +
+    'fcharset134 SimSun;}}{' + BS + 'colortbl;' + BS + 'red255' + BS + 'green0' + BS + 'blue0;' +
+    BS + 'red0' + BS + 'green0' + BS + 'blue255;}{' + BS + 'stylesheet{' + BS + 's3 Quote;}{' + BS +
+    '*' + BS + 'cs5 Emph;}}' + BS + 'pard' + BS + 's3' + BS + 'cbpat2' + BS + 'brdrb' + BS +
+    'brdrs' + BS + 'brdrw10' + BS + 'brdrcf1 ' + BS + 'f0' + BS + 'cs5' + BS + 'cb2' + BS +
+    'chcbpat1' + BS + 'ulc2' + BS + 'ul plain {' + BS + 'field{' + BS + '*' + BS +
+    'fldinst HYPERLINK "http://x"}{' + BS + 'fldrslt' + BS + 'f1' + BS + 'cf1 ' + BS + '''d6' + BS +
+    '''d0' + BS + '''ce' + BS + '''c4}} end' + BS + 'par' + BS + 'trowd' + BS + 'clcbpat1' + BS +
+    'clbrdrb' + BS + 'brdrs' + BS + 'brdrcf2' + BS + 'cellx2000' + BS + 'pard' + BS + 'intbl' + BS +
+    'f0 cell' + BS + 'cell' + BS + 'row}';
+  // the target file: f1 Wingdings, colour 1 green, colour 2 yellow, style 3 a heading
+  TgtIdx = '{' + BS + 'rtf1' + BS + 'ansi' + BS + 'ansicpg1252' + BS + 'deff0{' + BS + 'fonttbl{' +
+    BS + 'f0' + BS + 'froman' + BS + 'fcharset0 Times New Roman;}{' + BS + 'f1' + BS + 'fnil' + BS +
+    'fcharset2 Wingdings;}}{' + BS + 'colortbl;' + BS + 'red0' + BS + 'green255' + BS + 'blue0;' +
+    BS + 'red255' + BS + 'green255' + BS + 'blue0;}{' + BS + 'stylesheet{' + BS + 's3 heading 9;}{' +
+    BS + '*' + BS + 'cs5 Strong;}}' + BS + 'pard' + BS + 'f0 first' + BS + 'par second' + BS +
+    'par third' + BS + 'par}';
+
+{ What a reader of the saved file finds in the pasted paragraphs - the field's text, styles,
+  colours, the row - for the source's numbers left behind. }
+procedure CheckForeignPaste(ATest: TTestCase; const AWhat: string; ADoc: TTyRichDocument);
+var
+  all: TBytes;
+  body: RawByteString;
+  b: TTyRichDocument;
+  o: TTyRichOpaque;
+  what: string;
+  k: Integer;
+begin
+  body := SavedBody(ADoc, all);
+  // none of the source's numbers in what the paste wrote; the field made again with its text
+  ATest.AssertEquals(AWhat + ': no style ' + Shown(body), 0, PosRaw(BS + 's3', body));
+  ATest.AssertEquals(AWhat + ': no character style', 0, PosRaw(BS + 'cs5', body));
+  ATest.AssertEquals(AWhat + ': no shading', 0, PosRaw(BS + 'cbpat', body));
+  ATest.AssertEquals(AWhat + ': no character shading', 0, PosRaw(BS + 'chcbpat', body));
+  ATest.AssertEquals(AWhat + ': no underline colour', 0, PosRaw(BS + 'ulc', body));
+  ATest.AssertEquals(AWhat + ': no border colour', 0, PosRaw(BS + 'brdrcf', body));
+  ATest.AssertEquals(AWhat + ': no cell shading', 0, PosRaw(BS + 'clcbpat', body));
+  ATest.AssertTrue(AWhat + ': the field''s instruction', PosRaw(BS + 'fldinst HYPERLINK "http://x"', body) > 0);
+  ATest.AssertTrue(AWhat + ': its result as Unicode', PosRaw(BS + 'fldrslt ' + BS + 'u20013?' + BS +
+    'u25991?', body) > 0);
+  ATest.AssertTrue(AWhat + ': the border kept', PosRaw(BS + 'brdrb', body) > 0);
+  ATest.AssertTrue(AWhat + ': the cell''s border kept', PosRaw(BS + 'clbrdrb', body) > 0);
+  b := LoadDoc(all, True);
+  try
+    o := FirstOpaque(b);
+    ATest.AssertNotNull(AWhat + ': the field read back', o);
+    ATest.AssertTrue(AWhat + ': its text is Chinese, not "' + Shown(o.DisplayText) + '"',
+      SameRaw(o.DisplayText, U($4E2D) + U($6587)));
+    ATest.AssertFalse(AWhat + ': ' + what, AnyTableNumber(b, what));
+    k := 0;
+    while (k < b.Text.ParaCount) and (b.CellAt(k) = nil) do Inc(k);
+    ATest.AssertTrue(AWhat + ': the row read back', k < b.Text.ParaCount);
+    ATest.AssertEquals(AWhat + ': its cell', 'cell', ParaText(b, k));
+  finally
+    b.Free;
+  end;
+end;
+
+{ R62 (W14 V-C1): pasted into a file whose header tables are not the source's, what the reader
+  kept by number - styles, shading, border, underline and cell colours, a field's result in a
+  numbered font - is left out or made again: the saved file holds none of the source's
+  numbers, and the field's Chinese reads back as Chinese. The target's own paragraphs go out
+  as its bytes. }
+procedure TTyRichEditPasteTest.TestAPasteIntoAnotherFileLeavesTheSourcesNumbersBehind;
+var
+  d: TTyRichDocument;
+  filtered: Boolean;
+  all: TBytes;
+  body: RawByteString;
+  pf: TTyParaFormat;
+  i: Integer;
+begin
+  d := LoadDoc(RawBytes(TgtIdx), False);
+  try
+    AssertTrue('pasted', PasteAcross(d, d.Text.ParaStart(1), RawBytes(SrcIdx), filtered));
+    AssertTrue('the tables differ: a filter', filtered);
+    AssertEquals('first, the paste''s two, second, third', 5, d.Text.ParaCount);
+    pf := d.Formats.ParaFormat(d.ParaFormatOf(1));
+    for i := 0 to pf.Extra.Count - 1 do
+      AssertFalse('no table number on the paragraph: ' + Shown(pf.Extra.Item(i)),
+        TyRtfNamesTableEntry(pf.Extra.Item(i)));
+    AssertTrue('the row made again', d.CellAt(2) <> nil);
+    AssertEquals('its definition without the colour', 0, PosRaw(BS + 'clcbpat', d.CellAt(2).Row.RawFormat));
+    CheckForeignPaste(Self, 'a file', d);
+    body := SavedBody(d, all);
+    AssertTrue('the target''s own paragraphs as its bytes', PosRaw('second' + BS + 'par third' + BS + 'par', body) > 0);
+    // undone and saved: the file
+    d.Undo;
+    all := SaveOut(d);
+    AssertTrue('undone: the file', SameRaw(StrOfBytes(all), TgtIdx));
+  finally
+    d.Free;
+  end;
+end;
+
+{ The same into a document with no file (it never agrees) and into a WordPad file. }
+procedure TTyRichEditPasteTest.TestAPasteIntoANewOrAWordPadDocumentKeepsAFieldsChinese;
+var
+  d: TTyRichDocument;
+  filtered: Boolean;
+begin
+  d := TTyRichDocument.Create;
+  try
+    AssertTrue('pasted', PasteAcross(d, 0, RawBytes(SrcIdx), filtered));
+    AssertTrue('a new document: a filter', filtered);
+    CheckForeignPaste(Self, 'a new document', d);
+  finally
+    d.Free;
+  end;
+  d := LoadDoc(FileBytes(FixtureDir + 'wp-zh-mixed.rtf'), False);
+  try
+    AssertTrue('pasted', PasteAcross(d, d.Text.ParaStart(1), RawBytes(SrcIdx), filtered));
+    AssertTrue('a WordPad file: a filter', filtered);
+    CheckForeignPaste(Self, 'a WordPad file', d);
+  finally
+    d.Free;
+  end;
+end;
+
+{ A copy out of the very file pasted back into it: the tables agree, nothing is filtered - the
+  style, the shading and the field's own bytes go in and out as they are. }
+procedure TTyRichEditPasteTest.TestAPasteInsideOneFileKeepsEverything;
+const
+  Field = '{' + BS + 'field{' + BS + '*' + BS + 'fldinst HYPERLINK "http://x"}{' + BS + 'fldrslt' +
+    BS + 'f1' + BS + 'cf1 ' + BS + '''d6' + BS + '''d0' + BS + '''ce' + BS + '''c4}}';
+var
+  d, b: TTyRichDocument;
+  filtered: Boolean;
+  all, rtf: TBytes;
+  body: RawByteString;
+  k, n: Integer;
+  runs: TTyRunArray;
+begin
+  d := LoadDoc(RawBytes(SrcIdx), False);
+  try
+    // the first paragraph with its mark, as the control copies it
+    rtf := RangeOut(d, 0, d.Text.ParaLength(0) + 1);
+    AssertTrue('pasted', PasteAcross(d, 0, rtf, filtered));
+    AssertFalse('the same file: no filter', filtered);
+    body := SavedBody(d, all);
+    AssertEquals('the style twice: ' + Shown(body), 2, CountRaw(BS + 's3', body));
+    AssertEquals('the shading twice', 2, CountRaw(BS + 'cbpat2', body));
+    AssertEquals('the field''s bytes twice', 2, CountRaw(Field, body));
+    b := LoadDoc(all, True);
+    try
+      n := 0;
+      for k := 0 to b.Text.ParaCount - 1 do
+      begin
+        runs := b.RunsOf(k);
+        if (Length(runs) > 1) and (runs[1].Obj is TTyRichOpaque) then
+        begin
+          Inc(n);
+          AssertTrue('its text', SameRaw(TTyRichOpaque(runs[1].Obj).DisplayText, U($4E2D) + U($6587)));
+        end;
+      end;
+      AssertEquals('two fields', 2, n);
+    finally
+      b.Free;
+    end;
+  finally
+    d.Free;
+  end;
+end;
+
+{ The review's probe M: two items of another document's list (its own \ls1) pasted into a file
+  whose own list is \ls1 do not join it: they keep their numbering format and are written as
+  a list of their own. }
+procedure TTyRichEditPasteTest.TestPastedListItemsDoNotJoinTheTargetsList;
+const
+  Src = '{' + BS + 'rtf1' + BS + 'ansi' + BS + 'ansicpg1252' + BS + 'deff0{' + BS + 'fonttbl{' + BS +
+    'f0' + BS + 'fswiss' + BS + 'fcharset0 Arial;}}{' + BS + '*' + BS + 'listtable{' + BS + 'list' + BS +
+    'listtemplateid7' + BS + 'listhybrid{' + BS + 'listlevel' + BS + 'levelnfc0' + BS + 'levelnfcn0' +
+    BS + 'leveljc0' + BS + 'leveljcn0' + BS + 'levelfollow0' + BS + 'levelstartat1' + BS + 'levelspace0' +
+    BS + 'levelindent0{' + BS + 'leveltext' + BS + '''02' + BS + '''00.;}{' + BS + 'levelnumbers' + BS +
+    '''01;}' + BS + 'fi-360' + BS + 'li720' + BS + 'lin720 }{' + BS + 'listname ;}' + BS +
+    'listid555}}{' + BS + '*' + BS + 'listoverridetable{' + BS + 'listoverride' + BS + 'listid555' +
+    BS + 'listoverridecount0' + BS + 'ls1}}' + BS + 'pard' + BS + 'plain' + BS + 'fi-360' + BS + 'li720' +
+    BS + 'ls1' + BS + 'f0 {' + BS + 'listtext' + BS + 'pard' + BS + 'plain' + BS + 'f0 1.' + BS +
+    'tab}Another list, item one' + BS + 'par' + BS + 'pard' + BS + 'plain' + BS + 'fi-360' + BS +
+    'li720' + BS + 'ls1' + BS + 'f0 {' + BS + 'listtext' + BS + 'pard' + BS + 'plain' + BS + 'f0 2.' +
+    BS + 'tab}Another list, item two' + BS + 'par}';
+var
+  d, b: TTyRichDocument;
+  filtered: Boolean;
+  all: TBytes;
+  s, tail: RawByteString;
+  k, n, own: Integer;
+  pf: TTyParaFormat;
+begin
+  d := LoadDoc(FileBytes(FixtureDir + 'hand-word-list.rtf'), False);
+  try
+    own := 0;
+    for k := 0 to d.Text.ParaCount - 1 do
+      if d.Formats.ParaFormat(d.ParaFormatOf(k)).List.Kind <> lkNone then Inc(own);
+    n := d.Text.ParaCount;
+    AssertTrue('pasted', PasteAcross(d, d.Text.Length, RawBytes(Src), filtered));
+    AssertTrue('another document: a filter', filtered);
+    for k := n to d.Text.ParaCount - 1 do
+    begin
+      pf := d.Formats.ParaFormat(d.ParaFormatOf(k));
+      if d.Text.ParaLength(k) = 0 then Continue;
+      AssertTrue('a numbered item', pf.List.Kind = lkDecimal);
+      AssertEquals('its indent', 720, pf.LeftIndent);
+    end;
+    all := SaveOut(d);
+    s := StrOfBytes(all);
+    tail := StrOfBytes(FileBytes(FixtureDir + 'hand-word-list.rtf'));
+    AssertEquals('no \ls1 of the target''s list more than the file has: ' +
+      Shown(Copy(s, PosRaw('Another list', s) - 300, 600)), CountRaw(BS + 'ls1', tail),
+      CountRaw(BS + 'ls1', s));
+    b := LoadDoc(all, True);
+    try
+      n := 0;
+      for k := 0 to b.Text.ParaCount - 1 do
+        if b.Formats.ParaFormat(b.ParaFormatOf(k)).List.Kind <> lkNone then Inc(n);
+      AssertEquals('the target''s items and the two pasted', own + 2, n);
+    finally
+      b.Free;
+    end;
+  finally
+    d.Free;
+  end;
+end;
+
+{ Through the control: a paste of another document's RTF into a file the control loaded goes
+  through the filter (no style number of the source on the pasted paragraph); one copied out
+  of the control's own file does not. }
+procedure TTyRichEditPasteTest.TestTheControlPastesAcrossDocumentsThroughTheFilter;
+var
+  pf: TTyParaFormat;
+  i: Integer;
+  rtf: RawByteString;
+  st: TBytesStream;
+begin
+  LoadRtf(TgtIdx);
+  FRich.SelStart := FRich.Document.Text.ParaStart(1);
+  Clip(SrcIdx, 'x');
+  FRich.PasteFromClipboard;
+  pf := FRich.Document.Formats.ParaFormat(FRich.Document.ParaFormatOf(1));
+  AssertTrue('pasted', SameRaw(Copy(Para(1), 1, 6), 'plain '));
+  for i := 0 to pf.Extra.Count - 1 do
+    AssertFalse('no table number: ' + Shown(pf.Extra.Item(i)), TyRtfNamesTableEntry(pf.Extra.Item(i)));
+  // a copy of its own first pasted paragraph, pasted back: kept as it is
+  LoadRtf(SrcIdx);
+  st := TBytesStream.Create;
+  try
+    TyRichSaveRtfRange(FRich.Document, st, 0, FRich.Document.Text.ParaLength(0) + 1);
+    rtf := StrOfBytes(Copy(st.Bytes, 0, st.Size));
+  finally
+    st.Free;
+  end;
+  FRich.SelStart := 0;
+  Clip(rtf, 'x');
+  FRich.PasteFromClipboard;
+  pf := FRich.Document.Formats.ParaFormat(FRich.Document.ParaFormatOf(0));
+  AssertTrue('the same file: the style kept', (pf.Extra.Count > 0) and SameRaw(pf.Extra.Item(0), BS + 's3'));
+end;
+
+{ TyRichRtfTablesAgree: the same header (and one whose font and colour tables were added to at
+  their ends, as a copy's) agrees; a font's name or charset, a colour, the style sheet, a list
+  table, the ANSI code page told apart - and a document with no file agrees with nothing. }
+procedure TTyRichEditPasteTest.TestTheTablesAgreeOnlyWhereEveryTableDoes;
+const
+  Fonts = '{' + BS + 'fonttbl{' + BS + 'f0' + BS + 'fswiss' + BS + 'fcharset0 Arial;}{' + BS + 'f1' +
+    BS + 'fnil' + BS + 'fcharset134 SimSun;}';
+  Colors = '{' + BS + 'colortbl;' + BS + 'red255' + BS + 'green0' + BS + 'blue0;' + BS + 'red0' +
+    BS + 'green0' + BS + 'blue255;';
+  Styles = '{' + BS + 'stylesheet{' + BS + 's3 Quote;}}';
+  Body = BS + 'pard' + BS + 's3 x' + BS + 'par}';
+
+  function Doc(const AHead: RawByteString): TTyRichDocument;
+  begin
+    Result := LoadDoc(RawBytes('{' + BS + 'rtf1' + BS + 'ansi' + BS + 'ansicpg1252' + BS + 'deff0' +
+      AHead + Body), True);
+  end;
+
+  procedure Check(const AWhat: string; AExpected: Boolean; const ASource, ATarget: RawByteString);
+  var
+    a, b: TTyRichDocument;
+  begin
+    a := Doc(ASource);
+    b := Doc(ATarget);
+    try
+      AssertEquals(AWhat, AExpected, TyRichRtfTablesAgree(a, b));
+    finally
+      a.Free;
+      b.Free;
+    end;
+  end;
+
+var
+  a, b: TTyRichDocument;
+begin
+  Check('the same', True, Fonts + '}' + Colors + '}' + Styles, Fonts + '}' + Colors + '}' + Styles);
+  Check('a copy''s added font and colour', True, Fonts + '{' + BS + 'f2 Courier;}}' + Colors + BS +
+    'red1' + BS + 'green1' + BS + 'blue1;}' + Styles, Fonts + '}' + Colors + '}' + Styles);
+  Check('the target has a font the source lacks', False, Fonts + '}' + Colors + '}' + Styles,
+    Fonts + '{' + BS + 'f2 Courier;}}' + Colors + '}' + Styles);
+  Check('a font''s charset', False, Fonts + '}' + Colors + '}' + Styles, StringReplace(Fonts,
+    'fcharset134', 'fcharset0', []) + '}' + Colors + '}' + Styles);
+  Check('a font''s name', False, Fonts + '}' + Colors + '}' + Styles, StringReplace(Fonts,
+    'SimSun', 'SimHei', []) + '}' + Colors + '}' + Styles);
+  Check('a colour', False, Fonts + '}' + Colors + '}' + Styles, Fonts + '}' + StringReplace(Colors,
+    'blue255', 'blue254', []) + '}' + Styles);
+  Check('the style sheet', False, Fonts + '}' + Colors + '}' + Styles, Fonts + '}' + Colors + '}' +
+    StringReplace(Styles, 'Quote', 'Heading', []));
+  Check('a list table', False, Fonts + '}' + Colors + '}' + Styles, Fonts + '}' + Colors + '}' +
+    Styles + '{' + BS + '*' + BS + 'listtable{' + BS + 'list' + BS + 'listid1}}');
+  a := Doc(Fonts + '}' + Colors + '}' + Styles);
+  b := LoadDoc(RawBytes('{' + BS + 'rtf1' + BS + 'ansi' + BS + 'ansicpg936' + BS + 'deff0' + Fonts +
+    '}' + Colors + '}' + Styles + Body), True);
+  try
+    AssertFalse('the ANSI code page', TyRichRtfTablesAgree(a, b));
+  finally
+    b.Free;
+  end;
+  b := TTyRichDocument.Create;
+  try
+    AssertFalse('a document with no file', TyRichRtfTablesAgree(a, b));
+    AssertFalse('nor the other way', TyRichRtfTablesAgree(b, a));
+  finally
+    b.Free;
+    a.Free;
+  end;
 end;
 
 { A 32-bit bottom-up DIB of AW x AH pixels in AColor (B, G, R, A), AXppm pixels a metre. }

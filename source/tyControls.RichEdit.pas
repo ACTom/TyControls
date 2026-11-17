@@ -4581,8 +4581,13 @@ begin
         rtf := '';
         src := TyRichReadRtfFragment(bytes, ends);
         bytes := nil;
+        { What the reader kept of the clipboard's file by number (styles, colours, fonts,
+          lists inside formats, rows and objects) goes in as it is only where this
+          document's file has the same header tables - a copy out of this very file;
+          elsewhere it is left out or made again (R62, TyRichFragmentFilterFor). }
         if (src <> nil) and ((src.Text.Length > 0) or ends) then
-          cmd := TTyRichInsertFragment.Create(s, src, ends, flat)
+          cmd := TTyRichInsertFragment.Create(s, src, ends, flat,
+            TyRichFragmentFilterFor(src, FDoc))
         else
           src.Free;
       end;

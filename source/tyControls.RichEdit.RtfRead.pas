@@ -796,6 +796,36 @@ function TyRichRtfLoadOf(ADoc: TTyRichDocument): TTyRtfLoad;
 // (the caller decides that it holds nothing).
 function TyRichReadRtfFragment(const ABytes: TBytes; out AEndsWithParagraph: Boolean): TTyRichDocument;
 
+// Whether what ASource (a document TyRichReadRtfFragment read) keeps of its file's bytes
+// means the same in ATarget's file: both were read from RTF, and their header tables agree -
+// every font the target's file defines has the same number, name and charset in the
+// source's; every colour of the target's table is the source's entry of the same number;
+// the style sheet, the list table, the list override table and the revision table are the
+// same bytes (or both missing); the ANSI code page and the default font are the same. What a
+// copy out of that very file carries (the range writer writes the file's header, its font
+// and colour tables only added to at their ends). A document with no file behind it never
+// agrees.
+function TyRichRtfTablesAgree(ASource, ATarget: TTyRichDocument): Boolean;
+// The filter a fragment of ASource needs to go into ATarget (TTyRichInsertFragment's AFilter):
+// nil when the two agree (TyRichRtfTablesAgree) - everything goes as it is -, else a new
+// filter, the caller's, that leaves out of what goes along every control word that is an
+// index into a header table (TyRtfNamesTableEntry): a format's Extra fragment that holds one
+// goes; a row's RawFormat loses those words (the row is made again); an object whose bytes
+// hold one: a field is made again from its instruction and its result's text
+// ({\field{\*\fldinst ...}{\fldrslt ...}}, the text as \uN - the field works, the formatting
+// inside its result goes), a picture is made again from its image (its \pict's other words
+// go), and any other object (a footnote, a comment, a shape, an embedded object, an
+// equation) is left out - with its display text in its place where it has one (only a
+// field's result has one, and a field is made again).
+function TyRichFragmentFilterFor(ASource, ATarget: TTyRichDocument): TTyRichFragmentFilter;
+// ABytes (a fragment of a format's Extra, a row's definition, an object's bytes) hold a
+// control word whose number is an index into a table of the file's header: a font (\f, \af,
+// \pnf), a colour (\cf, \cb, \highlight, \ulc, \brdrcf, \chcbpat, \chcfpat, \cbpat, \cfpat,
+// \clcbpat, \clcfpat, \clcbpatraw, \clcfpatraw, \trcbpat, \trcfpat, \pncf), a style (\s, \cs,
+// \ds, \ts), a list override (\ls) or a revision author (\revauth, \revauthdel, \crauth,
+// \pnrauth). \lang, \kerning, \fcs and the rsid words are numbers of their own, not indices.
+function TyRtfNamesTableEntry(const ABytes: RawByteString): Boolean;
+
 type
   // Where the reader finds a fragment of TTyParaFormat.Extra: among a paragraph's own words
   // (pekTop; \lsN and \ilvlN apart, with N), or inside its {\*\pn ...} group (pekPn) - which
@@ -5954,6 +5984,444 @@ begin
       AEndsWithParagraph := False;
     end;
   end;
+end;
+
+// ---- a fragment that goes into another document ----
+
+const
+  BS = #92;
+  // the control words whose number is an index into a table of the header
+  IndexWords: array[0..30] of string = ('f', 'af', 'pnf', 'cf', 'cb', 'highlight', 'ulc',
+    'brdrcf', 'chcbpat', 'chcfpat', 'cbpat', 'cfpat', 'clcbpat', 'clcfpat', 'clcbpatraw',
+    'clcfpatraw', 'trcbpat', 'trcfpat', 'pncf', 's', 'cs', 'ds', 'ts', 'ls', 'revauth',
+    'revauthdel', 'crauth', 'pnrauth', 'tscellcbpat', 'tscellcfpat', 'trbrdrcf');
+
+function IsIndexWord(P: PByte; ALen: Integer): Boolean;
+var
+  i: Integer;
+begin
+  for i := 0 to High(IndexWords) do
+    if (Length(IndexWords[i]) = ALen) and CompareMem(P, PChar(IndexWords[i]), ALen) then
+      Exit(True);
+  Result := False;
+end;
+
+function TyRtfNamesTableEntry(const ABytes: RawByteString): Boolean;
+var
+  lex: TTyRtfLexer;
+  t: TTyRtfToken;
+begin
+  Result := False;
+  if ABytes = '' then Exit;
+  lex.Init(PByte(PAnsiChar(ABytes)), 0, Length(ABytes));
+  while lex.Next(t) do
+    if (t.Kind = rtkWord) and IsIndexWord(@PByte(PAnsiChar(ABytes))[t.NameStart], t.NameLen) then
+      Exit(True);
+end;
+
+// ABytes without the index words (TyRtfNamesTableEntry): a row's definition for another
+// document. A word dropped between a word and text leaves the space that delimits them.
+function WithoutIndexWords(const ABytes: RawByteString): RawByteString;
+var
+  lex: TTyRtfLexer;
+  t: TTyRtfToken;
+  buf: PByte;
+  openWord: Boolean;
+begin
+  Result := '';
+  if ABytes = '' then Exit;
+  buf := PByte(PAnsiChar(ABytes));
+  lex.Init(buf, 0, Length(ABytes));
+  // the output ends with a control word and no delimiter
+  openWord := False;
+  while lex.Next(t) do
+  begin
+    if (t.Kind = rtkWord) and IsIndexWord(@buf[t.NameStart], t.NameLen) then Continue;
+    if openWord and (t.Kind = rtkText) and (buf[t.Start] <> Ord(' ')) then Result := Result + ' ';
+    Result := Result + Copy(ABytes, t.Start + 1, t.Stop - t.Start);
+    openWord := (t.Kind = rtkWord) and (buf[t.Stop - 1] <> Ord(' '));
+  end;
+end;
+
+// The bytes of the group the header's top level holds whose destination is AName (after a
+// \* or not), '' when there is none.
+function HeaderGroup(const ABytes: TBytes; AStop: Int64; const AName: string): RawByteString;
+var
+  lex, peek: TTyRtfLexer;
+  t, w: TTyRtfToken;
+  depth, d: Integer;
+  start: PtrInt;
+begin
+  Result := '';
+  if AStop > Length(ABytes) then AStop := Length(ABytes);
+  if AStop <= 0 then Exit;
+  lex.Init(@ABytes[0], 0, AStop);
+  depth := 0;
+  while lex.Next(t) do
+    case t.Kind of
+      rtkGroupStart:
+        begin
+          Inc(depth);
+          if depth <> 2 then Continue;
+          peek := lex;
+          if not peek.Next(w) then Exit;
+          if (w.Kind = rtkSymbol) and (w.Value = Ord('*')) and not peek.Next(w) then Exit;
+          if (w.Kind <> rtkWord) or (w.NameLen <> Length(AName)) or
+             not CompareMem(@ABytes[w.NameStart], PChar(AName), w.NameLen) then
+            Continue;
+          start := t.Start;
+          d := 1;
+          lex := peek;
+          while (d > 0) and lex.Next(t) do
+            if t.Kind = rtkGroupStart then Inc(d)
+            else if t.Kind = rtkGroupEnd then Dec(d);
+          SetLength(Result, lex.Position - start);
+          Move(ABytes[start], Result[1], lex.Position - start);
+          Exit;
+        end;
+      rtkGroupEnd: Dec(depth);
+    end;
+end;
+
+function TyRichRtfTablesAgree(ASource, ATarget: TTyRichDocument): Boolean;
+const
+  Tables: array[0..3] of string = ('stylesheet', 'listtable', 'listoverridetable', 'revtbl');
+var
+  s, t: TTyRtfLoad;
+  ss, ts: TTyRtfParser;
+  i, k: Integer;
+  fa, fb: TTyRtfFont;
+  aa, ab: Boolean;
+begin
+  Result := False;
+  if (ASource = nil) or (ATarget = nil) then Exit;
+  s := TyRichRtfLoadOf(ASource);
+  t := TyRichRtfLoadOf(ATarget);
+  if (s = nil) or (t = nil) then Exit;
+  ss := s.Scan;
+  ts := t.Scan;
+  if (ss.AnsiCodePage <> ts.AnsiCodePage) or (ss.DefaultFont <> ts.DefaultFont) then Exit;
+  for i := 0 to ts.FontCount - 1 do
+  begin
+    fb := ts.Font(i);
+    k := ss.FontIndex(fb.Num);
+    if k < 0 then Exit;
+    fa := ss.Font(k);
+    if (fa.Name <> fb.Name) or (fa.Charset <> fb.Charset) or (fa.Cpg <> fb.Cpg) then Exit;
+  end;
+  if ts.ColorCount > ss.ColorCount then Exit;
+  for i := 0 to ts.ColorCount - 1 do
+    if (ss.Color(i, aa) <> ts.Color(i, ab)) or (aa <> ab) then Exit;
+  for i := 0 to High(Tables) do
+    if HeaderGroup(s.Bytes, s.Header.Stop, Tables[i]) <>
+       HeaderGroup(t.Bytes, t.Header.Stop, Tables[i]) then
+      Exit;
+  Result := True;
+end;
+
+type
+  // TyRichFragmentFilterFor's filter: the index words stay behind.
+  TTyRtfForeignFilter = class(TTyRichFragmentFilter)
+  private
+    FScan: TTyRtfParser;     // the source's header tables (the fragment's text is decoded by them)
+    function FieldInstruction(const ABytes: RawByteString; AUc: Integer): UTF8String;
+  public
+    function KeepFragment(const AFragment: RawByteString; APara: Boolean): Boolean; override;
+    function RowFormat(const ARaw: RawByteString): RawByteString; override;
+    function MapObject(AObj: TTyRichObject; out AText: UTF8String): TTyRichObject; override;
+  end;
+
+function TTyRtfForeignFilter.KeepFragment(const AFragment: RawByteString; APara: Boolean): Boolean;
+begin
+  Result := not TyRtfNamesTableEntry(AFragment);
+end;
+
+function TTyRtfForeignFilter.RowFormat(const ARaw: RawByteString): RawByteString;
+begin
+  if TyRtfNamesTableEntry(ARaw) then Result := WithoutIndexWords(ARaw) else Result := ARaw;
+end;
+
+// The text of a field's {\*\fldinst ...}: its characters as a reader takes them - \'xx in
+// the code page of the font in effect (of the source's table), \uN with its \uc fallback
+// skipped -, groups inside it but no destination ({\*\...}: a form field's data, ...).
+function TTyRtfForeignFilter.FieldInstruction(const ABytes: RawByteString; AUc: Integer): UTF8String;
+var
+  lex: TTyRtfLexer;
+  t: TTyRtfToken;
+  buf: PByte;
+  depth, instAt, skipAt, skip, i, cp: Integer;
+  font: array of Integer;
+  uc: array of Integer;
+  raw: RawByteString;
+  ob: TBytes;
+  olen: PtrInt;
+  starting: Boolean;
+
+  procedure FlushRaw;
+  var
+    k, j: Integer;
+    s: UTF8String;
+  begin
+    if raw = '' then Exit;
+    j := -1;
+    if FScan <> nil then j := FScan.FontOfNum(font[depth]);
+    if j >= 0 then cp := FScan.FFonts[j].CodePage
+    else if FScan <> nil then cp := FScan.AnsiCodePage
+    else cp := 1252;
+    if FScan <> nil then s := FScan.DecodeRaw(raw, cp) else s := raw;
+    for k := 1 to Length(s) do
+    begin
+      if olen + 1 > Length(ob) then SetLength(ob, Length(ob) * 2 + 64);
+      ob[olen] := Byte(s[k]);
+      Inc(olen);
+    end;
+    raw := '';
+  end;
+
+begin
+  Result := '';
+  if ABytes = '' then Exit;
+  buf := PByte(PAnsiChar(ABytes));
+  lex.Init(buf, 0, Length(ABytes));
+  depth := 0;
+  instAt := -1;     // the depth of the instruction's group, -1 not in it
+  skipAt := -1;     // the depth of a destination inside it being passed over
+  skip := 0;        // \uc fallback items still to skip
+  font := nil;
+  uc := nil;
+  SetLength(font, 8);
+  SetLength(uc, 8);
+  font[0] := -1;
+  uc[0] := AUc;
+  raw := '';
+  ob := nil;
+  olen := 0;
+  starting := False;
+  while lex.Next(t) do
+  begin
+    case t.Kind of
+      rtkGroupStart:
+        begin
+          if instAt >= 0 then FlushRaw;
+          Inc(depth);
+          if depth >= Length(font) then
+          begin
+            SetLength(font, depth * 2);
+            SetLength(uc, depth * 2);
+          end;
+          font[depth] := font[depth - 1];
+          uc[depth] := uc[depth - 1];
+          skip := 0;
+          starting := True;
+          Continue;
+        end;
+      rtkGroupEnd:
+        begin
+          if instAt >= 0 then FlushRaw;
+          if depth = instAt then
+          begin
+            instAt := -1;
+            Break;
+          end;
+          if depth = skipAt then skipAt := -1;
+          if depth > 0 then Dec(depth);
+          skip := 0;
+          starting := False;
+          Continue;
+        end;
+      rtkWord:
+        if (t.NameLen = 7) and CompareMem(@buf[t.NameStart], PChar('fldinst'), 7) and
+           (instAt < 0) then
+          instAt := depth
+        else if instAt >= 0 then
+        begin
+          if starting and (skipAt < 0) and (t.Start > 0) and (buf[t.Start - 1] = Ord('*')) then
+            skipAt := depth;
+          if skipAt < 0 then
+          begin
+            if (t.NameLen = 1) and (buf[t.NameStart] = Ord('f')) and t.HasParam then
+            begin
+              FlushRaw;
+              font[depth] := t.Param;
+            end
+            else if (t.NameLen = 2) and (buf[t.NameStart] = Ord('u')) and
+              (buf[t.NameStart + 1] = Ord('c')) and t.HasParam then
+              uc[depth] := t.Param
+            else if (t.NameLen = 1) and (buf[t.NameStart] = Ord('u')) and t.HasParam then
+            begin
+              FlushRaw;
+              if olen + 4 > Length(ob) then SetLength(ob, Length(ob) * 2 + 64);
+              UtfPut(ob, olen, UnicodeOfParam(t.Param));
+              skip := uc[depth];
+              starting := False;
+              Continue;
+            end
+            else if (t.NameLen = 3) and CompareMem(@buf[t.NameStart], PChar('tab'), 3) then
+              raw := raw + #9;
+          end;
+        end;
+      rtkHex:
+        if (instAt >= 0) and (skipAt < 0) then
+        begin
+          if skip > 0 then Dec(skip)
+          else if t.Value >= 0 then raw := raw + AnsiChar(t.Value);
+        end;
+      rtkSymbol:
+        if (instAt >= 0) and (skipAt < 0) and (t.Value <> Ord('*')) then
+        begin
+          if skip > 0 then Dec(skip)
+          else if t.Value in [Ord('\'), Ord('{'), Ord('}')] then raw := raw + AnsiChar(t.Value)
+          else if t.Value = Ord('~') then raw := raw + ' ';
+        end;
+      rtkText:
+        if (instAt >= 0) and (skipAt < 0) then
+          for i := t.Start to t.Stop - 1 do
+          begin
+            if buf[i] in [10, 13, 0] then Continue;
+            if skip > 0 then
+            begin
+              Dec(skip);
+              Continue;
+            end;
+            raw := raw + AnsiChar(buf[i]);
+          end;
+    end;
+    if not ((t.Kind = rtkSymbol) and (t.Value = Ord('*'))) then starting := False;
+  end;
+  FlushRaw;
+  SetLength(Result, olen);
+  if olen > 0 then Move(ob[0], Result[1], olen);
+  // the instruction's own spaces at its ends are the writer's, not the field's
+  Result := Trim(Result);
+end;
+
+// S's characters as RTF text of its own: ASCII as it is (\, { and } escaped), a tab \tab,
+// every other character \uN? (under \uc1), what is no text left out.
+function RtfTextOf(const S: UTF8String): RawByteString;
+var
+  i, n: Integer;
+  b: Byte;
+  code: Cardinal;
+
+  procedure PutUnit(AUnit: Cardinal);
+  begin
+    if AUnit > 32767 then
+      Result := Result + BS + 'u' + IntToStr(Integer(AUnit) - 65536) + '?'
+    else
+      Result := Result + BS + 'u' + IntToStr(AUnit) + '?';
+  end;
+
+begin
+  Result := '';
+  i := 1;
+  while i <= Length(S) do
+  begin
+    b := Byte(S[i]);
+    if b < $80 then
+    begin
+      n := 1;
+      code := b;
+    end
+    else if (b >= $C0) and (b < $E0) and (i + 1 <= Length(S)) then
+    begin
+      n := 2;
+      code := ((b and $1F) shl 6) or (Byte(S[i + 1]) and $3F);
+    end
+    else if (b >= $E0) and (b < $F0) and (i + 2 <= Length(S)) then
+    begin
+      n := 3;
+      code := ((b and $0F) shl 12) or ((Byte(S[i + 1]) and $3F) shl 6) or (Byte(S[i + 2]) and $3F);
+    end
+    else if (b >= $F0) and (i + 3 <= Length(S)) then
+    begin
+      n := 4;
+      code := ((b and $07) shl 18) or ((Byte(S[i + 1]) and $3F) shl 12) or
+        ((Byte(S[i + 2]) and $3F) shl 6) or (Byte(S[i + 3]) and $3F);
+    end
+    else
+    begin
+      n := 1;
+      code := $FFFD;
+    end;
+    Inc(i, n);
+    case code of
+      9: Result := Result + BS + 'tab ';
+      0..8, 10..31, 127: ;
+      Ord('\'), Ord('{'), Ord('}'): Result := Result + BS + AnsiChar(code);
+      32..91, 93..122, 124, 126: Result := Result + AnsiChar(code);
+    else
+      if code > $FFFF then
+      begin
+        PutUnit($D800 + ((code - $10000) shr 10));
+        PutUnit($DC00 + ((code - $10000) and $3FF));
+      end
+      else
+        PutUnit(code);
+    end;
+  end;
+end;
+
+function IsFieldBytes(const ABytes: RawByteString): Boolean;
+var
+  lex: TTyRtfLexer;
+  t: TTyRtfToken;
+  buf: PByte;
+begin
+  Result := False;
+  if ABytes = '' then Exit;
+  buf := PByte(PAnsiChar(ABytes));
+  lex.Init(buf, 0, Length(ABytes));
+  if not lex.Next(t) or (t.Kind <> rtkGroupStart) then Exit;
+  if not lex.Next(t) then Exit;
+  if (t.Kind = rtkSymbol) and (t.Value = Ord('*')) and not lex.Next(t) then Exit;
+  Result := (t.Kind = rtkWord) and (t.NameLen = 5) and CompareMem(@buf[t.NameStart], PChar('field'), 5);
+end;
+
+function TTyRtfForeignFilter.MapObject(AObj: TTyRichObject; out AText: UTF8String): TTyRichObject;
+var
+  o: TTyRichOpaque;
+  p: TTyRichPicture;
+  b: RawByteString;
+begin
+  AText := '';
+  Result := AObj;
+  if AObj is TTyRichOpaque then
+  begin
+    o := TTyRichOpaque(AObj);
+    if not TyRtfNamesTableEntry(o.Bytes) then Exit;
+    if IsFieldBytes(o.Bytes) then
+    begin
+      // made again: what it does and what it shows, nothing that names the source's tables
+      b := '{' + BS + 'field{' + BS + '*' + BS + 'fldinst ' +
+        RtfTextOf(FieldInstruction(o.Bytes, o.RawUc)) + '}{' + BS + 'fldrslt ' +
+        RtfTextOf(o.DisplayText) + '}}';
+      SetCodePage(b, CP_NONE, False);
+      Exit(TTyRichOpaque.Create(b, o.DisplayText, 1));
+    end;
+    AText := o.DisplayText;
+    Exit(nil);
+  end;
+  if AObj is TTyRichPicture then
+  begin
+    p := TTyRichPicture(AObj);
+    if (p.RawRtf = '') or not TyRtfNamesTableEntry(p.RawRtf) then Exit;
+    // its image, as a picture made here is written
+    Result := TTyRichPicture.Create(p.PictureFormat, p.Data, p.WidthTwips, p.HeightTwips);
+  end;
+end;
+
+function TyRichFragmentFilterFor(ASource, ATarget: TTyRichDocument): TTyRichFragmentFilter;
+var
+  f: TTyRtfForeignFilter;
+  load: TTyRtfLoad;
+begin
+  Result := nil;
+  if TyRichRtfTablesAgree(ASource, ATarget) then Exit;
+  f := TTyRtfForeignFilter.Create;
+  load := nil;
+  if ASource <> nil then load := TyRichRtfLoadOf(ASource);
+  if load <> nil then f.FScan := load.Scan;
+  Result := f;
 end;
 
 // ---- for the writer ----

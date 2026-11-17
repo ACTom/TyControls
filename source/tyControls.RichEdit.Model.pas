@@ -494,6 +494,25 @@ type
     After: TTyRichSelectionMark;
   end;
 
+  { What a fragment carries of its source's kept bytes into a document whose file's header
+    tables are not the source's (TTyRichFragment, AFilter). A format's Extra, a row's
+    RawFormat and an opaque object's bytes may name fonts, colours, styles and lists by the
+    numbers of the source's tables; in another document those numbers mean the target's
+    entries. Who reads such bytes implements it (tyControls.RichEdit.RtfRead's
+    TyRichFragmentFilterFor, which also says when the tables agree and no filter is needed);
+    the model only asks it. It never changes the source. }
+  TTyRichFragmentFilter = class
+  public
+    { A fragment of a format's Extra (APara: a paragraph format's) goes along. }
+    function KeepFragment(const AFragment: RawByteString; APara: Boolean): Boolean; virtual; abstract;
+    { A row's RawFormat as the row made again for the target has it. }
+    function RowFormat(const ARaw: RawByteString): RawByteString; virtual; abstract;
+    { AObj as it goes along: AObj itself; an object made again (a new one no reference was
+      taken of - the fragment's paragraph values take theirs); or nil: it is left out, and
+      AText ('' none) stands in its character's place, in its run's format. }
+    function MapObject(AObj: TTyRichObject; out AText: UTF8String): TTyRichObject; virtual; abstract;
+  end;
+
   { Content of a document of its own (what a reader made of a clipboard's RTF) made ready to
     go into another document at one place - what TTyRichDocument's InsertFragment inserts.
     Made by the target document's terms: the source's character and paragraph formats are
@@ -515,6 +534,13 @@ type
     with text, no row is left half); otherwise (APos in a cell, or AFlatten) every paragraph
     is a plain paragraph of the cell (or of no table) APos is in: never a nested table. The
     list markers a file gave are not taken: the numbers are counted, as after any edit.
+
+    AFilter (nil: everything goes as the source has it - what a paste inside one document,
+    or between two documents whose files' header tables agree, wants): what the source keeps
+    of its file's bytes goes through it - a format's Extra fragment by fragment, each object -
+    and its tables are made again for the target, each row with the RawFormat the filter
+    gives (the rows are then the fragment's own, not the source's). The filter is used only
+    while the fragment is made; the caller frees it.
     The values hold references into the target document: free a fragment before its target. }
   TTyRichFragment = class
   private
@@ -529,17 +555,25 @@ type
     FFlatCell: TTyRichCell;
     FCharMap, FParaMap: array of Integer;
     FSrcDefault: TTyCharFormat;
+    FFilter: TTyRichFragmentFilter;
+    // the source's tables met, and what goes in for each (made again, or the very one)
+    FTabSrc, FTabNew: array of TTyRichTable;
+    FTabCount: Integer;
     procedure AddPart(AValue: TTyRichParaData; ALen: Int64; AOwn: Boolean);
     procedure InsertOwnFirst;
     procedure AddText(P: PByte; ALen: PtrInt);
     function MapChar(AId: TTyCharFormatId): TTyCharFormatId;
     function MapPara(AId: TTyParaFormatId): TTyParaFormatId;
+    function MapExtra(const AExtra: TTyOpaqueAttrs; APara: Boolean): TTyOpaqueAttrs;
+    function MapCell(ACell: TTyRichCell): TTyRichCell;
+    procedure MapObjects(var AText: RawByteString; var ARuns: TTyRunArray; var AChars: Int64);
     procedure TakePara(AIndex: Integer; AData: Pointer; AText: PByte; ALen: PtrInt;
       var AContinue: Boolean);
     function PartCell(AIndex: Integer): TTyRichCell;
   public
     constructor Create(ATarget: TTyRichDocument; APos: TTyRichPos; ASource: TTyRichDocument;
-      AEndsWithParagraph: Boolean; AFlatten: Boolean = False);
+      AEndsWithParagraph: Boolean; AFlatten: Boolean = False;
+      AFilter: TTyRichFragmentFilter = nil);
     destructor Destroy; override;
     { Parts (paragraph separators inserted + 1); 0: nothing to insert. }
     property PartCount: Integer read FCount;
@@ -3248,7 +3282,8 @@ end;
 { ---- a fragment of another document ---- }
 
 constructor TTyRichFragment.Create(ATarget: TTyRichDocument; APos: TTyRichPos;
-  ASource: TTyRichDocument; AEndsWithParagraph: Boolean; AFlatten: Boolean);
+  ASource: TTyRichDocument; AEndsWithParagraph: Boolean; AFlatten: Boolean;
+  AFilter: TTyRichFragmentFilter);
 var
   t: TTyRichText;
   k, n, i: Integer;
@@ -3260,6 +3295,7 @@ begin
     raise ETyRichModel.Create('A fragment needs a target and a source of its own');
   FDoc := ATarget;
   FSrc := ASource;
+  FFilter := AFilter;
   t := ATarget.FText;
   k := t.ParaOfPos(APos);   // range check
   o := APos - t.ParaStart(k);
@@ -3309,8 +3345,15 @@ begin
     SetLength(FText, FTextLen);
   finally
     FSrc := nil;
+    FFilter := nil;
     FCharMap := nil;
     FParaMap := nil;
+    // a table made again was held while it was made: the values that use it hold theirs
+    for i := 0 to FTabCount - 1 do
+      if (FTabNew[i] <> nil) and (FTabNew[i] <> FTabSrc[i]) then FTabNew[i].Release;
+    FTabSrc := nil;
+    FTabNew := nil;
+    FTabCount := 0;
   end;
 end;
 
@@ -3431,15 +3474,178 @@ begin
     f.Charset := FSrcDefault.Charset;
   end;
   if (f.SizeHalfPt = 0) and (FSrcDefault.SizeHalfPt <> 0) then f.SizeHalfPt := FSrcDefault.SizeHalfPt;
+  if FFilter <> nil then f.Extra := MapExtra(f.Extra, False);
   Result := FDoc.FFormats.InternChar(f);
   if (AId >= 0) and (AId < Length(FCharMap)) then FCharMap[AId] := Result;
 end;
 
 function TTyRichFragment.MapPara(AId: TTyParaFormatId): TTyParaFormatId;
+var
+  f: TTyParaFormat;
 begin
   if (AId >= 0) and (AId < Length(FParaMap)) and (FParaMap[AId] >= 0) then Exit(FParaMap[AId]);
-  Result := FDoc.FFormats.InternPara(FSrc.FFormats.ParaFormat(AId));
+  f := FSrc.FFormats.ParaFormat(AId);
+  if FFilter <> nil then f.Extra := MapExtra(f.Extra, True);
+  Result := FDoc.FFormats.InternPara(f);
   if (AId >= 0) and (AId < Length(FParaMap)) then FParaMap[AId] := Result;
+end;
+
+function TTyRichFragment.MapExtra(const AExtra: TTyOpaqueAttrs; APara: Boolean): TTyOpaqueAttrs;
+var
+  i: Integer;
+begin
+  Result.FItems := nil;
+  for i := 0 to AExtra.Count - 1 do
+    if FFilter.KeepFragment(AExtra.Item(i), APara) then Result.Add(AExtra.Item(i));
+end;
+
+{ The cell a paragraph of the source's ACell goes into: the very one, or with a filter the
+  same cell of the table made again for the target - made at its first paragraph, whole (a
+  table's rows are fixed once a paragraph uses it). }
+function TTyRichFragment.MapCell(ACell: TTyRichCell): TTyRichCell;
+var
+  src, nt: TTyRichTable;
+  r: TTyRichRow;
+  i: Integer;
+begin
+  Result := ACell;
+  if ACell = nil then Exit;
+  src := ACell.Table;
+  i := FTabCount - 1;
+  while (i >= 0) and (FTabSrc[i] <> src) do Dec(i);
+  if i < 0 then
+  begin
+    nt := src;
+    if FFilter <> nil then
+    begin
+      nt := TTyRichTable.Create(src.FColBoundaries, src.FStructureLocked);
+      // held while the fragment is made (Create lets go of it at its end)
+      nt.AddRef;
+      for i := 0 to High(src.FRows) do
+      begin
+        r := src.FRows[i];
+        nt.AddRow(Length(r.FCells), FFilter.RowFormat(r.FRawFormat), r.FBoundaries,
+          r.FHoldsNestedTable);
+      end;
+    end;
+    if FTabCount = Length(FTabSrc) then
+    begin
+      SetLength(FTabSrc, FTabCount * 2 + 4);
+      SetLength(FTabNew, FTabCount * 2 + 4);
+    end;
+    FTabSrc[FTabCount] := src;
+    FTabNew[FTabCount] := nt;
+    Inc(FTabCount);
+    i := FTabCount - 1;
+  end
+  else if i < FTabCount - 1 then
+  begin
+    // the table met last first: a table's paragraphs follow each other
+    src := FTabSrc[i];
+    nt := FTabNew[i];
+    FTabSrc[i] := FTabSrc[FTabCount - 1];
+    FTabNew[i] := FTabNew[FTabCount - 1];
+    FTabSrc[FTabCount - 1] := src;
+    FTabNew[FTabCount - 1] := nt;
+    i := FTabCount - 1;
+  end;
+  nt := FTabNew[i];
+  if nt = nil then Exit(nil);
+  if nt = src then Exit;
+  Result := nt.FRows[ACell.FRow.FIndex].FCells[ACell.FIndex];
+end;
+
+function Utf8SeqLen(B: Byte): Integer; inline;
+begin
+  if B < $C0 then Result := 1
+  else if B < $E0 then Result := 2
+  else if B < $F0 then Result := 3
+  else Result := 4;
+end;
+
+{ The paragraph's objects through the filter: one kept or made again stays its character; one
+  left out gives its character's place to the text the filter has for it (or to nothing). }
+procedure TTyRichFragment.MapObjects(var AText: RawByteString; var ARuns: TTyRunArray;
+  var AChars: Int64);
+var
+  j, n: Integer;
+  p, q: PtrInt;
+  ch, runEnd, outCh: Int64;
+  got: TTyRichObject;
+  s: UTF8String;
+  o: RawByteString;
+  runs: TTyRunArray;
+begin
+  o := '';
+  runs := nil;
+  SetLength(runs, Length(ARuns));
+  n := 0;
+  p := 1;
+  ch := 0;
+  outCh := 0;
+  for j := 0 to High(ARuns) do
+  begin
+    if j < High(ARuns) then runEnd := ARuns[j + 1].Start else runEnd := AChars;
+    if ARuns[j].Obj = nil then
+    begin
+      AppendRun(runs, n, outCh, ARuns[j].Format, nil);
+      q := p;
+      while (ch < runEnd) and (q <= Length(AText)) do
+      begin
+        Inc(q, Utf8SeqLen(Byte(AText[q])));
+        Inc(ch);
+        Inc(outCh);
+      end;
+      if q > Length(AText) + 1 then q := Length(AText) + 1;
+      o := o + Copy(AText, p, q - p);
+      p := q;
+      Continue;
+    end;
+    // an object run is its one character
+    q := p;
+    if (ch < runEnd) and (q <= Length(AText)) then
+    begin
+      Inc(q, Utf8SeqLen(Byte(AText[q])));
+      if q > Length(AText) + 1 then q := Length(AText) + 1;
+      Inc(ch);
+    end;
+    got := FFilter.MapObject(ARuns[j].Obj, s);
+    if got <> nil then
+    begin
+      AppendRun(runs, n, outCh, ARuns[j].Format, got);
+      o := o + Copy(AText, p, q - p);
+      Inc(outCh);
+    end
+    else if s <> '' then
+    begin
+      AppendRun(runs, n, outCh, ARuns[j].Format, nil);
+      o := o + s;
+      q := 1;
+      while q <= Length(s) do
+      begin
+        Inc(q, Utf8SeqLen(Byte(s[q])));
+        Inc(outCh);
+      end;
+    end;
+    p := q;
+    // (a run that held more than its one character: the rest as text)
+    if (ch < runEnd) and (p <= Length(AText)) then
+      AppendRun(runs, n, outCh, ARuns[j].Format, nil);
+    while (ch < runEnd) and (p <= Length(AText)) do
+    begin
+      q := p + Utf8SeqLen(Byte(AText[p]));
+      if q > Length(AText) + 1 then q := Length(AText) + 1;
+      o := o + Copy(AText, p, q - p);
+      p := q;
+      Inc(ch);
+      Inc(outCh);
+    end;
+  end;
+  if n = 0 then AppendRun(runs, n, 0, ARuns[0].Format, nil);
+  SetLength(runs, n);
+  AText := o;
+  ARuns := runs;
+  AChars := outCh;
 end;
 
 procedure TTyRichFragment.TakePara(AIndex: Integer; AData: Pointer; AText: PByte; ALen: PtrInt;
@@ -3450,19 +3656,37 @@ var
   cell: TTyRichCell;
   n, j: Integer;
   chars: Int64;
+  txt: RawByteString;
+  objs: Boolean;
 begin
   // a paragraph of a reader that parses on demand with no value of the moment: parse it
   if not FSrc.ReadValue(AData, fmt, runs, cell) then
     FSrc.ReadValue(FSrc.DataOf(AIndex), fmt, runs, cell);
   chars := FSrc.FText.ParaLength(AIndex);
+  objs := False;
+  if FFilter <> nil then
+    for j := 0 to High(runs) do
+      if runs[j].Obj <> nil then
+      begin
+        objs := True;
+        Break;
+      end;
+  if objs then
+  begin
+    txt := '';
+    SetLength(txt, ALen);
+    if ALen > 0 then Move(AText^, txt[1], ALen);
+    MapObjects(txt, runs, chars);
+  end;
   mapped := nil;
   n := 0;
   SetLength(mapped, Length(runs));
   for j := 0 to High(runs) do
     AppendRun(mapped, n, runs[j].Start, MapChar(runs[j].Format), runs[j].Obj);
   SetLength(mapped, n);
-  if FFlat then cell := FFlatCell;
-  AddText(AText, ALen);
+  if FFlat then cell := FFlatCell else cell := MapCell(cell);
+  if objs then AddText(PByte(PAnsiChar(txt)), Length(txt))
+  else AddText(AText, ALen);
   AddPart(FDoc.MakeData(MapPara(fmt), mapped, cell), chars, False);
 end;
 
