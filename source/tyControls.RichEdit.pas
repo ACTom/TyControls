@@ -10857,8 +10857,12 @@ begin
     finally
       Dec(FEditing);
     end;
-    // (the history's command tells this call nothing any more)
-    if ran and (FDoc.UndoStep = cmd) and (cmd.Id = id) then cmd.Tally := nil;
+    // (the history's command tells this call nothing any more, and will not go on)
+    if ran and (FDoc.UndoStep = cmd) and (cmd.Id = id) then
+    begin
+      cmd.Tally := nil;
+      cmd.LetGo;
+    end;
     Result := tally.Replaced;
     if complete then AResult := ReplaceResultOf(rfsDone, tally)
     else AResult := ReplaceResultOf(rfsCancelled, tally);
@@ -10930,7 +10934,11 @@ begin
   // (the history's command tells this control nothing any more)
   if FReplaceRan and (FReplaceCmd <> nil) and (FDoc.UndoStep = FReplaceCmd) and
     (FReplaceCmd.Id = FReplaceId) then
+  begin
     FReplaceCmd.Tally := nil;
+    // it will not go on: only its undo record stays in the history (an undone one let go)
+    FReplaceCmd.LetGo;
+  end;
   if not FReplaceRan then FreeAndNil(FReplaceCmd) else FReplaceCmd := nil;
   FReplaceRan := False;
 end;

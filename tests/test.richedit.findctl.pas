@@ -88,6 +88,7 @@ type
     procedure TestTheWordBoundaryIsTheLineBreakers;
     procedure TestAHandlerMayFreeTheControl;
     procedure TestAReplaceOfAnIncompleteDocumentCountsInPieces;
+    procedure TestAStoppedReplaceKeepsOnlyItsRecord;
   end;
 
   // the control's protected seams (the find's piece and batch, the first slice)
@@ -1626,6 +1627,76 @@ begin
   AssertEquals('nothing replaced', 0, Pos('dog', Text));
   AssertTrue('every match counted: ' + FDone[0], Pos('replace 0 ', FDone[0]) = 1);
   AssertEquals('...as many as there are', CountMatchesOf('cat', Text), FReplaceResult.Skipped);
+end;
+
+{ A background replace stopped before its end - cancelled, a key, a save, cancelled again, on
+  one line of matches - leaves in the history its undo record only: its finder and the copy of
+  the paragraph it stood in go with every ending, and what it still holds is within what the
+  history counts. }
+procedure TTyRichEditFindTest.TestAStoppedReplaceKeepsOnlyItsRecord;
+var
+  sb: TStringBuilder;
+  i, way, turns, depth: Integer;
+  cmd: TTyRichReplaceAllCommand;
+  m: TMemoryStream;
+begin
+  sb := TStringBuilder.Create;
+  try
+    for i := 0 to 299999 do sb.Append('a,');
+    SetText(sb.ToString);
+  finally
+    sb.Free;
+  end;
+  FRich.FakeClock := True;
+  FRich.ClockStep := 1;
+  try
+    FReplaceResult.ResumeAt := 0;
+    FReplaceResult.ResumeLength := -1;
+    for way := 0 to 3 do
+    begin
+      ResetEvents;
+      FRich.ReplaceAllAsync(',', ';', [], FReplaceResult.ResumeAt, FReplaceResult.ResumeLength);
+      TFindAccess(FRich).FindSlice := 4096;
+      turns := 0;
+      depth := FRich.Document.UndoDepth;
+      while FRich.FindRunning and (FRich.Document.UndoDepth = depth) do
+      begin
+        FRich.Turn;
+        Inc(turns);
+        AssertTrue('runaway', turns < 10000);
+      end;
+      AssertTrue(Format('%d: a part went in', [way]), FRich.FindRunning);
+      cmd := FRich.Document.UndoStep as TTyRichReplaceAllCommand;
+      AssertTrue(Format('%d: while it runs, it keeps the line', [way]), cmd.HeldBytes > 0);
+      case way of
+        0, 3: FRich.CancelFind;
+        1:
+          begin
+            FRich.Key8('q');
+            FRich.Turn;
+          end;
+      else
+        m := TMemoryStream.Create;
+        try
+          FRich.SaveToStream(m, rfText);
+        finally
+          m.Free;
+        end;
+      end;
+      AssertFalse(Format('%d: stopped', [way]), FRich.FindRunning);
+      AssertEquals(Format('%d: told cancelled', [way]), Ord(rreCancelled), Ord(FReplaceResult.Ending));
+      AssertTrue(Format('%d: some replaced', [way]), FReplaceResult.Replaced > 0);
+      if way = 1 then
+        // (the typed key is the step now; the replace's is the one below it)
+        FRich.Document.Undo;
+      cmd := FRich.Document.UndoStep as TTyRichReplaceAllCommand;
+      AssertEquals(Format('%d: nothing but its record', [way]), 0, cmd.HeldBytes);
+      AssertTrue(Format('%d: counted by the history', [way]), FRich.Document.HistoryBytes >= cmd.HeldBytes);
+      if way = 1 then FRich.Document.Redo;
+    end;
+  finally
+    FRich.FakeClock := False;
+  end;
 end;
 
 initialization

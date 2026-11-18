@@ -753,6 +753,10 @@ type
       TTyRichStepMarks). The document never reads or changes them; TakeOver (a merge) keeps
       this command's Before and takes ANext's After. }
     property Marks: TTyRichStepMarks read FMarks write FMarks;
+    { Another step went on top of this one in the history: it is not the top step any more,
+      so it will not be continued (ExecutePart goes on with the top step only) - a command that
+      holds what only its next part would need lets go of it here. Nothing by default. }
+    procedure Covered; virtual;
   end;
 
   TTyRichKeyList = array of Int64;
@@ -4797,6 +4801,10 @@ begin
   inherited Destroy;
 end;
 
+procedure TTyRichCommand.Covered;
+begin
+end;
+
 procedure TTyRichCommand.FreeRecords;
 begin
   while FRecordCount > 0 do
@@ -5319,6 +5327,7 @@ procedure TTyRichDocument.PushUndo(ACmd: TTyRichCommand);
 var
   e: TTyRichHistoryEntry;
 begin
+  if FUndoCount > 0 then FUndo[FUndoCount - 1].Cmd.Covered;
   e := Default(TTyRichHistoryEntry);
   e.Cmd := ACmd;
   e.Bytes := ACmd.MemSize;

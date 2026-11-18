@@ -338,6 +338,8 @@ type
     property PassedBytes: Int64 read FPassedBytes;
     { The pieces paragraphs were read in (a paragraph read in one go is one). }
     property Pieces: Int64 read FPieces;
+    { Bytes of the paragraph text it keeps (the paragraph it stands in, read over steps). }
+    function KeptBytes: Int64;
   end;
 
   { What a replace of every match has done so far, written by TTyRichReplaceAllCommand as its
@@ -442,6 +444,8 @@ type
     procedure DoUndo(ADoc: TTyRichDocument); override;
     procedure DoRedo(ADoc: TTyRichDocument); override;
   public
+    { A step on top of it: the walk will not go on (LetGo). }
+    procedure Covered; override;
     { A replace in ADoc (the document it will run in) of the matches that lie wholly in
       [AStart, AStart + ALength) (ALength < 0, or past the end: to the text's end, also as
       the replacements make it longer). rfoBackward and rfoWrap are not looked at. Nothing is
@@ -470,6 +474,11 @@ type
     { The walk could not go on: a part that made no progress ended it (a guard: an end that
       the ordinary way never takes). }
     property Failed: Boolean read FStuck;
+    { The walk will not go on (its caller stopped it before its end - a cancel, an edit, a
+      save): the finder and its kept paragraph text go, and what is left is the undo record. }
+    procedure LetGo;
+    { What it holds besides its undo record: the finder's kept text, the lists of matches. }
+    function HeldBytes: Int64;
     function Description: string; override;
     { What the step keeps, counted as its parts ran (no pass over its records). }
     function MemSize: Int64; override;
@@ -2183,6 +2192,11 @@ begin
   SetLength(FSrcBytes, 0);
 end;
 
+function TTyRichFinder.KeptBytes: Int64;
+begin
+  Result := Length(FKeep);
+end;
+
 function TTyRichFinder.WorkDone: Int64;
 begin
   Result := FTextBytes + FPassedBytes + FilterLooked + FilterHidden + FParasRead +
@@ -2621,6 +2635,32 @@ begin
   inherited DoUndo(ADoc);
   // the records are reverted and go: nothing is kept for them any more
   FRecBytes := 0;
+  // (undone, the walk cannot go on: a redo starts it again from the range's start)
+  LetGo;
+end;
+
+procedure TTyRichReplaceAllCommand.Covered;
+begin
+  LetGo;
+end;
+
+procedure TTyRichReplaceAllCommand.LetGo;
+begin
+  FreeAndNil(FFinder);
+  FReady := nil;
+  FReadyCount := 0;
+  FAll := nil;
+  FAllCount := 0;
+  FAllNext := 0;
+  FRangeOpen := False;
+  FRangeLo := -1;
+  FWalkDone := True;
+end;
+
+function TTyRichReplaceAllCommand.HeldBytes: Int64;
+begin
+  Result := (Length(FReady) + Length(FAll)) * SizeOf(TTyRichPos);
+  if FFinder <> nil then Inc(Result, FFinder.KeptBytes);
 end;
 
 procedure TTyRichReplaceAllCommand.DoRedo(ADoc: TTyRichDocument);
