@@ -2041,10 +2041,10 @@ begin
   end;
   // the documented loop: again from where it said while the limit ended it
   SetText(src);
-  FRich.Document.MaxUndoBytes := 64 * 1024;
+  FRich.Document.MaxUndoBytes := 16 * 1024;
   total := FRich.ReplaceAll('a-', #10 + 'z', [rfoWholeWord], 0, -1, res);
   AssertEquals('the limit ended the first call', Ord(rreLimit), Ord(res.Ending));
-  AssertEquals('...after one part of them', CRichReplacePartMatches, total);
+  AssertEquals('...after one part of them', CRichReplacePartEdits, total);
   calls := 1;
   while (res.Ending = rreLimit) and (calls < 100) do
   begin
@@ -2078,7 +2078,7 @@ begin
       // (a part went in - or it ended, nothing left)
       if FRich.FindRunning then FRich.CancelFind;
       AssertEquals('told', 1, Length(FDone));
-      AssertTrue('a part takes at most its share', FReplaceResult.Replaced <= CRichReplacePartMatches);
+      AssertTrue('a part takes at most its share', FReplaceResult.Replaced <= CRichReplacePartEdits);
       Inc(total, FReplaceResult.Replaced);
       Inc(calls);
     until (FReplaceResult.Ending = rreDone) or (calls > 100);
@@ -2090,7 +2090,7 @@ begin
   end;
   // an edit between the stop and the new start: judged by the text as it is
   SetText(src);
-  FRich.Document.MaxUndoBytes := 64 * 1024;
+  FRich.Document.MaxUndoBytes := 16 * 1024;
   total := FRich.ReplaceAll('a-', #10 + 'z', [rfoWholeWord], 0, -1, res);
   AssertEquals('again: the limit', Ord(rreLimit), Ord(res.Ending));
   FRich.Document.MaxUndoBytes := 0;

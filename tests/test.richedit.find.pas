@@ -76,6 +76,7 @@ type
     procedure TestGeneratedRowsThatEndInsideADestination;
     procedure TestAStopBetweenTouchingWholeWords;
     procedure TestALineOfTouchingMatchesIsReplacedInBoundedParts;
+    procedure TestAPartOfEachKindTakesItsShareOfMatches;
   end;
 
 implementation
@@ -3122,7 +3123,7 @@ end;
 
 { One line of 80,000 touching whole-word matches, each replaced by a paragraph end and a
   letter (the ordinary edits, a delete and an insert a match): the parts are bounded - at most
-  CRichReplacePartMatches matches each -, the limit on the undo step is looked at after each
+  CRichReplacePartEdits matches each -, the limit on the undo step is looked at after each
   (one part's worth is kept when the first reaches it), and an edit of a part costs a short
   stretch of text, not the line from its start: what the text storage counts to find the
   edits' places is bounded by the matches, by the text between them, and once by the text
@@ -3173,8 +3174,8 @@ begin
       if tally.Replaced - before > most then most := tally.Replaced - before;
     until cmd.Finished;
     AssertEquals('all of them', CCount, tally.Replaced);
-    AssertEquals('a part takes at most its share of matches', CRichReplacePartMatches, most);
-    AssertEquals('so many parts', (CCount + CRichReplacePartMatches - 1) div CRichReplacePartMatches, parts);
+    AssertEquals('a part takes at most its share of matches', CRichReplacePartEdits, most);
+    AssertEquals('so many parts', (CCount + CRichReplacePartEdits - 1) div CRichReplacePartEdits, parts);
     work := doc.Text.SplitWork - work;
     AssertTrue(Format('an edit counts a short stretch at most, not the line (%d characters ' +
       'counted for %d matches)', [work, CCount]), work <= 4 * Int64(CRichReplaceBackSpan) * CCount);
@@ -3233,27 +3234,120 @@ begin
   // the limit: looked at after each part, so a step keeps one part's worth past it at most
   doc := TextDoc(s);
   try
-    doc.MaxUndoBytes := 64 * 1024;
+    doc.MaxUndoBytes := 16 * 1024;
     tally := Default(TTyRichReplaceTally);
     cmd := TTyRichReplaceAllCommand.Create(doc, 'a-', #10 + 'z', [rfoWholeWord]);
     cmd.Tally := @tally;
     AssertTrue(cmd.Prepare(-1) and cmd.Ready);
     AssertTrue(doc.Execute(cmd));
     AssertTrue('the first part reached the limit', cmd.Limited and cmd.Finished);
-    AssertEquals('one part of them', CRichReplacePartMatches, tally.Replaced);
+    AssertEquals('one part of them', CRichReplacePartEdits, tally.Replaced);
     cmd.Tally := nil;
     cmd.LetGo;
     // on from where it said, with what it saw there: the next part's worth, from that very place
     at := tally.ResumeAt;
     len := tally.ResumeLength;
     bef := tally.ResumeBefore;
-    AssertEquals('it stopped behind what it replaced', Int64(2 * CRichReplacePartMatches), at);
+    AssertEquals('it stopped behind what it replaced', Int64(2 * CRichReplacePartEdits), at);
     AssertTrue('it says what stood before that place', bef.Known and (bef.Code = Ord('-')));
     ReplaceOnePart(doc, 'a-', #10 + 'z', [rfoWholeWord], at, len, bef, tally);
-    AssertEquals('started again: the next part of them', CRichReplacePartMatches, tally.Replaced);
+    AssertEquals('started again: the next part of them', CRichReplacePartEdits, tally.Replaced);
     AssertTrue('... the limit again', tally.Limited);
-    AssertTrue('... none left out between the two', Copy(LinesOf(doc), 1, 4 * CRichReplacePartMatches + 2) =
-      Copy(want, 1, 4 * CRichReplacePartMatches) + 'a-');
+    AssertTrue('... none left out between the two', Copy(LinesOf(doc), 1, 4 * CRichReplacePartEdits + 2) =
+      Copy(want, 1, 4 * CRichReplacePartEdits) + 'a-');
+  finally
+    doc.Free;
+  end;
+end;
+
+{ How many matches one part replaces, by its kind. Neither the needle nor the replacement
+  holds a paragraph end: the paragraphs are changed in place, 8,192 matches a part. A
+  paragraph end in the replacement, or in the needle: ordinary edits, a delete and an insert
+  a match, and a part - what a background turn does without a break - is 512 of them. A
+  needle with a paragraph end has its matches listed first and handed on a range's worth at
+  a time (every one of a few thousand short lines here): a part still takes its share only,
+  and the others follow in the next parts, moved by what it changed. }
+procedure TTyRichFindTest.TestAPartOfEachKindTakesItsShareOfMatches;
+var
+  doc: TTyRichDocument;
+  sb: TStringBuilder;
+  s, want: RawByteString;
+  i, parts: Integer;
+
+  // replaces every match in parts; the most matches one part replaced
+  function Most(const ANeedle, ARepl: UTF8String; out AParts: Integer): Integer;
+  var
+    cmd: TTyRichReplaceAllCommand;
+    tally: TTyRichReplaceTally;
+    before: Integer;
+  begin
+    Result := 0;
+    AParts := 0;
+    doc.MaxUndoBytes := 0;
+    tally := Default(TTyRichReplaceTally);
+    cmd := TTyRichReplaceAllCommand.Create(doc, ANeedle, ARepl, []);
+    cmd.Tally := @tally;
+    repeat
+      cmd.Prepare(-1);
+      if not cmd.Ready then Break;
+      before := tally.Replaced;
+      if AParts = 0 then AssertTrue(doc.Execute(cmd)) else AssertTrue(doc.ExecutePart(cmd));
+      Inc(AParts);
+      if tally.Replaced - before > Result then Result := tally.Replaced - before;
+    until cmd.Finished;
+    AssertTrue('through its range', (AParts > 0) and cmd.Finished and not cmd.Failed);
+    cmd.Tally := nil;
+  end;
+
+begin
+  sb := TStringBuilder.Create;
+  try
+    for i := 1 to 20000 do sb.Append('a,');
+    s := sb.ToString;
+  finally
+    sb.Free;
+  end;
+  // changed in place
+  doc := TextDoc(s);
+  try
+    AssertEquals('in place: a part''s matches', 8192, Most(',', ';', parts));
+    AssertEquals('in place: the parts', 3, parts);
+    AssertTrue('in place: the text', doc.Text.GetText(0, doc.Text.Length) =
+      StringReplace(s, ',', ';', [rfReplaceAll]));
+  finally
+    doc.Free;
+  end;
+  // a paragraph end in the replacement: ordinary edits
+  doc := TextDoc(s);
+  try
+    AssertEquals('a paragraph end in the replacement: a part''s matches', 512, Most(',', #10, parts));
+    AssertEquals('...the parts', (20000 + 511) div 512, parts);
+    AssertTrue('...the text', LinesOf(doc) = StringReplace(s, ',', #10, [rfReplaceAll]));
+    doc.Undo;
+    AssertTrue('...undone, one step', (doc.Text.GetText(0, doc.Text.Length) = s) and
+      (doc.UndoDepth = 0));
+  finally
+    doc.Free;
+  end;
+  // a paragraph end in the needle: every match of the lines in one range's worth
+  sb := TStringBuilder.Create;
+  try
+    for i := 1 to 3000 do sb.Append('x' + IntToStr(i mod 10) + #10);
+    s := sb.ToString;
+    sb.Clear;
+    for i := 1 to 3000 do sb.Append('x' + IntToStr(i mod 10) + ';');
+    want := sb.ToString;
+  finally
+    sb.Free;
+  end;
+  doc := TextDoc(s);
+  try
+    AssertTrue('the lines fit one range', Length(s) < CRichReplaceRangeChars);
+    AssertEquals('a paragraph end in the needle: a part''s matches', 512, Most(#10, ';', parts));
+    AssertEquals('...the parts', (3000 + 511) div 512, parts);
+    AssertTrue('...the text', doc.Text.GetText(0, doc.Text.Length) = want);
+    doc.Undo;
+    AssertTrue('...undone, one step', (LinesOf(doc) = s) and (doc.UndoDepth = 0));
   finally
     doc.Free;
   end;

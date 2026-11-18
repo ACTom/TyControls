@@ -66,9 +66,14 @@ const
   { The range of paragraphs a replace of every match reads and replaces at a time, in
     characters (TTyRichReplaceAllCommand.RangeChars). }
   CRichReplaceRangeChars = 64 * 1024;
-  { The most matches a part of it replaces (the last of its range's: the others wait for the
-    next part). }
+  { The most matches a part of it replaces (the first of its range's: the others wait for the
+    next part) - where neither the needle nor the replacement holds a paragraph end, and a
+    part changes paragraphs in place. }
   CRichReplacePartMatches = 8192;
+  { ... and where one of them does: the part is ordinary edits, a delete and an insert a
+    match, each many times the work of a match replaced in place - a part is what a
+    background turn does without a break. }
+  CRichReplacePartEdits = 512;
   { The ordinary edits of a part (a replacement with a paragraph end): while the part's matches
     lie within this many characters they go the first one, then from the last back; farther
     apart, from the first on (TTyRichReplaceAllCommand's run says why). }
@@ -301,8 +306,9 @@ type
     the range's matches are found on the text as it is (Prepare - it changes nothing, and goes
     on in pieces of a budget) and replaced right after (the command's run: Execute for the
     first range, TTyRichDocument.ExecutePart for each next one - the document consistent and
-    reported between two; at most CRichReplacePartMatches a part, the others of the range
-    moved by what the part changed). So no position is used after the text changed before
+    reported between two; at most CRichReplacePartMatches a part - CRichReplacePartEdits
+    where a part is ordinary edits -, the others of the range moved by what the part
+    changed). So no position is used after the text changed before
     it, an interval of a lazily read RTF is parsed once (found and replaced while it is
     resident), no list of every match is kept, and a replacement is never searched again;
     the walk goes from the range's start to its end. A needle with a paragraph end is the
@@ -384,6 +390,7 @@ type
     function Search(ABudget: Int64): Boolean;
     procedure Fail;
     function RangeEnd: TTyRichPos;
+    function PartMatches: Integer;
     procedure SetStartBefore(const AValue: TTyRichBefore);
   protected
     procedure DoExecute(ADoc: TTyRichDocument); override;
@@ -1678,6 +1685,12 @@ begin
   if FTo < 0 then Result := FTarget.Text.Length else Result := FTo + FCharDelta;
 end;
 
+{ The most matches a part replaces: by its kind (changed in place, or ordinary edits). }
+function TTyRichReplaceAllCommand.PartMatches: Integer;
+begin
+  if FFast then Result := CRichReplacePartMatches else Result := CRichReplacePartEdits;
+end;
+
 function TTyRichReplaceAllCommand.ResumeLength: TTyRichPos;
 begin
   if FTo < 0 then Exit(-1);
@@ -1880,7 +1893,7 @@ begin
       may hold millions (a one-line file) - a list of all of them would cost what the step's
       record saves. The finder then stands after the last one, in the paragraph's text it
       keeps, and goes on from there after the part (Moved). }
-    r := FFinder.CollectRange(FRangeLo, FRangeHi, FFrom, stop, ABudget, CRichReplacePartMatches);
+    r := FFinder.CollectRange(FRangeLo, FRangeHi, FFrom, stop, ABudget, PartMatches);
     if r = rfrMore then Exit(False);
     // (one read scope for the range's checks: the loader trims once, when it ends)
     FTarget.BeginRead;
@@ -1924,11 +1937,12 @@ begin
   n0 := RecordCount;
   t := ADoc.Text;
   len0 := t.Length;
-  { At most CRichReplacePartMatches a part, the first ones: those after them wait for the next
+  { At most a part's share (PartMatches), the first ones: those after them wait for the next
     part, moved by what this one changed - a paragraph of megabytes with matches all through
-    it is replaced in parts too. }
+    it is replaced in parts too, and so are the matches of a needle with a paragraph end,
+    which come here a range's worth at a time, however many that is. }
   n := FReadyCount;
-  if n > CRichReplacePartMatches then n := CRichReplacePartMatches;
+  if n > PartMatches then n := PartMatches;
   { What stands right before the place this part ends at, while it is still there: the last
     character of its last match - how the walk sees the boundary of a match that begins right
     behind it (ResumeBefore). }
