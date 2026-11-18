@@ -1,10 +1,11 @@
 unit test.richedit.find;
 
 { Finding and replacing in the engine (tyControls.RichEdit.Find): what a match is,
-  rule by rule; the options alone and together; text that was never parsed - the raw-byte
-  filter looked through first, never losing a match (every fixture, every word at every
-  place, lazily and fully read, with and without the filter) and parsing only near what it
-  finds; a find while a file loads; a find changes nothing; the replace command - one undo
+  rule by rule; the options alone and together; text that was never parsed - read by the
+  reader as the search reaches it, and found where the file read whole has it (every
+  fixture, every word at every place, every byte form the reader takes), the reader keeping
+  no more of what was read than its bound; a find while a file loads; a find changes
+  nothing; the replace command - one undo
   step however many turns it took, the format of what it replaces, undone the file's bytes.
 
   Headless, no control. Bounds are counts (paragraphs read, intervals parsed), never times. }
@@ -22,9 +23,9 @@ uses
 type
   TTyRichFindTest = class(TTestCase)
   private
-    FTotFiltered, FTotRejected, FTotDecoded, FTotWords, FTotHits, FTotEmptyDecodes: Int64;
+    FTotWords: Int64;
     function Positions(ADoc: TTyRichDocument; const ANeedle: UTF8String;
-      AOptions: TTyRichFindOptions; AFilter: Boolean = True): string;
+      AOptions: TTyRichFindOptions): string;
     function WholePositions(ADoc: TTyRichDocument; const ANeedle: UTF8String;
       AOptions: TTyRichFindOptions): string;
     function First(ADoc: TTyRichDocument; const ANeedle: UTF8String;
@@ -35,12 +36,13 @@ type
       AEncoding: TTyTextEncoding = teAuto);
   published
     procedure TestFindInsideUnparsedRtf;
-    // the filter: every fixture, and every form of a character the reader takes
-    procedure TestTheFilterNeverLosesAHit;
+    // read lazily against read whole: every fixture, and every form of a character the
+    // reader takes
+    procedure TestEveryWordOfEveryFixture;
     procedure TestEveryFormTheReaderTakes;
     procedure TestTheAdversarialFiles;
     procedure TestEveryByteFormOfEveryWord;
-    procedure TestParagraphEndsAndOutsideTheBmpAreFiltered;
+    procedure TestParagraphEndsAndOutsideTheBmp;
     // what a match is
     procedure TestEachOptionAloneAndTogether;
     procedure TestCaseFoldingPerScript;
@@ -305,32 +307,23 @@ begin
 end;
 
 function TTyRichFindTest.Positions(ADoc: TTyRichDocument; const ANeedle: UTF8String;
-  AOptions: TTyRichFindOptions; AFilter: Boolean): string;
+  AOptions: TTyRichFindOptions): string;
 var
   f: TTyRichFinder;
-  i: Integer;
-  a: array of Int64;
 begin
   f := TTyRichFinder.Create(ADoc, ANeedle, AOptions);
   try
-    f.UseFilter := AFilter;
     f.Collect := True;
     AssertTrue('collected to the end', f.Run = rfrNotFound);
-    a := nil;
-    SetLength(a, f.MatchCount);
-    for i := 0 to f.MatchCount - 1 do a[i] := f.Match(i);
-    Result := Join(a);
-    Inc(FTotFiltered, f.ParasFiltered);
-    Inc(FTotRejected, f.ParasRejected);
-    Inc(FTotDecoded, f.ParasDecoded);
+    Result := Joined(f);
   finally
     f.Free;
   end;
 end;
 
-{ The places in a document read whole, with nothing lazy and no filter in it: every paragraph
-  was set by the one parse from the file's first byte to its last, the finder parses none on
-  demand and looks at no paragraph's bytes. What the two lazy ways are held against. }
+{ The places in a document read whole, with nothing lazy in it: every paragraph was set by
+  the one parse from the file's first byte to its last, and the finder has none parsed on
+  demand. What the lazy read is held against. }
 function TTyRichFindTest.WholePositions(ADoc: TTyRichDocument; const ANeedle: UTF8String;
   AOptions: TTyRichFindOptions): string;
 var
@@ -343,10 +336,8 @@ begin
   parsed := load.ParseCount;
   f := TTyRichFinder.Create(ADoc, ANeedle, AOptions);
   try
-    f.UseFilter := False;
     f.Collect := True;
     AssertTrue('collected to the end', f.Run = rfrNotFound);
-    AssertEquals('no paragraph was looked at in its bytes', 0, f.ParasFiltered);
     AssertEquals('no paragraph was parsed for it', parsed, load.ParseCount);
     Result := Joined(f);
   finally
@@ -368,8 +359,8 @@ begin
 end;
 
 { Every word of the document (a run of word characters, as the caret's rule has them) at
-  every place it is: the finder gives what the reference gives - in the file read lazily
-  with the filter and without it, and read whole. }
+  every place it is: the finder gives what the reference gives - in the file read whole and
+  in the file read lazily. }
 procedure TTyRichFindTest.CheckEveryWord(const AName: string; const ABytes: TBytes;
   ARtf: Boolean; AEncoding: TTyTextEncoding);
 var
@@ -378,9 +369,7 @@ var
   words: TStringList;
   i, j: Integer;
   w: UTF8String;
-  want, got: string;
-  f: TTyRichFinder;
-  hitParas: Integer;
+  want: string;
   k, g, e: Int64;
   phrases: Integer;
 begin
@@ -409,7 +398,7 @@ begin
         for k := i to j - 1 do w := w + U([text[k]]);
         words.Add(w);
         { and a phrase: the word, the spaces or punctuation after it, the next word - a
-          needle with characters that are no word goes through the filter too }
+          needle with characters that are no word }
         g := j;
         while (g < Length(text)) and (g - j < 3) and (TyRichWordClass(text[g]) = 0) and
           (text[g] <> TyRichFindParaEnd) do
@@ -441,42 +430,15 @@ begin
       begin
         lazy := LoadRtf(ABytes, False);
         try
-          AssertEquals(AName + ': lazily, filtered, ' + w, want,
-            Positions(lazy, w, [rfoMatchCase], True));
+          AssertEquals(AName + ': lazily, ' + w, want, Positions(lazy, w, [rfoMatchCase]));
         finally
           lazy.Free;
         end;
-        lazy := LoadRtf(ABytes, False);
-        try
-          AssertEquals(AName + ': lazily, not filtered, ' + w, want,
-            Positions(lazy, w, [rfoMatchCase], False));
-        finally
-          lazy.Free;
-        end;
-        // case-insensitive, the filter's folded tables
+        // any case
         lazy := LoadRtf(ABytes, False);
         try
           AssertEquals(AName + ': lazily, any case, ' + w, Naive(full, w, []),
-            Positions(lazy, w, [], True));
-        finally
-          lazy.Free;
-        end;
-        // what the filter let through: decoded paragraphs that held no match
-        lazy := LoadRtf(ABytes, False);
-        try
-          f := TTyRichFinder.Create(lazy, w, [rfoMatchCase]);
-          try
-            f.Collect := True;
-            f.Run;
-            hitParas := 0;
-            for j := 0 to f.MatchCount - 1 do
-              if (j = 0) or (lazy.Text.ParaOfPos(f.Match(j)) <> lazy.Text.ParaOfPos(f.Match(j - 1))) then
-                Inc(hitParas);
-            Inc(FTotHits, hitParas);
-            if f.ParasDecoded > hitParas then Inc(FTotEmptyDecodes, f.ParasDecoded - hitParas);
-          finally
-            f.Free;
-          end;
+            Positions(lazy, w, []));
         finally
           lazy.Free;
         end;
@@ -492,7 +454,10 @@ begin
 end;
 
 { A 5 MB RTF, opened and searched at once for a word that is only in its last paragraph (and
-  split there by formatting groups): found, and only the interval of the hit was parsed. }
+  split there by formatting groups): found. Every paragraph on the way was read by the
+  reader - each interval of the file parsed, none twice - and of what was read no more
+  stays than the reader keeps of any read: its bound of intervals, and no paragraph's text
+  outside them. }
 procedure TTyRichFindTest.TestFindInsideUnparsedRtf;
 const
   Vocab: array[0..9] of string = ('alpha', 'bravo', 'charlie', 'delta', 'echo', 'foxtrot',
@@ -503,7 +468,7 @@ var
   doc: TTyRichDocument;
   load: TTyRtfLoad;
   f: TTyRichFinder;
-  i, n, para, k: Integer;
+  n, para, k: Integer;
   parsed0: Integer;
   want: TTyRichPos;
   src, bytes: Int64;
@@ -546,37 +511,24 @@ begin
       try
         AssertTrue('found', f.Run = rfrFound);
         AssertEquals('at the end', want, f.MatchPos);
-        AssertTrue(Format('the filter ruled out the paragraphs (%d of %d)',
-          [f.ParasRejected, f.ParasFiltered]), f.ParasRejected >= f.ParasFiltered - 1);
-        AssertTrue(Format('decoded only the hit (%d)', [f.ParasDecoded]), f.ParasDecoded <= 1);
+        AssertEquals('every paragraph was read', Int64(para + 1), f.ParasRead);
+        AssertTrue(Format('the file''s bytes counted (%d of %d)', [f.FileBytes, m.Size]),
+          (f.FileBytes > m.Size - 4096) and (f.FileBytes <= m.Size));
       finally
         f.Free;
       end;
-      AssertTrue(Format('parsed near the hit only: %d intervals', [load.ParseCount - parsed0]),
-        load.ParseCount - parsed0 <= 1);
-      AssertTrue('the hit''s paragraph is the one decoded',
-        doc.Text.ParaLazySource(para, src, bytes) and doc.Text.IsDecoded(src));
-      AssertTrue('a paragraph far from it is not',
+      AssertTrue(Format('every interval was parsed for it (%d of %d)',
+        [load.ParseCount - parsed0, load.IntervalCount]),
+        load.ParseCount - parsed0 >= load.IntervalCount - 1);
+      AssertTrue(Format('none twice (%d of %d)', [load.ParseCount - parsed0, load.IntervalCount]),
+        load.ParseCount - parsed0 <= load.IntervalCount);
+      // (a parse may bring a group of intervals in before the oldest go: twice the bound)
+      AssertTrue(Format('the reader kept its bound of them (%d)', [load.ResidentIntervals]),
+        load.ResidentIntervals <= 2 * load.MaxResidentIntervals + 1);
+      AssertTrue(Format('and of the text only theirs (%d bytes)', [doc.Text.DecodedBytes]),
+        doc.Text.DecodedBytes <= Int64(2 * load.MaxResidentIntervals + 1) * 128 * 1024);
+      AssertTrue('a paragraph far from the hit is its bytes in the file again',
         doc.Text.ParaLazySource(para div 2, src, bytes) and not doc.Text.IsDecoded(src));
-    finally
-      doc.Free;
-    end;
-    // without the filter every interval is parsed to find it
-    doc := TTyRichDocument.Create;
-    try
-      m.Position := 0;
-      TyRichLoadRtf(doc, m);
-      load := TyRichRtfLoadOf(doc);
-      parsed0 := load.ParseCount;
-      f := TTyRichFinder.Create(doc, 'quixotic', []);
-      try
-        f.UseFilter := False;
-        AssertTrue('found unfiltered', f.Run = rfrFound);
-        AssertEquals('at the end unfiltered', want, f.MatchPos);
-      finally
-        f.Free;
-      end;
-      AssertTrue('unfiltered parses everything', load.ParseCount - parsed0 >= load.IntervalCount - 1);
     finally
       doc.Free;
     end;
@@ -585,9 +537,9 @@ begin
   end;
 end;
 
-{ ---- the filter ---- }
+{ ---- read lazily against read whole ---- }
 
-procedure TTyRichFindTest.TestTheFilterNeverLosesAHit;
+procedure TTyRichFindTest.TestEveryWordOfEveryFixture;
 var
   sr: TSearchRec;
   names: TStringList;
@@ -620,18 +572,14 @@ begin
     // the bytes no text: as they are (a forced UTF-8)
     CheckEveryWord('utf8-badbytes forced', ReadFileBytes(FixtureDir('txt') + 'utf8-badbytes.txt'),
       False, teUtf8);
-    AssertTrue(Format('the filter rules most paragraphs out (words %d; filtered %d, ruled out ' +
-      '%d, decoded %d; paragraphs with a hit %d, decoded without one %d)',
-      [FTotWords, FTotFiltered, FTotRejected, FTotDecoded, FTotHits, FTotEmptyDecodes]),
-      FTotRejected * 2 > FTotFiltered);
-    AssertTrue('a paragraph decoded without a hit is rare', FTotEmptyDecodes * 10 < FTotHits);
+    AssertTrue(Format('the words and phrases searched (%d)', [FTotWords]), FTotWords > 500);
   finally
     names.Free;
   end;
 end;
 
 { Every way the reader turns bytes into a character of the needle, one paragraph each: the
-  filtered find and the unfiltered find agree with the whole parse. }
+  find in the file read lazily agrees with the whole parse. }
 procedure TTyRichFindTest.TestEveryFormTheReaderTakes;
 var
   body: RawByteString;
@@ -693,22 +641,16 @@ begin
       AssertTrue(Format('needle %d is in the text', [i]), want <> '');
       lazy := LoadRtf(bytes, False);
       try
-        AssertEquals(Format('needle %d filtered', [i]), want, Positions(lazy, needles[i], [], True));
-      finally
-        lazy.Free;
-      end;
-      lazy := LoadRtf(bytes, False);
-      try
-        AssertEquals(Format('needle %d not filtered', [i]), want, Positions(lazy, needles[i], [], False));
+        AssertEquals(Format('needle %d lazily', [i]), want, Positions(lazy, needles[i], []));
       finally
         lazy.Free;
       end;
     end;
-    // and what is not in the text is ruled out by the bytes
+    // and what is not in the text is not found
     lazy := LoadRtf(bytes, False);
     try
-      AssertEquals('ansi half: not text', '', Positions(lazy, 'ansi half', [], True));
-      AssertEquals('the bookmark''s name: not text', '', Positions(lazy, 'orqld', [], True));
+      AssertEquals('ansi half: not text', '', Positions(lazy, 'ansi half', []));
+      AssertEquals('the bookmark''s name: not text', '', Positions(lazy, 'orqld', []));
     finally
       lazy.Free;
     end;
@@ -722,7 +664,7 @@ begin
     lazy := LoadRtf(bytes, False);
     try
       AssertEquals('found through the font''s code page', '0',
-        Positions(lazy, U([$4E2D, $6587]), [], True));
+        Positions(lazy, U([$4E2D, $6587]), []));
     finally
       lazy.Free;
     end;
@@ -733,13 +675,15 @@ end;
 
 { The adversarial files (tests/fixtures/rtf/find, its cases.txt: the file, the needle as hex of
   its UTF-8, m for match case and w for whole word, the places it is found - "-" none): read
-  whole (nothing lazy, no filter), lazily with the filter and lazily without it, the finder
-  gives those places. Hex control bytes, a \u without a number, a font table and an \ansicpg
+  whole (nothing lazy) and read lazily, the finder gives those places. Hex control bytes, a
+  \u without a number, a font table and an \ansicpg
   given again in the body, a surrogate pair split by a group the reader passes over, a picture
   below the reader's group stack, a destination read in part and a paragraph that begins
   inside one (after a paragraph's end there, and after a row's end given to the last cell),
-  a lead byte left waiting in a field's result (its ? comes out before the field's object)
-  lost a hit before; the places pin the reader as well, not only the filter against it. }
+  a lead byte left waiting in a field's result (its ? comes out before the field's object,
+  whatever follows the result inside the field) are among them: forms a search that judged
+  a paragraph by its bytes once lost a hit in. The places pin what the reader makes of
+  each, read whole and read lazily alike. }
 procedure TTyRichFindTest.TestTheAdversarialFiles;
 var
   lines: TStringList;
@@ -779,35 +723,28 @@ begin
       end;
       lazy := LoadRtf(bytes, False);
       try
-        AssertEquals(parts[0] + ' ' + parts[1] + ': lazily, filtered', want,
-          Positions(lazy, needle, opts, True));
-      finally
-        lazy.Free;
-      end;
-      lazy := LoadRtf(bytes, False);
-      try
-        AssertEquals(parts[0] + ' ' + parts[1] + ': lazily, not filtered', want,
-          Positions(lazy, needle, opts, False));
+        AssertEquals(parts[0] + ' ' + parts[1] + ': lazily', want,
+          Positions(lazy, needle, opts));
       finally
         lazy.Free;
       end;
       Inc(n);
     end;
-    AssertEquals('the cases', 106, n);
+    AssertEquals('the cases', 129, n);
     { And two of our own: a code page that only a later font table or an ansicpg word brings, used by a
       paragraph whose bytes do not hold that table or word. }
     bytes := BytesOf(Rtf('{|rtf1|ansi|ansicpg1252|deff0{|fonttbl{|f0|fswiss Arial;}}|pard one' +
       '{|fonttbl{|f5|fnil|fcharset134 SimSun;}}|par |f5 |''d6|''d0|par}'));
     lazy := LoadRtf(bytes, False);
     try
-      AssertEquals('a font of a later table', '4', Positions(lazy, U([$4E2D]), [], True));
+      AssertEquals('a font of a later table', '4', Positions(lazy, U([$4E2D]), []));
     finally
       lazy.Free;
     end;
     bytes := BytesOf(Rtf('{|rtf1|ansi|ansicpg1252|pard one|ansicpg1251|par |''cf|''f0|''e8|par}'));
     lazy := LoadRtf(bytes, False);
     try
-      AssertEquals('a later ansicpg', '4', Positions(lazy, U([$41F, $440, $438]), [rfoMatchCase], True));
+      AssertEquals('a later ansicpg', '4', Positions(lazy, U([$41F, $440, $438]), [rfoMatchCase]));
     finally
       lazy.Free;
     end;
@@ -852,22 +789,21 @@ end;
 { By a generator: every word of every RTF fixture, written in each byte form the reader
   takes - \uN with a fallback of none, one and two bytes, \'xx and raw bytes in each code page
   of the fixture that has its characters, a control word and a group between any two of its
-  letters - in a paragraph after another: the filtered find finds it there (and the whole
-  parse reads it so). }
+  letters - in a paragraph after another: the find in the file read lazily finds it there
+  (and the whole parse reads it so). }
 procedure TTyRichFindTest.TestEveryByteFormOfEveryWord;
 var
   sr: TSearchRec;
   names, words: TStringList;
-  f, i, k, n, cp, forms: Integer;
+  f, i, k, cp, forms: Integer;
   bytes: TBytes;
   doc, lazy: TTyRichDocument;
   codes: TTyRichCodeArray;
   cps: array of Integer;
   table: Pointer;
   body, s: RawByteString;
-  ok: Boolean;
+  known: Boolean;
   v: Integer;
-  c: Cardinal;
 
   function UWord(ACode: Cardinal; const AFallback: RawByteString): RawByteString;
   var
@@ -925,7 +861,7 @@ var
     AssertEquals(Format('%s: %s, %s is read', [names[f], words[i], AForm]), '7', want);
     lazy := LoadRtf(BytesOf(file_), False);
     try
-      got := Positions(lazy, words[i], [rfoMatchCase], True);
+      got := Positions(lazy, words[i], [rfoMatchCase]);
     finally
       lazy.Free;
     end;
@@ -951,14 +887,19 @@ begin
     begin
       bytes := ReadFileBytes(FixtureDir('rtf') + names[f]);
       words.Clear;
-      // the fixture's code pages, as the index scan met them
+      // the fixture's code pages: 1252, the file's own and each of its fonts'
       lazy := LoadRtf(bytes, False);
       try
         cps := nil;
-        for k := 0 to TyRichRtfLoadOf(lazy).Scan.CodePageCount - 1 do
+        for k := -2 to TyRichRtfLoadOf(lazy).Scan.FontCount - 1 do
         begin
-          cp := TyRichRtfLoadOf(lazy).Scan.CodePageSeen(k);
-          if (cp > 0) and (TyRichCodePageTable(cp) <> nil) then
+          if k = -2 then cp := 1252
+          else if k = -1 then cp := TyRichRtfLoadOf(lazy).Scan.AnsiCodePage
+          else cp := TyRichRtfLoadOf(lazy).Scan.Font(k).CodePage;
+          known := False;
+          for v := 0 to High(cps) do
+            if cps[v] = cp then known := True;
+          if not known and (cp > 0) and (TyRichCodePageTable(cp) <> nil) then
           begin
             SetLength(cps, Length(cps) + 1);
             cps[High(cps)] := cp;
@@ -1019,11 +960,11 @@ begin
   end;
 end;
 
-{ What the filter takes, through the same comparison - a character outside the BMP
-  (only \uN pairs make one), a needle that is only paragraph ends (the lengths in the
-  paragraph tree say where; nothing is read but what a table holds), and one of text and
-  paragraph ends (each side's text filtered in its paragraph). U+FFFD is not filtered. }
-procedure TTyRichFindTest.TestParagraphEndsAndOutsideTheBmpAreFiltered;
+{ Through the same comparison - a character outside the BMP (only \uN pairs make one), a
+  needle that is only paragraph ends (the lengths in the paragraph tree say where; nothing
+  is read but what a table holds), one of text and paragraph ends (the lengths of the
+  paragraphs between say where it may be: only those few are read), and U+FFFD. }
+procedure TTyRichFindTest.TestParagraphEndsAndOutsideTheBmp;
 var
   s: RawByteString;
   bytes: TBytes;
@@ -1065,12 +1006,10 @@ begin
           f.Collect := True;
           f.Run;
           AssertEquals(Format('needle %d: the same places', [i]), want, Joined(f));
-          if i < 5 then
+          if i in [2, 3, 4] then
           begin
-            AssertTrue(Format('needle %d: the bytes were looked at (%d)', [i, f.ParasFiltered]),
-              (i in [2, 3]) or (f.ParasFiltered > 1000));
-            AssertTrue(Format('needle %d: few paragraphs read (%d)', [i, f.ParasDecoded]),
-              f.ParasDecoded <= 4);
+            AssertTrue(Format('needle %d: few paragraphs read (%d)', [i, f.ParasRead]),
+              f.ParasRead <= 4);
             AssertTrue(Format('needle %d: few intervals parsed (%d)', [i, load.ParseCount - parsed]),
               load.ParseCount - parsed <= 2);
             // paragraph ends alone: the lengths say it all, outside a table nothing is read
@@ -1081,12 +1020,11 @@ begin
             end;
           end
           else
-            AssertEquals('U+FFFD: not filtered', 0, f.ParasFiltered);
+            AssertTrue(Format('needle %d: every paragraph read (%d)', [i, f.ParasRead]),
+              f.ParasRead >= 3000);
         finally
           f.Free;
         end;
-        AssertEquals(Format('needle %d: and without the filter', [i]), want,
-          Positions(lazy, needles[i], [], False));
       finally
         lazy.Free;
       end;
@@ -1398,8 +1336,9 @@ end;
 
 { A step is bounded in bytes, whatever the paragraphs are - one line of megabytes of
   text is read in pieces (a match that straddles two steps is found, and so is the next one),
-  forward and backward, match case or not, whole word; a file of paragraphs that are each a
-  large picture is passed by the pictures' braces, its bytes not lexed. Counts, not times. }
+  forward and backward, match case or not, whole word; in a file of paragraphs that are each
+  a large picture - a megabyte of the file, one character of text - the file's bytes count:
+  a step ends with the paragraph that spent its budget. Counts, not times. }
 procedure TTyRichFindTest.TestAStepIsBoundedInBytes;
 const
   Budget = 64 * 1024;
@@ -1410,7 +1349,7 @@ var
   f: TTyRichFinder;
   r: TTyRichFindResult;
   i, steps: Integer;
-  before, beforeL, beforeH, worst, d: Int64;
+  before, worst, d: Int64;
   opts: TTyRichFindOptions;
   k: Integer;
   m: TMemoryStream;
@@ -1501,20 +1440,21 @@ begin
       f := TTyRichFinder.Create(doc, 'quixotic', []);
       try
         worst := 0;
+        steps := 0;
         repeat
-          before := f.TextBytes;
-          beforeL := f.FilterLooked;
-          beforeH := f.FilterHidden;
+          before := f.TextBytes + f.FileBytes;
           r := f.Step(Budget);
-          d := (f.TextBytes - before) + (f.FilterLooked - beforeL) + (f.FilterHidden - beforeH) div 16;
+          Inc(steps);
+          d := f.TextBytes + f.FileBytes - before;
           if d > worst then worst := d;
         until r <> rfrMore;
         AssertTrue('found after the pictures', r = rfrFound);
-        AssertTrue(Format('no step over its budget (%d)', [worst]), worst <= Budget + Slack);
-        AssertTrue(Format('the pictures passed by their braces (%d of %d bytes)',
-          [f.FilterHidden, total]), f.FilterHidden > total - MB);
-        AssertTrue(Format('their bytes not lexed (%d of %d)', [f.FilterLooked, total]),
-          f.FilterLooked * 100 < total);
+        // (a paragraph is parsed in one piece: the one that spends the budget ends the step)
+        AssertTrue(Format('no step over its budget by more than a paragraph (%d)', [worst]),
+          worst <= Budget + MB + Slack);
+        AssertTrue(Format('each picture ends a step (%d steps)', [steps]), steps >= 8);
+        AssertTrue(Format('the file''s bytes counted (%d of %d)', [f.FileBytes, total]),
+          (f.FileBytes > total - MB) and (f.FileBytes <= total));
       finally
         f.Free;
       end;
@@ -1602,8 +1542,8 @@ begin
       live := TDocAccess(doc).LiveParaData;
       state := doc.ContentState;
       resident := load.ResidentIntervals;
-      Positions(doc, 'e', [], True);
-      Positions(doc, 'e', [rfoWholeWord], False);
+      Positions(doc, 'e', []);
+      Positions(doc, 'e', [rfoWholeWord]);
       First(doc, 'e', [rfoBackward]);
       AssertEquals(name + ': no value left behind', live, TDocAccess(doc).LiveParaData);
       AssertEquals(name + ': the content is the same', state, doc.ContentState);
@@ -2679,9 +2619,9 @@ end;
   table, an unknown starred word, an unknown plain word, and an ordinary formatting group): one
   inside the other - text in the outer group before the inner, after it, and a paragraph end
   inside the inner one - and every piece of one to four characters of the text the whole read
-  gives, searched in the whole read (nothing lazy, no filter), lazily with the filter and
-  lazily without it: the three agree. A destination added to the reader that the filter does
-  not follow, or in which a paragraph can end so that the next one begins inside it, is found
+  gives, searched in the whole read (nothing lazy) and in the lazy read: the two agree. A
+  destination added to the reader that the lazy read takes otherwise than the whole read -
+  one in which a paragraph can end so that the next one begins inside it, say - is found
   here, whatever it is. The first shape for every pair; the other two for a fixed sample of
   pairs.
 
@@ -2689,9 +2629,8 @@ end;
   cell end, and a row end right after the last cell's end (which ends no paragraph and still
   moves where the next one begins) - before the outer group, between the two braces, inside
   the inner group and after it - for every kind as the outer group of an ordinary one, as the
-  inner group of an ordinary one, and inside upr. (Of today's kinds a paragraph begins inside
-  a destination only in ud inside upr - three of the files; a kind added later in which one
-  can is counted here and searched like them.)
+  inner group of an ordinary one, and inside upr (in ud inside upr a paragraph does begin
+  inside a destination: the lazy read must go on there as the whole read did).
 
   And a lead byte of a double-byte font left waiting where a group ends - in every kind
   alone, and in one inside a field, an ordinary group or upr, and an ordinary group inside
@@ -2705,13 +2644,13 @@ const
   CTable = '|trowd|cellx2000|cellx4000|pard|intbl ';
 var
   words: TStringArray;
-  i, j, shape, files, needles, k, len, p1, place, ending, begun: Integer;
+  i, j, shape, files, needles, k, len, p1, place, ending: Integer;
   w1, w2, body, e, src: RawByteString;
   full, lazy: TTyRichDocument;
   codes: TTyRichCodeArray;
   seen: TStringList;
   needle: UTF8String;
-  want: string;
+  want, got: string;
 
   function Word(const AName: string): RawByteString;
   begin
@@ -2740,7 +2679,6 @@ begin
   words[High(words)] := '.';
   files := 0;
   needles := 0;
-  begun := 0;
   seen := TStringList.Create;
   try
     seen.Sorted := True;
@@ -2806,8 +2744,6 @@ begin
             for k := 0 to High(codes) do
               for len := 1 to 4 do
               begin
-                // (short ones there: with a double-byte font every finder builds its pair table)
-                if (shape >= 15) and (len > 2) then Continue;
                 if (k + len > Length(codes)) or (k + len - 1 <= p1) then Continue;
                 needle := Utf8Of(k, len);
                 seen.Add(needle);
@@ -2815,9 +2751,6 @@ begin
             if seen.Count = 0 then Continue;
             Inc(files);
             lazy := LoadRtf(BytesOf(src), False);
-            // (the shapes do make paragraphs that begin inside a destination: the reader says)
-            for k := 0 to lazy.Text.ParaCount - 1 do
-              if lazy.Text.ParaLazyMarked(k) then Inc(begun);
             for k := 0 to seen.Count - 1 do
             begin
               needle := seen[k];
@@ -2825,13 +2758,10 @@ begin
               Inc(needles);
               want := WholePositions(full, needle, []);
               ForgetDecodes(lazy);
-              if Positions(lazy, needle, [], True) <> want then
-                Fail(Format('%s / %s, shape %d, "%s": lazily, filtered: %s, read whole: %s',
-                  [words[i], words[j], shape, needle, Positions(lazy, needle, [], True), want]));
-              ForgetDecodes(lazy);
-              if Positions(lazy, needle, [], False) <> want then
-                Fail(Format('%s / %s, shape %d, "%s": lazily, not filtered differs from the whole read',
-                  [words[i], words[j], shape, needle]));
+              got := Positions(lazy, needle, []);
+              if got <> want then
+                Fail(Format('%s / %s, shape %d, "%s": lazily: %s, read whole: %s',
+                  [words[i], words[j], shape, needle, got, want]));
             end;
           finally
             lazy.Free;
@@ -2841,8 +2771,8 @@ begin
   finally
     seen.Free;
   end;
-  AssertTrue(Format('files %d, needles %d, paragraphs that begin inside a destination %d',
-    [files, needles, begun]), (files > 1500) and (needles > 15000) and (begun >= 3));
+  AssertTrue(Format('files %d, needles %d', [files, needles]),
+    (files > 1500) and (needles > 15000));
 end;
 
 { Tables made by a generator of fixed seed whose groups, destinations, cell and row words are
@@ -2850,21 +2780,22 @@ end;
   cell's end and holds the row's end: the row end then ends no paragraph (it is given to the
   last cell) and the next paragraph begins inside the destination, where its bytes alone do
   not say what they read as. Needles of one to four characters from the whole read's own
-  text (so each has a place), plain, match case and whole word: the whole read (nothing lazy,
-  no filter), the lazy read with the filter and the lazy read without it agree. (The fonts
-  are single-byte ones: with a double-byte code page in the file every finder builds its
-  table of byte pairs, and the same seconds would search a tenth of the files.) }
+  text (so each has a place), plain, match case and whole word: the whole read (nothing
+  lazy) and the lazy read agree. }
 procedure TTyRichFindTest.TestGeneratedRowsThatEndInsideADestination;
 const
-  CFiles = 350;
-  Head: array[0..1] of RawByteString = (
+  CFiles = 3000;
+  Head: array[0..2] of RawByteString = (
     '{|rtf1|ansi|ansicpg1251|deff0{|fonttbl{|f0|fnil|fcharset204 Arial Cyr;}{|f1|fswiss Arial;}' +
     '{|f2|ftech|fcharset2 Symbol;}{|f3|fnil|fcharset161 Greek;}}|pard ',
     '{|rtf1|ansi|ansicpg1252|deff1{|fonttbl{|f0|fnil|fcharset204 Arial Cyr;}{|f1|fswiss Arial;}' +
-    '{|f2|ftech|fcharset2 Symbol;}{|f3|fnil|fcharset161 Greek;}}|pard ');
+    '{|f2|ftech|fcharset2 Symbol;}{|f3|fnil|fcharset161 Greek;}}|pard ',
+    // (a double-byte default font: a byte may be left waiting for its second)
+    '{|rtf1|ansi|ansicpg936|deff0{|fonttbl{|f0|fnil|fcharset134 SimSun;}{|f1|fswiss Arial;}' +
+    '{|f2|ftech|fcharset2 Symbol;}{|f3|fnil|fcharset128 MS Mincho;}}|pard ');
 var
   seed: QWord;
-  n, files, needles, begun, tries, len, i, o, k: Integer;
+  n, files, needles, tries, len, i, o: Integer;
   body: RawByteString;
   bytes: TBytes;
   full, lazy: TTyRichDocument;
@@ -2971,7 +2902,6 @@ begin
   seed := 88172645463325252;
   files := 0;
   needles := 0;
-  begun := 0;
   seen := TStringList.Create;
   try
     seen.Sorted := True;
@@ -2979,7 +2909,7 @@ begin
     for n := 1 to CFiles do
     begin
       body := Gen(0);
-      bytes := BytesOf(Rtf(Head[Rnd(2)] + 'filler|par |trowd|cellx2000|cellx4000|pard|intbl ' +
+      bytes := BytesOf(Rtf(Head[Rnd(3)] + 'filler|par |trowd|cellx2000|cellx4000|pard|intbl ' +
         body + '|par zz|par}'));
       full := LoadRtf(bytes, True);
       lazy := nil;
@@ -2988,8 +2918,6 @@ begin
         lazy := LoadRtf(bytes, False);
         AssertEquals(Format('file %d: the lazy read''s text is the whole read''s', [n]),
           full.Text.GetText(0, full.Text.Length), lazy.Text.GetText(0, lazy.Text.Length));
-        for k := 0 to lazy.Text.ParaCount - 1 do
-          if lazy.Text.ParaLazyMarked(k) then Inc(begun);
         Inc(files);
         seen.Clear;
         if Length(codes) = 0 then Continue;
@@ -3014,14 +2942,9 @@ begin
           Inc(needles);
           want := WholePositions(full, needle, opts);
           ForgetDecodes(lazy);
-          got := Positions(lazy, needle, opts, True);
+          got := Positions(lazy, needle, opts);
           if got <> want then
-            Fail(Format('file %d, needle hex %s, options %d: lazily, filtered: [%s], read whole: [%s]',
-              [n, HexOf(needle), Integer(opts), got, want]));
-          ForgetDecodes(lazy);
-          got := Positions(lazy, needle, opts, False);
-          if got <> want then
-            Fail(Format('file %d, needle hex %s, options %d: lazily, not filtered: [%s], read whole: [%s]',
+            Fail(Format('file %d, needle hex %s, options %d: lazily: [%s], read whole: [%s]',
               [n, HexOf(needle), Integer(opts), got, want]));
         end;
       finally
@@ -3032,8 +2955,8 @@ begin
   finally
     seen.Free;
   end;
-  AssertTrue(Format('files %d, needles %d, paragraphs that begin inside a destination %d',
-    [files, needles, begun]), (files = CFiles) and (needles > 10 * CFiles) and (begun > CFiles div 20));
+  AssertTrue(Format('files %d, needles %d', [files, needles]),
+    (files = CFiles) and (needles > 10 * CFiles));
 end;
 
 { One part of a replace of [AStart, AStart + ALength) that goes on where another stopped -

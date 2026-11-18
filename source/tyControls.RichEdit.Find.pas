@@ -26,21 +26,17 @@ unit tyControls.RichEdit.Find;
   between two ideographs, and a Latin word inside Chinese text is bounded by them (Joins).
 
   Text that was never parsed (a lazily read RTF): a paragraph that is still its bytes in the
-  file is first looked for in those bytes (TTyRichRawFilter: every form the reader
-  turns into a character of the needle's first 64 - by the reader's own rules, shared with it
-  in RtfRead -, every group either read or passed over, every character a \uN may skip, in
-  every code page the file ever named), and decoded only when it may hold the needle - but
-  for a paragraph whose bytes begin inside a destination, which the reader marks when it
-  fixes where a paragraph begins (TTyRtfParser.ParaBeginsInDest): what such bytes read as
-  depends on a group that is not among them, so the filter is not asked and the paragraph is
-  read. A paragraph is decoded through the text's walk that hands out paragraph values of the
-  moment (nothing is set, nothing is kept beyond what the reader keeps of any read). A needle
-  with paragraph ends
-  is looked for paragraph by paragraph: a middle paragraph must be a segment whole (its
-  length, from the paragraph tree, says much: two paragraph ends in a row are an empty
-  paragraph), the first must end with the first segment and the last begin with the last
-  (each filtered for its segment's text); only the paragraphs of a match that may be there are
-  read. U+FFFD is not filtered: the reader makes it of too many things.
+  file is read like any other - the reader parses it as the search reaches it, and the
+  needle is looked for in the text it reads as. Nothing is concluded from a paragraph's
+  bytes: what they read as is the reader's to say (a code page, a group left open, a byte
+  still waiting for its second), and a find that guessed could miss a hit. So a find in a
+  very big file reads the file's paragraphs as it goes - through the text's walk that hands
+  out paragraph values of the moment (nothing is set, nothing is kept beyond what the
+  reader keeps of any read), so memory stays as bounded as the reader keeps it. A needle
+  with paragraph ends is looked for paragraph by paragraph: a middle paragraph must be a
+  segment whole (its length, from the paragraph tree, says much: two paragraph ends in a
+  row are an empty paragraph), the first must be as long as the first segment and the last
+  as long as the last; only the paragraphs of a match that may be there are read.
 
   An object never matches text - and a field (a link) is an object: its display text is not
   found. When field results become text the control shows, the finder must see them.
@@ -63,9 +59,6 @@ const
   TyRichFindParaEnd = $FFFFFFFF;
   { A byte that starts no valid UTF-8 sequence is this plus the byte: it matches only itself. }
   TyRichFindRawByte = $110000;
-  { The most characters of the needle the raw-byte filter looks for (its first ones): a match of
-    the whole needle holds them, so a longer needle is filtered by them. }
-  TyRichFindFilterChars = 64;
   { A replace of every match (TTyRichReplaceAllCommand) ends when its undo step keeps this many
     times the document's MaxUndoBytes (64 MB by default: 256 MB): what it replaced is one step,
     and it says the limit ended it. }
@@ -101,70 +94,6 @@ type
     may search is searched and a load is still adding to it) - call Step again. }
   TTyRichFindResult = (rfrMore, rfrFound, rfrNotFound);
 
-  { What the raw-byte filter says of a paragraph's bytes: they may hold the needle (decode
-    them), they cannot, or (fvMore) its budget ran out first - go on with Run. }
-  TTyRichFilterVerdict = (fvMay, fvCannot, fvMore);
-
-  { What the filter carries into a group, to put back (or join) at its end. }
-  TTyRichFilterSave = record
-    D, T, Lead: QWord;
-    LeadByte: Integer;
-    Wild: QWord;
-  end;
-
-  { A needle turned into what the raw-byte filter compares: built once per finder (and again
-    when the file's code pages grew). It reads a paragraph's bytes by the reader's own rules
-    (TTyRtfLexer, and RtfRead's TyRtfByteRole, TyRtfUnicodeOf, TyRtfWordChar, TyRtfSymbolChar),
-    in pieces: Start, then Run until it says fvMay or fvCannot - its state (a few words and
-    a stack of groups) waits between two Runs. }
-  TTyRichRawFilter = class
-  private
-    FCount: Integer;                      // the needle's first characters looked for
-    FAccept: QWord;                       // the bit of the last of them
-    FChars: array of Cardinal;            // the distinct ones above U+00FF, sorted
-    FCharMask: array of QWord;            // ... and where they are in the needle
-    FLow: array[0..255] of QWord;         // characters U+0000 .. U+00FF
-    FByte: array[0..255] of QWord;        // a byte of text in any of the file's code pages
-    FLead: array[0..255] of Boolean;      // a lead byte in one of them
-    FPair: array of QWord;                // a lead and a trail byte (lead shl 8 or trail)
-    FMatchCase: Boolean;
-    // the paragraph being read
-    FBuf: PByte;
-    FLex: TTyRtfLexer;
-    FStop: PtrInt;
-    FD, FT, FLeadMask, FWild: QWord;
-    FLeadByte: Integer;
-    FHigh: Boolean;                       // a high surrogate \uN may be waiting for its pair
-    FHighVal: Cardinal;
-    FAstral: Boolean;                     // a character the needle looks for is above U+FFFF
-    FStack: array of TTyRichFilterSave;
-    FDepth: Integer;
-    FHide: Integer;                       // > 0: inside a group passed over unread (a picture)
-    FHidePictures: Boolean;
-    FLooked, FHidden: Int64;
-    function MaskOf(C: Cardinal): QWord;
-  public
-    { ANeedle: the needle's characters as the finder has them (folded unless AMatchCase), no
-      paragraph end in it. ACodePages: the code pages the file's bytes may be in (the scan's
-      TTyRtfParser.CodePageSeen; 1252 is added). }
-    constructor Create(const ANeedle: array of Cardinal; AMatchCase: Boolean;
-      const ACodePages: array of Integer);
-    { The bytes [AStart, AStop) of ABuf - a paragraph of the file - are read next.
-      AHidePictures False: a picture's group is read like any other (the reader's group stack
-      overflowed somewhere in the file: below its limit a \pict opens no picture, and its hex
-      is text). }
-    procedure Start(ABuf: PByte; AStart, AStop: PtrInt; AHidePictures: Boolean = True);
-    { Reads on for about ABudget units (a byte lexed is one; a byte of a picture passed over is
-      one sixteenth: it is only looked at for the braces), taken from ABudget. }
-    function Run(var ABudget: Int64): TTyRichFilterVerdict;
-    { Start and Run to the end: False only when the RTF bytes [AStart, AStop) of ABuf cannot
-      read as text that holds the needle's first characters (see the unit comment). }
-    function MayHold(ABuf: PByte; AStart, AStop: PtrInt; AHidePictures: Boolean = True): Boolean;
-    { Bytes lexed, and bytes of pictures passed over without being lexed, since it was made. }
-    property Looked: Int64 read FLooked;
-    property Hidden: Int64 read FHidden;
-  end;
-
   TTyRichFinder = class
   private
     FDoc: TTyRichDocument;
@@ -184,14 +113,11 @@ type
     FMatchPos: TTyRichPos;
     FMatches: array of TTyRichPos;
     FMatchCount: Integer;
-    FLoad: TTyRtfLoad;
-    FFilter: TTyRichRawFilter;
-    FUseFilter, FFilterTried, FFilterable, FFiltersMade: Boolean;
-    FFilterCps: Integer;              // the scan's code pages the filter was made with
-    FHidePictures: Boolean;           // the scan's group stack never overflowed
+    FLoad: TTyRtfLoad;                // the lazily read file the text is of (Source)
+    FLoadAsked: Boolean;
     // counts
-    FParasFiltered, FParasRejected, FParasDecoded, FParasRead, FSteps: Int64;
-    FRawBytes, FTextBytes, FPassedBytes, FPieces: Int64;
+    FParasRead, FSteps: Int64;
+    FTextBytes, FFileBytes, FPassedBytes, FPieces: Int64;
     // the scan in progress
     FMode: Integer;                   // 0 first, 1 all, 2 last
     FScanEnd: TTyRichPos;             // matches end at or before it
@@ -201,9 +127,10 @@ type
     FRing: array of Cardinal;
     { ScanWindow (a needle with paragraph ends): what is known of paragraphs FWinFirst ..
       FWinFirst + n - 1 - characters, start, the value a walk gave, the file's bytes of an
-      unparsed one; and, per role, whether it can play it (-1 not known yet, 0 no, 1 yes): the
-      first of a match (it ends with the first segment), a middle one (it is segment k), the
-      last (it begins with the last segment); hidden (a cell merged away). }
+      unparsed one; and, per role, whether it can play it (-1 not known yet, 0 no, 1 yes, 2
+      it may - its text will say): the first of a match (it ends with the first segment), a
+      middle one (it is segment k), the last (it begins with the last segment); hidden (a
+      cell merged away). }
     FWinFirst: Integer;
     FWinLen: array of Int64;
     FWinStart: array of TTyRichPos;
@@ -211,18 +138,15 @@ type
     FWinSrc, FWinBytes: array of Int64;
     FWinTail, FWinHead, FWinHidden: array of ShortInt;
     FWinMid: array of array of ShortInt;
-    FWinNeed, FWinLooked, FWinUnknown: array of Boolean;
-    FSegFilter: array of TTyRichRawFilter; // per segment (nil: empty, or not filterable)
-    // where the bytes of paragraphs FSrcFirst .. are in the file (-1: not an unparsed one)
+    FWinNeed: array of Boolean;
+    // where the bytes of paragraphs FSrcFirst .. are in the file (-1: not a paragraph of a
+    // lazily read file, or one edited since)
     FSrc, FSrcBytes: array of Int64;
-    FSrcUnknown: array of Boolean;    // ... and they begin in a state only the reader knows
     FSrcFirst: Integer;
-    { The scan of a needle without paragraph ends stands in paragraph FNext: FPhase 0 at its
-      start, 1 its bytes in the filter, 2 its text read - FCurOff characters of it, FCurByte
-      bytes (-1: those characters are passed first), the matcher's state FK and FPend there.
-      A step reads FBudget units. Backward, and for CollectRange: the range FRangeLo ..
-      FRangeHi being read (-1: none). }
-    FPhase: Integer;
+    { The scan of a needle without paragraph ends stands in paragraph FNext, FCurOff
+      characters and FCurByte bytes into its text (both 0: at its start), the matcher's
+      state FK and FPend there. A step reads FBudget units. Backward, and for CollectRange:
+      the range FRangeLo .. FRangeHi being read (-1: none). }
     FCurOff: TTyRichPos;
     FCurByte: PtrInt;
     FPassTo: TTyRichPos;              // characters of FNext passed, not matched (a start inside it)
@@ -251,13 +175,11 @@ type
       var AContinue: Boolean);
     function ScanEnd: TTyRichPos;
     function HiddenValue(AData: Pointer): Boolean;
-    function FilterReady: Boolean;
-    function BeginsUnknown(AIndex: Integer): Boolean;
+    function Source: TTyRtfLoad;
     function BeforeCode: Cardinal;
     function Accept(AStart: TTyRichPos): Boolean;
     procedure NextPara;
     procedure LoadSources(AFirst, ALast: Integer);
-    function RawAt(I: Integer): Boolean;
     procedure ScanRange(ALast: Integer);
     procedure ScanWindow(ALo, AHi: Integer);
     function WindowHi(ALo, ALast: Integer; ABudget: Int64): Integer;
@@ -267,8 +189,6 @@ type
       var AContinue: Boolean);
     procedure WindowSource(AIndex: Integer; AData: Pointer; ASrcOffset, ASrcBytes: Int64;
       var AContinue: Boolean);
-    function WinRaw(I: Integer): Boolean;
-    function WinMay(ASeg, I: Integer): Boolean;
     function WinTail(I: Integer): Boolean;
     function WinMid(K, I: Integer): Boolean;
     function WinHead(I: Integer): Boolean;
@@ -282,13 +202,13 @@ type
       rfoBackward from AEnd back, the last first. Nothing is searched before the first Step. }
     constructor Create(ADoc: TTyRichDocument; const ANeedle: UTF8String;
       AOptions: TTyRichFindOptions; AStart: TTyRichPos = 0; AEnd: TTyRichPos = -1);
-    destructor Destroy; override;
-    { Searches on for about ABudget units of work: a byte of text read is one, a byte of a
-      file's unparsed paragraph lexed by the filter one, a byte of a picture it passes over by
-      its braces a sixteenth, a paragraph begun sixteen. A paragraph larger than that is read
-      in pieces over several steps (the matcher, and the filter, keep their state in it); the
-      one thing a step may go over its budget by is a paragraph that must be decoded - the
-      decode is one piece (at most the paragraph's interval group of the file is parsed for
+    { Searches on for about ABudget units of work: a byte of text read is one, a paragraph
+      begun sixteen, and a paragraph of a lazily read file as many more as it has bytes in
+      the file (the reader parses them for the search: a picture's paragraph is one character
+      and may be megabytes). A paragraph whose text is larger than the budget is read in
+      pieces over several steps (the matcher keeps its state in it); the one thing a step
+      may go over its budget by is the paragraph it is in when the budget ends - a
+      paragraph is parsed in one piece (at most its interval group of the file is parsed for
       it) - and, for a needle with paragraph ends, the paragraphs of one match window, which
       are read whole. rfrFound: the next match is MatchPos (MatchLen characters); the next
       Step goes on right after it (backward: before it). With Collect, matches are kept in
@@ -316,13 +236,9 @@ type
       (a replace's own part, of the matches it collected): the scan goes on where it stood, in
       the paragraph's text it keeps, its places moved by the change. }
     procedure Moved(ADelta: TTyRichPos; AParas: Integer);
-    { A count that grows with everything a step does (text read, bytes lexed or passed,
-      paragraphs begun, the paragraph it stands in): a step that leaves it as it was did
-      nothing. }
+    { A count that grows with everything a step does (text read or passed, paragraphs begun,
+      the paragraph it stands in): a step that leaves it as it was did nothing. }
     function WorkDone: Int64;
-    { Bytes the filter lexed, and bytes of pictures it passed over by their braces. }
-    function FilterLooked: Int64;
-    function FilterHidden: Int64;
     { Steps to the next match or the end. A document still loading is searched as far as it
       is loaded: rfrNotFound there means none in what is loaded yet. }
     function Run: TTyRichFindResult;
@@ -342,18 +258,13 @@ type
     { Where the search has come to (forward: the first position not searched; backward: the
       last one), for progress. }
     function Reached: TTyRichPos;
-    { The raw-byte filter is used where it can be (default True; False: every unparsed
-      paragraph is decoded, for a test that compares). }
-    property UseFilter: Boolean read FUseFilter write FUseFilter;
-    { Counts: unparsed paragraphs looked for in their bytes, those the filter ruled out, those
-      decoded to be read, every paragraph read, steps; bytes of files and of text read. }
-    property ParasFiltered: Int64 read FParasFiltered;
-    property ParasRejected: Int64 read FParasRejected;
-    property ParasDecoded: Int64 read FParasDecoded;
+    { Counts: paragraphs read, steps, bytes of text read; and, of the paragraphs read that
+      are a lazily read file's (never edited), their bytes in the file - what the reader
+      parsed for the search, or had parsed already. }
     property ParasRead: Int64 read FParasRead;
     property Steps: Int64 read FSteps;
-    property RawBytes: Int64 read FRawBytes;
     property TextBytes: Int64 read FTextBytes;
+    property FileBytes: Int64 read FFileBytes;
     { Bytes of paragraph text the finder had handed to it (gathered from pieces or decoded):
       a paragraph read over many steps counts once. Characters passed before a start inside a
       paragraph, in bytes (never matched; a step passes at most eight times its budget). }
@@ -557,8 +468,7 @@ function TyRichFindCodes(const S: RawByteString): TTyRichCodeArray;
 implementation
 
 uses
-  LazUTF16, tyControls.RichEdit.TextIO, tyControls.RichEdit.RowFormat,
-  tyControls.StrConsts;
+  LazUTF16, tyControls.RichEdit.RowFormat, tyControls.StrConsts;
 
 const
   CObject = $FFFC;
@@ -679,453 +589,6 @@ begin
     not TyRichNoSpaceScript(AOutside) and not TyRichNoSpaceScript(AEdge);
 end;
 
-{ ---- the raw-byte filter ---- }
-
-constructor TTyRichRawFilter.Create(const ANeedle: array of Cardinal; AMatchCase: Boolean;
-  const ACodePages: array of Integer);
-var
-  k, i, j, b, t: Integer;
-  c: Cardinal;
-  tables: array of Pointer;
-  table, cls: Pointer;
-
-  procedure AddTable(ACodePage: Integer);
-  var
-    tb: Pointer;
-    q: Integer;
-  begin
-    tb := TyRichCodePageTable(ACodePage);
-    if tb = nil then Exit;
-    for q := 0 to High(tables) do
-      if tables[q] = tb then Exit;
-    SetLength(tables, Length(tables) + 1);
-    tables[High(tables)] := tb;
-  end;
-
-  function Folded(AChar: Cardinal): Cardinal;
-  begin
-    if FMatchCase then Result := AChar else Result := TyRichFoldChar(AChar);
-  end;
-
-begin
-  inherited Create;
-  FMatchCase := AMatchCase;
-  FCount := Length(ANeedle);
-  if FCount > TyRichFindFilterChars then FCount := TyRichFindFilterChars;
-  FAccept := QWord(1) shl (FCount - 1);
-  FillChar(FLow, SizeOf(FLow), 0);
-  for k := 0 to FCount - 1 do
-  begin
-    c := ANeedle[k];
-    if (c >= $10000) and (c < TyRichFindRawByte) then FAstral := True;
-    if c <= $FF then
-      FLow[c] := FLow[c] or (QWord(1) shl k)
-    else
-    begin
-      j := -1;
-      for i := 0 to High(FChars) do
-        if FChars[i] = c then j := i;
-      if j < 0 then
-      begin
-        // sorted, for MaskOf's search
-        j := Length(FChars);
-        SetLength(FChars, j + 1);
-        SetLength(FCharMask, j + 1);
-        while (j > 0) and (FChars[j - 1] > c) do
-        begin
-          FChars[j] := FChars[j - 1];
-          FCharMask[j] := FCharMask[j - 1];
-          Dec(j);
-        end;
-        FChars[j] := c;
-        FCharMask[j] := 0;
-      end;
-      FCharMask[j] := FCharMask[j] or (QWord(1) shl k);
-    end;
-  end;
-  { The code pages the reader can decode this file's bytes with (UpdateDecoder): every one the
-    scan met - each font entry's of every font table, each \ansicpg - and 1252 (a code page it
-    has no table for). }
-  tables := nil;
-  for i := 0 to High(ACodePages) do
-    if ACodePages[i] > 0 then AddTable(ACodePages[i]);
-  AddTable(1252);
-  // one byte: itself (ASCII), its character in a code page, '?' (a byte no code page has, a
-  // lead byte left alone), and the Symbol charset's U+F000 + b
-  for b := 0 to 255 do
-  begin
-    FByte[b] := 0;
-    FLead[b] := False;
-    if b < $80 then FByte[b] := MaskOf(Folded(b))
-    else FByte[b] := MaskOf(Ord('?'));
-    if b > $20 then FByte[b] := FByte[b] or MaskOf(Folded($F000 + Cardinal(b)));
-  end;
-  for t := 0 to High(tables) do
-  begin
-    table := tables[t];
-    cls := TyRichCodePageClasses(table);
-    for b := $80 to 255 do
-    begin
-      if (cls <> nil) and (PByte(cls)[b] = 2) then
-      begin
-        FLead[b] := True;
-        Continue;
-      end;
-      c := TyRichCodePageChar(table, b, -1);
-      if c <> 0 then FByte[b] := FByte[b] or MaskOf(Folded(c));
-    end;
-  end;
-  // two bytes: a pair of a double-byte code page
-  for t := 0 to High(tables) do
-  begin
-    table := tables[t];
-    cls := TyRichCodePageClasses(table);
-    if cls = nil then Continue;
-    if FPair = nil then
-    begin
-      SetLength(FPair, 65536);
-      FillChar(FPair[0], 65536 * SizeOf(QWord), 0);
-    end;
-    for b := $80 to 255 do
-    begin
-      if PByte(cls)[b] <> 2 then Continue;
-      for i := 0 to 255 do
-      begin
-        c := TyRichCodePageChar(table, b, i);
-        if c <> 0 then FPair[(b shl 8) or i] := FPair[(b shl 8) or i] or MaskOf(Folded(c));
-      end;
-    end;
-  end;
-end;
-
-function TTyRichRawFilter.MaskOf(C: Cardinal): QWord;
-var
-  lo, hi, mid: Integer;
-begin
-  if C <= $FF then Exit(FLow[C]);
-  lo := 0;
-  hi := High(FChars);
-  while lo <= hi do
-  begin
-    mid := (lo + hi) div 2;
-    if FChars[mid] = C then Exit(FCharMask[mid]);
-    if FChars[mid] < C then lo := mid + 1 else hi := mid - 1;
-  end;
-  Result := 0;
-end;
-
-procedure TTyRichRawFilter.Start(ABuf: PByte; AStart, AStop: PtrInt; AHidePictures: Boolean);
-begin
-  FBuf := ABuf;
-  FHidePictures := AHidePictures;
-  FLex.Init(ABuf, AStart, AStop);
-  FStop := AStop;
-  FD := 0;
-  FT := 0;
-  FLeadMask := 0;
-  FWild := 0;
-  FLeadByte := -1;
-  FHigh := False;
-  FHighVal := 0;
-  FDepth := 0;
-  FHide := 0;
-end;
-
-{ The needle's first characters looked for in the bytes as the reader may read them - a
-  Shift-And automaton (bit k: the needle's first k + 1 characters end here) over a reading
-  that takes every way the reader can go, by the reader's own rules (RtfRead's TyRtfByteRole,
-  TyRtfUnicodeOf, TyRtfWordChar, TyRtfSymbolChar; its lexer):
-  - a text byte or a \'xx is a byte: its character in any of the file's code pages, '?', or
-    the Symbol charset's; a lead byte and the byte after it (also after control words and
-    groups between them, as the reader joins them) a pair of any double-byte code page. A
-    byte the reader drops (NUL, LF, CR, the other control bytes but the tab) is nothing -
-    or a fallback a \uN skips;
-  - \uN is its character (a high and a low surrogate: the one character they make); \u
-    without a number makes none. The bytes, \'xx and control symbols after it up to the next
-    control word may each be a fallback it skips, or text (any \ucN, also one from before
-    the paragraph's bytes);
-  - the control words that are characters (\tab, \emdash, ...) and the control symbols that
-    are (a tilde, an underscore, an escaped backslash or brace) are those characters; every
-    other control word and symbol is nothing;
-  - every group is read through or passed over as if it were not there - whatever the reader
-    does with a destination (a field, a list's marker are no text of the paragraph; \upr's
-    \ud is); a picture's group (\pict) is passed over unread, by its braces alone - unless
-    the reader's group stack overflowed in the file (Start's AHidePictures), where it reads
-    such a group as text;
-  - the one state the reader carries through a group without keeping it per group, a high
-    surrogate waiting for its pair: where one waits at a group's start and the needle
-    has a character above U+FFFF, the bytes may hold it (fvMay);
-  - a word that changes how the file decodes (a font table, an \ansicpg) inside the bytes:
-    the bytes may hold anything (fvMay).
-  So the answer is fvCannot only where no reading the reader can make holds the characters. }
-function TTyRichRawFilter.Run(var ABudget: Int64): TTyRichFilterVerdict;
-var
-  tok, w: TTyRtfToken;
-  peek: TTyRtfLexer;
-  d, t, lead, wild, nd: QWord;
-  leadByte: Integer;
-  p, q, p0: PtrInt;
-  b: Byte;
-  c: Cardinal;
-  isU, got: Boolean;
-  buf: PByte;
-  used: Int64;
-
-  // a character the reader makes, not from a byte (\uN, a control word, a symbol)
-  procedure CharUnit(AChar: Cardinal);
-  begin
-    if not FMatchCase then AChar := TyRichFoldChar(AChar);
-    d := (((d shl 1) or 1) and MaskOf(AChar)) or t;
-    lead := 0;
-    wild := 0;
-    leadByte := -1;
-  end;
-
-  procedure ByteUnit(AByte: Byte);
-  begin
-    if TyRtfByteRole(AByte) <> rbrText then
-    begin
-      { Read as nothing (a lead byte waiting waits on, or reads as the '?' its own reading
-        holds already), or a fallback a \uN skips. }
-      d := d or t;
-      Exit;
-    end;
-    nd := ((d shl 1) or 1) and FByte[AByte];
-    if (lead <> 0) and (FPair <> nil) then
-      nd := nd or (lead and FPair[(leadByte shl 8) or AByte]);
-    nd := nd or wild or t;
-    if FLead[AByte] then
-    begin
-      lead := (d shl 1) or 1;
-      leadByte := AByte;
-    end
-    else
-    begin
-      lead := 0;
-      leadByte := -1;
-    end;
-    wild := 0;
-    d := nd;
-  end;
-
-begin
-  Result := fvMay;
-  if FCount <= 0 then Exit;
-  buf := FBuf;
-  d := FD;
-  t := FT;
-  lead := FLeadMask;
-  wild := FWild;
-  leadByte := FLeadByte;
-  used := 0;
-  try
-    while True do
-    begin
-      if used >= ABudget then Exit(fvMore);
-      if FHide > 0 then
-      begin
-        { A group that holds no text the reader takes: only its braces are looked for (an
-          escaped one, and a \bin's data, are the lexer's to tell). }
-        p := FLex.Position;
-        p0 := p;
-        if ABudget - used > (FStop - p) div 16 + 1 then q := FStop
-        else q := p + (ABudget - used) * 16 + 16;
-        if q > FStop then q := FStop;
-        while (p < q) and (FHide > 0) do
-        begin
-          b := buf[p];
-          if b = Ord('{') then
-            Inc(FHide)
-          else if b = Ord('}') then
-            Dec(FHide)
-          else if b = Ord('\') then
-          begin
-            peek := FLex;
-            peek.Position := p;
-            if peek.Next(tok) then p := tok.Stop else p := FStop;
-            Continue;
-          end;
-          Inc(p);
-        end;
-        if p > FStop then p := FStop;
-        FLex.Position := p;
-        Inc(FHidden, p - p0);
-        Inc(used, (p - p0) div 16 + 1);
-        if (FHide > 0) and (p >= FStop) then Exit(fvCannot);
-        Continue;
-      end;
-      if not FLex.Next(tok) then
-      begin
-        { The bytes end with groups still open (a file cut short inside them): the reader
-          closes them there, and a lead byte left waiting comes out as at their braces. }
-        if (lead <> 0) or (wild <> 0) then
-          while FDepth > 0 do
-          begin
-            Dec(FDepth);
-            d := d or (((FStack[FDepth].D shl 1) or 1) and MaskOf(Ord('?')));
-          end;
-        if d and FAccept <> 0 then Exit(fvMay);
-        Exit(fvCannot);
-      end;
-      case tok.Kind of
-        rtkGroupStart:
-          begin
-            Inc(used);
-            Inc(FLooked);
-            { A high surrogate waiting where a group begins: whether its pair is made depends
-              on what the reader does with the group (one it passes over leaves the half
-              waiting, one it reads may end the wait) - the single flag here cannot follow both
-              ways, so the bytes may hold the needle. (At a group's end nothing is needed: a
-              reading that passed over the group has the state of its start, where nothing
-              waited; one that read it has the filter's own.) }
-            if FHigh and FAstral then Exit(fvMay);
-            peek := FLex;
-            got := peek.Next(w);
-            if got and (w.Kind = rtkSymbol) and (w.Value = Ord('*')) then got := peek.Next(w);
-            if FHidePictures and got and (w.Kind = rtkWord) and
-              TyRtfWordHidesGroup(buf, w.NameStart, w.NameLen) then
-              FHide := 1
-            else
-            begin
-              if FDepth = Length(FStack) then SetLength(FStack, FDepth * 2 + 8);
-              FStack[FDepth].D := d;
-              FStack[FDepth].T := t;
-              FStack[FDepth].Lead := lead;
-              FStack[FDepth].LeadByte := leadByte;
-              FStack[FDepth].Wild := wild;
-              Inc(FDepth);
-            end;
-          end;
-        rtkGroupEnd:
-          begin
-            Inc(used);
-            Inc(FLooked);
-            { (A closing brace whose group opened before these bytes closes an ordinary group:
-              a paragraph that begins inside any other is never given to the filter - the
-              reader says which, TTyRtfParser.ParaBeginsInDest.) }
-            if FDepth > 0 then
-            begin
-              Dec(FDepth);
-              { A lead byte still waiting where the group ends is not the group's: the reader
-                keeps it past the brace, whatever it makes of the group. Where the group's
-                own text is none of the paragraph's - a field's result - what then comes out
-                is the '?' of a lead byte whose trail never came, right behind what stood
-                before the group (the reader's Flush, as the field's object is put in). }
-              if (lead <> 0) or (wild <> 0) then
-                d := d or (((FStack[FDepth].D shl 1) or 1) and MaskOf(Ord('?')));
-              // read through, or passed over
-              d := d or FStack[FDepth].D;
-              t := t or FStack[FDepth].T;
-              if FStack[FDepth].Lead <> 0 then
-                if (lead = 0) or (leadByte = FStack[FDepth].LeadByte) then
-                begin
-                  lead := lead or FStack[FDepth].Lead;
-                  leadByte := FStack[FDepth].LeadByte;
-                end
-                else
-                  // two lead bytes may be waiting: whatever follows may pair with either
-                  wild := wild or FStack[FDepth].Lead;
-              wild := wild or FStack[FDepth].Wild;
-            end;
-          end;
-        rtkWord:
-          begin
-            Inc(used, tok.Stop - tok.Start);
-            Inc(FLooked, tok.Stop - tok.Start);
-            // the code pages may not be the ones the filter was made with
-            if TyRtfWordSetsCodePages(buf, tok.NameStart, tok.NameLen) then Exit(fvMay);
-            // a destination the reader reads in part: neither of the two readings above
-            if TyRtfWordReadInPart(buf, tok.NameStart, tok.NameLen) then Exit(fvMay);
-            c := TyRtfWordChar(buf, tok.NameStart, tok.NameLen, isU);
-            // a word ends what a \uN before it was skipping
-            t := 0;
-            if isU then
-            begin
-              c := TyRtfUnicodeOf(tok.Param);
-              if (c >= $D800) and (c <= $DBFF) then
-              begin
-                // the first half of a pair: nothing yet
-                FHigh := True;
-                FHighVal := c;
-              end
-              else
-              begin
-                if (c >= $DC00) and (c <= $DFFF) then
-                begin
-                  if FHigh then c := $10000 + ((FHighVal - $D800) shl 10) + (c - $DC00)
-                  else c := $FFFD;
-                end;
-                FHigh := False;
-                // (0, LF, CR: no text)
-                if (c <> 0) and (c <> 10) and (c <> 13) then CharUnit(c);
-              end;
-              // the fallback after it may be skipped
-              t := d;
-            end
-            else if c <> 0 then
-              CharUnit(c);
-          end;
-        rtkSymbol:
-          begin
-            Inc(used, tok.Stop - tok.Start);
-            Inc(FLooked, tok.Stop - tok.Start);
-            c := TyRtfSymbolChar(tok.Value);
-            if c <> 0 then CharUnit(c);
-          end;
-        rtkHex:
-          begin
-            Inc(used, tok.Stop - tok.Start);
-            Inc(FLooked, tok.Stop - tok.Start);
-            if tok.Value >= 0 then ByteUnit(tok.Value) else d := d or t;
-          end;
-        rtkText:
-          begin
-            // a long run of text is read in pieces: the lexer goes on from inside it
-            q := tok.Stop;
-            if q - tok.Start > ABudget - used then
-            begin
-              q := tok.Start + (ABudget - used);
-              if q <= tok.Start then q := tok.Start + 1;
-              FLex.Position := q;
-            end;
-            Inc(used, q - tok.Start);
-            Inc(FLooked, q - tok.Start);
-            for p := tok.Start to q - 1 do
-            begin
-              ByteUnit(buf[p]);
-              if d and FAccept <> 0 then Exit(fvMay);
-            end;
-          end;
-        rtkBin:
-          begin
-            Inc(used, tok.DataStart - tok.Start);
-            Inc(FLooked, tok.DataStart - tok.Start);
-            Inc(FHidden, tok.Stop - tok.DataStart);
-            d := d or t;
-          end;
-      end;
-      if d and FAccept <> 0 then Exit(fvMay);
-    end;
-  finally
-    FD := d;
-    FT := t;
-    FLeadMask := lead;
-    FWild := wild;
-    FLeadByte := leadByte;
-    Dec(ABudget, used);
-  end;
-end;
-
-function TTyRichRawFilter.MayHold(ABuf: PByte; AStart, AStop: PtrInt;
-  AHidePictures: Boolean): Boolean;
-var
-  budget: Int64;
-begin
-  Start(ABuf, AStart, AStop, AHidePictures);
-  budget := High(Int64) div 4;
-  Result := Run(budget) <> fvCannot;
-end;
-
 { ---- TTyRichFinder ---- }
 
 constructor TTyRichFinder.Create(ADoc: TTyRichDocument; const ANeedle: UTF8String;
@@ -1135,7 +598,6 @@ begin
   FDoc := ADoc;
   FText := ADoc.Text;
   FOptions := AOptions;
-  FUseFilter := True;
   if AStart < 0 then AStart := 0;
   FMin := AStart;
   FMax := AEnd;
@@ -1148,15 +610,6 @@ begin
   FStartAt := AStart;
   ParseNeedle(ANeedle);
   if (FMax >= 0) and (FMax - FMin < FLen) then FNever := True;
-end;
-
-destructor TTyRichFinder.Destroy;
-var
-  k: Integer;
-begin
-  FFilter.Free;
-  for k := 0 to High(FSegFilter) do FSegFilter[k].Free;
-  inherited Destroy;
 end;
 
 procedure TTyRichFinder.ParseNeedle(const ANeedle: UTF8String);
@@ -1242,8 +695,7 @@ begin
     Exit(FText.ParaStart(FNext) + FText.ParaLength(FNext));
   end;
   if FNext >= FText.ParaCount then Exit(FText.Length);
-  Result := FText.ParaStart(FNext);
-  if FPhase = 2 then Inc(Result, FCurOff);
+  Result := FText.ParaStart(FNext) + FCurOff;
 end;
 
 function TTyRichFinder.ScanEnd: TTyRichPos;
@@ -1252,62 +704,15 @@ begin
   if (FMax >= 0) and (FMax < Result) then Result := FMax;
 end;
 
-function TTyRichFinder.FilterReady: Boolean;
-var
-  cps: array of Integer;
-  i, k: Integer;
-  ok: Boolean;
+{ The lazily read RTF file the document's text is of (nil: none), asked for once. }
+function TTyRichFinder.Source: TTyRtfLoad;
 begin
-  if not FFilterTried then
+  if not FLoadAsked then
   begin
-    FFilterTried := True;
+    FLoadAsked := True;
     FLoad := TyRichRtfLoadOf(FDoc);
-    FFilterable := FLoad <> nil;
   end;
-  { Made with every code page the scan has met so far, and made again when it met another (a
-    file still loading, a font table given again in the body). }
-  if FFilterable then FHidePictures := not FLoad.Scan.GroupsOverflowed;
-  if FFilterable and (not FFiltersMade or (FFilterCps <> FLoad.Scan.CodePageCount)) then
-  begin
-    FreeAndNil(FFilter);
-    for k := 0 to High(FSegFilter) do FreeAndNil(FSegFilter[k]);
-    FFiltersMade := True;
-    FFilterCps := FLoad.Scan.CodePageCount;
-    cps := nil;
-    SetLength(cps, FFilterCps);
-    for i := 0 to FFilterCps - 1 do cps[i] := FLoad.Scan.CodePageSeen(i);
-    if FParaEnds = 0 then
-    begin
-      // what the filter cannot say: U+FFFD, which the reader makes of many things
-      ok := True;
-      for i := 0 to FLen - 1 do
-        if FCodes[i] = $FFFD then ok := False;
-      if ok then FFilter := TTyRichRawFilter.Create(FCodes, rfoMatchCase in FOptions, cps);
-    end
-    else
-    begin
-      // each segment's text, for the paragraphs that must hold it
-      SetLength(FSegFilter, FParaEnds + 1);
-      for k := 0 to FParaEnds do
-      begin
-        ok := Length(FSegs[k]) > 0;
-        for i := 0 to High(FSegs[k]) do
-          if FSegs[k][i] = $FFFD then ok := False;
-        if ok then FSegFilter[k] := TTyRichRawFilter.Create(FSegs[k], rfoMatchCase in FOptions, cps);
-      end;
-    end;
-  end;
-  Result := FUseFilter and FFilterable;
-end;
-
-{ Paragraph AIndex, unparsed, begins in a state its bytes do not tell: inside a destination,
-  as the reader noted when it fixed where the paragraph's bytes begin
-  (TTyRtfParser.ParaBeginsInDest, kept with the paragraph). The filter is not asked about such
-  a paragraph - it may hold the needle, and is read. (A file without one - every file but a
-  hand-made one - is not looked up at all.) }
-function TTyRichFinder.BeginsUnknown(AIndex: Integer): Boolean;
-begin
-  Result := (FLoad <> nil) and (FLoad.Scan.DestStarts > 0) and FText.ParaLazyMarked(AIndex);
+  Result := FLoad;
 end;
 
 function TTyRichFinder.HiddenValue(AData: Pointer): Boolean;
@@ -1367,7 +772,6 @@ end;
 procedure TTyRichFinder.NextPara;
 begin
   Inc(FNext);
-  FPhase := 0;
   FCurOff := 0;
   FCurByte := 0;
   FPassTo := 0;
@@ -1418,12 +822,18 @@ var
   end;
 
 begin
-  FPhase := 2;
   Inc(FPieces);
   if Pointer(AText) <> Pointer(FKeep) then Inc(FFetchedBytes, ALen);
   if (FCurOff = 0) and (FCurByte = 0) then
   begin
     Inc(FParasRead);
+    // a paragraph of a lazily read file: its bytes there count (the reader parses them)
+    k := AIndex - FSrcFirst;
+    if (k >= 0) and (k < Length(FSrc)) and (FSrc[k] >= 0) then
+    begin
+      Inc(FFileBytes, FSrcBytes[k]);
+      Dec(FBudget, FSrcBytes[k]);
+    end;
     if HiddenValue(AData) then
     begin
       // not there for a find: only its length counts
@@ -1565,8 +975,6 @@ begin
   if (FBudget <= 0) or FStop then AContinue := False;
 end;
 
-{ Paragraphs ALo .. AHi, for a needle with no paragraph end: unparsed ones of a file looked for
-  in their bytes first, the others (and those that may hold it) read, in runs. }
 procedure TTyRichFinder.SourceOf(AIndex: Integer; AData: Pointer; ASrcOffset, ASrcBytes: Int64;
   var AContinue: Boolean);
 var
@@ -1580,7 +988,6 @@ begin
   end;
   FSrc[k] := ASrcOffset;
   FSrcBytes[k] := ASrcBytes;
-  FSrcUnknown[k] := (ASrcOffset >= 0) and BeginsUnknown(AIndex);
   if k = High(FSrc) then AContinue := False;
 end;
 
@@ -1597,71 +1004,27 @@ begin
   if n < 1 then n := 1;
   SetLength(FSrc, n);
   SetLength(FSrcBytes, n);
-  SetLength(FSrcUnknown, n);
   for i := 0 to n - 1 do
   begin
     FSrc[i] := -1;
     FSrcBytes[i] := 0;
-    FSrcUnknown[i] := False;
   end;
   FSrcFirst := AFirst;
   FText.WalkParas(AFirst, @SourceOf);
 end;
 
-{ Paragraph FSrcFirst + I is one the file still has as its bytes, unparsed, and they begin in
-  a state the filter knows: it looks at them first. }
-function TTyRichFinder.RawAt(I: Integer): Boolean;
-var
-  src: Int64;
-begin
-  src := FSrc[I];
-  Result := (src >= 0) and (FSrcBytes[I] > 0) and not FSrcUnknown[I] and
-    not FText.IsDecoded(src) and (src + FSrcBytes[I] <= Length(FLoad.Bytes));
-end;
-
 { Reads on from paragraph FNext (and from where the scan stands in it) to ALast, a needle
   without paragraph ends, until a match stops it (mode 0), FBudget is spent, or ALast is read.
-  An unparsed paragraph is first given to the filter (also in pieces); one it rules out is not
-  read. Paragraphs that need no filter are read in runs, one walk each. }
+  Every paragraph is read in its text, in runs of one walk each; of a lazily read file a
+  run goes as far as the paragraphs' bytes in the file are known (LoadSources: what a
+  paragraph begun costs the step). }
 procedure TTyRichFinder.ScanRange(ALast: Integer);
 var
-  filter, cont: Boolean;
+  cont: Boolean;
   e: Integer;
-  v: TTyRichFilterVerdict;
 begin
-  filter := FilterReady and (FFilter <> nil);
   while (FBudget > 0) and not FStop and (FNext <= ALast) do
   begin
-    if FPhase = 0 then
-    begin
-      FPhase := 2;
-      if filter then
-      begin
-        if (FNext < FSrcFirst) or (FNext >= FSrcFirst + Length(FSrc)) then
-          LoadSources(FNext, ALast);
-        if RawAt(FNext - FSrcFirst) then
-        begin
-          Inc(FParasFiltered);
-          Inc(FRawBytes, FSrcBytes[FNext - FSrcFirst]);
-          FFilter.Start(PByte(Pointer(FLoad.Bytes)), FSrc[FNext - FSrcFirst],
-            FSrc[FNext - FSrcFirst] + FSrcBytes[FNext - FSrcFirst], FHidePictures);
-          FPhase := 1;
-        end;
-      end;
-    end;
-    if FPhase = 1 then
-    begin
-      v := FFilter.Run(FBudget);
-      if v = fvMore then Break;
-      if v = fvCannot then
-      begin
-        Inc(FParasRejected);
-        NextPara;
-        Continue;
-      end;
-      Inc(FParasDecoded);
-      FPhase := 2;
-    end;
     { Inside the paragraph since an earlier step, its text kept and the content as it was:
       read on in the kept text (not fetched again). }
     if FKeepMoved then
@@ -1678,16 +1041,13 @@ begin
       ExactPara(FNext, nil, PByte(Pointer(FKeep)), Length(FKeep), cont);
       Continue;
     end;
-    // this paragraph, and those after it that no filter must look at first, in one walk
-    e := FNext;
-    if filter then
+    e := ALast;
+    if Source <> nil then
     begin
-      while (e < ALast) and (e + 1 < FSrcFirst + Length(FSrc)) and
-        not RawAt(e + 1 - FSrcFirst) do
-        Inc(e);
-    end
-    else
-      e := ALast;
+      if (FNext < FSrcFirst) or (FNext >= FSrcFirst + Length(FSrc)) then
+        LoadSources(FNext, ALast);
+      if e > FSrcFirst + High(FSrc) then e := FSrcFirst + High(FSrc);
+    end;
     FRunPos := FText.ParaStart(FNext);
     FText.WalkParaTexts(FNext, e, @ExactPara, True);
   end;
@@ -1711,6 +1071,7 @@ begin
   Inc(FParasRead);
   Inc(FTextBytes, ALen);
   i := AIndex - FWinFirst;
+  if FWinSrc[i] >= 0 then Inc(FFileBytes, FWinBytes[i]);
   matchCase := rfoMatchCase in FOptions;
   whole := rfoWholeWord in FOptions;
   if HiddenValue(AData) then FWinHidden[i] := 1 else FWinHidden[i] := 0;
@@ -1784,12 +1145,6 @@ begin
   if ok and whole and (last > 0) and (pos > last) then
     ok := not Joins(codes[last], FLastChar);
   FWinHead[i] := Ord(ok);
-  if FWinLooked[i] then
-  begin
-    // looked at in its bytes, and read
-    FWinLooked[i] := False;
-    Inc(FParasDecoded);
-  end;
 end;
 
 procedure TTyRichFinder.WindowSource(AIndex: Integer; AData: Pointer; ASrcOffset,
@@ -1806,38 +1161,11 @@ begin
   FWinData[i] := AData;
   FWinSrc[i] := ASrcOffset;
   FWinBytes[i] := ASrcBytes;
-  FWinUnknown[i] := (ASrcOffset >= 0) and BeginsUnknown(AIndex);
   if i = High(FWinLen) then AContinue := False;
 end;
 
-{ Paragraph I of the window is one the file still has as its bytes, unparsed, and they begin
-  in a state the filter knows: a filter can look at them. }
-function TTyRichFinder.WinRaw(I: Integer): Boolean;
-var
-  src: Int64;
-begin
-  src := FWinSrc[I];
-  Result := FUseFilter and FFilterable and (src >= 0) and (FWinBytes[I] > 0) and
-    not FWinUnknown[I] and not FText.IsDecoded(src) and
-    (src + FWinBytes[I] <= Length(FLoad.Bytes));
-end;
-
-{ May paragraph I's bytes hold segment ASeg (True also where there is no filter for it)? }
-function TTyRichFinder.WinMay(ASeg, I: Integer): Boolean;
-begin
-  if (ASeg > High(FSegFilter)) or (FSegFilter[ASeg] = nil) or not WinRaw(I) then Exit(True);
-  if not FWinLooked[I] then
-  begin
-    FWinLooked[I] := True;
-    Inc(FParasFiltered);
-    Inc(FRawBytes, FWinBytes[I]);
-  end;
-  Result := FSegFilter[ASeg].MayHold(PByte(Pointer(FLoad.Bytes)), FWinSrc[I],
-    FWinSrc[I] + FWinBytes[I], FHidePictures);
-end;
-
-{ The roles: 1 it plays it (known from its text, or from its length alone), 0 it cannot, 2 it
-  may (its text not read yet); asked once, kept. }
+{ The roles, by a paragraph's length before its text is read: 1 it plays it, 0 it cannot, 2
+  it may (its text will say: WindowPara); asked once, kept. }
 function TTyRichFinder.WinTail(I: Integer): Boolean;
 var
   s: Integer;
@@ -1847,8 +1175,7 @@ begin
     s := Length(FSegs[0]);
     if s = 0 then FWinTail[I] := 1
     else if FWinLen[I] < s then FWinTail[I] := 0
-    else if WinMay(0, I) then FWinTail[I] := 2
-    else FWinTail[I] := 0;
+    else FWinTail[I] := 2;
   end;
   Result := FWinTail[I] <> 0;
 end;
@@ -1863,8 +1190,7 @@ begin
     // a middle paragraph is the segment, whole: its length says much
     if FWinLen[I] <> s then FWinMid[K][I] := 0
     else if s = 0 then FWinMid[K][I] := 1
-    else if WinMay(K, I) then FWinMid[K][I] := 2
-    else FWinMid[K][I] := 0;
+    else FWinMid[K][I] := 2;
   end;
   Result := FWinMid[K][I] <> 0;
 end;
@@ -1878,8 +1204,7 @@ begin
     s := Length(FSegs[FParaEnds]);
     if s = 0 then FWinHead[I] := 1
     else if FWinLen[I] < s then FWinHead[I] := 0
-    else if WinMay(FParaEnds, I) then FWinHead[I] := 2
-    else FWinHead[I] := 0;
+    else FWinHead[I] := 2;
   end;
   Result := FWinHead[I] <> 0;
 end;
@@ -1892,7 +1217,7 @@ var
   e: TTyRtfTableExtent;
 begin
   Result := False;
-  if FLoad = nil then Exit;
+  if Source = nil then Exit;
   lo := 0;
   hi := FLoad.Scan.TableExtentCount - 1;
   // the last extent that starts at or before ASrc
@@ -1909,9 +1234,8 @@ end;
 { Matches starting in paragraphs ALo .. AHi of a needle with paragraph ends. What a paragraph
   can be of a match is first asked of what costs nothing - its length (a middle paragraph is a
   segment whole: two paragraph ends in a row are an empty paragraph), its value when it has
-  one, the file's tables (a paragraph outside them is no cell merged away) - and of the bytes
-  of one never parsed, through a filter for the segment it would hold; only the paragraphs of
-  a match that may be there are read. }
+  one, the file's tables (a paragraph outside them is no cell merged away); only the
+  paragraphs of a match that may be there are read. }
 procedure TTyRichFinder.ScanWindow(ALo, AHi: Integer);
 var
   last, n, i, j, k, a: Integer;
@@ -1933,8 +1257,6 @@ begin
   SetLength(FWinHead, n);
   SetLength(FWinHidden, n);
   SetLength(FWinNeed, n);
-  SetLength(FWinLooked, n);
-  SetLength(FWinUnknown, n);
   SetLength(FWinMid, FParaEnds + 1);
   for k := 1 to FParaEnds - 1 do SetLength(FWinMid[k], n);
   pos := FText.ParaStart(ALo);
@@ -1950,15 +1272,12 @@ begin
     FWinHead[i] := -1;
     FWinHidden[i] := -1;
     FWinNeed[i] := False;
-    FWinLooked[i] := False;
-    FWinUnknown[i] := False;
     for k := 1 to FParaEnds - 1 do FWinMid[k][i] := -1;
   end;
-  FilterReady;
   FText.WalkParas(ALo, @WindowSource);
   // merged away or not, known without the text: from a value, or outside the file's tables
   for i := 0 to n - 1 do
-    if (FWinData[i] <> nil) or (FLoad = nil) then
+    if (FWinData[i] <> nil) or (Source = nil) then
       FWinHidden[i] := Ord(HiddenValue(FWinData[i]))
     else if (FWinSrc[i] >= 0) and not InTable(FWinSrc[i]) then
       FWinHidden[i] := 0;
@@ -1996,9 +1315,6 @@ begin
     while (i < n) and FWinNeed[i] do Inc(i);
     FText.WalkParaTexts(ALo + a, ALo + i - 1, @WindowPara, True);
   end;
-  // (a paragraph whose bytes were looked at and that was not read: ruled out)
-  for i := 0 to n - 1 do
-    if FWinLooked[i] then Inc(FParasRejected);
   // the matches, in order
   for j := 0 to AHi - ALo do
   begin
@@ -2029,7 +1345,7 @@ begin
   Result := FText.ParaOfPos(limit);
   if Result > ALast then Result := ALast;
   if Result < ALo then Result := ALo;
-  if FilterReady then
+  if Source <> nil then
   begin
     LoadSources(ALo, Result);
     if Result > ALo + High(FSrc) then Result := ALo + High(FSrc);
@@ -2064,7 +1380,6 @@ begin
   begin
     FNext := FText.ParaOfPos(FMin);
     // (a scan that begins inside a paragraph passes its characters before FMin first)
-    FPhase := 0;
     FPassTo := FMin - FText.ParaStart(FNext);
     FCurOff := 0;
     FCurByte := 0;
@@ -2144,7 +1459,6 @@ begin
     FRangeHi := hi;
     FBest := -1;
     FNext := lo;
-    FPhase := 0;
     FCurOff := 0;
     FCurByte := 0;
     FPassTo := 0;
@@ -2230,7 +1544,6 @@ begin
     FRangeLo := ALo;
     FRangeHi := AHi;
     FNext := ALo;
-    FPhase := 0;
     FK := 0;
     FPend := -1;
     FMatchCount := 0;
@@ -2283,7 +1596,6 @@ begin
   // (the walk's batch of sources is of the text before)
   SetLength(FSrc, 0);
   SetLength(FSrcBytes, 0);
-  SetLength(FSrcUnknown, 0);
 end;
 
 function TTyRichFinder.KeptBytes: Int64;
@@ -2293,20 +1605,7 @@ end;
 
 function TTyRichFinder.WorkDone: Int64;
 begin
-  Result := FTextBytes + FPassedBytes + FilterLooked + FilterHidden + FParasRead +
-    FParasFiltered + FNext;
-end;
-
-function TTyRichFinder.FilterLooked: Int64;
-begin
-  Result := 0;
-  if FFilter <> nil then Result := FFilter.Looked;
-end;
-
-function TTyRichFinder.FilterHidden: Int64;
-begin
-  Result := 0;
-  if FFilter <> nil then Result := FFilter.Hidden;
+  Result := FTextBytes + FFileBytes + FPassedBytes + FParasRead + FNext;
 end;
 
 { ---- TTyRichReplaceAllCommand ---- }

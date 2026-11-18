@@ -79,7 +79,6 @@ type
     procedure TestRandomEditsUndoneAndRedone;
     procedure TestAPlainParagraphUndoneAfterItsIntervalWentIsTheFilesOwn;
     procedure TestKeptValuesCostLittleInAnyOrder;
-    procedure TestTheReaderSaysWhichParagraphsBeginInsideADestination;
   end;
 
 implementation
@@ -3013,108 +3012,6 @@ begin
       d.Free;
     end;
   end;
-end;
-
-{ Where a paragraph's bytes begin, the reader notes whether a group open there is a
-  destination - by its own group stack, for every way a paragraph can begin: after a paragraph
-  end (the word, and the escaped line break), a cell's end, a nested cell's end, a row's end
-  given to the last cell (which ends no paragraph), closing braces and line breaks the
-  paragraph before still takes, the file's end. A paragraph end inside a group the reader
-  passes over or reads as an object's (a field's result, a footnote, a list's properties, a
-  word it does not know) ends no paragraph, so nothing begins there. One mark per paragraph,
-  '1' where it begins inside a destination; the same when the file is indexed a token at a
-  time (each paragraph is then appended by a slice of its own). '|' is the backslash. }
-procedure TTyRtfLazyTest.TestTheReaderSaysWhichParagraphsBeginInsideADestination;
-const
-  Head = '{|rtf1|ansi|ansicpg1252|deff0{|fonttbl{|f0|fswiss Arial;}}|pard ';
-  Row = '|trowd|cellx2000|cellx4000|pard|intbl ';
-
-  function Rtf(const S: RawByteString): RawByteString;
-  var
-    i: Integer;
-  begin
-    Result := S;
-    for i := 1 to Length(Result) do
-      if Result[i] = '|' then Result[i] := #92;
-  end;
-
-  function Marks(ADoc: TTyRichDocument): string;
-  var
-    i: Integer;
-  begin
-    Result := '';
-    for i := 0 to ADoc.Text.ParaCount - 1 do
-      if ADoc.Text.ParaLazyMarked(i) then Result := Result + '1' else Result := Result + '0';
-  end;
-
-  procedure Check(const AName: string; const ABody: RawByteString; const AWant: string);
-  var
-    b: TBytes;
-    d: TTyRichDocument;
-    s: TBytesStream;
-    load: TTyRtfLoad;
-    steps, k, n: Integer;
-  begin
-    b := BytesOf(Rtf(Head + ABody));
-    d := LoadWith(b, False);
-    try
-      AssertEquals(AName, AWant, Marks(d));
-      n := 0;
-      for k := 1 to Length(AWant) do
-        if AWant[k] = '1' then Inc(n);
-      AssertEquals(AName + ': the scan counts them', n, TyRichRtfLoadOf(d).Scan.DestStarts);
-    finally
-      d.Free;
-    end;
-    d := LoadWith(b, True);
-    try
-      AssertEquals(AName + ', read whole', AWant, Marks(d));
-    finally
-      d.Free;
-    end;
-    d := TTyRichDocument.Create;
-    s := TBytesStream.Create(b);
-    try
-      load := TyRichBeginLoadRtf(d, s, 1);
-      steps := 0;
-      while not load.Step(1) do
-      begin
-        Inc(steps);
-        AssertTrue('runaway load', steps < 10000);
-      end;
-      AssertEquals(AName + ', indexed a token at a time', AWant, Marks(d));
-    finally
-      d.Free;
-      s.Free;
-    end;
-  end;
-
-begin
-  Check('ordinary paragraphs', 'one|par two|par three|par}', '000');
-  Check('a paragraph end inside an ordinary group', 'one|par {|b two|par three}|par}', '000');
-  Check('a paragraph end inside ud', 'one|par {|upr J{|*|ud two|par three}K}four|par}', '001');
-  Check('... and the paragraph after it is outside again',
-    'one{|upr{|*|ud two|par three}}four|par five|par}', '010');
-  Check('an ordinary group inside ud', 'one{|upr{|*|ud{|b two|par three}}}four|par}', '01');
-  Check('an escaped line break inside ud', 'one{|upr{|*|ud two|' + #10 + 'three}}four|par}', '01');
-  Check('a cell end inside ud', Row + 'a|cell{|upr{|*|ud b|cell c}}|row |pard d|par}', '0010');
-  Check('a nested cell end inside ud', Row + 'a{|upr{|*|ud b|nestcell c}}d|cell|row}', '01');
-  Check('a row end inside ud right after the last cell',
-    Row + 'a|cell b|cell{|upr{|*|ud|row |pard y}J}c|par}', '001');
-  Check('a row end inside an ordinary group right after the last cell',
-    Row + 'a|cell b|cell{|b|row |pard y}Jc|par}', '000');
-  Check('the braces that close the destination are the paragraph''s before',
-    'one{|upr{|*|ud two|par}}three|par}', '00');
-  Check('... but only one of them: the next begins inside upr',
-    'one{|upr{|*|ud two|par}J}three|par}', '01');
-  Check('... and with a line break of the file between',
-    'one{|upr{|*|ud two|par}' + #13#10 + 'J}three|par}', '01');
-  Check('the file ends inside ud', 'one{|upr{|*|ud two|par three', '01');
-  Check('a field''s result holds no paragraph end of the text',
-    'one{|field{|*|fldinst X}{|fldrslt two|par three}}four|par}', '0');
-  Check('nor does a group passed over', 'one{|*|zzqqx two|par three}four|par}', '0');
-  Check('nor a footnote', 'one{|footnote two|par three}four|par}', '0');
-  Check('nor a list''s properties', '{|*|pn|pnlvlblt two|par three}one|par}', '0');
 end;
 
 initialization

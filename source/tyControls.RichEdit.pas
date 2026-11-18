@@ -1493,7 +1493,7 @@ type
     { The background find's piece (a finder step's units, see CRichFindStepChars - and a
       replace's range of paragraphs, in characters), as the turns sized it; the finder at
       work (nil: none); the replace's command (nil: none); what the synchronous finds read
-      (bytes of text and of unparsed RTF). Test seams. }
+      (bytes of text). Test seams. }
     property FindSlice: Int64 read FFindSlice write FFindSlice;
     property Finder: TTyRichFinder read FFinder;
     property ReplaceCommand: TTyRichReplaceAllCommand read FReplaceCmd;
@@ -10582,7 +10582,7 @@ begin
         Result := f.MatchPos;
         AFoundLen := f.MatchLen;
       end;
-      Inc(FFindBytesRead, f.TextBytes + f.FilterLooked);
+      Inc(FFindBytesRead, f.TextBytes);
     finally
       f.Free;
     end;

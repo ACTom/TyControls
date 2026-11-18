@@ -138,7 +138,6 @@ type
     Dest: TTyRtfDest;
     DestOwner: Boolean;          // this group began Dest (its end finishes it)
     DestStart: PtrInt;           // where that group's brace is
-    InDest: Boolean;             // a group open around this one is no ordinary group (DoGroupStart)
     Uc: Integer;
     // character
     FontNum: Integer;            // -1: \deff
@@ -193,7 +192,6 @@ type
     HeaderEnd: PtrInt;
     Boundary: PtrInt;            // where the current paragraph's bytes start
     BoundaryDepth: Integer;      // the depth there
-    BoundaryInDest: Boolean;     // ... and whether a group open there is no ordinary one
     LastStartDepth: Integer;     // the depth where the paragraph before started
     Absorb: TTyRtfAbsorb;        // what closing braces and line breaks still extend
     HasContent: Boolean;         // the current paragraph has a character
@@ -258,7 +256,6 @@ type
     Table, Row, Cell: Integer;   // Table -1: not in a table
     TextStart: PtrInt;           // building: its UTF-8 in the parser's output (no separator)
     TextLen: Integer;
-    InDest: Boolean;             // its bytes begin inside a destination (ParaBeginsInDest)
     ListText: UTF8String;        // building: its {\listtext} / {\pntext}, '' none
   end;
 
@@ -304,10 +301,6 @@ type
     FVersionGen: Integer;
     FAnsiCp: Integer;
     FAnsiCpSet: Boolean;
-    FCodePages: array of Integer;  // every code page this parser decoded or could decode with
-    FCodePageN: Integer;
-    FOverflowed: Boolean;
-    FDestStarts: Integer;
     FDeff: Integer;
     FPaperW, FPaperH, FMargL, FMargR: Integer;
     FFonts: array of TTyRtfFont;
@@ -418,7 +411,7 @@ type
     procedure EndDest(const AOld: TTyRtfProps);
     procedure Extend(AWasBrace: Boolean);
     // body, paragraphs, tables
-    procedure ParaStartsAt(APos: PtrInt; ADepth: Integer; const AProps: TTyRtfProps);
+    procedure ParaStartsAt(APos: PtrInt; ADepth: Integer);
     procedure EnsureBody;
     procedure StartContent;
     procedure EndParagraph(AKind: TTyRtfParaKind);
@@ -457,7 +450,6 @@ type
     function FontIndex(ANum: Integer): Integer;
     function FontOfNum(ANum: Integer): Integer;
     function ResolveCodePage(ACharset, ACpg: Integer): Integer;
-    procedure NoteCodePage(ACodePage: Integer);
     function DecodeRaw(const ARaw: RawByteString; ACodePage: Integer): UTF8String;
     procedure UpdateDecoder;
     procedure AddColor;
@@ -500,14 +492,6 @@ type
     function ParaRec(AIndex: Integer): TTyRtfParaRec;
     // A paragraph's bytes and characters (no record with a managed field copied).
     procedure ParaSpan(AIndex: Integer; out ASrc: TTyRtfRange; out AChars: Int64);
-    { Paragraph AIndex's bytes begin while a group is open that the reader does not read as
-      an ordinary formatting group - a destination of any kind, whatever it does with what it
-      holds (reads it in its own way, in part, as an object's or a field's, or drops it), also
-      one it comes to know later: what those bytes read as then depends on that group, which
-      is not among them. Said by the reader's own state where it fixes the place a
-      paragraph's bytes begin (ParaStartsAt): somebody who looks at a paragraph's bytes alone
-      - the find's filter - must not judge such a paragraph by them. }
-    function ParaBeginsInDest(AIndex: Integer): Boolean;
     // The first paragraph ParaRec still has.
     property FirstParaRec: Integer read FParaBase;
     // Forgets the records of the paragraphs before AIndex (an index scan keeps no record of
@@ -543,20 +527,6 @@ type
     function Color(AIndex: Integer; out AAuto: Boolean): TColor;
     procedure ResolveListRef(ALs, AIlvl: Integer; var AList: TTyListFormat);
     property AnsiCodePage: Integer read FAnsiCp;
-    // Every code page text read by this parser so far may have been decoded with: each \ansicpg
-    // (and \ansi, \mac, \pc, \pca) it met, each font table entry's (a table given again in the
-    // body included: the earlier paragraphs keep the code pages of their time), 1252 to begin
-    // with. Of the index scan: the whole file's once the scan has ended; a finder looking at
-    // unparsed bytes reads them in all of these (CpSymbol for a Symbol charset font).
-    function CodePageCount: Integer;
-    function CodePageSeen(AIndex: Integer): Integer;
-    // Groups went deeper than MaxDepth somewhere in what this parser read: past it a group is
-    // only counted, so no destination begins there (a \pict's hex is text). Of the index scan:
-    // a finder looking at unparsed bytes then reads a picture's group as it reads any other.
-    property GroupsOverflowed: Boolean read FOverflowed;
-    // How many of the paragraphs this parser read begin inside a destination
-    // (ParaBeginsInDest); of the index scan: so far.
-    property DestStarts: Integer read FDestStarts;
     property DefaultFont: Integer read FDeff;     // \deff, -1 none
     // Where the first font table and the first colour table before the body close (the
     // position of their closing brace), -1 when the header has none.
@@ -912,37 +882,6 @@ function TyRtfStateWords(const AState: TTyRtfState; const ABytes: TBytes;
 // the file's \ansicpg; 0 for the Symbol charset, which has none.
 function TyRtfCharsetCodePage(ACharset, AAnsiCodePage: Integer): Integer;
 
-{ ---- the reader's rules for a token of text: the parser reads by them, and so does the find's
-  filter over bytes never parsed (tyControls.RichEdit.Find), so the two cannot drift ---- }
-type
-  { What the reader makes of a byte of text, raw or written \'xx, before its code page is asked:
-    rbrText - a character (decoded); rbrDropped - nothing at all, a lead byte waiting for its
-    trail still waits (NUL, LF, CR); rbrControl - nothing, a lead byte waiting reads as '?'
-    (every other byte below 20h but the tab). A byte a \uN skips as its fallback is counted
-    before any of this. }
-  TTyRtfByteRole = (rbrText, rbrDropped, rbrControl);
-
-function TyRtfByteRole(B: Byte): TTyRtfByteRole; inline;
-// The character \uN makes: N as it is, a negative N as N + 65536; one that is no character
-// U+FFFD; 0 (\u0, and a \u without a number) - none, though its fallback is skipped all the
-// same. A surrogate pair \uH\uL is one character; a lone surrogate is U+FFFD.
-function TyRtfUnicodeOf(AParam: Integer): Cardinal;
-// The character a control word makes in a paragraph's text (\tab, \line, \emdash, the quotes,
-// the spaces, the joiners and the marks), 0 for any other word. AIsU: the word is \u (its
-// character is TyRtfUnicodeOf of its number).
-function TyRtfWordChar(ABuf: PByte; ANameStart, ANameLen: Integer; out AIsU: Boolean): Cardinal;
-// The character a control symbol makes in text (\~ \_ \\ \{ \}), 0 for the others.
-function TyRtfSymbolChar(AValue: Integer): Cardinal;
-// A word that changes how the bytes after it decode for the whole file (a font table, an
-// \ansicpg and its kin): a find that meets one in bytes it reads cannot be sure of them.
-function TyRtfWordSetsCodePages(ABuf: PByte; ANameStart, ANameLen: Integer): Boolean;
-// A group that begins with this word holds no text the reader takes (\pict): its bytes need
-// not be looked at to find text.
-function TyRtfWordHidesGroup(ABuf: PByte; ANameStart, ANameLen: Integer): Boolean;
-// A word of a destination the reader reads only in part (ReadInPart): of its group some is the
-// paragraph's text and some is dropped (upr: what it holds directly goes, its ud is the text).
-// A find that meets one in bytes it reads cannot treat the group as either read or passed over.
-function TyRtfWordReadInPart(ABuf: PByte; ANameStart, ANameLen: Integer): Boolean;
 // A word of every destination the reader tells apart (its word table: words of one meaning
 // share one code - the first of them), for a test that tries each.
 function TyRtfDestinationWords: TStringArray;
@@ -1003,12 +942,6 @@ const
   kwDOpaque = 170;          // a non-text block: one object
   kwDCharExtra = 171;       // a property group: the run's Extra
   kwDParaExtra = 172;       // a property group: the paragraph's Extra
-
-  { The destinations the reader reads only in part - some of what their group holds is the
-    paragraph's text, some is dropped (HandleDestination: upr drops what it holds directly and
-    reads its ud). The find's filter cannot read such a group as either read or passed over
-    (TyRtfWordReadInPart): a destination added that is read in part goes here. }
-  ReadInPart = [kwDUpr, kwDUd];
 
 type
   TWordDef = record
@@ -1334,12 +1267,15 @@ begin
   if (v < 0) or (v > $10FFFF) then Result := $FFFD else Result := v;
 end;
 
-function TyRtfUnicodeOf(AParam: Integer): Cardinal;
-begin
-  Result := UnicodeOfParam(AParam);
-end;
+type
+  { What the reader makes of a byte of text, raw or written \'xx, before its code page is
+    asked: rbrText - a character (decoded); rbrDropped - nothing at all, a lead byte waiting
+    for its trail still waits (NUL, LF, CR); rbrControl - nothing, a lead byte waiting reads
+    as '?' (every other byte below 20h but the tab). A byte a \uN skips as its fallback is
+    counted before any of this. }
+  TByteRole = (rbrText, rbrDropped, rbrControl);
 
-function TyRtfByteRole(B: Byte): TTyRtfByteRole;
+function ByteRole(B: Byte): TByteRole; inline;
 begin
   if (B = 0) or (B = 10) or (B = 13) then Result := rbrDropped
   else if (B < $20) and (B <> 9) then Result := rbrControl
@@ -1373,16 +1309,8 @@ begin
   end;
 end;
 
-function TyRtfWordChar(ABuf: PByte; ANameStart, ANameLen: Integer; out AIsU: Boolean): Cardinal;
-var
-  kw: Integer;
-begin
-  kw := LookupWord(@ABuf[ANameStart], ANameLen);
-  AIsU := kw = kwU;
-  Result := KwChar(kw);
-end;
-
-function TyRtfSymbolChar(AValue: Integer): Cardinal;
+// The character a control symbol makes in text (\~ \_ \\ \{ \}), 0 for the others.
+function SymbolChar(AValue: Integer): Cardinal;
 begin
   case AValue of
     Ord('~'): Result := $A0;
@@ -1391,25 +1319,6 @@ begin
   else
     Result := 0;
   end;
-end;
-
-function TyRtfWordSetsCodePages(ABuf: PByte; ANameStart, ANameLen: Integer): Boolean;
-begin
-  case LookupWord(@ABuf[ANameStart], ANameLen) of
-    kwAnsi, kwMac, kwPc, kwPca, kwAnsiCpg, kwDFontTbl: Result := True;
-  else
-    Result := False;
-  end;
-end;
-
-function TyRtfWordHidesGroup(ABuf: PByte; ANameStart, ANameLen: Integer): Boolean;
-begin
-  Result := LookupWord(@ABuf[ANameStart], ANameLen) = kwDPict;
-end;
-
-function TyRtfWordReadInPart(ABuf: PByte; ANameStart, ANameLen: Integer): Boolean;
-begin
-  Result := LookupWord(@ABuf[ANameStart], ANameLen) in ReadInPart;
 end;
 
 function TyRtfDestinationWords: TStringArray;
@@ -1643,7 +1552,6 @@ begin
   FFontNumMax := -1;
   FColorTblClose := -1;
   FAnsiCp := 1252;
-  NoteCodePage(1252);
   FDeff := -1;
   FFirstFont := -1;
   FPaperW := 12240;
@@ -1932,8 +1840,6 @@ begin
   TablesChanged;
   FAnsiCp := AOther.FAnsiCp;
   FAnsiCpSet := AOther.FAnsiCpSet;
-  FCodePages := Copy(AOther.FCodePages, 0, AOther.FCodePageN);
-  FCodePageN := AOther.FCodePageN;
   FDeff := AOther.FDeff;
   FFirstFont := AOther.FFirstFont;
   FFonts := Copy(AOther.FFonts, 0, Length(AOther.FFonts));
@@ -2279,7 +2185,7 @@ begin
     absLast:
       if not AWasBrace or (FS.Depth >= FS.LastStartDepth) then
       begin
-        ParaStartsAt(FTokStop, FS.Depth, FS.Props);
+        ParaStartsAt(FTokStop, FS.Depth);
         if FParaN > 0 then FParas[FParaN - 1].Src.Stop := FTokStop;
       end
       else
@@ -2297,7 +2203,6 @@ begin
   if (FS.Overflow > 0) or (FS.Depth >= MaxDepth) then
   begin
     Inc(FS.Overflow);
-    FOverflowed := True;
     Exit;
   end;
   if not FS.BodyStarted and (FS.Depth >= 1) and (FS.PendingGroup < 0) then
@@ -2310,11 +2215,6 @@ begin
   SettleLists;
   FStack[FS.Depth] := FS.Props;
   Inc(FS.Depth);
-  { What the new group lies in: once a destination is open, every group inside it knows -
-    whatever word began it, and whatever is made of the group itself (\upr's \ud reads as
-    ordinary text and is still inside \upr). A destination this reader passes over as a whole
-    never gets here: nothing is read inside it. }
-  if FS.Props.Dest <> rdNormal then FS.Props.InDest := True;
   FS.Props.DestOwner := False;
   FS.GroupOpen := True;
   FS.Star := False;
@@ -2517,8 +2417,7 @@ begin
   if not (FS.Props.Dest in [rdNormal, rdFieldResult, rdListText]) then Exit;
   if FS.InRowDef then EndRowDef;
   case v of
-    // (the find's filter reads the same: TyRtfSymbolChar)
-    Ord('~'), Ord('_'), Ord('\'), Ord('{'), Ord('}'): EmitChar(TyRtfSymbolChar(v));
+    Ord('~'), Ord('_'), Ord('\'), Ord('{'), Ord('}'): EmitChar(SymbolChar(v));
     Ord('-'):
       if FS.Props.Dest = rdNormal then
       begin
@@ -2948,7 +2847,6 @@ begin
   if not FEntryOn then Exit;
   FEntryOn := False;
   FEntry.CodePage := ResolveCodePage(FEntry.Charset, FEntry.Cpg);
-  NoteCodePage(FEntry.CodePage);
   FEntry.Name := FEntry.Name + DecodeRaw(FEntryRaw, FEntry.CodePage);
   FEntryRaw := '';
   if FEntry.CodePage <> CpSymbol then FEntry.Table := TyRichCodePageTable(FEntry.CodePage);
@@ -3019,27 +2917,6 @@ begin
   if ANum < 0 then ANum := FFirstFont;
   if ANum < 0 then Exit(-1);
   Result := FontIndex(ANum);
-end;
-
-procedure TTyRtfParser.NoteCodePage(ACodePage: Integer);
-var
-  i: Integer;
-begin
-  for i := 0 to FCodePageN - 1 do
-    if FCodePages[i] = ACodePage then Exit;
-  if FCodePageN = Length(FCodePages) then SetLength(FCodePages, FCodePageN * 2 + 4);
-  FCodePages[FCodePageN] := ACodePage;
-  Inc(FCodePageN);
-end;
-
-function TTyRtfParser.CodePageCount: Integer;
-begin
-  Result := FCodePageN;
-end;
-
-function TTyRtfParser.CodePageSeen(AIndex: Integer): Integer;
-begin
-  Result := FCodePages[AIndex];
 end;
 
 function TTyRtfParser.ResolveCodePage(ACharset, ACpg: Integer): Integer;
@@ -3737,14 +3614,12 @@ begin
         else
           FAnsiCp := 850;
         end;
-        NoteCodePage(FAnsiCp);
         TablesChanged;
       end;
     kwAnsiCpg:
       begin
         p := RtfCodePage(p);
         if TyRichCodePageSupported(p) then FAnsiCp := p else FAnsiCp := 1252;
-        NoteCodePage(FAnsiCp);
         FAnsiCpSet := True;
         Inc(FFontGen);
         TablesChanged;
@@ -4008,7 +3883,6 @@ begin
     kwRow: if normal then DoRow;
     // characters
     kwPar: if normal then EndParagraph(rpkPar);
-    // (the find's filter reads the same table: TyRtfWordChar)
     kwLine..kwZwnbo: EmitChar(KwChar(AKw));
     kwObjWord:
       if normal and (FFieldNest = 0) then
@@ -4034,18 +3908,15 @@ end;
 
 // ---- the body and its paragraphs ----
 
-{ The bytes of the paragraph that comes next begin at APos, where ADepth groups are open and
-  AProps are the properties in effect. The ONE place that fixes where a paragraph begins:
-  whatever makes or moves that place goes through here - the body's start, a paragraph's end
-  of any kind (EndParagraph), a closing brace or a line break still taken by the paragraph
-  before (Extend), a row's end given to its last cell (DoRow), the end of a file that has no
-  body (Finish) - so that what is known of the place is said once, by the state the reader
-  really is in: whether every group open there is an ordinary one. }
-procedure TTyRtfParser.ParaStartsAt(APos: PtrInt; ADepth: Integer; const AProps: TTyRtfProps);
+{ The bytes of the paragraph that comes next begin at APos, where ADepth groups are open. The
+  ONE place that fixes where a paragraph begins: whatever makes or moves that place goes
+  through here - the body's start, a paragraph's end of any kind (EndParagraph), a closing
+  brace or a line break still taken by the paragraph before (Extend), a row's end given to
+  its last cell (DoRow), the end of a file that has no body (Finish). }
+procedure TTyRtfParser.ParaStartsAt(APos: PtrInt; ADepth: Integer);
 begin
   FS.Boundary := APos;
   FS.BoundaryDepth := ADepth;
-  FS.BoundaryInDest := AProps.InDest or (AProps.Dest <> rdNormal);
 end;
 
 procedure TTyRtfParser.EnsureBody;
@@ -4054,15 +3925,14 @@ begin
   FS.BodyStarted := True;
   if FS.PendingGroup >= 0 then
   begin
-    // the group that was open before the body: the paragraph begins at its brace, in what
-    // was in effect there (the properties that group saved)
+    // the group that was open before the body: the paragraph begins at its brace
     FS.HeaderEnd := FS.PendingGroup;
-    ParaStartsAt(FS.HeaderEnd, FS.PendingGroupDepth, FStack[FS.PendingGroupDepth]);
+    ParaStartsAt(FS.HeaderEnd, FS.PendingGroupDepth);
   end
   else
   begin
     FS.HeaderEnd := FTok.Start;
-    ParaStartsAt(FS.HeaderEnd, FS.Depth, FS.Props);
+    ParaStartsAt(FS.HeaderEnd, FS.Depth);
   end;
   FS.PendingGroup := -1;
   FS.LastStartDepth := FS.BoundaryDepth;
@@ -4212,8 +4082,7 @@ begin
     Dec(FS.UcSkip);
     Exit;
   end;
-  // (the find's filter reads bytes by the same roles: TyRtfByteRole)
-  if TyRtfByteRole(B) = rbrDropped then Exit;
+  if ByteRole(B) = rbrDropped then Exit;
   if FS.PendingHigh <> 0 then
   begin
     FS.PendingHigh := 0;
@@ -4235,7 +4104,7 @@ begin
     end;
     EmitCode(Ord('?'), False);
   end;
-  if TyRtfByteRole(B) = rbrControl then Exit;
+  if ByteRole(B) = rbrControl then Exit;
   if B < $20 then
   begin
     // the tab
@@ -4352,8 +4221,6 @@ begin
   rec^.TextLen := 0;
   rec^.Chars := FCurChars;
   rec^.Src := Range(FS.Boundary, FTok.Stop);
-  rec^.InDest := FS.BoundaryInDest;
-  if rec^.InDest then Inc(FDestStarts);
   if not Counting then
   begin
     if FRunN = 0 then AddRun(CharFormatFor(rccLoch), nil);
@@ -4406,7 +4273,7 @@ begin
     CloseTable;
   Inc(FParaN);
   FS.LastStartDepth := FS.BoundaryDepth;
-  ParaStartsAt(FTok.Stop, FS.Depth, FS.Props);
+  ParaStartsAt(FTok.Stop, FS.Depth);
   FS.Absorb := absLast;
   FCommitted := True;
   FS.HasContent := False;
@@ -4424,7 +4291,7 @@ begin
   else if FS.LastWasCell then
   begin
     // the row's end belongs to its last cell
-    ParaStartsAt(FTok.Stop, FS.Depth, FS.Props);
+    ParaStartsAt(FTok.Stop, FS.Depth);
     if FParaN > 0 then FParas[FParaN - 1].Src.Stop := FTok.Stop;
     FS.Absorb := absLast;
     FCommitted := True;
@@ -4503,7 +4370,7 @@ begin
   begin
     FS.BodyStarted := True;
     FS.HeaderEnd := FS.DocCloseAt;
-    ParaStartsAt(FS.HeaderEnd, FS.BoundaryDepth, FS.Props);
+    ParaStartsAt(FS.HeaderEnd, FS.BoundaryDepth);
   end;
   FLastOpen := FS.HasContent or (FS.Paras = 0);
   if FS.HasContent then
@@ -4810,11 +4677,6 @@ procedure TTyRtfParser.ParaSpan(AIndex: Integer; out ASrc: TTyRtfRange; out ACha
 begin
   ASrc := FParas[AIndex - FParaBase].Src;
   AChars := FParas[AIndex - FParaBase].Chars;
-end;
-
-function TTyRtfParser.ParaBeginsInDest(AIndex: Integer): Boolean;
-begin
-  Result := FParas[AIndex - FParaBase].InDest;
 end;
 
 procedure TTyRtfParser.DropParas(AIndex: Integer);
@@ -5155,8 +5017,7 @@ begin
     begin
       FScan.ParaSpan(i, src, chars);
       if i < ATo - 1 then sep := FSep else sep := rsNone;
-      text.AppendLazyParagraph(chars, src.Start, src.Stop - src.Start, sep,
-        FScan.ParaBeginsInDest(i));
+      text.AppendLazyParagraph(chars, src.Start, src.Stop - src.Start, sep);
       if FMap <> nil then AddMapRange(src);
     end;
   finally
@@ -6156,11 +6017,9 @@ begin
       begin
         load.FScan.ParaSpan(i, src, chars);
         if i < n - 1 then
-          text.AppendLazyParagraph(chars, src.Start, src.Stop - src.Start, load.FSep,
-            load.FScan.ParaBeginsInDest(i))
+          text.AppendLazyParagraph(chars, src.Start, src.Stop - src.Start, load.FSep)
         else
-          text.AppendLazyParagraph(chars, src.Start, src.Stop - src.Start, rsNone,
-            load.FScan.ParaBeginsInDest(i));
+          text.AppendLazyParagraph(chars, src.Start, src.Stop - src.Start, rsNone);
         if AMap <> nil then load.AddMapRange(src);
       end;
       text.EndLazyLoad;

@@ -1,13 +1,16 @@
 # Find: adversarial RTF cases
 
-Small RTF files that attack the raw-byte filter of the finder (`tyControls.RichEdit.Find`): the
-filter looks for a needle in a paragraph's unparsed bytes and must never say "cannot match"
-where the reader would read the needle. `TTyRichFindTest.TestTheAdversarialFiles` reads
-`cases.txt` - per line, tab-separated: the file, the needle as hex of its UTF-8, the options (`m` match case,
-`w` whole word, `-` none), the places the needle is found (`-`: none) and what the file is about. Each
-file is searched read whole, read lazily with the filter and without it: all three must give
-those places. A file may serve two lines (two needles). They are kept byte for byte
-(`.gitattributes`: `tests/fixtures/rtf/** -text`); none of their words is anyone's.
+Small RTF files with a needle and the places it is found. Each is a form in which a search
+that judged a paragraph by its bytes in the file once lost a hit - what those bytes read as
+was the reader's to say (a code page, a group left open, a byte still waiting for its
+second) - or a neighbour of such a form. The finder (`tyControls.RichEdit.Find`) reads every
+paragraph through the reader now, so the cases pin what the reader makes of each file, read
+whole and read lazily alike. `TTyRichFindTest.TestTheAdversarialFiles` reads `cases.txt` - per
+line, tab-separated: the file, the needle as hex of its UTF-8, the options (`m` match case,
+`w` whole word, `-` none), the places the needle is found (`-`: none) and what the file is
+about. Each file is searched read whole and read lazily: both must give those places. A file
+may serve two lines (two needles). They are kept byte for byte (`.gitattributes`:
+`tests/fixtures/rtf/** -text`); none of their words is anyone's.
 
 | File | Needle | Case | Found at | What it is |
 |---|---|---|---|---|
@@ -28,7 +31,7 @@ those places. A file may serve two lines (two needles). They are kept byte for b
 | `U7.rtf` | a—xb |  | 7 | the optional hyphen as the fallback |
 | `U8.rtf` | a送b |  | 7 | negative \|u |
 | `U9.rtf` | ab |  | 7 | \|u65 \|u66 any case |
-| `U10.rtf` | a😀b |  | 7 | a surrogate pair (not filtered) |
+| `U10.rtf` | a😀b |  | 7 | a surrogate pair |
 | `U11.rtf` | bc |  | 9 | text after a lone high surrogate |
 | `U12.rtf` | cd |  | 10 | \|u above 65535 next to text |
 | `U13.rtf` | a—zb |  | - | a bin as the fallback |
@@ -106,7 +109,7 @@ those places. A file may serve two lines (two needles). They are kept byte for b
 | `T5.rtf` | yc<0D><0A>d |  | 11 | the same, a needle with a paragraph end |
 | `T6.rtf` | yc |  | 13 | text before the row end: the row end ends a paragraph inside ud |
 | `T7.rtf` | yzc |  | 11 | the row end in ud, then upr's own text and a second ud |
-| `T8.rtf` | yJc |  | 11 | a row end inside an ordinary group after the last cell (filtered as ever) |
+| `T8.rtf` | yJc |  | 11 | a row end inside an ordinary group after the last cell |
 | `L1.rtf` | b? |  | 8 | a lead byte left waiting in a field's result: its ? comes out before the field |
 | `L2.rtf` | b? |  | 8 | the same, the file cut short inside the result |
 | `L3.rtf` | b? |  | 8 | the same, inside a group of the result |
@@ -117,3 +120,26 @@ those places. A file may serve two lines (two needles). They are kept byte for b
 | `L8.rtf` | b? |  | - | the lead byte before the field, its trail in the result: no ? at all |
 | `L9.rtf` | b? |  | - | a character after the lead byte in the result: the ? is the result's |
 | `L10.rtf` | b? |  | - | a lead byte left in a list's marker: none comes out |
+| `W1.rtf` | b? |  | 1 | a lead byte left waiting in a field's result, text of the field itself before and behind the result |
+| `W2.rtf` | b? |  | 1 | the same, spaces between the field's groups |
+| `W3.rtf` | b? |  | 1 | the same, a hex byte behind the result |
+| `W4.rtf` | b? |  | 1 | the same, a character word behind the result |
+| `W5.rtf` | b? |  | 1 | the same, a \|u behind the result |
+| `W6.rtf` | b? |  | 1 | the same, a control symbol behind the result |
+| `W7.rtf` | b? |  | 1 | the same, in an inner field of a result that has text |
+| `W8.rtf` | b? |  | 1 | the same, the file cut short behind the text |
+| `W9.rtf` | b? |  | 1 | the same, the lead byte raw |
+| `W10.rtf` | b? |  | 8 | the same, in a later paragraph |
+| `W10.rtf` | r<0A>ab? |  | 5 | the same, in a later paragraph |
+| `W11.rtf` | b? |  | 1 | the same, a Shift-JIS font |
+| `W12.rtf` | b? |  | 1 | the same, a character word before the result |
+| `W13.rtf` | b? |  | 1 | the same, in a table cell |
+| `X1.rtf` | b? |  | 1 | a lead byte left waiting in a result, nothing before the result |
+| `X2.rtf` | b? |  | 1 | the same, nothing behind the result |
+| `X3.rtf` | b? |  | 1 | the same, a line break of the source before and behind the result |
+| `X4.rtf` | b? |  | 1 | the same, a formatting word before and behind the result |
+| `X5.rtf` | b? |  | - | a single-byte font: the byte is a character of the result, no ? comes out |
+| `X5.rtf` | ab | m | 0 | a single-byte font: the byte is a character of the result, no ? comes out |
+| `X6.rtf` | b? |  | - | a whole pair in the result: no ? comes out |
+| `X6.rtf` | ab | m | 0 | a whole pair in the result: no ? comes out |
+| `X7.rtf` | b? |  | 1 | a lead byte left waiting in a result, an instruction before it and text behind |
