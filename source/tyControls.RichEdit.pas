@@ -10702,6 +10702,7 @@ begin
   // its turns start small and find their size, as a load's do
   FFindSlice := CRichFindMinStepChars;
   FFindDone := 0;
+  FFindTotal := 0;
   FFindLegBase := 0;
   FFindWrapLeft := False;
 end;
@@ -11270,6 +11271,7 @@ var
   load: TTyRtfLoad;
   stop: TTyRichPos;
   r: TTyRichFindResult;
+  done: Int64;
 begin
   gen := FFindGen;
   { A document that takes no change (a load cancelled): every match is left, and counted - a
@@ -11281,12 +11283,25 @@ begin
       if FReplaceLength < 0 then stop := -1 else stop := FReplaceFrom + FReplaceLength;
       FFinder := TTyRichFinder.Create(FDoc, FFindText, FFindOpts, FReplaceFrom, stop);
       FFinder.Collect := True;
+      // its own total: the characters of the range it counts in
+      if stop < 0 then FFindTotal := FDoc.Text.Length - FReplaceFrom
+      else FFindTotal := stop - FReplaceFrom;
     end;
     r := FFinder.Step(Math.Max(Int64(1), FFindSlice));
     Inc(FFindTurnWork, FFindSlice);
     Inc(FReplaceTally.Skipped, FFinder.MatchCount);
     FFinder.ClearMatches;
-    if r <> rfrNotFound then Exit;
+    if r <> rfrNotFound then
+    begin
+      // the progress on the way, as any piece's (its handler may cancel)
+      done := FFinder.Reached - FReplaceFrom;
+      if done < FFindDone then done := FFindDone;
+      if done > FFindTotal then done := FFindTotal;
+      FFindCancel := False;
+      ReportFindProgress(rfkReplace, done, FFindTotal);
+      if (FFindGen = gen) and FFindCancel then EndFind(rfsCancelled, True);
+      Exit;
+    end;
     EndFind(rfsDone, True);
     Exit;
   end;

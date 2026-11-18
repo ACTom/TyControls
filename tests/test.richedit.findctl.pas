@@ -1687,6 +1687,20 @@ begin
   AssertEquals('nothing replaced', 0, Pos('dog', Text));
   AssertTrue('every match counted: ' + FDone[0], Pos('replace 0 ', FDone[0]) = 1);
   AssertEquals('...as many as there are', CountMatchesOf('cat', Text), FReplaceResult.Skipped);
+  // the progress on the way, of its own total, never back, at its total before the end
+  AssertTrue(Format('progress on the way (%d for %d turns)', [Length(FProgress), turns]),
+    Length(FProgress) >= turns - 1);
+  AssertEquals('...its own total: the text', FRich.Document.Text.Length, FProgressTotal);
+  for i := 1 to High(FProgress) do
+    AssertTrue('...never back', FProgress[i] >= FProgress[i - 1]);
+  AssertEquals('...at its total before the end', FProgressTotal, FDoneProgress);
+  // and its handler may stop it
+  ResetEvents;
+  FCancelAt := 2;
+  FRich.ReplaceAllAsync('cat', 'dog');
+  TFindAccess(FRich).FindSlice := 4096;
+  TurnUntilDone;
+  AssertTrue('cancelled from the progress: ' + FDone[0], Pos(' cancelled', FDone[0]) > 0);
 end;
 
 { A background replace stopped before its end - cancelled, a key, a save, cancelled again, on
