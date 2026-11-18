@@ -737,7 +737,8 @@ end;
   gives those places. Hex control bytes, a \u without a number, a font table and an \ansicpg
   given again in the body, a surrogate pair split by a group the reader passes over, a picture
   below the reader's group stack, a destination read in part and a paragraph that begins
-  inside one (after a paragraph's end there, and after a row's end given to the last cell)
+  inside one (after a paragraph's end there, and after a row's end given to the last cell),
+  a lead byte left waiting in a field's result (its ? comes out before the field's object)
   lost a hit before; the places pin the reader as well, not only the filter against it. }
 procedure TTyRichFindTest.TestTheAdversarialFiles;
 var
@@ -792,7 +793,7 @@ begin
       end;
       Inc(n);
     end;
-    AssertEquals('the cases', 96, n);
+    AssertEquals('the cases', 106, n);
     { And two of our own: a code page that only a later font table or an ansicpg word brings, used by a
       paragraph whose bytes do not hold that table or word. }
     bytes := BytesOf(Rtf('{|rtf1|ansi|ansicpg1252|deff0{|fonttbl{|f0|fswiss Arial;}}|pard one' +
@@ -2690,7 +2691,13 @@ end;
   the inner group and after it - for every kind as the outer group of an ordinary one, as the
   inner group of an ordinary one, and inside upr. (Of today's kinds a paragraph begins inside
   a destination only in ud inside upr - three of the files; a kind added later in which one
-  can is counted here and searched like them.) }
+  can is counted here and searched like them.)
+
+  And a lead byte of a double-byte font left waiting where a group ends - in every kind
+  alone, and in one inside a field, an ordinary group or upr, and an ordinary group inside
+  every kind: the reader keeps a waiting half past the brace whatever it makes of the group,
+  so a group whose own text is none of the paragraph's can still put a ? into it (a field's
+  result does). }
 procedure TTyRichFindTest.TestEveryPairOfDestinations;
 const
   CSampleEvery = 3;
@@ -2740,10 +2747,15 @@ begin
     seen.Duplicates := dupIgnore;
     for i := 0 to High(words) do
       for j := 0 to High(words) do
-        for shape := 0 to 14 do
+        for shape := 0 to 16 do
         begin
           if (shape in [1, 2]) and (((i * Length(words) + j) mod CSampleEvery) <> 0) then Continue;
-          if (shape > 2) and not ((words[i] = '.') or (words[j] = '.') or (words[i] = 'upr')) then
+          if (shape in [3..14]) and not ((words[i] = '.') or (words[j] = '.') or (words[i] = 'upr')) then
+            Continue;
+          // (the kind alone: once, with the last inner one)
+          if (shape = 15) and (j <> High(words)) then Continue;
+          if (shape = 16) and not ((words[i] = '.') or (words[j] = '.') or (words[i] = 'upr') or
+            (words[i] = 'field')) then
             Continue;
           w1 := Word(words[i]);
           w2 := Word(words[j]);
@@ -2751,6 +2763,8 @@ begin
             0: body := 'a{' + w1 + ' b{' + w2 + ' xyz}}c';
             1: body := 'a{' + w1 + '{' + w2 + ' xyz}b}c';
             2: body := 'a{' + w1 + ' b{' + w2 + ' x|par yz}}c';
+            15: body := 'a{' + w1 + ' q|''e9}c';
+            16: body := 'a{' + w1 + '{' + w2 + ' q|''e9}}c';
           else
             place := (shape - 3) mod 4;
             ending := (shape - 3) div 4;
@@ -2774,8 +2788,13 @@ begin
               end;
             if ending > 0 then body := CTable + body;
           end;
-          src := Rtf('{|rtf1|ansi|ansicpg1252|deff0{|fonttbl{|f0|fswiss Arial;}}' +
-            '|pard filler|par ' + body + '|par}');
+          if shape >= 15 then
+            // (a double-byte default font: E9 is a lead byte)
+            src := Rtf('{|rtf1|ansi|ansicpg936|deff0{|fonttbl{|f0|fnil|fcharset134 SimSun;}}' +
+              '|pard filler|par ' + body + '|par}')
+          else
+            src := Rtf('{|rtf1|ansi|ansicpg1252|deff0{|fonttbl{|f0|fswiss Arial;}}' +
+              '|pard filler|par ' + body + '|par}');
           full := LoadRtf(BytesOf(src), True);
           lazy := nil;
           try
@@ -2787,6 +2806,8 @@ begin
             for k := 0 to High(codes) do
               for len := 1 to 4 do
               begin
+                // (short ones there: with a double-byte font every finder builds its pair table)
+                if (shape >= 15) and (len > 2) then Continue;
                 if (k + len > Length(codes)) or (k + len - 1 <= p1) then Continue;
                 needle := Utf8Of(k, len);
                 seen.Add(needle);

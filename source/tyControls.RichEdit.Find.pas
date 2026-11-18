@@ -950,7 +950,19 @@ begin
         if (FHide > 0) and (p >= FStop) then Exit(fvCannot);
         Continue;
       end;
-      if not FLex.Next(tok) then Exit(fvCannot);
+      if not FLex.Next(tok) then
+      begin
+        { The bytes end with groups still open (a file cut short inside them): the reader
+          closes them there, and a lead byte left waiting comes out as at their braces. }
+        if (lead <> 0) or (wild <> 0) then
+          while FDepth > 0 do
+          begin
+            Dec(FDepth);
+            d := d or (((FStack[FDepth].D shl 1) or 1) and MaskOf(Ord('?')));
+          end;
+        if d and FAccept <> 0 then Exit(fvMay);
+        Exit(fvCannot);
+      end;
       case tok.Kind of
         rtkGroupStart:
           begin
@@ -990,6 +1002,13 @@ begin
             if FDepth > 0 then
             begin
               Dec(FDepth);
+              { A lead byte still waiting where the group ends is not the group's: the reader
+                keeps it past the brace, whatever it makes of the group. Where the group's
+                own text is none of the paragraph's - a field's result - what then comes out
+                is the '?' of a lead byte whose trail never came, right behind what stood
+                before the group (the reader's Flush, as the field's object is put in). }
+              if (lead <> 0) or (wild <> 0) then
+                d := d or (((FStack[FDepth].D shl 1) or 1) and MaskOf(Ord('?')));
               // read through, or passed over
               d := d or FStack[FDepth].D;
               t := t or FStack[FDepth].T;

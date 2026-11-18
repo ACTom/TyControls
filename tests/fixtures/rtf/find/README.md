@@ -107,3 +107,13 @@ those places. A file may serve two lines (two needles). They are kept byte for b
 | `T6.rtf` | yc |  | 13 | text before the row end: the row end ends a paragraph inside ud |
 | `T7.rtf` | yzc |  | 11 | the row end in ud, then upr's own text and a second ud |
 | `T8.rtf` | yJc |  | 11 | a row end inside an ordinary group after the last cell (filtered as ever) |
+| `L1.rtf` | b? |  | 8 | a lead byte left waiting in a field's result: its ? comes out before the field |
+| `L2.rtf` | b? |  | 8 | the same, the file cut short inside the result |
+| `L3.rtf` | b? |  | 8 | the same, inside a group of the result |
+| `L4.rtf` | b? |  | 8 | the same, the lead byte raw |
+| `L5.rtf` | b? |  | 8 | two fields, a lead byte left in each |
+| `L6.rtf` | b? |  | 8 | the same, a paragraph after |
+| `L7.rtf` | b? |  | 8 | the same, in upr's ud inside the result |
+| `L8.rtf` | b? |  | - | the lead byte before the field, its trail in the result: no ? at all |
+| `L9.rtf` | b? |  | - | a character after the lead byte in the result: the ? is the result's |
+| `L10.rtf` | b? |  | - | a lead byte left in a list's marker: none comes out |
