@@ -203,8 +203,10 @@ type
 
   { How a replace of every match ended. rreDone: it went through its range (none replaced
     included); rreCancelled: stopped before its end - CancelFind, the progress handler, a
-    second start, a change of the document it did not make (an edit, an undo, a new content),
-    a save (its saved point would end the step), its step let go by a handler; rreLimit: its
+    second start, a change of the document it did not make (an edit, an undo, a new content -
+    also an edit undone again, or its own step undone and redone, before its next turn),
+    a save (its saved point would end the step), its step let go by the history (ClearUndo,
+    the byte limit, the redo side dropped; by a handler too); rreLimit: its
     undo step reached its limit (four times Document.MaxUndoBytes); rreFailed: it could not go
     on (a guard against a walk that makes no progress - not an ordinary end). }
   TTyRichReplaceEnd = (rreDone, rreCancelled, rreLimit, rreFailed);
@@ -214,8 +216,11 @@ type
     ResumeAt, unless Ending is rreDone: right behind the last match it dealt with, in the text
     as it is when told (an edit made since a background replace's last part is counted in);
     ReplaceAll from there for ResumeLength characters (-1: to the text's end) replaces the
-    rest, and nothing twice - also when a replacement holds the needle. -1 when nothing is
-    left, or the text it ran on is gone (a new content). }
+    rest, and nothing twice - also when a replacement holds the needle. Whole word: started
+    exactly there with the text unchanged, it also replaces a match that touches the last one
+    replaced, as one run does (the control remembers how that run saw the place); after any
+    edit, or from another start, such a match is judged by the text as it is. -1 when nothing
+    is left, or the text it ran on is gone (a new content). }
   TTyRichReplaceResult = record
     Ending: TTyRichReplaceEnd;
     Replaced, Skipped: Integer;
