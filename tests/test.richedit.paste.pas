@@ -752,7 +752,7 @@ begin
   end;
 end;
 
-{ The review's probe M: two items of another document's list (its own \ls1) pasted into a file
+{ Two items of another document's list (its own \ls1) pasted into a file
   whose own list is \ls1 do not join it: they keep their numbering format and are written as
   a list of their own. }
 procedure TTyRichEditPasteTest.TestPastedListItemsDoNotJoinTheTargetsList;
@@ -1688,7 +1688,7 @@ const
   ClipBold = '{' + BS + 'rtf1' + BS + 'ansi{' + BS + 'fonttbl{' + BS + 'f0 Times;}}' + BS +
     'f0' + BS + 'b RT}';
 
-{ The brief's test: with RTF, a picture and text on the clipboard the RTF goes in (the others
+{ The flavours in order: with RTF, a picture and text on the clipboard the RTF goes in (the others
   are not even read); without the RTF the picture; with text alone the text. And the
   application's "paste as": each flavour on request. }
 procedure TTyRichEditPasteTest.TestPastePrefersRtfThenPictureThenText;

@@ -91,12 +91,12 @@ Delphi 的 `uses ComCtrls`(或 RichMemo 的 `RichMemo`)换成 `tyControls.RichEd
 uses
   tyControls.RichEdit, tyControls.RichEdit.Text, tyControls.RichEdit.Attrs,
   tyControls.RichEdit.Model, tyControls.RichEdit.Layout, tyControls.RichEdit.Find,
-  tyControls.ScrollBar;
+  tyControls.ScrollBar;  // 要用 Document.Execute 时再加 tyControls.RichEdit.Commands
 ```
 
 | 单元 | 提供的名字 |
 |------|-----------|
-| `tyControls.RichEdit` | `TTyRichEdit`、`ETyRichEdit`、`TTyRichFormat`(`rfAuto`、`rfRtf`、`rfText`)、各个事件类型、`TTyRichFindEnd`(`rfeFound` ……)、`TTyRichReplaceEnd`(`rreDone` ……)、`TTyRichReplaceResult`、`TTyRichFindTask`(`rftFind`、`rftReplace`) |
+| `tyControls.RichEdit` | `TTyRichEdit`、`ETyRichEdit`、`TTyRichFormat`(`rfAuto`、`rfRtf`、`rfText`)、各个事件类型(`OnFallbackFont` 的 `TTyRichFallbackEvent` 在 `tyControls.RichEdit.Layout` 里)、`TTyRichFindEnd`(`rfeFound` ……)、`TTyRichReplaceEnd`(`rreDone` ……)、`TTyRichReplaceResult`、`TTyRichFindTask`(`rftFind`、`rftReplace`) |
 | `tyControls.RichEdit.Text` | `TTyRichPos` |
 | `tyControls.RichEdit.Attrs` | `TTyRichTextAttributes`、`TTyRichParaAttributes`、`TNumberingStyle` 及 `nsNone`、`nsBullet`,`TTySearchTypes`(`stWholeWord`、`stMatchCase`)、`TTySearchOptions`(`soMatchCase`、`soWholeWord`、`soBackward`)、`TTyRichConsistentAttributes`(`caBold` ……)、`TTyRichConsistentParaAttributes`(`cpaAlignment` ……)、`TTySubscriptType`(`sstNone` ……);RichMemo 的记录、集合和辅助过程:`TTyFontParams`、`InitFontParams`、`TTyParaMetric`、`TTyParaNumbering`(`pnBullet` ……)、`TTyParaAlignment`(`paLeft` ……)、`TTyTabStopList`、`TTyTextModifyMask`(`tmm_Styles` ……)、`TTyParaModifyMask`、`TTyParaRange` |
 | `tyControls.RichEdit.Model` | 各种编号列表(`lkDecimal` …… `lkUpperRoman`)、`ParaAlign` 用的 `TTyParaAlign`(`paraLeft`、`paraCenter`、`paraRight`、`paraJustify`)、`LineSpacingRule` 用的 `TTyLineSpacing`(`lsSingle` ……)、`TTyTextEncoding`(`teAuto`、`teUtf8` ……)、`TTyRichDocument` |
@@ -168,10 +168,10 @@ uses
 - **要找的文字里 CR LF、LF、CR 各匹配一个段落结尾。** Delphi 会把 CR LF 变成 CR。
 - **图片永远不会被匹配**,链接的文字和合并掉的表格单元格里的文字也不会。
 - **文件还在载入时,`FindText` 和 `Search` 只找已经载入的部分**,其余部分返回 -1;`FindNextAsync` 先找已经载入的部分，随着载入继续往下找。
-- **`ReplaceAll` 有三种形式**:最简单的返回替换的个数;带 `out ASkipped` 的还数出没动的匹配;带范围(`AStart`、`ALength`,长度为负数表示到末尾，和 `FindText` 的取法一样)的填一个 `TTyRichReplaceResult`。`ReplaceAllAsync` 取同样的范围(默认整篇),把同样的记录交给 `OnReplaceDone`。文档不允许用户编辑改动的匹配(在含有嵌套表格的表格行里，或删掉它会把文字跨过表格单元格或行的边界连起来),以及文件正在载入、载入被取消之后或正在保存时的所有匹配，都保持原样，计入 `Skipped`。
+- **`ReplaceAll` 有三种形式**:最简单的返回替换的个数;带 `out ASkipped` 的还数出没动的匹配;带范围(`AStart`、`ALength`,长度为负数表示到末尾，和 `FindText` 的取法一样)的填一个 `TTyRichReplaceResult`。`ReplaceAllAsync` 取同样的范围(默认整篇),把同样的记录交给 `OnReplaceDone`。文档不允许用户编辑改动的匹配(在含有嵌套表格的表格行里，或删掉它会把文字跨过表格单元格或行的边界连起来),以及(对 `ReplaceAll` 而言)文件正在载入、载入被取消之后或正在保存时的所有匹配(`ReplaceAllAsync` 则等载入结束),都保持原样，计入 `Skipped`。
 - **一次替换算一步撤销，这一步有上限**,是 `Document.MaxUndoBytes` 的四倍。`TTyRichReplaceResult.Ending` 说明它怎么结束:`rreDone`(走完了范围)、`rreLimit`(这一步满了)、`rreCancelled`(被 `CancelFind`、进度事件、再次开始、不是它自己做的编辑或撤销、换了内容或保存停下;只有后台替换会这样)或 `rreFailed`(无法继续);`Replaced` 和 `Skipped` 是它做了多少。已经替换的保留，算一步撤销。
-- **遇到 `rreLimit` 或 `rreCancelled` 后要接着替换，就从它报告的位置再调用一次**:`ReplaceAll(AFind, AReplace, AOptions, R.ResumeAt, R.ResumeLength, R)`,一直重复到 `R.Ending` 为 `rreDone`。`ResumeAt` 紧跟在它处理的最后一个匹配后面，按报告时的文字计算(后台替换停下以后做的编辑也算进去);不会有地方被替换两次，替换文字里含有要找的文字时也一样。没有剩下的或者内容已经换掉时,`ResumeAt` 是 -1。停下的那一次已经计入的被拒绝的匹配，再调用时可能又计入一次 `Skipped`。
-- **`OnFindDone` 给出 `AEnd`(`rfeFound`、`rfeNotFound`、`rfeCancelled`)和匹配的 `APos`、`ALen`**(没找到时是 -1 和 0);`OnReplaceDone` 给出 `TTyRichReplaceResult`。每次开始的后台查找或替换都恰好触发一次，控件被销毁时除外。`OnFindProgress` 用 `ATask` 说明在跑的是查找(`rftFind`)还是替换(`rftReplace`),并给出所查范围里已经完成的字符数;`ACancel` 让它停下。
+- **遇到 `rreLimit` 或 `rreCancelled` 后要接着替换，就从它报告的位置再调用一次**:`ReplaceAll(AFind, AReplace, AOptions, R.ResumeAt, R.ResumeLength, R)`,只要 `R.Ending` 是 `rreLimit` 就再重复(`rreCancelled` 或 `rreFailed` 的调用不会自己接下去)。`ResumeAt` 紧跟在它处理的最后一个匹配后面，按报告时的文字计算(后台替换停下以后做的编辑也算进去);不会有地方被替换两次，替换文字里含有要找的文字时也一样。没有剩下的或者内容已经换掉时,`ResumeAt` 是 -1。后台替换被撤销它自己那一步而停下时,`Replaced` 报 0,`ResumeAt` 报范围的起点：它做的已经一点不剩。停下的那一次已经计入的被拒绝的匹配，再调用时可能又计入一次 `Skipped`。
+- **`OnFindDone` 给出 `AEnd`(`rfeFound`、`rfeNotFound`、`rfeCancelled`)和匹配的 `APos`、`ALen`**(没找到时是 -1 和 0);`OnReplaceDone` 给出 `TTyRichReplaceResult`。每次开始的后台查找或替换都恰好触发一次，控件被销毁时除外。`OnFindProgress` 用 `ATask` 说明在跑的是查找(`rftFind`)还是替换(`rftReplace`),并给出所查范围里已经完成的字符数;`ACancel` 让它停下。这些事件的处理方法可以释放控件：触发事件的那个调用照常返回，就像什么都没找到、没替换一样(`FindNext` 返回 False,`ReplaceAll` 返回 0 和 `rreCancelled`),不会有异常传出来。
 
 ### 没有的东西
 
@@ -179,12 +179,12 @@ uses
 - **RichMemo 的类型名**:记录、枚举和集合都带本库的前缀(`TTyFontParams`、`TTyParaMetric`、`TTyParaNumbering`、`TTyTabStopList`、`TTyTextModifyMask` ……),`TTabStop` 是 `TTyRichTabStop`。成员保留 RichMemo 的名字(`paLeft`、`tmm_Styles` ……);在同时用了 `RichMemo` 或 `Menus` 的单元里要加限定名。
 - **把 `Integer` 变量传给 `GetStyleRange` 或 `GetParaRange`** 编译不过：改声明为 `TTyRichPos`。
 - **控件不保存的属性**:`Protected`、`Disabled`、`Hidden`、`Link`、`Offset`、`Pitch`、`RevAuthor`、`UseForAllText` 以及 `ConsistentAttributes` 里对应的成员(`caProtected` ……)。RTF 文件里的这些内容按原字节保留，保存时写回。
-- **多行文本框的成员**:控件不是 `TCustomMemo`,所以没有 `WordWrap`(用 `WrapMode`)、`ScrollBars`(需要时自动出现;`ScrollBarAutoHide`)、`Alignment`(按段落设:`Paragraph.Alignment`)、`MaxLength`、`WantReturns`(回车总是新起一段)、`BorderStyle`、`Color` 和 `ParentColor`(颜色来自主题，用 `StyleOverride` 改)、`HideSelection`、`HideScrollBars`、`GetSelTextBuf`、`SetSelTextBuf`、`SetSelTextToFriendlyURL`;`is TCustomEdit` 判断和 LCL 的标准编辑动作也认不出它。右键菜单是本库的文本菜单。
-- **Delphi 的其他成员**:`OnProtectChange`、`OnResizeRequest`、`OnSaveClipboard`、`OnLinkClick`、`EnableURLs`、`ShowURLHint`、`SelectionStreamMode`、`SpellChecking`、`ShowSpellCheckMenu`、`Transparent`、`EditMargins`、`ActiveLineNo`、`ScrollPosition`(用 `ScrollY`,视图顶端的像素位置，可以写入;`ScrollX` 读出水平偏移)、`Print`、`RenderRange`、`PageRect`、`DefaultConverter` 和 `RegisterConversionFormat`。
+- **多行文本框的成员**:控件不是 `TCustomMemo`,所以没有 `WordWrap`(用 `WrapMode`)、`ScrollBars`(需要时自动出现;`ScrollBarAutoHide`)、`Alignment`(按段落设:`Paragraph.Alignment`)、`MaxLength`、`WantReturns`(回车总是新起一段)、`BorderStyle`、`Color` 和 `ParentColor`(颜色来自主题，用 `StyleOverride` 改)、`HideSelection`、`HideScrollBars`、`GetSelTextBuf`、`SetSelTextBuf`;`is TCustomEdit` 判断和 LCL 的标准编辑动作也认不出它。右键菜单是本库的文本菜单。
+- **Delphi 的其他成员**:`OnProtectChange`、`OnResizeRequest`、`OnSaveClipboard`、`OnLinkClick`、`EnableURLs`、`ShowURLHint`、`SelectionStreamMode`、`SpellChecking`、`ShowSpellCheckMenu`、`Transparent`、`EditMargins`、`ActiveLineNo`、`ScrollPosition`(用 `ScrollY`,视图顶端的像素位置，可以写入;`ScrollX` 读出水平偏移)、`Print`、`RenderRange`、`PageRect`、`DefaultConverter`、`RegisterConversionFormat` 和 `SetSelTextToFriendlyURL`。
 - **RichMemo 的其他成员**:`SetLink`、`isLink`、`OnLinkAction`、`Print`、`OnPrintAction`、`InDelInline`、`InitParaNumber`、`InitParaBullet`、第二个 `InitTabStopList`、`GetFontParams`、`InitPrintParams` 和 `InitTextUIParams`。
 - **替换当前匹配**:用 `SelText :=` 或 `InDelText`。
 - **窗体文件里的 `Lines`。** 富文本不能脱离格式按行保存，所以 `Lines` 不发布：在运行时设置文字或载入文件。
-- **从 Delphi 转换来的窗体**,对下表里 Delphi 的 `TRichEdit` 存过、本控件不发布的每个属性都会报属性不存在。把它们删掉(在出错对话框里选继续，或用"工具 → 在编辑器中检查 LFM 文件 → 移除所有无效属性")就够了，除非表里写了要改设什么。
+- **从 Delphi 转换来的窗体**,对下表里 Delphi 的 `TRichEdit` 存过、本控件不发布的每个属性都会报属性不存在。把它们删掉就够了(打开窗体时 IDE 会弹出"Repair LFM file"对话框，选"移除所有无效属性";或者在编辑器里打开这个 .lfm,用"工具 → 在编辑器中检查 LFM 文件")，除非表里写了要改设什么。
 
 | Delphi 的属性 | 改用 |
 |--------------|------|

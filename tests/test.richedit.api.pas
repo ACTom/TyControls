@@ -1883,7 +1883,10 @@ begin
   if AStream.Size > 0 then Move(AStream.Memory^, Result[1], AStream.Size);
 end;
 
-{ one state, one rule - three sequences. }
+{ PlainText is one state with one rule, in three sequences: (i) an asked True that a load
+  ended does not force a later load to text; (ii) a text file opened, formatted and saved as
+  .rtf is RTF, with its formats; (iii) PlainText := False makes a text-loaded document rich,
+  and it saves as RTF. }
 procedure TTyRichEditApiTest.TestPlainTextIsOneState;
 var
   st: TMemoryStream;
@@ -3013,7 +3016,7 @@ const
            if AMode = 2 then FRich.EndEdit;
          end;
       1: begin
-           // its second: the caret behind the text, so the bold is the typing format
+           // the second sequence: the caret behind the text, so the bold is the typing format
            Sel(0, 3);
            FRich.SelText := 'A longer text';
            FRich.SelAttributes.Bold := True;

@@ -2784,7 +2784,7 @@ begin
     paragraph end more than it has separators - the document given back plus one empty
     paragraph: the last line with its break, or that break alone, is the same
     range as "to the document's end" and cannot be told apart from it (WordPad tells them
-    apart by its final mark; accepted). }
+    apart by its final mark: a known difference from WordPad). }
   if Result.LastSeparator and (stop = t.Length) and (Result.LastPara = t.ParaCount - 2) and
     (t.ParaLength(t.ParaCount - 1) = 0) then
   begin

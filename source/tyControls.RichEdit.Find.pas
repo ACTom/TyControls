@@ -371,9 +371,9 @@ type
     reported between two; at most CRichReplacePartMatches a part, the others of the range
     moved by what the part changed). So no position is used after the text changed before
     it, an interval of a lazily read RTF is parsed once (found and replaced while it is
-    resident), no list of every match is kept, and a replacement is never searched again.
-    The walk goes from the range's start to its end, a replacement never searched again. A
-    needle with a paragraph end is the simple way: every match is found
+    resident), no list of every match is kept, and a replacement is never searched again;
+    the walk goes from the range's start to its end. A needle with a paragraph end is the
+    simple way: every match is found
     first (a position each, 8 bytes), then they are replaced from the first on in ranges of
     the same size, each moved by what the ones before it changed.
 

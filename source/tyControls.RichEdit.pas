@@ -1946,10 +1946,11 @@ type
       document that is loading, incomplete or being saved (then nothing is replaced). Nothing
       is raised for a refusal. Returns the number replaced. The third form replaces in the
       range [AStart, AStart + ALength) only (ALength < 0: to the text's end - the shape
-      FindText has) and tells how it ended in AResult: rreDone, or rreLimit when the step
-      reached its limit (four times Document.MaxUndoBytes) - what was replaced is the one
-      step, and the same call from AResult.ResumeAt for AResult.ResumeLength replaces the rest
-      (repeat until rreDone). The text is walked from the range's start, a range of
+      FindText has) and tells how it ended in AResult (Ending: rreDone, rreLimit when the step
+      reached its limit - four times Document.MaxUndoBytes -, rreCancelled when the document
+      refused the step, rreFailed): what was replaced is the one step, and the same call from
+      AResult.ResumeAt for AResult.ResumeLength replaces the rest (repeat it while the ending
+      is rreLimit). The text is walked from the range's start, a range of
       paragraphs at a time, as the background form does: a lazily read file is parsed once
       and let go range by range. Synchronous, the wait cursor over a document longer than
       CopyWaitChars; stops a background find or replace first. One OnChange. A handler of that
@@ -12598,7 +12599,8 @@ begin
       ground := TyColorToBGRA(CurrentStyle.Background.Color);
       { A block's ink may reach past its box (a descender, an italic, a picture frame): the
         blocks next to a region are painted into it too (clipped), as a full redraw would leave
-        them. No block of today's layouts inks outside its box (equivalent now); the
+        them. No block of today's layouts inks outside its box (painting the neighbours changes
+        nothing today); the
         handles of a selected picture will, and this is what keeps them whole. }
       reach := Math.Max(1, FEstimate);
       FLayouter.BeginPaintPass;

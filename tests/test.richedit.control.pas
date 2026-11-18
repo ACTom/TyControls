@@ -325,7 +325,7 @@ type
     procedure TestTheSurfaceIsTheClientsSize;
     procedure TestDeviceScaleTwo;
     procedure TestASlicedLoadShowsTheFilesNumbers;
-    // 9a3: the second review of the viewer
+    // loads and text inside an update, pictures across a zoom, a table read in parts
     procedure TestLinesLoadAndATextInsideAnUpdate;
     procedure TestAPictureComesBackAfterAZoomThereAndBack;
     procedure TestAPreparationThatRaisesIsTriedOnce;
@@ -380,7 +380,7 @@ type
     procedure TestACopyWhileLoadingAndAfterACancel;
     procedure TestTheRowBeforeIsHeldWhileTheNextIsCompared;
     procedure TestABigTableReadInPartsCopiesAsAWhole;
-    // the caret and the selection after their review
+    // the caret at a line's end, a pressed object, the selection's edges
     procedure TestTheCaretAtALineEndAtScaleTwoAndRightToLeft;
     procedure TestAPressOnAnObjectKeepsItSelected;
     procedure TestDownLeavesATallPictureAndATallRow;
@@ -2093,7 +2093,7 @@ begin
     AssertFalse('nothing left', FRich.Step);
     FRich.PaintPart(canvasBmp.Canvas, Rect(0, 0, 400, 300), True);
     AssertEquals('drawn now, nothing left over', 0, FRich.Pending);
-    { A zoom keeps the decoded pictures (9a3): an enlargement is drawn from the kept
+    { A zoom keeps the decoded pictures: an enlargement is drawn from the kept
       image at once - nothing waits, nothing is decoded again. (A reduction, whose image the
       layouter let go, waits at its new size: TestAPictureComesBackAfterAZoomThereAndBack.) }
     decodes := FRich.Layouter.PictureDecodes;
@@ -3397,8 +3397,8 @@ begin
 end;
 
 { The sequence, at device scale AScale (forced for the canvas and restored by TearDown): every
-  move of rows, dirty band and exposed strip is in raster pixels there. Besides the 9a2 steps:
-  a picture made ready, a part invalidated and a scroll in one paint, the end's pull-up after
+  move of rows, dirty band and exposed strip is in raster pixels there. Besides edits, scrolls
+  and a selection: a picture made ready, a part invalidated and a scroll in one paint, the end's pull-up after
   a deletion, a resize, a zoom there and back, right to left. }
 procedure TTyRichEditControlTest.SurfaceSequence(AScale: Integer);
 var
@@ -3744,7 +3744,7 @@ begin
   Check('loaded', 10);
 end;
 
-{ ---- 9a3: the second review of the viewer ---- }
+{ ---- the viewer: loads inside an update, pictures across a zoom, tables read in parts ---- }
 
 { Lines.LoadFromStream, Lines.LoadFromFile and a Text inside BeginUpdate .. EndUpdate
   replace the content once, at EndUpdate (the document refuses a replacement inside its own

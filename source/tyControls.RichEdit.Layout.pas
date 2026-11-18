@@ -1953,8 +1953,8 @@ begin
   Result := FMeasure.TextSize(AText).cx;
 end;
 
-{ Windows: the cmap of the face GDI realises for the font's name. Not verified (left from the
-  layout review): for a font that is not installed, CreateFontW with DEFAULT_CHARSET realises
+{ Windows: the cmap of the face GDI realises for the font's name. Not verified on a machine
+  without the font: for a font that is not installed, CreateFontW with DEFAULT_CHARSET realises
   a substitute, and that face's cmap is read - which need not be the face the renderer picks
   for the same name, so a fallback may be taken (or not) for a glyph the drawn face has (or
   lacks). }

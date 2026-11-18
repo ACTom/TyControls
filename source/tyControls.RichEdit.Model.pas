@@ -2536,7 +2536,8 @@ end;
 procedure TTyRichDocument.SetDefaultPage;
 begin
   { A new document's page, and one not read from RTF (a reader of RTF sets the file's):
-    A4 (a control for Chinese users; a check against Word said so), WordPad's 1.25" side margins }
+    A4 (Word's default page for a Chinese locale: a control for Chinese users), WordPad's 1.25"
+    side margins }
   FPaperWidth := 11906;
   FPaperHeight := 16838;
   FMarginLeft := 1800;
