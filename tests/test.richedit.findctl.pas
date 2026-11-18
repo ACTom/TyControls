@@ -42,6 +42,9 @@ type
     FRestartWith: string;
     FEditInHandler, FEditInChange: Boolean;
     FFreeIn: Integer;               // 1: the progress handler frees the control, 2: the done one
+    FCancelInProgress: Boolean;     // the progress handler calls CancelFind, once
+    FSeenInHandler: string;         // what that call raised into the handler ('': nothing)
+    FHandlerWentOn: Boolean;        // ... and the handler ran on after it
     procedure Changed(Sender: TObject);
     procedure SelChanged(Sender: TObject);
     procedure ChangedEdit(Sender: TObject);
@@ -210,6 +213,20 @@ begin
     FreeAndNil(FRich);
     Exit;
   end;
+  if FCancelInProgress then
+  begin
+    { A public call of the control made from a handler; the done-event it raises frees the
+      control (FFreeIn = 2). The call returns to this handler - no exception of the control's
+      comes through here. }
+    FCancelInProgress := False;
+    try
+      FRich.CancelFind;
+    except
+      on E: Exception do FSeenInHandler := E.ClassName + ': ' + E.Message;
+    end;
+    FHandlerWentOn := True;
+    Exit;
+  end;
   FProgressTask := ATask;
   SetLength(FProgress, Length(FProgress) + 1);
   FProgress[High(FProgress)] := ADone;
@@ -300,6 +317,9 @@ begin
   FRestartWith := '';
   FEditInHandler := False;
   FFreeIn := 0;
+  FCancelInProgress := False;
+  FSeenInHandler := '';
+  FHandlerWentOn := False;
   FRich.ResetCounts;
   FRich.Waits := 0;
   FRich.WaitEnds := 0;
@@ -1512,7 +1532,10 @@ end;
 { A handler of OnFindProgress, OnFindDone or OnReplaceDone may free the control: the turn
   that raised it touches nothing of it any more and ends quietly (the turns of a find and of a
   replace); a public call that raised it returns as if nothing had been found or replaced, and
-  no exception of any class leaves it. Nothing reaches the application's exception handler. }
+  no exception of any class leaves it - also a public call made from inside a handler, which
+  returns to that handler (the turn under the handler ends when the handler has returned), and
+  the calls that hold another of the control's calls (a file's load and save, the end of a
+  Lines update). Nothing reaches the application's exception handler. }
 procedure TTyRichEditFindTest.TestAHandlerMayFreeTheControl;
 
   procedure Fresh;
@@ -1548,10 +1571,14 @@ procedure TTyRichEditFindTest.TestAHandlerMayFreeTheControl;
   end;
 
 var
-  raised, what: string;
+  raised, what, dir, name: string;
   call, kind: Integer;
   m: TMemoryStream;
   res: TTyRichReplaceResult;
+  sr: TSearchRec;
+  fs: TFileStream;
+  g: TGUID;
+  p: TEditProbe;
 begin
   FreeAndNil(FRich);
   // a find: its done-event frees it, then its progress
@@ -1572,8 +1599,77 @@ begin
   FRich.ReplaceAllAsync('two', 'TWO');
   FFreeIn := 1;
   TurnsUntilFreed('replace, progress');
+  { A public call made from a handler - the progress handler calls CancelFind -, in which the
+    done-event frees the control: the call returns to the handler, which sees no exception and
+    runs on; the turn that raised the progress ends quietly. }
+  for kind := 0 to 1 do
+  begin
+    Fresh;
+    if kind = 0 then FRich.FindNextAsync('absent', []) else FRich.ReplaceAllAsync('two', 'TWO');
+    FFreeIn := 2;
+    FCancelInProgress := True;
+    FSeenInHandler := '';
+    FHandlerWentOn := False;
+    what := Format('a call from a handler, a %s running', [BoolToStr(kind = 0, 'find', 'replace')]);
+    raised := '';
+    p := FRich;
+    try
+      while (FRich <> nil) and FCancelInProgress do p.Turn;
+    except
+      on E: Exception do raised := E.ClassName + ': ' + E.Message;
+    end;
+    AssertEquals(what + ': the turn raised nothing', '', raised);
+    AssertTrue(what + ': freed', FRich = nil);
+    AssertEquals(what + ': the handler saw no exception', '', FSeenInHandler);
+    AssertTrue(what + ': the call returned to the handler', FHandlerWentOn);
+    AssertEquals(what + ': told once', 1, Length(FDone));
+  end;
+  // the calls that hold another call of the control: a file's load and save, a Lines update
+  CreateGUID(g);
+  dir := IncludeTrailingPathDelimiter(GetTempDir(False));
+  name := 'tyrichfind-' + Copy(GUIDToString(g), 2, 36);
+  try
+    fs := TFileStream.Create(dir + name + '.txt', fmCreate);
+    try
+      fs.WriteBuffer(PChar('new text')^, 8);
+    finally
+      fs.Free;
+    end;
+    for call := 0 to 2 do
+    begin
+      Fresh;
+      FRich.ReplaceAllAsync('two', 'TWO');
+      FFreeIn := 2;
+      what := Format('holding call %d', [call]);
+      raised := '';
+      try
+        case call of
+          0: FRich.LoadFromFile(dir + name + '.txt');
+          1: FRich.SaveToFile(dir + name + '.out.txt');
+        else
+          FRich.Lines.BeginUpdate;
+          FRich.Lines.Text := 'new';
+          FRich.Lines.EndUpdate;
+        end;
+      except
+        on E: Exception do raised := E.ClassName + ': ' + E.Message;
+      end;
+      AssertEquals(what + ': nothing raised', '', raised);
+      AssertTrue(what + ': freed', FRich = nil);
+      AssertEquals(what + ': told once', 1, Length(FDone));
+    end;
+    AssertFalse('the save wrote no file', FileExists(dir + name + '.out.txt'));
+    if FindFirst(dir + '.' + name + '*', faAnyFile, sr) = 0 then
+    begin
+      FindClose(sr);
+      Fail('the save left its temporary file: ' + sr.Name);
+    end;
+  finally
+    SysUtils.DeleteFile(dir + name + '.txt');
+    SysUtils.DeleteFile(dir + name + '.out.txt');
+  end;
   // the public calls that end one: each returns (no exception), its answer "nothing"
-  for call := 0 to 10 do
+  for call := 0 to 11 do
     for kind := 0 to 1 do
     begin
       Fresh;
@@ -1615,6 +1711,7 @@ begin
               end;
             end;
           9: AssertEquals(what + ': ReplaceAll answers 0', 0, FRich.ReplaceAll('one', 'ONE'));
+          11: FRich.ClearUndo;
         else
           begin
             m := TMemoryStream.Create;
@@ -1630,9 +1727,9 @@ begin
       except
         on E: Exception do raised := E.ClassName + ': ' + E.Message;
       end;
-      if (call = 7) and (kind = 0) then
+      if ((call = 7) or (call = 11)) and (kind = 0) then
       begin
-        // (a save ends a running replace, not a find: nothing freed it)
+        // (a save and ClearUndo end a running replace, not a find: nothing freed it)
         AssertEquals(what + ': nothing raised', '', raised);
         FreeAndNil(FRich);
         Continue;

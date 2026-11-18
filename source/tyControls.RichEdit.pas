@@ -231,10 +231,13 @@ type
   // how a find or a replace stops (internal: told as a TTyRichFindEnd or TTyRichReplaceEnd)
   TTyRichFindStop = (rfsFound, rfsNotFound, rfsDone, rfsCancelled);
   { (internal) A frame on the stack that wants to know whether the control was freed meanwhile
-    - by a handler of its find or replace events: the destructor marks every one Gone. }
+    - by a handler of its find or replace events: the destructor marks every one Gone.
+    Handler: the frame around a call of such a handler (the application's code is above it);
+    the others are the public calls' and the turn's. }
   PTyRichLife = ^TTyRichLife;
   TTyRichLife = record
     Gone: Boolean;
+    Handler: Boolean;
     Next: PTyRichLife;
   end;
   { (internal) The command of a synchronous ReplaceAll, on that call's stack: the reference is
@@ -245,8 +248,11 @@ type
     Next: PTyRichSyncReplace;
   end;
   { (internal) Raised where a handler freed the control, so that nothing of it is touched any
-    more; the turns swallow it, a public call lets it go (an EAbort: the application's loop
-    shows nothing). }
+    more. It never passes through the application's code: it is raised after a handler has
+    returned, and unwinds the control's own frames up to the public call (or the turn) that
+    lies below them, which returns - also a public call made from inside a handler: that one
+    returns to the handler, and the frame around the handler raises again when the handler
+    has returned (TyRichGonePasses). }
   ETyRichGone = class(EAbort);
 
   { The clipboard's flavours a paste takes, in the order it takes them. HTML is none of them:
@@ -770,7 +776,7 @@ type
     FOnFindProgress: TTyRichFindProgressEvent;
     FOnFindDone: TTyRichFindDoneEvent;
     FOnReplaceDone: TTyRichReplaceDoneEvent;
-    procedure LifeEnter(var ALife: TTyRichLife);
+    procedure LifeEnter(var ALife: TTyRichLife; AHandler: Boolean = False);
     procedure LifeLeave(var ALife: TTyRichLife);
     procedure TurnBody(var ALife: TTyRichLife);
     // the run of typing ends (TTyRichDocument.BreakMerge)
@@ -2265,6 +2271,8 @@ uses
   tyControls.PlatformWS, tyControls.Animation
   {$IFDEF LCLCocoa}, tyControls.CocoaWS{$ENDIF};
 
+function TyRichGonePasses(const ALife: TTyRichLife): Boolean; forward;
+
 { WM_IME_SETCONTEXT's flags: what the input context asks to show (ImeSetContextDefault, a
   seam on every widgetset; only win32's does something with them). }
 const
@@ -2618,7 +2626,7 @@ begin
         FOwner.SetPlainText(s);
       end;
     except
-      on ETyRichGone do if not life.Gone or (life.Next <> nil) then raise;
+      on ETyRichGone do if TyRichGonePasses(life) then raise;
     end;
   finally
     if not life.Gone then FOwner.LifeLeave(life);
@@ -6294,7 +6302,7 @@ begin
       if FFindKind = rfkReplace then EndFind(rfsCancelled, True);
       FDoc.ClearUndo;
     except
-      on ETyRichGone do if not life.Gone or (life.Next <> nil) then raise;
+      on ETyRichGone do if TyRichGonePasses(life) then raise;
     end;
   finally
     if not life.Gone then LifeLeave(life);
@@ -10299,11 +10307,24 @@ begin
   BackgroundTurn;
 end;
 
-procedure TTyCustomRichEdit.LifeEnter(var ALife: TTyRichLife);
+procedure TTyCustomRichEdit.LifeEnter(var ALife: TTyRichLife; AHandler: Boolean);
 begin
   ALife.Gone := False;
+  ALife.Handler := AHandler;
   ALife.Next := FLife;
   FLife := @ALife;
+end;
+
+{ A public call's frame caught ETyRichGone - a handler under it freed the control: does the
+  unwinding go on past this frame? Only into the control's own code: when the frame below is
+  another public call's (LoadFromFile around LoadFromStream), which called this one itself and
+  must not go on either. With a handler's frame below - the application's handler made this
+  call - or none, it ends here: the call returns its "nothing", no exception reaches the
+  application's code; the handler's frame unwinds further once the handler has returned. (No
+  method: the control is gone.) }
+function TyRichGonePasses(const ALife: TTyRichLife): Boolean;
+begin
+  Result := not ALife.Gone or ((ALife.Next <> nil) and not ALife.Next^.Handler);
 end;
 
 procedure TTyCustomRichEdit.LifeLeave(var ALife: TTyRichLife);
@@ -10729,7 +10750,7 @@ begin
       SelectFound(p, n);
       Result := True;
     except
-      on ETyRichGone do if not life.Gone or (life.Next <> nil) then raise;
+      on ETyRichGone do if TyRichGonePasses(life) then raise;
     end;
   finally
     if not life.Gone then LifeLeave(life);
@@ -10796,7 +10817,7 @@ begin
       if FFindWrapLeft then Inc(FFindTotal, len - FFindTotal + FFindLen);
       if HasBackgroundWork then StartBackground;
     except
-      on ETyRichGone do if not life.Gone or (life.Next <> nil) then raise;
+      on ETyRichGone do if TyRichGonePasses(life) then raise;
     end;
   finally
     if not life.Gone then LifeLeave(life);
@@ -11010,7 +11031,7 @@ begin
         if wait then EndWait;
       end;
     except
-      on ETyRichGone do if not life.Gone or (life.Next <> nil) then raise;
+      on ETyRichGone do if TyRichGonePasses(life) then raise;
     end;
   finally
     if not life.Gone then LifeLeave(life);
@@ -11062,7 +11083,7 @@ begin
       FReplaceCmd.Marks := marks;
       if HasBackgroundWork then StartBackground;
     except
-      on ETyRichGone do if not life.Gone or (life.Next <> nil) then raise;
+      on ETyRichGone do if TyRichGonePasses(life) then raise;
     end;
   finally
     if not life.Gone then LifeLeave(life);
@@ -11080,7 +11101,7 @@ begin
     try
       if FFindKind <> rfkNone then EndFind(rfsCancelled, True);
     except
-      on ETyRichGone do if not life.Gone or (life.Next <> nil) then raise;
+      on ETyRichGone do if TyRichGonePasses(life) then raise;
     end;
   finally
     if not life.Gone then LifeLeave(life);
@@ -11221,9 +11242,9 @@ var
 begin
   if [csDestroying, csLoading] * ComponentState <> [] then Exit;
   { A handler may free the control (from any of these events): then nothing of it is touched
-    after the handler - ETyRichGone goes up to the turn, which ends quietly, or out of the
-    public call that ended the find, as an EAbort. }
-  LifeEnter(life);
+    after the handler - ETyRichGone, raised when the handler has returned, goes up to the turn,
+    which ends quietly, or to the public call that ended the find, which returns. }
+  LifeEnter(life, True);
   try
     if AKind = rfkFind then
     begin
@@ -11321,7 +11342,7 @@ begin
   if AKind = rfkReplace then task := rftReplace else task := rftFind;
   // the handler's time is the user's: the pieces are not sized by it
   t0 := IdleTicks;
-  LifeEnter(life);
+  LifeEnter(life, True);
   try
     FOnFindProgress(Self, task, ADone, ATotal, cancel);
   finally
@@ -11695,7 +11716,7 @@ begin
       EndOwedLoad;
       PayFindOwed;
     except
-      on ETyRichGone do if not life.Gone or (life.Next <> nil) then raise;
+      on ETyRichGone do if TyRichGonePasses(life) then raise;
     end;
   finally
     if not life.Gone then LifeLeave(life);
@@ -11740,7 +11761,7 @@ begin
       end;
       FSourceFile := ExpandFileName(AFileName);
     except
-      on ETyRichGone do if not life.Gone or (life.Next <> nil) then raise;
+      on ETyRichGone do if TyRichGonePasses(life) then raise;
     end;
   finally
     if not life.Gone then LifeLeave(life);
@@ -11783,7 +11804,7 @@ begin
       FLinesStored := True;
       PayFindOwed;
     except
-      on ETyRichGone do if not life.Gone or (life.Next <> nil) then raise;
+      on ETyRichGone do if TyRichGonePasses(life) then raise;
     end;
   finally
     if not life.Gone then LifeLeave(life);
@@ -11883,7 +11904,7 @@ begin
         if (FSaving = 0) and HasBackgroundWork then StartBackground;
       end;
     except
-      on ETyRichGone do if not life.Gone or (life.Next <> nil) then raise;
+      on ETyRichGone do if TyRichGonePasses(life) then raise;
     end;
   finally
     if not life.Gone then LifeLeave(life);
@@ -12064,7 +12085,7 @@ begin
         FSourceFormat := AFormat;
       end;
     except
-      on ETyRichGone do if not life.Gone or (life.Next <> nil) then raise;
+      on ETyRichGone do if TyRichGonePasses(life) then raise;
     end;
   finally
     if not life.Gone then LifeLeave(life);
