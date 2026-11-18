@@ -99,3 +99,11 @@ those places. A file may serve two lines (two needles). They are kept byte for b
 | `R13.rtf` | ax |  | - | upr in a field result (an object: nothing to find) |
 | `R14.rtf` | axyz |  | 7 | upr, any case |
 | `R15.rtf` | axyz | w | 8 | upr, whole word |
+| `T1.rtf` | yc |  | 11 | a row end inside ud right after the last cell: the next paragraph begins inside ud |
+| `T2.rtf` | yc |  | 11 | the same, any case |
+| `T3.rtf` | y | w | 11 | the same, whole word |
+| `T4.rtf` | yc |  | 9 | the same, a row of one cell |
+| `T5.rtf` | yc<0D><0A>d |  | 11 | the same, a needle with a paragraph end |
+| `T6.rtf` | yc |  | 13 | text before the row end: the row end ends a paragraph inside ud |
+| `T7.rtf` | yzc |  | 11 | the row end in ud, then upr's own text and a second ud |
+| `T8.rtf` | yJc |  | 11 | a row end inside an ordinary group after the last cell (filtered as ever) |

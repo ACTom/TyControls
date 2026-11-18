@@ -29,9 +29,13 @@ unit tyControls.RichEdit.Find;
   file is first looked for in those bytes (TTyRichRawFilter: every form the reader
   turns into a character of the needle's first 64 - by the reader's own rules, shared with it
   in RtfRead -, every group either read or passed over, every character a \uN may skip, in
-  every code page the file ever named), and decoded only when it may hold the needle; it is
-  decoded through the text's walk that hands out paragraph values of the moment (nothing is
-  set, nothing is kept beyond what the reader keeps of any read). A needle with paragraph ends
+  every code page the file ever named), and decoded only when it may hold the needle - but
+  for a paragraph whose bytes begin inside a destination, which the reader marks when it
+  fixes where a paragraph begins (TTyRtfParser.ParaBeginsInDest): what such bytes read as
+  depends on a group that is not among them, so the filter is not asked and the paragraph is
+  read. A paragraph is decoded through the text's walk that hands out paragraph values of the
+  moment (nothing is set, nothing is kept beyond what the reader keeps of any read). A needle
+  with paragraph ends
   is looked for paragraph by paragraph: a middle paragraph must be a segment whole (its
   length, from the paragraph tree, says much: two paragraph ends in a row are an empty
   paragraph), the first must end with the first segment and the last begin with the last
@@ -125,7 +129,6 @@ type
     FDepth: Integer;
     FHide: Integer;                       // > 0: inside a group passed over unread (a picture)
     FHidePictures: Boolean;
-    FOpenGroupsMatter: Boolean;
     FLooked, FHidden: Int64;
     function MaskOf(C: Cardinal): QWord;
   public
@@ -147,10 +150,6 @@ type
     function MayHold(ABuf: PByte; AStart, AStop: PtrInt; AHidePictures: Boolean = True): Boolean;
     { Bytes lexed, and bytes of pictures passed over without being lexed, since it was made. }
     property Looked: Int64 read FLooked;
-    { A closing brace whose group opened before the bytes may matter: a paragraph of the file
-      ended inside a destination read in part (TTyRtfParser.ParaEndInPart), so one may begin
-      inside such a group - such a brace then answers fvMay. }
-    property OpenGroupsMatter: Boolean read FOpenGroupsMatter write FOpenGroupsMatter;
     property Hidden: Int64 read FHidden;
   end;
 
@@ -200,10 +199,11 @@ type
     FWinSrc, FWinBytes: array of Int64;
     FWinTail, FWinHead, FWinHidden: array of ShortInt;
     FWinMid: array of array of ShortInt;
-    FWinNeed, FWinLooked: array of Boolean;
+    FWinNeed, FWinLooked, FWinUnknown: array of Boolean;
     FSegFilter: array of TTyRichRawFilter; // per segment (nil: empty, or not filterable)
     // where the bytes of paragraphs FSrcFirst .. are in the file (-1: not an unparsed one)
     FSrc, FSrcBytes: array of Int64;
+    FSrcUnknown: array of Boolean;    // ... and they begin in a state only the reader knows
     FSrcFirst: Integer;
     { The scan of a needle without paragraph ends stands in paragraph FNext: FPhase 0 at its
       start, 1 its bytes in the filter, 2 its text read - FCurOff characters of it, FCurByte
@@ -240,6 +240,7 @@ type
     function ScanEnd: TTyRichPos;
     function HiddenValue(AData: Pointer): Boolean;
     function FilterReady: Boolean;
+    function BeginsUnknown(AIndex: Integer): Boolean;
     function Accept(AStart: TTyRichPos): Boolean;
     procedure NextPara;
     procedure LoadSources(AFirst, ALast: Integer);
@@ -943,10 +944,9 @@ begin
           begin
             Inc(used);
             Inc(FLooked);
-            { A closing brace whose group opened before the paragraph's bytes, in a file with
-              a destination read in part: the paragraph may have begun inside one, and what it
-              makes of the bytes is not known here. }
-            if (FDepth = 0) and FOpenGroupsMatter then Exit(fvMay);
+            { (A closing brace whose group opened before these bytes closes an ordinary group:
+              a paragraph that begins inside any other is never given to the filter - the
+              reader says which, TTyRtfParser.ParaBeginsInDest.) }
             if FDepth > 0 then
             begin
               Dec(FDepth);
@@ -1234,14 +1234,19 @@ begin
       end;
     end;
   end;
-  if FFilterable then
-  begin
-    if FFilter <> nil then FFilter.OpenGroupsMatter := FLoad.Scan.ParaEndInPart;
-    for k := 0 to High(FSegFilter) do
-      if FSegFilter[k] <> nil then FSegFilter[k].OpenGroupsMatter := FLoad.Scan.ParaEndInPart;
-  end;
   Result := FUseFilter and FFilterable;
 end;
+
+{ Paragraph AIndex, unparsed, begins in a state its bytes do not tell: inside a destination,
+  as the reader noted when it fixed where the paragraph's bytes begin
+  (TTyRtfParser.ParaBeginsInDest, kept with the paragraph). The filter is not asked about such
+  a paragraph - it may hold the needle, and is read. (A file without one - every file but a
+  hand-made one - is not looked up at all.) }
+function TTyRichFinder.BeginsUnknown(AIndex: Integer): Boolean;
+begin
+  Result := (FLoad <> nil) and (FLoad.Scan.DestStarts > 0) and FText.ParaLazyMarked(AIndex);
+end;
+
 function TTyRichFinder.HiddenValue(AData: Pointer): Boolean;
 var
   fmt: TTyParaFormatId;
@@ -1510,6 +1515,7 @@ begin
   end;
   FSrc[k] := ASrcOffset;
   FSrcBytes[k] := ASrcBytes;
+  FSrcUnknown[k] := (ASrcOffset >= 0) and BeginsUnknown(AIndex);
   if k = High(FSrc) then AContinue := False;
 end;
 
@@ -1526,24 +1532,26 @@ begin
   if n < 1 then n := 1;
   SetLength(FSrc, n);
   SetLength(FSrcBytes, n);
+  SetLength(FSrcUnknown, n);
   for i := 0 to n - 1 do
   begin
     FSrc[i] := -1;
     FSrcBytes[i] := 0;
+    FSrcUnknown[i] := False;
   end;
   FSrcFirst := AFirst;
   FText.WalkParas(AFirst, @SourceOf);
 end;
 
-{ Paragraph FSrcFirst + I is one the file still has as its bytes, unparsed: the filter looks
-  at them first. }
+{ Paragraph FSrcFirst + I is one the file still has as its bytes, unparsed, and they begin in
+  a state the filter knows: it looks at them first. }
 function TTyRichFinder.RawAt(I: Integer): Boolean;
 var
   src: Int64;
 begin
   src := FSrc[I];
-  Result := (src >= 0) and (FSrcBytes[I] > 0) and not FText.IsDecoded(src) and
-    (src + FSrcBytes[I] <= Length(FLoad.Bytes));
+  Result := (src >= 0) and (FSrcBytes[I] > 0) and not FSrcUnknown[I] and
+    not FText.IsDecoded(src) and (src + FSrcBytes[I] <= Length(FLoad.Bytes));
 end;
 
 { Reads on from paragraph FNext (and from where the scan stands in it) to ALast, a needle
@@ -1731,18 +1739,20 @@ begin
   FWinData[i] := AData;
   FWinSrc[i] := ASrcOffset;
   FWinBytes[i] := ASrcBytes;
+  FWinUnknown[i] := (ASrcOffset >= 0) and BeginsUnknown(AIndex);
   if i = High(FWinLen) then AContinue := False;
 end;
 
-{ Paragraph I of the window is one the file still has as its bytes, unparsed: a filter can
-  look at them. }
+{ Paragraph I of the window is one the file still has as its bytes, unparsed, and they begin
+  in a state the filter knows: a filter can look at them. }
 function TTyRichFinder.WinRaw(I: Integer): Boolean;
 var
   src: Int64;
 begin
   src := FWinSrc[I];
   Result := FUseFilter and FFilterable and (src >= 0) and (FWinBytes[I] > 0) and
-    not FText.IsDecoded(src) and (src + FWinBytes[I] <= Length(FLoad.Bytes));
+    not FWinUnknown[I] and not FText.IsDecoded(src) and
+    (src + FWinBytes[I] <= Length(FLoad.Bytes));
 end;
 
 { May paragraph I's bytes hold segment ASeg (True also where there is no filter for it)? }
@@ -1857,6 +1867,7 @@ begin
   SetLength(FWinHidden, n);
   SetLength(FWinNeed, n);
   SetLength(FWinLooked, n);
+  SetLength(FWinUnknown, n);
   SetLength(FWinMid, FParaEnds + 1);
   for k := 1 to FParaEnds - 1 do SetLength(FWinMid[k], n);
   pos := FText.ParaStart(ALo);
@@ -1873,6 +1884,7 @@ begin
     FWinHidden[i] := -1;
     FWinNeed[i] := False;
     FWinLooked[i] := False;
+    FWinUnknown[i] := False;
     for k := 1 to FParaEnds - 1 do FWinMid[k][i] := -1;
   end;
   FilterReady;
@@ -2214,6 +2226,7 @@ begin
   // (the walk's batch of sources is of the text before)
   SetLength(FSrc, 0);
   SetLength(FSrcBytes, 0);
+  SetLength(FSrcUnknown, 0);
 end;
 
 function TTyRichFinder.KeptBytes: Int64;

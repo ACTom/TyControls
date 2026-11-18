@@ -135,6 +135,7 @@ type
     procedure TestIntegritySeesLazyPiecesOutOfOrder;
     procedure TestAProviderCannotChangeTheText;
     procedure TestASpanPutsTheLazyPiecesBack;
+    procedure TestAMarkStaysWithItsLazyParagraph;
   end;
 
 implementation
@@ -2507,6 +2508,72 @@ begin
     on ETyRichText do raised := True;
   end;
   AssertTrue('another text: refused', raised);
+end;
+
+{ A lazy paragraph appended marked answers so for as long as it is that unedited paragraph:
+  through the load being opened again (the last paragraph gets its separator, an empty last
+  one gets its piece), and again after an edit of it is put back; an edited paragraph is no
+  lazy one and is not marked. The mark is no part of where the paragraph's bytes are. }
+procedure TTyRichLazyTextTest.TestAMarkStaysWithItsLazyParagraph;
+var
+  i: Integer;
+  src, n, pos: Int64;
+  sep: TTyRichSeparator;
+  span: TTyRichSpan;
+  before: UTF8String;
+
+  procedure Marks(const AWhen, AWant: string);
+  var
+    k: Integer;
+    got: string;
+  begin
+    got := '';
+    for k := 0 to FText.ParaCount - 1 do
+      if FText.ParaLazyMarked(k) then got := got + '1' else got := got + '0';
+    AssertEquals(AWhen, AWant, got);
+  end;
+
+begin
+  FProvider := TFakeRichProvider.Create(12);
+  FText := TTyRichText.CreateLazy(FProvider, False);
+  for i := 0 to 4 do
+  begin
+    if i < 4 then sep := rsCR else sep := rsNone;
+    FText.AppendLazyParagraph(Utf8Chars(FProvider.Texts[i]), i * LazyStride + LazyBase, 40, sep,
+      (i = 1) or (i = 4));
+  end;
+  FText.EndLazyLoad;
+  Marks('as appended', '01001');
+  AssertTrue('the marked paragraph is where it is', FText.ParaLazySource(1, src, n));
+  AssertEquals('its bytes begin at its offset', 1 * LazyStride + LazyBase, src);
+  AssertEquals('found by that offset', 1, FText.ParaOfLazySource(1 * LazyStride + LazyBase));
+  // the load goes on: the last paragraph, marked, gets its separator
+  FText.ReopenLazyLoad(rsCR);
+  FText.AppendLazyParagraph(Utf8Chars(FProvider.Texts[5]), 5 * LazyStride + LazyBase, 40, rsCR);
+  FText.AppendLazyParagraph(Utf8Chars(FProvider.Texts[6]), 6 * LazyStride + LazyBase, 40, rsCR, True);
+  // ... and an empty last one, marked: it has no piece yet
+  FText.AppendLazyParagraph(0, 7 * LazyStride + LazyBase, 0, rsNone, True);
+  FText.EndLazyLoad;
+  Marks('after the second slice', '01001011');
+  AssertBytesEqual('the text of a marked paragraph', FProvider.Texts[4], ParaText(4));
+  // the empty last one gets its piece
+  FText.ReopenLazyLoad(rsCR);
+  FText.AppendLazyParagraph(Utf8Chars(FProvider.Texts[8]), 8 * LazyStride + LazyBase, 40, rsNone);
+  FText.EndLazyLoad;
+  Marks('after the third slice', '010010110');
+  AssertEquals('found by its offset', 7, FText.ParaOfLazySource(7 * LazyStride + LazyBase));
+  AssertEquals('whole', '', FText.CheckIntegrity);
+  // an edit: the paragraph is not the file's any more - and is again when the edit is put back
+  before := ParaText(6);
+  pos := FText.ParaStart(6) + 1;
+  span := FText.PieceSpan(pos, pos);
+  FText.Insert(pos, 'xy');
+  Marks('paragraph 6 edited', '010010010');
+  FText.Delete(pos, 2);
+  FText.RestoreSpan(span);
+  Marks('and put back', '010010110');
+  AssertBytesEqual('its text', before, ParaText(6));
+  AssertEquals('whole again', '', FText.CheckIntegrity);
 end;
 
 initialization

@@ -86,3 +86,11 @@ R12.rtf	6178797A64	-	7	upr nested in ud nested in upr
 R13.rtf	6178	-	-	upr in a field result (an object: nothing to find)
 R14.rtf	6178797A	-	7	upr, any case
 R15.rtf	6178797A	w	8	upr, whole word
+T1.rtf	7963	-	11	a row end inside ud right after the last cell: the next paragraph begins inside ud
+T2.rtf	7963	-	11	the same, any case
+T3.rtf	79	w	11	the same, whole word
+T4.rtf	7963	-	9	the same, a row of one cell
+T5.rtf	79630D0A64	-	11	the same, a needle with a paragraph end
+T6.rtf	7963	-	13	text before the row end: the row end ends a paragraph inside ud
+T7.rtf	797A63	-	11	the row end in ud, then upr's own text and a second ud
+T8.rtf	794A63	-	11	a row end inside an ordinary group after the last cell (filtered as ever)

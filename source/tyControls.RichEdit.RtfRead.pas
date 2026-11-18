@@ -138,7 +138,7 @@ type
     Dest: TTyRtfDest;
     DestOwner: Boolean;          // this group began Dest (its end finishes it)
     DestStart: PtrInt;           // where that group's brace is
-    InPart: Boolean;             // inside a destination read only in part (ReadInPart)
+    InDest: Boolean;             // a group open around this one is no ordinary group (DoGroupStart)
     Uc: Integer;
     // character
     FontNum: Integer;            // -1: \deff
@@ -193,6 +193,7 @@ type
     HeaderEnd: PtrInt;
     Boundary: PtrInt;            // where the current paragraph's bytes start
     BoundaryDepth: Integer;      // the depth there
+    BoundaryInDest: Boolean;     // ... and whether a group open there is no ordinary one
     LastStartDepth: Integer;     // the depth where the paragraph before started
     Absorb: TTyRtfAbsorb;        // what closing braces and line breaks still extend
     HasContent: Boolean;         // the current paragraph has a character
@@ -257,6 +258,7 @@ type
     Table, Row, Cell: Integer;   // Table -1: not in a table
     TextStart: PtrInt;           // building: its UTF-8 in the parser's output (no separator)
     TextLen: Integer;
+    InDest: Boolean;             // its bytes begin inside a destination (ParaBeginsInDest)
     ListText: UTF8String;        // building: its {\listtext} / {\pntext}, '' none
   end;
 
@@ -305,7 +307,7 @@ type
     FCodePages: array of Integer;  // every code page this parser decoded or could decode with
     FCodePageN: Integer;
     FOverflowed: Boolean;
-    FParaEndInPart: Boolean;
+    FDestStarts: Integer;
     FDeff: Integer;
     FPaperW, FPaperH, FMargL, FMargR: Integer;
     FFonts: array of TTyRtfFont;
@@ -416,6 +418,7 @@ type
     procedure EndDest(const AOld: TTyRtfProps);
     procedure Extend(AWasBrace: Boolean);
     // body, paragraphs, tables
+    procedure ParaStartsAt(APos: PtrInt; ADepth: Integer; const AProps: TTyRtfProps);
     procedure EnsureBody;
     procedure StartContent;
     procedure EndParagraph(AKind: TTyRtfParaKind);
@@ -497,6 +500,14 @@ type
     function ParaRec(AIndex: Integer): TTyRtfParaRec;
     // A paragraph's bytes and characters (no record with a managed field copied).
     procedure ParaSpan(AIndex: Integer; out ASrc: TTyRtfRange; out AChars: Int64);
+    { Paragraph AIndex's bytes begin while a group is open that the reader does not read as
+      an ordinary formatting group - a destination of any kind, whatever it does with what it
+      holds (reads it in its own way, in part, as an object's or a field's, or drops it), also
+      one it comes to know later: what those bytes read as then depends on that group, which
+      is not among them. Said by the reader's own state where it fixes the place a
+      paragraph's bytes begin (ParaStartsAt): somebody who looks at a paragraph's bytes alone
+      - the find's filter - must not judge such a paragraph by them. }
+    function ParaBeginsInDest(AIndex: Integer): Boolean;
     // The first paragraph ParaRec still has.
     property FirstParaRec: Integer read FParaBase;
     // Forgets the records of the paragraphs before AIndex (an index scan keeps no record of
@@ -543,10 +554,9 @@ type
     // only counted, so no destination begins there (a \pict's hex is text). Of the index scan:
     // a finder looking at unparsed bytes then reads a picture's group as it reads any other.
     property GroupsOverflowed: Boolean read FOverflowed;
-    // A paragraph ended inside a destination read only in part (ReadInPart) somewhere in what
-    // this parser read. Of the index scan: the next paragraph of the file then begins inside
-    // such a group, and a finder looking at its bytes cannot know what the group makes of them.
-    property ParaEndInPart: Boolean read FParaEndInPart;
+    // How many of the paragraphs this parser read begin inside a destination
+    // (ParaBeginsInDest); of the index scan: so far.
+    property DestStarts: Integer read FDestStarts;
     property DefaultFont: Integer read FDeff;     // \deff, -1 none
     // Where the first font table and the first colour table before the body close (the
     // position of their closing brace), -1 when the header has none.
@@ -2269,8 +2279,7 @@ begin
     absLast:
       if not AWasBrace or (FS.Depth >= FS.LastStartDepth) then
       begin
-        FS.Boundary := FTokStop;
-        FS.BoundaryDepth := FS.Depth;
+        ParaStartsAt(FTokStop, FS.Depth, FS.Props);
         if FParaN > 0 then FParas[FParaN - 1].Src.Stop := FTokStop;
       end
       else
@@ -2301,6 +2310,11 @@ begin
   SettleLists;
   FStack[FS.Depth] := FS.Props;
   Inc(FS.Depth);
+  { What the new group lies in: once a destination is open, every group inside it knows -
+    whatever word began it, and whatever is made of the group itself (\upr's \ud reads as
+    ordinary text and is still inside \upr). A destination this reader passes over as a whole
+    never gets here: nothing is read inside it. }
+  if FS.Props.Dest <> rdNormal then FS.Props.InDest := True;
   FS.Props.DestOwner := False;
   FS.GroupOpen := True;
   FS.Star := False;
@@ -2766,12 +2780,7 @@ begin
       end
       else
         SkipAndPop;
-    kwDUpr:
-      begin
-        BeginDest(rdUpr);
-        // (its groups take it over: a paragraph that ends in them ends in a part-read group)
-        FS.Props.InPart := True;
-      end;
+    kwDUpr: BeginDest(rdUpr);
   else
     if FS.Star then
     begin
@@ -4025,22 +4034,37 @@ end;
 
 // ---- the body and its paragraphs ----
 
+{ The bytes of the paragraph that comes next begin at APos, where ADepth groups are open and
+  AProps are the properties in effect. The ONE place that fixes where a paragraph begins:
+  whatever makes or moves that place goes through here - the body's start, a paragraph's end
+  of any kind (EndParagraph), a closing brace or a line break still taken by the paragraph
+  before (Extend), a row's end given to its last cell (DoRow), the end of a file that has no
+  body (Finish) - so that what is known of the place is said once, by the state the reader
+  really is in: whether every group open there is an ordinary one. }
+procedure TTyRtfParser.ParaStartsAt(APos: PtrInt; ADepth: Integer; const AProps: TTyRtfProps);
+begin
+  FS.Boundary := APos;
+  FS.BoundaryDepth := ADepth;
+  FS.BoundaryInDest := AProps.InDest or (AProps.Dest <> rdNormal);
+end;
+
 procedure TTyRtfParser.EnsureBody;
 begin
   if FS.BodyStarted then Exit;
   FS.BodyStarted := True;
   if FS.PendingGroup >= 0 then
   begin
+    // the group that was open before the body: the paragraph begins at its brace, in what
+    // was in effect there (the properties that group saved)
     FS.HeaderEnd := FS.PendingGroup;
-    FS.BoundaryDepth := FS.PendingGroupDepth;
+    ParaStartsAt(FS.HeaderEnd, FS.PendingGroupDepth, FStack[FS.PendingGroupDepth]);
   end
   else
   begin
     FS.HeaderEnd := FTok.Start;
-    FS.BoundaryDepth := FS.Depth;
+    ParaStartsAt(FS.HeaderEnd, FS.Depth, FS.Props);
   end;
   FS.PendingGroup := -1;
-  FS.Boundary := FS.HeaderEnd;
   FS.LastStartDepth := FS.BoundaryDepth;
 end;
 
@@ -4313,7 +4337,6 @@ var
   inTable: Boolean;
   i: Integer;
 begin
-  if FS.Props.InPart then FParaEndInPart := True;
   if FS.InRowDef then EndRowDef;
   Flush;
   EnsureBody;
@@ -4329,6 +4352,8 @@ begin
   rec^.TextLen := 0;
   rec^.Chars := FCurChars;
   rec^.Src := Range(FS.Boundary, FTok.Stop);
+  rec^.InDest := FS.BoundaryInDest;
+  if rec^.InDest then Inc(FDestStarts);
   if not Counting then
   begin
     if FRunN = 0 then AddRun(CharFormatFor(rccLoch), nil);
@@ -4381,8 +4406,7 @@ begin
     CloseTable;
   Inc(FParaN);
   FS.LastStartDepth := FS.BoundaryDepth;
-  FS.Boundary := FTok.Stop;
-  FS.BoundaryDepth := FS.Depth;
+  ParaStartsAt(FTok.Stop, FS.Depth, FS.Props);
   FS.Absorb := absLast;
   FCommitted := True;
   FS.HasContent := False;
@@ -4400,8 +4424,7 @@ begin
   else if FS.LastWasCell then
   begin
     // the row's end belongs to its last cell
-    FS.Boundary := FTok.Stop;
-    FS.BoundaryDepth := FS.Depth;
+    ParaStartsAt(FTok.Stop, FS.Depth, FS.Props);
     if FParaN > 0 then FParas[FParaN - 1].Src.Stop := FTok.Stop;
     FS.Absorb := absLast;
     FCommitted := True;
@@ -4480,7 +4503,7 @@ begin
   begin
     FS.BodyStarted := True;
     FS.HeaderEnd := FS.DocCloseAt;
-    FS.Boundary := FS.HeaderEnd;
+    ParaStartsAt(FS.HeaderEnd, FS.BoundaryDepth, FS.Props);
   end;
   FLastOpen := FS.HasContent or (FS.Paras = 0);
   if FS.HasContent then
@@ -4787,6 +4810,11 @@ procedure TTyRtfParser.ParaSpan(AIndex: Integer; out ASrc: TTyRtfRange; out ACha
 begin
   ASrc := FParas[AIndex - FParaBase].Src;
   AChars := FParas[AIndex - FParaBase].Chars;
+end;
+
+function TTyRtfParser.ParaBeginsInDest(AIndex: Integer): Boolean;
+begin
+  Result := FParas[AIndex - FParaBase].InDest;
 end;
 
 procedure TTyRtfParser.DropParas(AIndex: Integer);
@@ -5127,7 +5155,8 @@ begin
     begin
       FScan.ParaSpan(i, src, chars);
       if i < ATo - 1 then sep := FSep else sep := rsNone;
-      text.AppendLazyParagraph(chars, src.Start, src.Stop - src.Start, sep);
+      text.AppendLazyParagraph(chars, src.Start, src.Stop - src.Start, sep,
+        FScan.ParaBeginsInDest(i));
       if FMap <> nil then AddMapRange(src);
     end;
   finally
@@ -6127,9 +6156,11 @@ begin
       begin
         load.FScan.ParaSpan(i, src, chars);
         if i < n - 1 then
-          text.AppendLazyParagraph(chars, src.Start, src.Stop - src.Start, load.FSep)
+          text.AppendLazyParagraph(chars, src.Start, src.Stop - src.Start, load.FSep,
+            load.FScan.ParaBeginsInDest(i))
         else
-          text.AppendLazyParagraph(chars, src.Start, src.Stop - src.Start, rsNone);
+          text.AppendLazyParagraph(chars, src.Start, src.Stop - src.Start, rsNone,
+            load.FScan.ParaBeginsInDest(i));
         if AMap <> nil then load.AddMapRange(src);
       end;
       text.EndLazyLoad;

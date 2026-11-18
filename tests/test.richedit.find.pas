@@ -25,6 +25,8 @@ type
     FTotFiltered, FTotRejected, FTotDecoded, FTotWords, FTotHits, FTotEmptyDecodes: Int64;
     function Positions(ADoc: TTyRichDocument; const ANeedle: UTF8String;
       AOptions: TTyRichFindOptions; AFilter: Boolean = True): string;
+    function WholePositions(ADoc: TTyRichDocument; const ANeedle: UTF8String;
+      AOptions: TTyRichFindOptions): string;
     function First(ADoc: TTyRichDocument; const ANeedle: UTF8String;
       AOptions: TTyRichFindOptions; AStart: TTyRichPos = 0; AEnd: TTyRichPos = -1): TTyRichPos;
     function Naive(ADoc: TTyRichDocument; const ANeedle: UTF8String;
@@ -68,6 +70,7 @@ type
     procedure TestAParagraphIsFetchedOnce;
     procedure TestOneHugeParagraphKeepsNoListOfItsMatches;
     procedure TestEveryPairOfDestinations;
+    procedure TestGeneratedRowsThatEndInsideADestination;
     procedure TestAStopBetweenTouchingWholeWords;
   end;
 
@@ -323,6 +326,32 @@ begin
   end;
 end;
 
+{ The places in a document read whole, with nothing lazy and no filter in it: every paragraph
+  was set by the one parse from the file's first byte to its last, the finder parses none on
+  demand and looks at no paragraph's bytes. What the two lazy ways are held against. }
+function TTyRichFindTest.WholePositions(ADoc: TTyRichDocument; const ANeedle: UTF8String;
+  AOptions: TTyRichFindOptions): string;
+var
+  f: TTyRichFinder;
+  load: TTyRtfLoad;
+  parsed: Integer;
+begin
+  load := TyRichRtfLoadOf(ADoc);
+  AssertTrue('the document was read whole', (load <> nil) and load.Whole);
+  parsed := load.ParseCount;
+  f := TTyRichFinder.Create(ADoc, ANeedle, AOptions);
+  try
+    f.UseFilter := False;
+    f.Collect := True;
+    AssertTrue('collected to the end', f.Run = rfrNotFound);
+    AssertEquals('no paragraph was looked at in its bytes', 0, f.ParasFiltered);
+    AssertEquals('no paragraph was parsed for it', parsed, load.ParseCount);
+    Result := Joined(f);
+  finally
+    f.Free;
+  end;
+end;
+
 function TTyRichFindTest.First(ADoc: TTyRichDocument; const ANeedle: UTF8String;
   AOptions: TTyRichFindOptions; AStart: TTyRichPos; AEnd: TTyRichPos): TTyRichPos;
 var
@@ -402,7 +431,10 @@ begin
       w := words[i];
       want := Naive(full, w, [rfoMatchCase]);
       AssertTrue(AName + ': the reference finds ' + w, want <> '');
-      AssertEquals(AName + ': read whole, ' + w, want, Positions(full, w, [rfoMatchCase]));
+      if ARtf then
+        AssertEquals(AName + ': read whole, ' + w, want, WholePositions(full, w, [rfoMatchCase]))
+      else
+        AssertEquals(AName + ': read whole, ' + w, want, Positions(full, w, [rfoMatchCase]));
       if ARtf then
       begin
         lazy := LoadRtf(ABytes, False);
@@ -698,11 +730,13 @@ begin
 end;
 
 { The adversarial files (tests/fixtures/rtf/find, its cases.txt: the file, the needle as hex of
-  its UTF-8, m for match case and w for whole word, the places it is found - "-" none): read whole, lazily with the
-  filter and without it, the finder gives those places. Hex control bytes, a \u without a
-  number, a font table and an \ansicpg given again in the body, a surrogate pair split by a
-  group the reader passes over, a picture below the reader's group stack lost a hit before;
-  the places pin the reader as well, not only the filter against it. }
+  its UTF-8, m for match case and w for whole word, the places it is found - "-" none): read
+  whole (nothing lazy, no filter), lazily with the filter and lazily without it, the finder
+  gives those places. Hex control bytes, a \u without a number, a font table and an \ansicpg
+  given again in the body, a surrogate pair split by a group the reader passes over, a picture
+  below the reader's group stack, a destination read in part and a paragraph that begins
+  inside one (after a paragraph's end there, and after a row's end given to the last cell)
+  lost a hit before; the places pin the reader as well, not only the filter against it. }
 procedure TTyRichFindTest.TestTheAdversarialFiles;
 var
   lines: TStringList;
@@ -735,7 +769,8 @@ begin
       bytes := ReadFileBytes(FixtureDir('rtf') + 'find' + PathDelim + parts[0]);
       full := LoadRtf(bytes, True);
       try
-        AssertEquals(parts[0] + ' ' + parts[1] + ': read whole', want, Positions(full, needle, opts));
+        AssertEquals(parts[0] + ' ' + parts[1] + ': read whole', want,
+          WholePositions(full, needle, opts));
       finally
         full.Free;
       end;
@@ -755,7 +790,7 @@ begin
       end;
       Inc(n);
     end;
-    AssertEquals('the cases', 88, n);
+    AssertEquals('the cases', 96, n);
     { And two of our own: a code page that only a later font table or an ansicpg word brings, used by a
       paragraph whose bytes do not hold that table or word. }
     bytes := BytesOf(Rtf('{|rtf1|ansi|ansicpg1252|deff0{|fonttbl{|f0|fswiss Arial;}}|pard one' +
@@ -1017,7 +1052,7 @@ begin
     for i := 0 to High(needles) do
     begin
       want := Naive(full, needles[i], []);
-      AssertEquals(Format('needle %d: read whole', [i]), want, Positions(full, needles[i], []));
+      AssertEquals(Format('needle %d: read whole', [i]), want, WholePositions(full, needles[i], []));
       lazy := LoadRtf(bytes, False);
       try
         load := TyRichRtfLoadOf(lazy);
@@ -2567,19 +2602,31 @@ begin
 end;
 
 { Every pair of the destinations the reader tells apart (a word of each meaning of its own word
-  table, and an unknown starred and an unknown plain word): one inside the other in three shapes - text in the outer group before
-  the inner, after it, and a paragraph end inside the inner one - and every piece of one to four
-  characters of the text the whole read gives, searched in the whole read, lazily with the
-  filter and without it: the three agree. A destination added to the reader that the filter does
-  not follow (one read only in part, as upr is) is found here, whatever it is. The first shape
-  for every pair; the other two for a fixed sample of pairs. }
+  table, an unknown starred word, an unknown plain word, and an ordinary formatting group): one
+  inside the other - text in the outer group before the inner, after it, and a paragraph end
+  inside the inner one - and every piece of one to four characters of the text the whole read
+  gives, searched in the whole read (nothing lazy, no filter), lazily with the filter and
+  lazily without it: the three agree. A destination added to the reader that the filter does
+  not follow, or in which a paragraph can end so that the next one begins inside it, is found
+  here, whatever it is. The first shape for every pair; the other two for a fixed sample of
+  pairs.
+
+  And the ways a paragraph can begin, at each place of the two groups: a paragraph end, a
+  cell end, and a row end right after the last cell's end (which ends no paragraph and still
+  moves where the next one begins) - before the outer group, between the two braces, inside
+  the inner group and after it - for every kind as the outer group of an ordinary one, as the
+  inner group of an ordinary one, and inside upr. (Of today's kinds a paragraph begins inside
+  a destination only in ud inside upr - three of the files; a kind added later in which one
+  can is counted here and searched like them.) }
 procedure TTyRichFindTest.TestEveryPairOfDestinations;
 const
   CSampleEvery = 3;
+  CEndings: array[0..2] of RawByteString = ('|par ', '|cell ', '|row ');
+  CTable = '|trowd|cellx2000|cellx4000|pard|intbl ';
 var
   words: TStringArray;
-  i, j, shape, files, needles, k, len, p1: Integer;
-  w1, w2, body: RawByteString;
+  i, j, shape, files, needles, k, len, p1, place, ending, begun: Integer;
+  w1, w2, body, e, src: RawByteString;
   full, lazy: TTyRichDocument;
   codes: TTyRichCodeArray;
   seen: TStringList;
@@ -2590,6 +2637,7 @@ var
   begin
     if AName = '*' then Result := '|*|zzqqx'
     else if AName = '-' then Result := '|zzqqy'
+    else if AName = '.' then Result := '|b'
     else Result := '|' + AName;
   end;
 
@@ -2606,30 +2654,56 @@ var
 begin
   words := TyRtfDestinationWords;
   AssertTrue('the reader names its destinations', Length(words) > 15);
-  SetLength(words, Length(words) + 2);
-  words[High(words) - 1] := '*';
-  words[High(words)] := '-';
+  SetLength(words, Length(words) + 3);
+  words[High(words) - 2] := '*';
+  words[High(words) - 1] := '-';
+  words[High(words)] := '.';
   files := 0;
   needles := 0;
+  begun := 0;
   seen := TStringList.Create;
   try
     seen.Sorted := True;
     seen.Duplicates := dupIgnore;
     for i := 0 to High(words) do
       for j := 0 to High(words) do
-        for shape := 0 to 2 do
+        for shape := 0 to 14 do
         begin
-          if (shape > 0) and (((i * Length(words) + j) mod CSampleEvery) <> 0) then Continue;
+          if (shape in [1, 2]) and (((i * Length(words) + j) mod CSampleEvery) <> 0) then Continue;
+          if (shape > 2) and not ((words[i] = '.') or (words[j] = '.') or (words[i] = 'upr')) then
+            Continue;
           w1 := Word(words[i]);
           w2 := Word(words[j]);
           case shape of
             0: body := 'a{' + w1 + ' b{' + w2 + ' xyz}}c';
             1: body := 'a{' + w1 + '{' + w2 + ' xyz}b}c';
+            2: body := 'a{' + w1 + ' b{' + w2 + ' x|par yz}}c';
           else
-            body := 'a{' + w1 + ' b{' + w2 + ' x|par yz}}c';
+            place := (shape - 3) mod 4;
+            ending := (shape - 3) div 4;
+            e := CEndings[ending];
+            if ending < 2 then
+              case place of
+                0: body := 'a' + e + 'q{' + w1 + ' b{' + w2 + ' xyz}m}c';
+                1: body := 'a{' + w1 + ' b' + e + 'q{' + w2 + ' xyz}m}c';
+                2: body := 'a{' + w1 + ' b{' + w2 + ' x' + e + 'yz}m}c';
+              else
+                body := 'a{' + w1 + ' b{' + w2 + ' xyz}m' + e + 'q}c';
+              end
+            else
+              // (nothing between the last cell's end and the row's end but the braces)
+              case place of
+                0: body := 'a|cell ' + e + 'q{' + w1 + ' b{' + w2 + ' xyz}m}c';
+                1: body := 'a|cell{' + w1 + e + 'q{' + w2 + ' xyz}m}c';
+                2: body := 'a|cell{' + w1 + '{' + w2 + e + 'yz}m}c';
+              else
+                body := 'a|cell{' + w1 + '{' + w2 + '}' + e + 'q}c';
+              end;
+            if ending > 0 then body := CTable + body;
           end;
-          full := LoadRtf(BytesOf(Rtf('{|rtf1|ansi|ansicpg1252|deff0{|fonttbl{|f0|fswiss Arial;}}' +
-            '|pard filler|par ' + body + '|par}')), True);
+          src := Rtf('{|rtf1|ansi|ansicpg1252|deff0{|fonttbl{|f0|fswiss Arial;}}' +
+            '|pard filler|par ' + body + '|par}');
+          full := LoadRtf(BytesOf(src), True);
           lazy := nil;
           try
             codes := TyRichFindCodes(full.Text.GetText(0, full.Text.Length));
@@ -2646,14 +2720,16 @@ begin
               end;
             if seen.Count = 0 then Continue;
             Inc(files);
-            lazy := LoadRtf(BytesOf(Rtf('{|rtf1|ansi|ansicpg1252|deff0{|fonttbl{|f0|fswiss Arial;}}' +
-              '|pard filler|par ' + body + '|par}')), False);
+            lazy := LoadRtf(BytesOf(src), False);
+            // (the shapes do make paragraphs that begin inside a destination: the reader says)
+            for k := 0 to lazy.Text.ParaCount - 1 do
+              if lazy.Text.ParaLazyMarked(k) then Inc(begun);
             for k := 0 to seen.Count - 1 do
             begin
               needle := seen[k];
               if Pos(#$EF#$BF#$BC, needle) > 0 then Continue;
               Inc(needles);
-              want := Positions(full, needle, []);
+              want := WholePositions(full, needle, []);
               ForgetDecodes(lazy);
               if Positions(lazy, needle, [], True) <> want then
                 Fail(Format('%s / %s, shape %d, "%s": lazily, filtered: %s, read whole: %s',
@@ -2671,7 +2747,199 @@ begin
   finally
     seen.Free;
   end;
-  AssertTrue(Format('files %d, needles %d', [files, needles]), (files > 500) and (needles > 5000));
+  AssertTrue(Format('files %d, needles %d, paragraphs that begin inside a destination %d',
+    [files, needles, begun]), (files > 1500) and (needles > 15000) and (begun >= 3));
+end;
+
+{ Tables made by a generator of fixed seed whose groups, destinations, cell and row words are
+  the reader's - and among them, often, a destination read in part that opens right after a
+  cell's end and holds the row's end: the row end then ends no paragraph (it is given to the
+  last cell) and the next paragraph begins inside the destination, where its bytes alone do
+  not say what they read as. Needles of one to four characters from the whole read's own
+  text (so each has a place), plain, match case and whole word: the whole read (nothing lazy,
+  no filter), the lazy read with the filter and the lazy read without it agree. (The fonts
+  are single-byte ones: with a double-byte code page in the file every finder builds its
+  table of byte pairs, and the same seconds would search a tenth of the files.) }
+procedure TTyRichFindTest.TestGeneratedRowsThatEndInsideADestination;
+const
+  CFiles = 350;
+  Head: array[0..1] of RawByteString = (
+    '{|rtf1|ansi|ansicpg1251|deff0{|fonttbl{|f0|fnil|fcharset204 Arial Cyr;}{|f1|fswiss Arial;}' +
+    '{|f2|ftech|fcharset2 Symbol;}{|f3|fnil|fcharset161 Greek;}}|pard ',
+    '{|rtf1|ansi|ansicpg1252|deff1{|fonttbl{|f0|fnil|fcharset204 Arial Cyr;}{|f1|fswiss Arial;}' +
+    '{|f2|ftech|fcharset2 Symbol;}{|f3|fnil|fcharset161 Greek;}}|pard ');
+var
+  seed: QWord;
+  n, files, needles, begun, tries, len, i, o, k: Integer;
+  body: RawByteString;
+  bytes: TBytes;
+  full, lazy: TTyRichDocument;
+  codes: TTyRichCodeArray;
+  needle: UTF8String;
+  opts: TTyRichFindOptions;
+  want, got: string;
+  seen: TStringList;
+  bad: Boolean;
+
+  function Rnd(ACount: Integer): Integer;
+  begin
+    seed := seed xor (seed shl 13);
+    seed := seed xor (seed shr 7);
+    seed := seed xor (seed shl 17);
+    Result := Integer((seed shr 11) mod QWord(ACount));
+  end;
+
+  function Pick(const A: array of RawByteString): RawByteString;
+  begin
+    Result := A[Rnd(Length(A))];
+  end;
+
+  function Gen(ADepth: Integer): RawByteString;
+  var
+    count, q, kind: Integer;
+  begin
+    Result := '';
+    count := 1 + Rnd(5);
+    for q := 1 to count do
+    begin
+      kind := Rnd(100);
+      if (ADepth < 3) and (Rnd(6) = 0) then
+      begin
+        // the destination read in part, opened after a cell's end, the row's end inside it
+        Result := Result + '|cell{|upr ' + Pick(['', 'J', 'ab']) + '{|*|ud' +
+          Pick(['|row ', '|row |pard ', ' |row ', '|cell |row ']) + Gen(ADepth + 2) + '}' +
+          Pick(['J', '', 'xa']) + Gen(ADepth + 1) + '}';
+        Continue;
+      end;
+      if Rnd(2) = 0 then kind := 80;
+      if Rnd(4) = 0 then
+      begin
+        Result := Result + Pick(['|trowd|cellx2000|cellx4000|intbl ', '|cell ', '|cell ', '|row ',
+          '|pard ', '|nestcell ', '|intbl ', '|itap2 ',
+          '|trowd|clmgf|cellx2000|clmrg|cellx4000|intbl ', '|nestrow ',
+          '{|*|nesttableprops|trowd|cellx1000|nestrow}', '{|nonesttables|par}', '|itap1 ']);
+        Continue;
+      end;
+      if kind < 22 then
+        Result := Result + Pick(['a', 'b', 'x', '?', ' ', 'ab', 'xa', 'ffd8', 'A', 'B'])
+      else if kind < 36 then
+        Result := Result + Pick(['|u-10179', '|u-8704', '|u8212', '|u65', '|u-10178', '|u128512',
+          '|u20013', '|u', '|u0', '|u97']) + Pick(['?', '', '', ' ', '|''3f', '??', ' ?'])
+      else if kind < 46 then
+        Result := Result + Pick(['|''d6', '|''d0', '|''ce', '|''c4', '|''61', '|''0a', '|''e9',
+          '|''d6|''d0', '|''4', '|''81', '|''40', '|''09'])
+      else if kind < 51 then
+        Result := Result + Pick(['|uc0 ', '|uc1 ', '|uc2 ', '|uc1'])
+      else if kind < 57 then
+        Result := Result + Pick(['|f0 ', '|f1 ', '|f2 ', '|f3 ', '|f9 ', '|plain ', '|b ', '|b0'])
+      else if kind < 66 then
+        Result := Result + Pick(['|tab ', '|line ', '|emdash ', '|~', '|_', '|-', '|{', '|}', '||',
+          '|*', '|:', '|bullet', '|chpgn ', '|sect ', '|page ', '|column '])
+      else if kind < 70 then
+        Result := Result + Pick(['|bin1 x', '|bin0 ', '|bin1 }', '|bin1 {', '|bin2 ab', '|bin'])
+      else if kind < 73 then
+        Result := Result + Pick([#13#10, #10, #0 + 'a', #1])
+      else if kind < 76 then
+        Result := Result + Pick(['|par ', '|par', '|' + #10, '|par '])
+      else if (kind < 97) and (ADepth < 5) then
+        Result := Result + '{' + Pick(['', '', '', ' ', '|b', '|b ', '|*|i', '|*|i ', '|i ',
+          '|pict', '|*|pict ', '|pict|wmetafile8 ', '|field', '|*|fldinst ', '|fldinst ',
+          '|fldrslt ', '|listtext ', '|pntext ', '|*|pn ', '|pntxtb ', '|*|unk ', '|unk ',
+          '|object ', '|*|objdata ', '|nonshppict', '|*|shppict', '|info', '|stylesheet',
+          '|footnote ', '|header ', '|b ', '|*', '|*|*|pict ', '|colortbl', '|*|bkmkstart ',
+          '|datafield ', '|*|datafield ', '|result ', '|shp', '|*|shpinst', '|shptxt ',
+          '|*|oldcprops ', '|*|nesttableprops ', '|listtable', '|f1 ', '|uc0 ', '|u-10179?',
+          #13#10 + '|pict ']) + Gen(ADepth + 1) + '}'
+      else
+        Result := Result + Pick(['a', 'b', 'x']);
+    end;
+  end;
+
+  function Utf8Of(AFrom, ALen: Integer): UTF8String;
+  var
+    q: Integer;
+  begin
+    Result := '';
+    for q := AFrom to AFrom + ALen - 1 do
+      if codes[q] = TyRichFindParaEnd then Result := Result + #10
+      else Result := Result + U([codes[q]]);
+  end;
+
+  function HexOf(const S: UTF8String): string;
+  var
+    q: Integer;
+  begin
+    Result := '';
+    for q := 1 to Length(S) do Result := Result + IntToHex(Ord(S[q]), 2);
+  end;
+
+begin
+  seed := 88172645463325252;
+  files := 0;
+  needles := 0;
+  begun := 0;
+  seen := TStringList.Create;
+  try
+    seen.Sorted := True;
+    seen.Duplicates := dupIgnore;
+    for n := 1 to CFiles do
+    begin
+      body := Gen(0);
+      bytes := BytesOf(Rtf(Head[Rnd(2)] + 'filler|par |trowd|cellx2000|cellx4000|pard|intbl ' +
+        body + '|par zz|par}'));
+      full := LoadRtf(bytes, True);
+      lazy := nil;
+      try
+        codes := TyRichFindCodes(full.Text.GetText(0, full.Text.Length));
+        lazy := LoadRtf(bytes, False);
+        AssertEquals(Format('file %d: the lazy read''s text is the whole read''s', [n]),
+          full.Text.GetText(0, full.Text.Length), lazy.Text.GetText(0, lazy.Text.Length));
+        for k := 0 to lazy.Text.ParaCount - 1 do
+          if lazy.Text.ParaLazyMarked(k) then Inc(begun);
+        Inc(files);
+        seen.Clear;
+        if Length(codes) = 0 then Continue;
+        for tries := 1 to 25 do
+        begin
+          len := 1 + Rnd(4);
+          if len > Length(codes) then len := Length(codes);
+          i := Rnd(Length(codes) - len + 1);
+          bad := False;
+          for o := i to i + len - 1 do
+            if (codes[o] = $FFFD) or (codes[o] = $FFFC) then bad := True;
+          if bad then Continue;
+          needle := Utf8Of(i, len);
+          case Rnd(3) of
+            0: opts := [];
+            1: opts := [rfoMatchCase];
+          else
+            opts := [rfoWholeWord];
+          end;
+          if seen.IndexOf(needle + '/' + IntToStr(Integer(opts))) >= 0 then Continue;
+          seen.Add(needle + '/' + IntToStr(Integer(opts)));
+          Inc(needles);
+          want := WholePositions(full, needle, opts);
+          ForgetDecodes(lazy);
+          got := Positions(lazy, needle, opts, True);
+          if got <> want then
+            Fail(Format('file %d, needle hex %s, options %d: lazily, filtered: [%s], read whole: [%s]',
+              [n, HexOf(needle), Integer(opts), got, want]));
+          ForgetDecodes(lazy);
+          got := Positions(lazy, needle, opts, False);
+          if got <> want then
+            Fail(Format('file %d, needle hex %s, options %d: lazily, not filtered: [%s], read whole: [%s]',
+              [n, HexOf(needle), Integer(opts), got, want]));
+        end;
+      finally
+        lazy.Free;
+        full.Free;
+      end;
+    end;
+  finally
+    seen.Free;
+  end;
+  AssertTrue(Format('files %d, needles %d, paragraphs that begin inside a destination %d',
+    [files, needles, begun]), (files = CFiles) and (needles > 10 * CFiles) and (begun > CFiles div 20));
 end;
 
 { One part of a replace of [AStart, AStart + ALength), then the replace is stopped as the

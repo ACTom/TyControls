@@ -241,7 +241,8 @@ type
     FLoadLastSrc: Int64;
     FLoadLastBytes: Int64;
     FLoadLastChars: Int64;
-    FReopened: Boolean;                // ReopenLazyLoad .. EndLazyLoad
+    FLoadLastMarked: Boolean;
+    FReopened: Boolean;               // ReopenLazyLoad .. EndLazyLoad
     FLazyTail: Boolean;                // the last paragraph is the empty lazy one appended last
     FAppend: TTyRichPieceArray;
     FAppendCount: Integer;
@@ -317,8 +318,11 @@ type
       order (source offsets strictly increasing; only the last may have rsNone), then
       EndLazyLoad. Nothing is decoded until it is read or edited. }
     constructor CreateLazy(AProvider: TTyRichTextProvider; AOwnsProvider: Boolean);
+    { AMarked: a mark of the reader's own, kept with the paragraph for as long as it is that
+      unedited lazy paragraph (ParaLazyMarked) - in a bit of its piece that was spare, so a
+      paragraph costs no more for it. The text makes nothing of it. }
     procedure AppendLazyParagraph(ACharCount, ASrcOffset, ASrcBytes: Int64;
-      ASeparator: TTyRichSeparator);
+      ASeparator: TTyRichSeparator; AMarked: Boolean = False);
     { Ends the load, and one that was reopened: the paragraphs appended since come into the
       text without OnParasChanged - the reader that appended them reports its own change. }
     procedure EndLazyLoad;
@@ -363,6 +367,9 @@ type
     { True when paragraph AIndex is a lazy paragraph that was never edited (it may have been
       read): its bytes in the original file. }
     function ParaLazySource(AIndex: Integer; out ASrcOffset, ASrcBytes: Int64): Boolean;
+    { Paragraph AIndex is a lazy paragraph that was never edited, and it was appended marked
+      (AppendLazyParagraph). }
+    function ParaLazyMarked(AIndex: Integer): Boolean;
     { The paragraph that is the unedited lazy paragraph from ASrcOffset, or -1. One
       root-to-leaf walk: lazy pieces stay in the order of their offsets (edits make new
       pieces; a restore puts pieces back where they were). }
@@ -499,6 +506,8 @@ implementation
 
 const
   SrcMask = (Int64(1) shl 56) - 1;
+  // a lazy piece appended marked (AppendLazyParagraph): above the kind and the separator
+  MarkBit = Int64(1) shl 60;
   // stored kinds (3 is unused: whether a lazy piece is decoded is FDecoded's business, so
   // its text can be let go of again)
   kOrig = 0;
@@ -1444,9 +1453,10 @@ begin
 end;
 
 procedure TTyRichText.AppendLazyParagraph(ACharCount, ASrcOffset, ASrcBytes: Int64;
-  ASeparator: TTyRichSeparator);
+  ASeparator: TTyRichSeparator; AMarked: Boolean);
 var
   chars: Int64;
+  it: PTyRichPiece;
 begin
   if not (FLoading or FReopened) or FScanned or (FProvider = nil) then
     raise ETyRichText.Create('AppendLazyParagraph outside a lazy load');
@@ -1463,6 +1473,7 @@ begin
   FLoadLastSrc := ASrcOffset;
   FLoadLastBytes := ASrcBytes;
   FLoadLastChars := chars;
+  FLoadLastMarked := AMarked;
   // an empty last paragraph has no piece to carry its source: the text remembers it
   FLazyTail := chars = 0;
   if chars = 0 then Exit;
@@ -1470,7 +1481,8 @@ begin
   begin
     if FAppendCount = System.Length(FAppend) then
       SetLength(FAppend, FAppendCount * 2 + 64);
-    with FAppend[FAppendCount] do
+    it := @FAppend[FAppendCount];
+    with it^ do
     begin
       FSrc := MakeSrc(ASrcOffset, kLazy, Ord(ASeparator));
       FBytes := ASrcBytes;
@@ -1481,7 +1493,11 @@ begin
     Inc(FAppendCount);
   end
   else
+  begin
     LoadPiece(ASrcOffset, ASrcBytes, chars, kLazy, Ord(ASeparator));
+    it := @FLoadLeaf^.Items[FLoadLeaf^.Count - 1];
+  end;
+  if AMarked then it^.FSrc := it^.FSrc or MarkBit;
 end;
 
 procedure TTyRichText.EndLazyLoad;
@@ -1529,7 +1545,7 @@ begin
       raise ETyRichText.Create('Lazy paragraph out of range');
     // its decoded text has no separator yet
     ForgetDecoded(POff(it^));
-    it^.FSrc := MakeSrc(POff(it^), kLazy, Ord(ALastSeparator));
+    it^.FSrc := MakeSrc(POff(it^), kLazy, Ord(ALastSeparator)) or (it^.FSrc and MarkBit);
     Inc(it^.FChars);
     it^.FData := FLastData;
     it^.FHeight := FLastHeight;
@@ -1542,6 +1558,7 @@ begin
       raise ETyRichText.Create('The last lazy paragraph was edited');
     FLazyTail := False;
     piece.FSrc := MakeSrc(FLoadLastSrc, kLazy, Ord(ALastSeparator));
+    if FLoadLastMarked then piece.FSrc := piece.FSrc or MarkBit;
     piece.FBytes := FLoadLastBytes;
     piece.FChars := 1;
     piece.FHeight := FLastHeight;
@@ -2507,6 +2524,29 @@ begin
     ASrcOffset := POff(it^);
     ASrcBytes := it^.FBytes;
   end;
+end;
+
+function TTyRichText.ParaLazyMarked(AIndex: Integer): Boolean;
+var
+  p: TTyRichPath;
+  before: TTyRichSum;
+  it: PTyRichPiece;
+begin
+  CheckPara(AIndex);
+  if FLazyTail and (AIndex = FTotal.Seps) then Exit(FLoadLastMarked);
+  // (as ParaLazySource finds the paragraph's piece)
+  if AIndex = 0 then
+  begin
+    if FTotal.Entries = 0 then Exit(False);
+    Find(rskEntry, 0, p, before);
+  end
+  else
+  begin
+    Find(rskSep, AIndex - 1, p, before);
+    if not Advance(p) then Exit(False);
+  end;
+  it := ItemAt(p);
+  Result := IsLazy(it^) and (it^.FSrc and MarkBit <> 0);
 end;
 
 function TTyRichText.ParaOfLazySource(ASrcOffset: Int64): Integer;
