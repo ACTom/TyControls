@@ -1507,8 +1507,8 @@ end;
 
 { A handler of OnFindProgress, OnFindDone or OnReplaceDone may free the control: the turn
   that raised it touches nothing of it any more and ends quietly (the turns of a find and of a
-  replace); a public call that raised it (CancelFind) gives up with an EAbort. Nothing reaches
-  the application's exception handler. }
+  replace); a public call that raised it returns as if nothing had been found or replaced, and
+  no exception of any class leaves it. Nothing reaches the application's exception handler. }
 procedure TTyRichEditFindTest.TestAHandlerMayFreeTheControl;
 
   procedure Fresh;
@@ -1544,7 +1544,10 @@ procedure TTyRichEditFindTest.TestAHandlerMayFreeTheControl;
   end;
 
 var
-  raised: Boolean;
+  raised, what: string;
+  call, kind: Integer;
+  m: TMemoryStream;
+  res: TTyRichReplaceResult;
 begin
   FreeAndNil(FRich);
   // a find: its done-event frees it, then its progress
@@ -1565,18 +1568,74 @@ begin
   FRich.ReplaceAllAsync('two', 'TWO');
   FFreeIn := 1;
   TurnsUntilFreed('replace, progress');
-  // a public call that ends one
-  Fresh;
-  FRich.FindNextAsync('absent', []);
-  FFreeIn := 2;
-  raised := False;
-  try
-    FRich.CancelFind;
-  except
-    on EAbort do raised := True;
-  end;
-  AssertTrue('CancelFind: freed', FRich = nil);
-  AssertTrue('...and gave up quietly (an EAbort)', raised);
+  // the public calls that end one: each returns (no exception), its answer "nothing"
+  for call := 0 to 10 do
+    for kind := 0 to 1 do
+    begin
+      Fresh;
+      if kind = 0 then FRich.FindNextAsync('absent', []) else FRich.ReplaceAllAsync('two', 'TWO');
+      FFreeIn := 2;
+      what := Format('call %d, a %s running', [call, BoolToStr(kind = 0, 'find', 'replace')]);
+      raised := '';
+      try
+        case call of
+          0: FRich.CancelFind;
+          1: AssertFalse(what + ': FindNext answers False', FRich.FindNext('one'));
+          2: FRich.FindNextAsync('one');
+          3:
+            begin
+              AssertEquals(what + ': ReplaceAll answers 0', 0, FRich.ReplaceAll('one', 'ONE', [], 0, -1, res));
+              AssertEquals(what + ': ...cancelled', Ord(rreCancelled), Ord(res.Ending));
+            end;
+          4: FRich.ReplaceAllAsync('one', 'ONE');
+          5: FRich.Lines.Text := 'new';
+          6: FRich.Clear;
+          7:
+            begin
+              m := TMemoryStream.Create;
+              try
+                FRich.SaveToStream(m, rfText);
+              finally
+                m.Free;
+              end;
+            end;
+          8:
+            begin
+              m := TMemoryStream.Create;
+              try
+                m.WriteBuffer(PChar('new text')^, 8);
+                m.Position := 0;
+                FRich.LoadFromStream(m, rfText);
+              finally
+                m.Free;
+              end;
+            end;
+          9: AssertEquals(what + ': ReplaceAll answers 0', 0, FRich.ReplaceAll('one', 'ONE'));
+        else
+          begin
+            m := TMemoryStream.Create;
+            try
+              m.WriteBuffer(PChar('new text')^, 8);
+              m.Position := 0;
+              FRich.Lines.LoadFromStream(m);
+            finally
+              m.Free;
+            end;
+          end;
+        end;
+      except
+        on E: Exception do raised := E.ClassName + ': ' + E.Message;
+      end;
+      if (call = 7) and (kind = 0) then
+      begin
+        // (a save ends a running replace, not a find: nothing freed it)
+        AssertEquals(what + ': nothing raised', '', raised);
+        FreeAndNil(FRich);
+        Continue;
+      end;
+      AssertEquals(what + ': nothing raised', '', raised);
+      AssertTrue(what + ': freed', FRich = nil);
+    end;
   // (TearDown frees a new one)
   Fresh;
 end;

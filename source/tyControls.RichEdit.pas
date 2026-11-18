@@ -1918,7 +1918,8 @@ type
       letter with a combining mark - selects the whole cluster, so the selection is never
       empty and the next call goes on after it), one OnSelectionChange; True. Synchronous: the
       wait cursor over a document longer than CopyWaitChars. Stops a background find or
-      replace (as a new start does). }
+      replace (as a new start does); a handler of its end that frees the control: False, and
+      nothing else happens. }
     function FindNext(const AText: string; AOptions: TTyRichFindOptions = [rfoWrap]): Boolean;
     { FindNext in the background: the search runs in the turns of the background work (one
       piece of CRichFindMinStepChars .. CRichFindStepChars units of a finder's step at a time
@@ -1951,7 +1952,9 @@ type
       (repeat until rreDone). The text is walked from the range's start, a range of
       paragraphs at a time, as the background form does: a lazily read file is parsed once
       and let go range by range. Synchronous, the wait cursor over a document longer than
-      CopyWaitChars; stops a background find or replace first. One OnChange. }
+      CopyWaitChars; stops a background find or replace first. One OnChange. A handler of that
+      one's end that frees the control: nothing is replaced, the result is 0 and AResult an
+      empty record whose Ending is rreCancelled (ResumeAt -1). }
     function ReplaceAll(const AFind, AReplace: string;
       AOptions: TTyRichFindOptions = []): Integer; overload;
     function ReplaceAll(const AFind, AReplace: string; AOptions: TTyRichFindOptions;
@@ -2535,41 +2538,54 @@ procedure TTyRichEditLines.SetUpdateState(Updating: Boolean);
 var
   s: string;
   ld: TMemoryStream;
+var
+  life: TTyRichLife;
 begin
-  FUpdating := Updating;
-  if Updating then
-  begin
-    // the commands of a batch (AddStrings) are one undo step
-    FOwner.FDoc.BeginUpdate;
-    Exit;
-  end;
-  // closed before a gathered replacement: the content is not replaced inside an update
-  FOwner.FDoc.EndUpdate;
-  if FBatchLoadFile then
-  begin
-    // the file is read now, as a load outside an update reads it (one gone by now raises)
-    s := FBatchFile;
-    FBatchLoadFile := False;
-    FBatchFile := '';
-    FOwner.LoadFromFile(s);
-  end
-  else if FBatchLoad <> nil then
-  begin
-    ld := FBatchLoad;
-    FBatchLoad := nil;
+  { A handler of a find's or a replace's events may free the control in here: then this
+    returns, touching nothing of it (inside another call of the control, that one does). }
+  FOwner.LifeEnter(life);
+  try
     try
-      ld.Position := 0;
-      FOwner.LoadFromStream(ld);
-      if FBatchFile <> '' then FOwner.FSourceFile := FBatchFile;
-    finally
-      ld.Free;
+      FUpdating := Updating;
+      if Updating then
+      begin
+        // the commands of a batch (AddStrings) are one undo step
+        FOwner.FDoc.BeginUpdate;
+        Exit;
+      end;
+      // closed before a gathered replacement: the content is not replaced inside an update
+      FOwner.FDoc.EndUpdate;
+      if FBatchLoadFile then
+      begin
+        // the file is read now, as a load outside an update reads it (one gone by now raises)
+        s := FBatchFile;
+        FBatchLoadFile := False;
+        FBatchFile := '';
+        FOwner.LoadFromFile(s);
+      end
+      else if FBatchLoad <> nil then
+      begin
+        ld := FBatchLoad;
+        FBatchLoad := nil;
+        try
+          ld.Position := 0;
+          FOwner.LoadFromStream(ld);
+          if FBatchFile <> '' then FOwner.FSourceFile := FBatchFile;
+        finally
+          ld.Free;
+        end;
+      end
+      else if FBatch <> nil then
+      begin
+        s := FBatch.Text;
+        FreeAndNil(FBatch);
+        FOwner.SetPlainText(s);
+      end;
+    except
+      on ETyRichGone do if not life.Gone or (life.Next <> nil) then raise;
     end;
-  end
-  else if FBatch <> nil then
-  begin
-    s := FBatch.Text;
-    FreeAndNil(FBatch);
-    FOwner.SetPlainText(s);
+  finally
+    if not life.Gone then FOwner.LifeLeave(life);
   end;
 end;
 
@@ -10625,32 +10641,46 @@ function TTyCustomRichEdit.FindNext(const AText: string; AOptions: TTyRichFindOp
 var
   p, n, s, e, len: TTyRichPos;
   o: TTyRichFindOptions;
+var
+  life: TTyRichLife;
 begin
   Result := False;
-  // a user's action: what is being composed goes in first; it edits nothing
-  EndCompositionForUser;
-  if FFindKind <> rfkNone then EndFind(rfsCancelled, True);
-  o := AOptions - [rfoWrap];
-  s := GetSelStart;
-  e := s + GetSelLength;
-  len := NeedleChars(AText);
-  if rfoBackward in AOptions then
-  begin
-    p := SyncFind(AText, 0, s, o, n);
-    // wrapped: from the end down to where it began - a match that ends past its start
-    if (p < 0) and (rfoWrap in AOptions) then
-      p := SyncFind(AText, Math.Max(Int64(0), s - len + 1), -1, o, n);
-  end
-  else
-  begin
-    p := SyncFind(AText, e, -1, o, n);
-    // wrapped: from the start on to where it began - a match that starts before it
-    if (p < 0) and (rfoWrap in AOptions) then
-      p := SyncFind(AText, 0, e + len - 1, o, n);
+  { A handler of a find's or a replace's events may free the control in here: then this
+    returns, touching nothing of it (inside another call of the control, that one does). }
+  LifeEnter(life);
+  try
+    try
+      Result := False;
+      // a user's action: what is being composed goes in first; it edits nothing
+      EndCompositionForUser;
+      if FFindKind <> rfkNone then EndFind(rfsCancelled, True);
+      o := AOptions - [rfoWrap];
+      s := GetSelStart;
+      e := s + GetSelLength;
+      len := NeedleChars(AText);
+      if rfoBackward in AOptions then
+      begin
+        p := SyncFind(AText, 0, s, o, n);
+        // wrapped: from the end down to where it began - a match that ends past its start
+        if (p < 0) and (rfoWrap in AOptions) then
+          p := SyncFind(AText, Math.Max(Int64(0), s - len + 1), -1, o, n);
+      end
+      else
+      begin
+        p := SyncFind(AText, e, -1, o, n);
+        // wrapped: from the start on to where it began - a match that starts before it
+        if (p < 0) and (rfoWrap in AOptions) then
+          p := SyncFind(AText, 0, e + len - 1, o, n);
+      end;
+      if p < 0 then Exit;
+      SelectFound(p, n);
+      Result := True;
+    except
+      on ETyRichGone do if not life.Gone or (life.Next <> nil) then raise;
+    end;
+  finally
+    if not life.Gone then LifeLeave(life);
   end;
-  if p < 0 then Exit;
-  SelectFound(p, n);
-  Result := True;
 end;
 
 procedure TTyCustomRichEdit.StartFindLeg(AFrom, ATo: TTyRichPos);
@@ -10679,31 +10709,44 @@ end;
 procedure TTyCustomRichEdit.FindNextAsync(const AText: string; AOptions: TTyRichFindOptions);
 var
   len, s, e: TTyRichPos;
+var
+  life: TTyRichLife;
 begin
-  EndCompositionForUser;
-  StartFind(rfkFind);
-  FFindText := AText;
-  FFindOpts := AOptions;
-  FFindWrapLeft := rfoWrap in AOptions;
-  len := FDoc.Text.Length;
-  s := GetSelStart;
-  e := s + GetSelLength;
-  FFindLen := NeedleChars(AText);
-  if rfoBackward in AOptions then
-  begin
-    StartFindLeg(0, s);
-    FFindTotal := s;
-    FFindFrom := s;
-  end
-  else
-  begin
-    StartFindLeg(e, -1);
-    FFindTotal := len - e;
-    FFindFrom := e;
+  { A handler of a find's or a replace's events may free the control in here: then this
+    returns, touching nothing of it (inside another call of the control, that one does). }
+  LifeEnter(life);
+  try
+    try
+      EndCompositionForUser;
+      StartFind(rfkFind);
+      FFindText := AText;
+      FFindOpts := AOptions;
+      FFindWrapLeft := rfoWrap in AOptions;
+      len := FDoc.Text.Length;
+      s := GetSelStart;
+      e := s + GetSelLength;
+      FFindLen := NeedleChars(AText);
+      if rfoBackward in AOptions then
+      begin
+        StartFindLeg(0, s);
+        FFindTotal := s;
+        FFindFrom := s;
+      end
+      else
+      begin
+        StartFindLeg(e, -1);
+        FFindTotal := len - e;
+        FFindFrom := e;
+      end;
+      // a wrapped search goes on to where it began (and a needle's length into it)
+      if FFindWrapLeft then Inc(FFindTotal, len - FFindTotal + FFindLen);
+      if HasBackgroundWork then StartBackground;
+    except
+      on ETyRichGone do if not life.Gone or (life.Next <> nil) then raise;
+    end;
+  finally
+    if not life.Gone then LifeLeave(life);
   end;
-  // a wrapped search goes on to where it began (and a needle's length into it)
-  if FFindWrapLeft then Inc(FFindTotal, len - FFindTotal + FFindLen);
-  if HasBackgroundWork then StartBackground;
 end;
 
 function TTyCustomRichEdit.ReplaceAll(const AFind, AReplace: string;
@@ -10776,109 +10819,127 @@ var
   id: Int64;
   load: TTyRtfLoad;
   len: TTyRichPos;
+var
+  life: TTyRichLife;
 begin
   Result := 0;
-  if FFindKind <> rfkNone then EndFind(rfsCancelled, True);
-  EndCompositionForUser;
-  len := FDoc.Text.Length;
-  if AStart < 0 then AStart := 0;
-  if AStart > len then AStart := len;
-  if (ALength >= 0) and (ALength > len - AStart) then ALength := -1;
-  tally := Default(TTyRichReplaceTally);
-  tally.ResumeAt := AStart;
-  tally.ResumeLength := ALength;
-  // a document that takes no change: every match is left (and counted), nothing raised
-  if FDoc.Loading or FDoc.Incomplete or FDoc.Saving then
-  begin
-    tally.Skipped := CountMatches(AFind, AOptions, AStart, ALength);
-    AResult := ReplaceResultOf(rfsDone, tally);
-    Exit;
-  end;
-  wait := FDoc.Text.Length > FCopyWaitChars;
-  if wait then BeginWait;
+  AResult := Default(TTyRichReplaceResult);
+  AResult.Ending := rreCancelled;
+  AResult.ResumeAt := -1;
+  AResult.ResumeLength := -1;
+  { A handler of a find's or a replace's events may free the control in here: then this
+    returns, touching nothing of it (inside another call of the control, that one does). }
+  LifeEnter(life);
   try
-    cmd := TTyRichReplaceAllCommand.Create(FDoc, AFind, AReplace, AOptions, AStart, ALength);
-    cmd.Tally := @tally;
-    id := cmd.Id;
-    marks := Default(TTyRichStepMarks);
-    marks.HasBefore := True;
-    marks.Before.Anchor := FSelAnchor;
-    marks.Before.Caret := FCaret;
-    marks.Before.AtLineEnd := FCaretAtEnd;
-    cmd.Marks := marks;
-    if ViewBehind then
-    begin
-      { Inside BeginEdit .. EndEdit the document gathers the block's commands into its one
-        step: the replace runs whole, in one run, there. }
-      cmd.AllAtOnce := True;
-      RunApiCommand(cmd, 0);
-      Result := tally.Replaced;
-      AResult := ReplaceResultOf(rfsDone, tally);
-      Exit;
-    end;
-    { The engine's parts, as the background runs them, in a loop: a range of paragraphs found,
-      then replaced (Execute, then ExecutePart - one undo step), and between two a lazily read
-      file's intervals go back to the loader's bound. The view hears each part; the
-      application one change, at the end. }
-    ran := False;
-    complete := False;
-    FEditHeard := False;
-    FEditStep := nil;
-    Inc(FEditing);
     try
-      try
-        repeat
-          cmd.Prepare(-1);
-          if not cmd.Ready then
-          begin
-            // (nothing more found: through the range - or a walk that failed)
-            complete := True;
-            Break;
-          end;
-          if not ran then
-          begin
-            ran := True;
-            // (the document owns it from here on, also when it says no)
-            if not FDoc.Execute(cmd) then Break;
-          end
-          else
-          begin
-            // (a handler of the last part's change may have let the step go)
-            if (FDoc.UndoStep <> cmd) or (cmd.Id <> id) then Break;
-            if not FDoc.ExecutePart(cmd) then Break;
-          end;
-          load := TyRichRtfLoadOf(FDoc);
-          if load <> nil then load.Trim;
-          if (FDoc.UndoStep = cmd) and (cmd.Id = id) and cmd.Finished then complete := True;
-        until complete or (FDoc.UndoStep <> cmd);
-      finally
-        if not ran then cmd.Free;
+      Result := 0;
+      if FFindKind <> rfkNone then EndFind(rfsCancelled, True);
+      EndCompositionForUser;
+      len := FDoc.Text.Length;
+      if AStart < 0 then AStart := 0;
+      if AStart > len then AStart := len;
+      if (ALength >= 0) and (ALength > len - AStart) then ALength := -1;
+      tally := Default(TTyRichReplaceTally);
+      tally.ResumeAt := AStart;
+      tally.ResumeLength := ALength;
+      // a document that takes no change: every match is left (and counted), nothing raised
+      if FDoc.Loading or FDoc.Incomplete or FDoc.Saving then
+      begin
+        tally.Skipped := CountMatches(AFind, AOptions, AStart, ALength);
+        AResult := ReplaceResultOf(rfsDone, tally);
+        Exit;
       end;
-    finally
-      Dec(FEditing);
-    end;
-    // (the history's command tells this call nothing any more, and will not go on)
-    if ran and (FDoc.UndoStep = cmd) and (cmd.Id = id) then
-    begin
-      cmd.Tally := nil;
-      cmd.LetGo;
-    end;
-    Result := tally.Replaced;
-    if complete then AResult := ReplaceResultOf(rfsDone, tally)
-    else AResult := ReplaceResultOf(rfsCancelled, tally);
-    if FEditHeard then
-    begin
-      // the step's selection after: where it stays (a document-API write keeps it)
-      if FDoc.UndoStep = cmd then FEditStep := cmd;
-      Inc(FApiWrite);
+      wait := FDoc.Text.Length > FCopyWaitChars;
+      if wait then BeginWait;
       try
-        FinishEdit(FSelAnchor, FCaret, FCaretAtEnd, True);
+        cmd := TTyRichReplaceAllCommand.Create(FDoc, AFind, AReplace, AOptions, AStart, ALength);
+        cmd.Tally := @tally;
+        id := cmd.Id;
+        marks := Default(TTyRichStepMarks);
+        marks.HasBefore := True;
+        marks.Before.Anchor := FSelAnchor;
+        marks.Before.Caret := FCaret;
+        marks.Before.AtLineEnd := FCaretAtEnd;
+        cmd.Marks := marks;
+        if ViewBehind then
+        begin
+          { Inside BeginEdit .. EndEdit the document gathers the block's commands into its one
+            step: the replace runs whole, in one run, there. }
+          cmd.AllAtOnce := True;
+          RunApiCommand(cmd, 0);
+          Result := tally.Replaced;
+          AResult := ReplaceResultOf(rfsDone, tally);
+          Exit;
+        end;
+        { The engine's parts, as the background runs them, in a loop: a range of paragraphs found,
+          then replaced (Execute, then ExecutePart - one undo step), and between two a lazily read
+          file's intervals go back to the loader's bound. The view hears each part; the
+          application one change, at the end. }
+        ran := False;
+        complete := False;
+        FEditHeard := False;
+        FEditStep := nil;
+        Inc(FEditing);
+        try
+          try
+            repeat
+              cmd.Prepare(-1);
+              if not cmd.Ready then
+              begin
+                // (nothing more found: through the range - or a walk that failed)
+                complete := True;
+                Break;
+              end;
+              if not ran then
+              begin
+                ran := True;
+                // (the document owns it from here on, also when it says no)
+                if not FDoc.Execute(cmd) then Break;
+              end
+              else
+              begin
+                // (a handler of the last part's change may have let the step go)
+                if (FDoc.UndoStep <> cmd) or (cmd.Id <> id) then Break;
+                if not FDoc.ExecutePart(cmd) then Break;
+              end;
+              load := TyRichRtfLoadOf(FDoc);
+              if load <> nil then load.Trim;
+              if (FDoc.UndoStep = cmd) and (cmd.Id = id) and cmd.Finished then complete := True;
+            until complete or (FDoc.UndoStep <> cmd);
+          finally
+            if not ran then cmd.Free;
+          end;
+        finally
+          Dec(FEditing);
+        end;
+        // (the history's command tells this call nothing any more, and will not go on)
+        if ran and (FDoc.UndoStep = cmd) and (cmd.Id = id) then
+        begin
+          cmd.Tally := nil;
+          cmd.LetGo;
+        end;
+        Result := tally.Replaced;
+        if complete then AResult := ReplaceResultOf(rfsDone, tally)
+        else AResult := ReplaceResultOf(rfsCancelled, tally);
+        if FEditHeard then
+        begin
+          // the step's selection after: where it stays (a document-API write keeps it)
+          if FDoc.UndoStep = cmd then FEditStep := cmd;
+          Inc(FApiWrite);
+          try
+            FinishEdit(FSelAnchor, FCaret, FCaretAtEnd, True);
+          finally
+            Dec(FApiWrite);
+          end;
+        end;
       finally
-        Dec(FApiWrite);
+        if wait then EndWait;
       end;
+    except
+      on ETyRichGone do if not life.Gone or (life.Next <> nil) then raise;
     end;
   finally
-    if wait then EndWait;
+    if not life.Gone then LifeLeave(life);
   end;
 end;
 
@@ -10887,38 +10948,64 @@ procedure TTyCustomRichEdit.ReplaceAllAsync(const AFind, AReplace: string;
 var
   marks: TTyRichStepMarks;
   len: TTyRichPos;
+var
+  life: TTyRichLife;
 begin
-  EndCompositionForUser;
-  StartFind(rfkReplace);
-  FFindText := AFind;
-  FFindOpts := AOptions - [rfoBackward, rfoWrap];
-  len := FDoc.Text.Length;
-  if AStart < 0 then AStart := 0;
-  if AStart > len then AStart := len;
-  if (ALength >= 0) and (ALength > len - AStart) then ALength := -1;
-  FReplaceFrom := AStart;
-  FReplaceLength := ALength;
-  FReplaceTally := Default(TTyRichReplaceTally);
-  FReplaceTally.ResumeAt := AStart;
-  FReplaceTally.ResumeLength := ALength;
-  FReplaceCmd := TTyRichReplaceAllCommand.Create(FDoc, AFind, AReplace, FFindOpts, AStart,
-    ALength);
-  FReplaceCmd.Tally := @FReplaceTally;
-  FReplaceCmd.RangeChars := FFindSlice;
-  FReplaceId := FReplaceCmd.Id;
-  FReplaceRan := False;
-  marks := Default(TTyRichStepMarks);
-  marks.HasBefore := True;
-  marks.Before.Anchor := FSelAnchor;
-  marks.Before.Caret := FCaret;
-  marks.Before.AtLineEnd := FCaretAtEnd;
-  FReplaceCmd.Marks := marks;
-  if HasBackgroundWork then StartBackground;
+  { A handler of a find's or a replace's events may free the control in here: then this
+    returns, touching nothing of it (inside another call of the control, that one does). }
+  LifeEnter(life);
+  try
+    try
+      EndCompositionForUser;
+      StartFind(rfkReplace);
+      FFindText := AFind;
+      FFindOpts := AOptions - [rfoBackward, rfoWrap];
+      len := FDoc.Text.Length;
+      if AStart < 0 then AStart := 0;
+      if AStart > len then AStart := len;
+      if (ALength >= 0) and (ALength > len - AStart) then ALength := -1;
+      FReplaceFrom := AStart;
+      FReplaceLength := ALength;
+      FReplaceTally := Default(TTyRichReplaceTally);
+      FReplaceTally.ResumeAt := AStart;
+      FReplaceTally.ResumeLength := ALength;
+      FReplaceCmd := TTyRichReplaceAllCommand.Create(FDoc, AFind, AReplace, FFindOpts, AStart,
+        ALength);
+      FReplaceCmd.Tally := @FReplaceTally;
+      FReplaceCmd.RangeChars := FFindSlice;
+      FReplaceId := FReplaceCmd.Id;
+      FReplaceRan := False;
+      marks := Default(TTyRichStepMarks);
+      marks.HasBefore := True;
+      marks.Before.Anchor := FSelAnchor;
+      marks.Before.Caret := FCaret;
+      marks.Before.AtLineEnd := FCaretAtEnd;
+      FReplaceCmd.Marks := marks;
+      if HasBackgroundWork then StartBackground;
+    except
+      on ETyRichGone do if not life.Gone or (life.Next <> nil) then raise;
+    end;
+  finally
+    if not life.Gone then LifeLeave(life);
+  end;
 end;
 
 procedure TTyCustomRichEdit.CancelFind;
+var
+  life: TTyRichLife;
 begin
-  if FFindKind <> rfkNone then EndFind(rfsCancelled, True);
+  { A handler of a find's or a replace's events may free the control in here: then this
+    returns, touching nothing of it (inside another call of the control, that one does). }
+  LifeEnter(life);
+  try
+    try
+      if FFindKind <> rfkNone then EndFind(rfsCancelled, True);
+    except
+      on ETyRichGone do if not life.Gone or (life.Next <> nil) then raise;
+    end;
+  finally
+    if not life.Gone then LifeLeave(life);
+  end;
 end;
 
 { The running find or replace ends, no event: its finder goes, a replace's command too unless
@@ -11385,41 +11472,54 @@ procedure TTyCustomRichEdit.LoadAs(AStream: TStream; AFormat: TTyRichFormat;
 var
   load: TTyRtfLoad;
   prefix: TBytes;
+var
+  life: TTyRichLife;
 begin
-  CheckReplaceable;
-  FCancelRequested := False;
-  // a new file's turns start small and find their size; its first slice is not a turn
-  FSlice := CRichLoadMinStepBytes;
-  // its first turn's range reaches the bars at once; an end owed to the last is moot
-  FBarsAtValid := False;
-  FLoadEndOwed := False;
-  if AFormat = rfRtf then
-  begin
-    prefix := ReadRtfPrefix(AStream);
-    load := TyRichBeginLoadRtf(FDoc, AStream, FFirstSliceBytes);
-    load.OnLoadProgress := @LoadProgress;
-    FSourceFormat := rfRtf;
-    FRtfPrefix := prefix;
-  end
-  else
-  begin
-    TyRichLoadText(FDoc, AStream, FTextEncoding, FTextCodePage);
-    FSourceFormat := rfText;
-    FRtfPrefix := nil;
+  { A handler of a find's or a replace's events may free the control in here: then this
+    returns, touching nothing of it (inside another call of the control, that one does). }
+  LifeEnter(life);
+  try
+    try
+      CheckReplaceable;
+      FCancelRequested := False;
+      // a new file's turns start small and find their size; its first slice is not a turn
+      FSlice := CRichLoadMinStepBytes;
+      // its first turn's range reaches the bars at once; an end owed to the last is moot
+      FBarsAtValid := False;
+      FLoadEndOwed := False;
+      if AFormat = rfRtf then
+      begin
+        prefix := ReadRtfPrefix(AStream);
+        load := TyRichBeginLoadRtf(FDoc, AStream, FFirstSliceBytes);
+        load.OnLoadProgress := @LoadProgress;
+        FSourceFormat := rfRtf;
+        FRtfPrefix := prefix;
+      end
+      else
+      begin
+        TyRichLoadText(FDoc, AStream, FTextEncoding, FTextCodePage);
+        FSourceFormat := rfText;
+        FRtfPrefix := nil;
+      end;
+      { The document follows the file: one of the two things that set PlainText. A state the
+        file (or the caller's rfRtf) made is not one the application asked for: the next load
+        without a format goes by its file again. A load read as text by the asked True itself or
+        by the caller's rfText decided nothing from its file: the asking stays, and the next load
+        is text too, as Delphi's PlainText, which never changes by itself. }
+      FPlainText := AFormat <> rfRtf;
+      if not AByAsked then FPlainTextAsked := False;
+      FLinesStored := False;
+      FSourceFile := '';
+      if HasBackgroundWork then StartBackground;
+      // a first turn that could not be queued: the load ends before this returns
+      EndOwedLoad;
+      PayFindOwed;
+    except
+      on ETyRichGone do if not life.Gone or (life.Next <> nil) then raise;
+    end;
+  finally
+    if not life.Gone then LifeLeave(life);
   end;
-  { The document follows the file: one of the two things that set PlainText. A state the
-    file (or the caller's rfRtf) made is not one the application asked for: the next load
-    without a format goes by its file again. A load read as text by the asked True itself or
-    by the caller's rfText decided nothing from its file: the asking stays, and the next load
-    is text too, as Delphi's PlainText, which never changes by itself. }
-  FPlainText := AFormat <> rfRtf;
-  if not AByAsked then FPlainTextAsked := False;
-  FLinesStored := False;
-  FSourceFile := '';
-  if HasBackgroundWork then StartBackground;
-  // a first turn that could not be queued: the load ends before this returns
-  EndOwedLoad;
-  PayFindOwed;
 end;
 
 procedure TTyCustomRichEdit.LoadFromStream(AStream: TStream; AFormat: TTyRichFormat);
@@ -11442,16 +11542,29 @@ end;
 procedure TTyCustomRichEdit.LoadFromFile(const AFileName: string);
 var
   fs: TFileStream;
+var
+  life: TTyRichLife;
 begin
-  CheckReplaceable;
-  // the bytes are read to the end at once and nothing is kept: a writer elsewhere is no harm
-  fs := TFileStream.Create(AFileName, fmOpenRead or fmShareDenyNone);
+  { A handler of a find's or a replace's events may free the control in here: then this
+    returns, touching nothing of it (inside another call of the control, that one does). }
+  LifeEnter(life);
   try
-    LoadFromStream(fs, rfAuto);
+    try
+      CheckReplaceable;
+      // the bytes are read to the end at once and nothing is kept: a writer elsewhere is no harm
+      fs := TFileStream.Create(AFileName, fmOpenRead or fmShareDenyNone);
+      try
+        LoadFromStream(fs, rfAuto);
+      finally
+        fs.Free;
+      end;
+      FSourceFile := ExpandFileName(AFileName);
+    except
+      on ETyRichGone do if not life.Gone or (life.Next <> nil) then raise;
+    end;
   finally
-    fs.Free;
+    if not life.Gone then LifeLeave(life);
   end;
-  FSourceFile := ExpandFileName(AFileName);
 end;
 
 procedure TTyCustomRichEdit.SetPlainText(const AText: string);
@@ -11459,29 +11572,42 @@ var
   s: RawByteString;
   st: TBytesStream;
   n: Integer;
+var
+  life: TTyRichLife;
 begin
-  CheckReplaceable;
-  s := AText;
-  // as TStrings reads it: a line break at the end closes the last line, it adds none
-  n := Length(s);
-  if (n > 0) and (s[n] = #10) then Dec(n);
-  if (n > 0) and (s[n] = #13) and ((n = Length(s)) or (s[n + 1] = #10)) then Dec(n);
-  SetLength(s, n);
-  st := TBytesStream.Create(BytesOf(s));
+  { A handler of a find's or a replace's events may free the control in here: then this
+    returns, touching nothing of it (inside another call of the control, that one does). }
+  LifeEnter(life);
   try
-    TyRichLoadText(FDoc, st, teUtf8, 0);
+    try
+      CheckReplaceable;
+      s := AText;
+      // as TStrings reads it: a line break at the end closes the last line, it adds none
+      n := Length(s);
+      if (n > 0) and (s[n] = #10) then Dec(n);
+      if (n > 0) and (s[n] = #13) and ((n = Length(s)) or (s[n + 1] = #10)) then Dec(n);
+      SetLength(s, n);
+      st := TBytesStream.Create(BytesOf(s));
+      try
+        TyRichLoadText(FDoc, st, teUtf8, 0);
+      finally
+        st.Free;
+      end;
+      // a text of one line break is one empty line, no text at all is none
+      FLines.FEmptyLine := (AText <> '') and (FDoc.Text.Length = 0);
+      FRtfPrefix := nil;
+      { Text set as lines leaves PlainText as it is: a rich control stays rich and saves
+        RTF as it came, a plain one text. }
+      if FPlainText then FSourceFormat := rfText else FSourceFormat := rfRtf;
+      FSourceFile := '';
+      FLinesStored := True;
+      PayFindOwed;
+    except
+      on ETyRichGone do if not life.Gone or (life.Next <> nil) then raise;
+    end;
   finally
-    st.Free;
+    if not life.Gone then LifeLeave(life);
   end;
-  // a text of one line break is one empty line, no text at all is none
-  FLines.FEmptyLine := (AText <> '') and (FDoc.Text.Length = 0);
-  FRtfPrefix := nil;
-  { Text set as lines leaves PlainText as it is: a rich control stays rich and saves
-    RTF as it came, a plain one text. }
-  if FPlainText then FSourceFormat := rfText else FSourceFormat := rfRtf;
-  FSourceFile := '';
-  FLinesStored := True;
-  PayFindOwed;
 end;
 
 procedure TTyCustomRichEdit.FinishLoading;
@@ -11541,33 +11667,46 @@ begin
 end;
 
 procedure TTyCustomRichEdit.WriteTo(AStream: TStream; AFormat: TTyRichFormat);
+var
+  life: TTyRichLife;
 begin
-  // a save asked for from a load progress handler would save a document still loading
-  if FInStep then raise ETyRichEdit.Create(rsRichEditBusy);
-  { A replace in the background stops (with its event): the saved point a save may set would
-    keep its next batch out of its one undo step. }
-  if FFindKind = rfkReplace then EndFind(rfsCancelled, True);
-  FinishLoading;
-  if FDoc.Incomplete then raise ETyRichEdit.Create(rsRichEditIncomplete);
-  // the document's state decides, not where the content came from
-  if AFormat = rfAuto then
-    if FPlainText then AFormat := rfText else AFormat := rfRtf;
-  // a document of ours names the font its plain text is shown in (RtfWrite's \f0)
-  FDoc.BaseFontName := TyEffectiveFontName(CurrentStyle.FontName);
-  Inc(FSaving);
+  { A handler of a find's or a replace's events may free the control in here: then this
+    returns, touching nothing of it (inside another call of the control, that one does). }
+  LifeEnter(life);
   try
-    if AFormat = rfText then
-      TyRichSaveText(FDoc, AStream, @SaveProgress)
-    else
-    begin
-      // the file's own first bytes, before the signature, as they came
-      if Length(FRtfPrefix) > 0 then AStream.WriteBuffer(FRtfPrefix[0], Length(FRtfPrefix));
-      TyRichSaveRtf(FDoc, AStream, @SaveProgress);
+    try
+      // a save asked for from a load progress handler would save a document still loading
+      if FInStep then raise ETyRichEdit.Create(rsRichEditBusy);
+      { A replace in the background stops (with its event): the saved point a save may set would
+        keep its next batch out of its one undo step. }
+      if FFindKind = rfkReplace then EndFind(rfsCancelled, True);
+      FinishLoading;
+      if FDoc.Incomplete then raise ETyRichEdit.Create(rsRichEditIncomplete);
+      // the document's state decides, not where the content came from
+      if AFormat = rfAuto then
+        if FPlainText then AFormat := rfText else AFormat := rfRtf;
+      // a document of ours names the font its plain text is shown in (RtfWrite's \f0)
+      FDoc.BaseFontName := TyEffectiveFontName(CurrentStyle.FontName);
+      Inc(FSaving);
+      try
+        if AFormat = rfText then
+          TyRichSaveText(FDoc, AStream, @SaveProgress)
+        else
+        begin
+          // the file's own first bytes, before the signature, as they came
+          if Length(FRtfPrefix) > 0 then AStream.WriteBuffer(FRtfPrefix[0], Length(FRtfPrefix));
+          TyRichSaveRtf(FDoc, AStream, @SaveProgress);
+        end;
+      finally
+        Dec(FSaving);
+        // a turn that came during the save did nothing
+        if (FSaving = 0) and HasBackgroundWork then StartBackground;
+      end;
+    except
+      on ETyRichGone do if not life.Gone or (life.Next <> nil) then raise;
     end;
   finally
-    Dec(FSaving);
-    // a turn that came during the save did nothing
-    if (FSaving = 0) and HasBackgroundWork then StartBackground;
+    if not life.Gone then LifeLeave(life);
   end;
 end;
 
@@ -11681,61 +11820,74 @@ var
   fs: TFileStream;
   g: TGUID;
   keeps: Boolean;
+var
+  life: TTyRichLife;
 begin
-  full := RealTarget(ExpandFileName(AFileName));
-  FinishLoading;
-  if FDoc.Incomplete then raise ETyRichEdit.Create(rsRichEditIncomplete);
-  { One rule: text when the application asked for it (PlainText := True), else the
-    extension, else the document's state - never where the content came from, so that a
-    text file opened, formatted and saved under .rtf is RTF. }
-  if (AFormat = rfAuto) and FPlainText and FPlainTextAsked then AFormat := rfText;
-  if AFormat = rfAuto then
-  begin
-    ext := LowerCase(ExtractFileExt(full));
-    if ext = '.rtf' then AFormat := rfRtf
-    else if ext = '.txt' then AFormat := rfText
-    else if FPlainText then AFormat := rfText
-    else AFormat := rfRtf;
-  end;
-  if TargetWriteProtected(full) then raise ETyRichEdit.CreateFmt(rsRichEditCannotWrite, [full]);
-  { Beside the target, so that putting it in the target's place is a rename on one volume;
-    the target - perhaps the very file the document reads from - is untouched until then. A
-    GUID names it: no other file has that name, nobody guesses it. }
-  CreateGUID(g);
-  tmp := ExtractFilePath(full) + '.' + ExtractFileName(full) + '.' +
-    Copy(GUIDToString(g), 2, 36) + '.tmp';
-  try
-    fs := TFileStream.Create(tmp, fmCreate or fmShareExclusive);
-  except
-    on EStreamError do raise ETyRichEdit.CreateFmt(rsRichEditCannotWrite, [full]);
-  end;
+  { A handler of a find's or a replace's events may free the control in here: then this
+    returns, touching nothing of it (inside another call of the control, that one does). }
+  LifeEnter(life);
   try
     try
-      WriteTo(fs, AFormat);
-      // on the disk before it takes the target's place
-      FileFlush(fs.Handle);
-    finally
-      fs.Free;
+      full := RealTarget(ExpandFileName(AFileName));
+      FinishLoading;
+      if FDoc.Incomplete then raise ETyRichEdit.Create(rsRichEditIncomplete);
+      { One rule: text when the application asked for it (PlainText := True), else the
+        extension, else the document's state - never where the content came from, so that a
+        text file opened, formatted and saved under .rtf is RTF. }
+      if (AFormat = rfAuto) and FPlainText and FPlainTextAsked then AFormat := rfText;
+      if AFormat = rfAuto then
+      begin
+        ext := LowerCase(ExtractFileExt(full));
+        if ext = '.rtf' then AFormat := rfRtf
+        else if ext = '.txt' then AFormat := rfText
+        else if FPlainText then AFormat := rfText
+        else AFormat := rfRtf;
+      end;
+      if TargetWriteProtected(full) then raise ETyRichEdit.CreateFmt(rsRichEditCannotWrite, [full]);
+      { Beside the target, so that putting it in the target's place is a rename on one volume;
+        the target - perhaps the very file the document reads from - is untouched until then. A
+        GUID names it: no other file has that name, nobody guesses it. }
+      CreateGUID(g);
+      tmp := ExtractFilePath(full) + '.' + ExtractFileName(full) + '.' +
+        Copy(GUIDToString(g), 2, 36) + '.tmp';
+      try
+        fs := TFileStream.Create(tmp, fmCreate or fmShareExclusive);
+      except
+        on EStreamError do raise ETyRichEdit.CreateFmt(rsRichEditCannotWrite, [full]);
+      end;
+      try
+        try
+          WriteTo(fs, AFormat);
+          // on the disk before it takes the target's place
+          FileFlush(fs.Handle);
+        finally
+          fs.Free;
+        end;
+      except
+        SysUtils.DeleteFile(tmp);
+        raise;
+      end;
+      if not ReplaceFile(tmp, full) then
+      begin
+        SysUtils.DeleteFile(tmp);
+        raise ETyRichEdit.CreateFmt(rsRichEditCannotReplace, [full]);
+      end;
+      { The same answer decides whether the file is now the document's: RTF keeps any
+        content; text keeps a plain-text document's - the text is what such a document is, its
+        formats included (the caller asked for text: an explicit .txt, rfText or PlainText, the
+        application's choice); a rich document saved as text is an export and stays Modified. }
+      keeps := (AFormat = rfRtf) or ((AFormat = rfText) and FPlainText);
+      if keeps then
+      begin
+        FDoc.Modified := False;
+        FSourceFile := full;
+        FSourceFormat := AFormat;
+      end;
+    except
+      on ETyRichGone do if not life.Gone or (life.Next <> nil) then raise;
     end;
-  except
-    SysUtils.DeleteFile(tmp);
-    raise;
-  end;
-  if not ReplaceFile(tmp, full) then
-  begin
-    SysUtils.DeleteFile(tmp);
-    raise ETyRichEdit.CreateFmt(rsRichEditCannotReplace, [full]);
-  end;
-  { The same answer decides whether the file is now the document's: RTF keeps any
-    content; text keeps a plain-text document's - the text is what such a document is, its
-    formats included (the caller asked for text: an explicit .txt, rfText or PlainText, the
-    application's choice); a rich document saved as text is an export and stays Modified. }
-  keeps := (AFormat = rfRtf) or ((AFormat = rfText) and FPlainText);
-  if keeps then
-  begin
-    FDoc.Modified := False;
-    FSourceFile := full;
-    FSourceFormat := AFormat;
+  finally
+    if not life.Gone then LifeLeave(life);
   end;
 end;
 
