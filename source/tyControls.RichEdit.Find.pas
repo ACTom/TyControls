@@ -220,7 +220,9 @@ type
       begun sixteen, and a paragraph of a lazily read file as many more as it has bytes in
       the file (the reader parses them for the search: a picture's paragraph is one character
       and may be megabytes). A paragraph whose bytes in the file do not fit in what is left
-      of the budget is not begun: the step ends before it, and nothing of it is parsed -
+      of the budget is not begun: the step ends before it, and nothing of it is parsed
+      (where the text read in this step, not its cost alone, ends the step, the walk has
+      parsed it already: that is kept for the next step) -
       unless the step has begun none yet: then it is searched in this step, its whole
       text, however large, and the step ends with it (a step always gets on; a paragraph
       is parsed in one piece - at most its interval group of the file is parsed for it).
@@ -1095,8 +1097,9 @@ end;
   A walk has the reader parse a paragraph before ExactPara sees it. So the budget's rule
   (Takes) is asked here first, for what the paragraphs cost alone: the walk goes no farther
   than the paragraphs the budget lets the step begin, and a paragraph the step ends before
-  is not parsed for it. ExactPara asks again as it begins each: the text read since
-  counts too. }
+  by its cost is not parsed for it. ExactPara asks again as it begins each: the text read
+  since counts too, so it may end the step at a paragraph the walk has parsed - whose
+  parse the text keeps for the next step. }
 procedure TTyRichFinder.ScanRange(ALast: Integer);
 var
   cont, began: Boolean;
