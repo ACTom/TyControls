@@ -672,6 +672,7 @@ type
     { The document's states (TTyRichDocument's saved point) before this step ran and after
       it: an undo goes back to the one, a redo forward to the other. }
     FStateBefore, FStateAfter: Int64;
+    FOnFreed: TNotifyEvent;
     procedure CheckRunning(ADoc: TTyRichDocument);
     function Keep(AUndo: TTyRichUndoData): TTyRichChange;
     procedure AddSummary(const AChange: TTyRichChange);
@@ -725,7 +726,19 @@ type
     procedure TakeOver(ANext: TTyRichCommand);
     property RecordCount: Integer read FRecordCount;
   public
+    procedure BeforeDestruction; override;
     destructor Destroy; override;
+    { Raised once, first thing when the command is freed - whoever frees it, and while it is
+      still whole. The ways a command the history holds goes: the history cleared (ClearUndo,
+      a new content, the document freed, a history dropped because an undo or a part of a
+      step failed), its oldest steps let go for MaxUndoBytes, the redo side dropped by a new
+      step or by a redo that failed, an undo that raised; and before it is the history's: a
+      run that was refused, raised or changed nothing, a merge into the step before, an
+      update's commands when the history is cleared inside it, a composite's parts with the
+      composite. Whoever keeps a reference to a command beside the history sets this and
+      gives the reference up in it. The handler is called from inside whatever frees the
+      command: it must not change the document, nor run the application's handlers. }
+    property OnFreed: TNotifyEvent read FOnFreed write FOnFreed;
     { False: Execute leaves the document alone and frees the command. }
     function CanExecute(ADoc: TTyRichDocument): Boolean; virtual;
     { ANext ran right after this command; True when this command took it over (TakeOver),
@@ -4795,6 +4808,17 @@ begin
 end;
 
 { ---- TTyRichCommand ---- }
+
+procedure TTyRichCommand.BeforeDestruction;
+var
+  h: TNotifyEvent;
+begin
+  // (before any destructor's body: the command is still whole for who hears of it)
+  h := FOnFreed;
+  FOnFreed := nil;
+  if Assigned(h) then h(Self);
+  inherited BeforeDestruction;
+end;
 
 destructor TTyRichCommand.Destroy;
 begin

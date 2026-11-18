@@ -19,8 +19,9 @@ uses
   tyControls.Controller, tyControls.StrConsts, tyControls.Painter,
   tyControls.RichEdit.Text, tyControls.RichEdit.Model, tyControls.RichEdit.Commands,
   tyControls.RichEdit.RtfRead, tyControls.RichEdit.RtfWrite, tyControls.RichEdit.Attrs,
-  tyControls.RichEdit.Find, tyControls.RichEdit,
-  test.richedit.control, test.richedit.edit;
+  tyControls.RichEdit.Find, tyControls.RichEdit, tyControls.RichEdit.TextIO,
+  test.richedit.control, test.richedit.edit,
+  test.danglingrefs;                 // BeginPoison / EndPoison
 
 type
   TTyRichEditFindTest = class(TTestCase)
@@ -91,6 +92,7 @@ type
     procedure TestAStoppedReplaceKeepsOnlyItsRecord;
     procedure TestAReplaceUndoneTellsItsStart;
     procedure TestAReplaceLetGoBetweenTwoTurnsIsNotDone;
+    procedure TestTheHistoryLetsGoOfARunningReplacesStep;
   end;
 
   // the control's protected seams (the find's piece and batch, the first slice)
@@ -1890,6 +1892,192 @@ begin
     end;
   finally
     FRich.FakeClock := False;
+  end;
+end;
+
+type
+  // the application's queue of asynchronous calls, run without pumping any message
+  TFindAppQueue = class(TApplication)
+  end;
+
+{ Every way the history lets go of the step of a replace that runs in the background: the
+  control's ClearUndo; the document's, behind the control; its oldest steps trimmed for the
+  byte limit (a key typed on top of the replace's step); the redo side dropped by a new step
+  (its step undone, then a key); a new content put into the document behind the control; the
+  control's Clear and a load; the control freed. Freed memory is poisoned meanwhile, so that a
+  use of the freed command faults instead of reading what happens to be there still.
+
+  The replace ends before its command is gone: the control refers to no command any more, the
+  replace is told once, cancelled, with what is replaced in the text and - where the text is
+  still there - the place from which a replace replaces the rest and nothing twice. }
+procedure TTyRichEditFindTest.TestTheHistoryLetsGoOfARunningReplacesStep;
+const
+  CWays: array[0..6] of string = ('the control''s ClearUndo', 'the document''s ClearUndo',
+    'the byte limit', 'the redo side dropped', 'a new content behind the control', 'Clear',
+    'a load');
+var
+  src, want, what, raised: string;
+  res: TTyRichReplaceResult;
+  way, turns, n, total, k: Integer;
+  st: TBytesStream;
+  poisoned: Boolean;
+  cmd: TTyRichReplaceAllCommand;
+begin
+  src := Lines(6000, 'MrMrMrMrMr ');
+  SetText(src);
+  total := FRich.ReplaceAll('Mr', 'Mr.');
+  AssertEquals('one replace of the whole', 6000 * 5, total);
+  want := Text;
+  FRich.FakeClock := True;
+  FRich.ClockStep := 1;
+  for way := 0 to High(CWays) do
+  begin
+    what := CWays[way];
+    SetText(src);
+    FRich.ClearUndo;
+    FRich.Document.MaxUndoBytes := 0;
+    FRich.ReplaceAllAsync('Mr', 'Mr.');
+    TFindAccess(FRich).FindSlice := 2048;
+    turns := 0;
+    while FRich.FindRunning and (Length(FProgress) < 6) and (turns < 10000) do
+    begin
+      FRich.Turn;
+      Inc(turns);
+    end;
+    AssertTrue(what + ': parts went in, more to come', FRich.FindRunning and (Pos('Mr.', Text) > 0));
+    AssertTrue(what + ': the control refers to its command',
+      TFindAccess(FRich).ReplaceCommand = FRich.Document.UndoStep);
+    raised := '';
+    poisoned := True;
+    BeginPoison;
+    try
+      try
+        case way of
+          0:
+            begin
+              FRich.ClearUndo;
+              AssertEquals(what + ': told before it returned', 1, Length(FDone));
+            end;
+          1: FRich.Document.ClearUndo;
+          2:
+            begin
+              // (the typed key's step stays, the replace's below it goes for the limit)
+              FRich.Document.MaxUndoBytes := 64;
+              FRich.SelStart := FRich.Document.Text.Length;
+              FRich.SelLength := 0;
+              FRich.Key8('q');
+              AssertEquals(what + ': the replace''s step went', 1, FRich.Document.UndoDepth);
+            end;
+          3:
+            begin
+              FRich.Undo;
+              FRich.SelStart := FRich.Document.Text.Length;
+              FRich.SelLength := 0;
+              FRich.Key8('q');
+              AssertFalse(what + ': nothing to redo', FRich.Document.CanRedo);
+            end;
+          4:
+            begin
+              st := TBytesStream.Create(BytesOf('other text'));
+              try
+                TyRichLoadText(FRich.Document, st, teUtf8, 0);
+              finally
+                st.Free;
+              end;
+            end;
+          5: FRich.Clear;
+        else
+          st := TBytesStream.Create(BytesOf(Rtf('{|rtf1|ansi a Mr|par}')));
+          try
+            FRich.LoadFromStream(st);
+          finally
+            st.Free;
+          end;
+        end;
+        AssertTrue(what + ': the control refers to no command', TFindAccess(FRich).ReplaceCommand = nil);
+        AssertFalse(what + ': nothing runs', FRich.FindRunning);
+        // (what the loop does between two turns, and the turns: nothing of the freed step is used)
+        TFindAppQueue(Application).ProcessAsyncCallQueue;
+        for k := 1 to 3 do FRich.Turn;
+      except
+        on E: EAssertionFailedError do
+        begin
+          EndPoison;
+          poisoned := False;
+          raise;
+        end;
+        on E: Exception do raised := E.ClassName + ': ' + E.Message;
+      end;
+    finally
+      if poisoned then EndPoison;
+    end;
+    AssertEquals(what + ': nothing raised', '', raised);
+    AssertEquals(what + ': told once', 1, Length(FDone));
+    AssertEquals(what + ': told cancelled', Ord(rreCancelled), Ord(FReplaceResult.Ending));
+    if way >= 4 then
+    begin
+      // the text it ran on is gone (told before it went, or after)
+      if way = 4 then AssertEquals(what + ': nothing to go on from', -1, FReplaceResult.ResumeAt);
+      AssertTrue(what + ': it tells that it replaced', FReplaceResult.Replaced > 0);
+      Continue;
+    end;
+    n := CountMatchesOf('Mr.', Text);
+    AssertEquals(what + ': it tells what is replaced in the text', n, FReplaceResult.Replaced);
+    if way = 3 then AssertEquals(what + ': its step was undone: none', 0, n)
+    else AssertTrue(what + Format(': a part of them (%d)', [n]), (n > 0) and (n < total));
+    AssertTrue(what + ': a place to go on from', FReplaceResult.ResumeAt >= 0);
+    FRich.Document.MaxUndoBytes := 0;
+    n := FRich.ReplaceAll('Mr', 'Mr.', [], FReplaceResult.ResumeAt, FReplaceResult.ResumeLength, res);
+    AssertEquals(what + ': from there: through', Ord(rreDone), Ord(res.Ending));
+    AssertEquals(what + ': the rest, none twice', total, FReplaceResult.Replaced + n);
+    if way < 2 then AssertTrue(what + ': the text one replace of the whole makes', Text = want)
+    else AssertEquals(what + ': every one replaced once', total, CountMatchesOf('Mr.', Text) -
+      CountMatchesOf('Mr..', Text));
+  end;
+  // the control freed while its replace runs: its step goes with the document, no event
+  SetText(src);
+  FRich.ReplaceAllAsync('Mr', 'Mr.');
+  TFindAccess(FRich).FindSlice := 2048;
+  turns := 0;
+  while FRich.FindRunning and (Length(FProgress) < 6) and (turns < 10000) do
+  begin
+    FRich.Turn;
+    Inc(turns);
+  end;
+  AssertTrue('freed: parts went in, more to come', FRich.FindRunning);
+  raised := '';
+  BeginPoison;
+  try
+    try
+      FreeAndNil(FRich);
+      TFindAppQueue(Application).ProcessAsyncCallQueue;
+    except
+      on E: Exception do raised := E.ClassName + ': ' + E.Message;
+    end;
+  finally
+    EndPoison;
+  end;
+  AssertEquals('freed: nothing raised', '', raised);
+  AssertEquals('freed: no event', 0, Length(FDone));
+  FRich := TEditProbe.Create(nil);
+  FRich.Controller := FCtl;
+  FRich.Font.PixelsPerInch := 96;
+  FRich.SetBounds(0, 0, 400, 300);
+  FRich.OnFindProgress := @Progress;
+  FRich.OnReplaceDone := @ReplaceDone;
+  { A synchronous replace: when it has returned, its command - the history's step - tells the
+    call nothing any more (its tally was on the call's stack) and says nothing when it goes. }
+  SetText(src);
+  AssertEquals('synchronous: all of them', total, FRich.ReplaceAll('Mr', 'Mr.', [], 0, -1, res));
+  cmd := FRich.Document.UndoStep as TTyRichReplaceAllCommand;
+  AssertTrue('synchronous: the step tells no tally', cmd.Tally = nil);
+  AssertFalse('synchronous: nor that it is freed', Assigned(cmd.OnFreed));
+  BeginPoison;
+  try
+    FRich.ClearUndo;
+    for k := 1 to 3 do FRich.Turn;
+  finally
+    EndPoison;
   end;
 end;
 

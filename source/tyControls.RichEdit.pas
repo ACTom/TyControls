@@ -237,6 +237,13 @@ type
     Gone: Boolean;
     Next: PTyRichLife;
   end;
+  { (internal) The command of a synchronous ReplaceAll, on that call's stack: the reference is
+    taken away when the command is freed under the call (ReplaceCommandFreed). }
+  PTyRichSyncReplace = ^TTyRichSyncReplace;
+  TTyRichSyncReplace = record
+    Cmd: TTyRichReplaceAllCommand;
+    Next: PTyRichSyncReplace;
+  end;
   { (internal) Raised where a handler freed the control, so that nothing of it is touched any
     more; the turns swallow it, a public call lets it go (an EAbort: the application's loop
     shows nothing). }
@@ -721,10 +728,12 @@ type
     FFindTurnWork: Int64;             // what this turn's find pieces searched or replaced
     FFindCancel: Boolean;             // the progress handler's ACancel
     FFindBytesRead: Int64;            // what the synchronous finds read (a test seam)
-    // the replace in the background: its command (the history's once it ran), what it did
+    { The replace in the background: its command (the history's once it ran), what it did.
+      The command says when it is freed - whoever frees it (ReplaceCommandFreed) - and the
+      reference goes there: while FReplaceCmd is not nil the command is alive. }
     FReplaceCmd: TTyRichReplaceAllCommand;
     FReplaceRan: Boolean;
-    FReplaceId: Int64;
+    FSyncReplace: PTyRichSyncReplace;  // the synchronous ReplaceAll calls on the stack
     { What its command did, as the command tells it - true of the content its last part left
       (FFindState). A change it did not make leaves that as it is and is followed in
       FReplaceFollowed (ReplaceResumeFollows): when the replace ends, the one that is true of
@@ -775,6 +784,7 @@ type
       const ATally: TTyRichReplaceTally);
     procedure PayFindOwed;
     procedure ReplaceResumeFollows(const AChange: TTyRichChange);
+    procedure ReplaceCommandFreed(Sender: TObject);
     function SnapPosAfter(APos: TTyRichPos): TTyRichPos;
     procedure SelectFound(APos, ALen: TTyRichPos);
     procedure NoteFindTurn(AMs: Int64);
@@ -6254,8 +6264,22 @@ begin
 end;
 
 procedure TTyCustomRichEdit.ClearUndo;
+var
+  life: TTyRichLife;
 begin
-  FDoc.ClearUndo;
+  LifeEnter(life);
+  try
+    try
+      { A replace in the background keeps its one step in the history: it ends first, told
+        (cancelled, what it did, the place to go on from), before its step goes. }
+      if FFindKind = rfkReplace then EndFind(rfsCancelled, True);
+      FDoc.ClearUndo;
+    except
+      on ETyRichGone do if not life.Gone or (life.Next <> nil) then raise;
+    end;
+  finally
+    if not life.Gone then LifeLeave(life);
+  end;
 end;
 
 procedure TTyCustomRichEdit.SetSelText(const AValue: string);
@@ -8736,7 +8760,8 @@ begin
     the load's own all the same: it changes no text of the file. }
   loadOwn := (FInStep and FDoc.Loading) or FInCancel;
   // (a background replace's place to go on from follows an edit it did not make)
-  if not loadOwn and (FFindKind = rfkReplace) then ReplaceResumeFollows(AChange);
+  if not loadOwn and ((FFindKind = rfkReplace) or (FOwedKind = rfkReplace)) then
+    ReplaceResumeFollows(AChange);
   { A composition shown while the document changes elsewhere (code, an undo from a handler)
     follows the text as the caret does; the layouter is told where before it hears of the
     change, which drops the block or moves it with what it laid out. So does the place of a
@@ -8884,6 +8909,8 @@ begin
     public call that replaced the content (it is raised there, before that call returns;
     CheckReplaceable ended one that ran before it began), never raised from in here. }
   EndFind(rfsCancelled, False);
+  // (a replace's end still to be told: the text it ran on is gone, nothing to go on from)
+  if FOwedKind = rfkReplace then FOwedTally.ResumeAt := -1;
   { A composition has no text to go into any more: it goes (the whole view is drawn again
     below), and the input method is told to drop it. }
   composed := FComposing or FImeRefused;
@@ -10820,11 +10847,10 @@ end;
 function TTyCustomRichEdit.ReplaceAll(const AFind, AReplace: string; AOptions: TTyRichFindOptions;
   AStart, ALength: TTyRichPos; out AResult: TTyRichReplaceResult): Integer;
 var
-  cmd: TTyRichReplaceAllCommand;
+  sync: TTyRichSyncReplace;
   tally: TTyRichReplaceTally;
   wait, ran, complete: Boolean;
   marks: TTyRichStepMarks;
-  id: Int64;
   load: TTyRtfLoad;
   len: TTyRichPos;
 var
@@ -10860,86 +10886,94 @@ begin
       wait := FDoc.Text.Length > FCopyWaitChars;
       if wait then BeginWait;
       try
-        cmd := TTyRichReplaceAllCommand.Create(FDoc, AFind, AReplace, AOptions, AStart, ALength);
-        cmd.Tally := @tally;
-        id := cmd.Id;
-        marks := Default(TTyRichStepMarks);
-        marks.HasBefore := True;
-        marks.Before.Anchor := FSelAnchor;
-        marks.Before.Caret := FCaret;
-        marks.Before.AtLineEnd := FCaretAtEnd;
-        cmd.Marks := marks;
-        if ViewBehind then
-        begin
-          { Inside BeginEdit .. EndEdit the document gathers the block's commands into its one
-            step: the replace runs whole, in one run, there. }
-          cmd.AllAtOnce := True;
-          RunApiCommand(cmd, 0);
-          Result := tally.Replaced;
-          AResult := ReplaceResultOf(rfsDone, tally);
-          Exit;
-        end;
-        { The engine's parts, as the background runs them, in a loop: a range of paragraphs found,
-          then replaced (Execute, then ExecutePart - one undo step), and between two a lazily read
-          file's intervals go back to the loader's bound. The view hears each part; the
-          application one change, at the end. }
+        { The command, referred to from this call's stack: it says when it is freed - by the
+          document that refused it or found nothing to change, by a handler of a part's change
+          that lets the history go - and the reference goes then (ReplaceCommandFreed). While
+          sync.Cmd is not nil the command is alive. }
+        sync.Cmd := TTyRichReplaceAllCommand.Create(FDoc, AFind, AReplace, AOptions, AStart, ALength);
+        sync.Next := FSyncReplace;
+        FSyncReplace := @sync;
         ran := False;
-        complete := False;
-        FEditHeard := False;
-        FEditStep := nil;
-        Inc(FEditing);
         try
+          sync.Cmd.Tally := @tally;
+          sync.Cmd.OnFreed := @ReplaceCommandFreed;
+          marks := Default(TTyRichStepMarks);
+          marks.HasBefore := True;
+          marks.Before.Anchor := FSelAnchor;
+          marks.Before.Caret := FCaret;
+          marks.Before.AtLineEnd := FCaretAtEnd;
+          sync.Cmd.Marks := marks;
+          if ViewBehind then
+          begin
+            { Inside BeginEdit .. EndEdit the document gathers the block's commands into its one
+              step: the replace runs whole, in one run, there. }
+            sync.Cmd.AllAtOnce := True;
+            // (the document owns it from here on, also when it says no)
+            ran := True;
+            RunApiCommand(sync.Cmd, 0);
+            Result := tally.Replaced;
+            AResult := ReplaceResultOf(rfsDone, tally);
+            Exit;
+          end;
+          { The engine's parts, as the background runs them, in a loop: a range of paragraphs found,
+            then replaced (Execute, then ExecutePart - one undo step), and between two a lazily read
+            file's intervals go back to the loader's bound. The view hears each part; the
+            application one change, at the end. }
+          complete := False;
+          FEditHeard := False;
+          FEditStep := nil;
+          Inc(FEditing);
           try
             repeat
-              cmd.Prepare(-1);
-              if not cmd.Ready then
+              sync.Cmd.Prepare(-1);
+              if not sync.Cmd.Ready then
               begin
                 { Nothing more found: through the range, or a walk that failed - or one a
                   handler of the last part's change let go of (a step of its own put on top and
                   taken off again): that one is not through. }
-                complete := cmd.Finished;
+                complete := sync.Cmd.Finished;
                 Break;
               end;
               if not ran then
               begin
-                ran := True;
                 // (the document owns it from here on, also when it says no)
-                if not FDoc.Execute(cmd) then Break;
+                ran := True;
+                if not FDoc.Execute(sync.Cmd) then Break;
               end
-              else
-              begin
-                // (a handler of the last part's change may have let the step go)
-                if (FDoc.UndoStep <> cmd) or (cmd.Id <> id) then Break;
-                if not FDoc.ExecutePart(cmd) then Break;
-              end;
+              else if not FDoc.ExecutePart(sync.Cmd) then Break;
+              // (a handler of the part's change may have let the step go, or freed it)
+              if (sync.Cmd = nil) or (FDoc.UndoStep <> sync.Cmd) then Break;
               load := TyRichRtfLoadOf(FDoc);
               if load <> nil then load.Trim;
-              if (FDoc.UndoStep = cmd) and (cmd.Id = id) and cmd.Finished then complete := True;
-            until complete or (FDoc.UndoStep <> cmd);
+              if sync.Cmd.Finished then complete := True;
+            until complete;
           finally
-            if not ran then cmd.Free;
+            Dec(FEditing);
+          end;
+          Result := tally.Replaced;
+          if complete then AResult := ReplaceResultOf(rfsDone, tally)
+          else AResult := ReplaceResultOf(rfsCancelled, tally);
+          if FEditHeard then
+          begin
+            // the step's selection after: where it stays (a document-API write keeps it)
+            if (sync.Cmd <> nil) and (FDoc.UndoStep = sync.Cmd) then FEditStep := sync.Cmd;
+            Inc(FApiWrite);
+            try
+              FinishEdit(FSelAnchor, FCaret, FCaretAtEnd, True);
+            finally
+              Dec(FApiWrite);
+            end;
           end;
         finally
-          Dec(FEditing);
-        end;
-        // (the history's command tells this call nothing any more, and will not go on)
-        if ran and (FDoc.UndoStep = cmd) and (cmd.Id = id) then
-        begin
-          cmd.Tally := nil;
-          cmd.LetGo;
-        end;
-        Result := tally.Replaced;
-        if complete then AResult := ReplaceResultOf(rfsDone, tally)
-        else AResult := ReplaceResultOf(rfsCancelled, tally);
-        if FEditHeard then
-        begin
-          // the step's selection after: where it stays (a document-API write keeps it)
-          if FDoc.UndoStep = cmd then FEditStep := cmd;
-          Inc(FApiWrite);
-          try
-            FinishEdit(FSelAnchor, FCaret, FCaretAtEnd, True);
-          finally
-            Dec(FApiWrite);
+          { This call's reference ends here. A command still alive tells it nothing any more
+            (its tally is on this stack) and will not go on; one the document never took is
+            this call's to free. }
+          if not life.Gone then FSyncReplace := sync.Next;
+          if sync.Cmd <> nil then
+          begin
+            sync.Cmd.Tally := nil;
+            sync.Cmd.OnFreed := nil;
+            if ran then sync.Cmd.LetGo else sync.Cmd.Free;
           end;
         end;
       finally
@@ -10983,8 +11017,8 @@ begin
       FReplaceCmd := TTyRichReplaceAllCommand.Create(FDoc, AFind, AReplace, FFindOpts, AStart,
         ALength);
       FReplaceCmd.Tally := @FReplaceTally;
+      FReplaceCmd.OnFreed := @ReplaceCommandFreed;
       FReplaceCmd.RangeChars := FFindSlice;
-      FReplaceId := FReplaceCmd.Id;
       FReplaceRan := False;
       marks := Default(TTyRichStepMarks);
       marks.HasBefore := True;
@@ -11022,6 +11056,8 @@ end;
 { The running find or replace ends, no event: its finder goes, a replace's command too unless
   it ran (then it is the history's). What it did is kept for the event (FEnded*). }
 procedure TTyCustomRichEdit.StopFind;
+var
+  cmd: TTyRichReplaceAllCommand;
 begin
   FEndedKind := FFindKind;
   if FFindKind = rfkNone then Exit;
@@ -11036,16 +11072,44 @@ begin
   FFindKind := rfkNone;
   Inc(FFindGen);
   FreeAndNil(FFinder);
-  // (the history's command tells this control nothing any more)
-  if FReplaceRan and (FReplaceCmd <> nil) and (FDoc.UndoStep = FReplaceCmd) and
-    (FReplaceCmd.Id = FReplaceId) then
+  cmd := FReplaceCmd;
+  FReplaceCmd := nil;
+  if cmd <> nil then
   begin
-    FReplaceCmd.Tally := nil;
-    // it will not go on: only its undo record stays in the history (an undone one let go)
-    FReplaceCmd.LetGo;
+    // (it tells this control nothing any more - not what it does, not that it is freed)
+    cmd.Tally := nil;
+    cmd.OnFreed := nil;
+    if FReplaceRan then
+      // the history's - wherever in it: it will not go on, only its undo record stays
+      cmd.LetGo
+    else
+      cmd.Free;
   end;
-  if not FReplaceRan then FreeAndNil(FReplaceCmd) else FReplaceCmd := nil;
   FReplaceRan := False;
+end;
+
+{ A replace's command this control refers to is freed (TTyRichCommand.OnFreed: by whatever
+  frees it - the history cleared or trimmed, its redo side dropped, a new content, a run the
+  document refused). The reference goes before the command does. A replace in the background
+  ends with it, as cancelled, with what it did and - while the text is still there - the place
+  to go on from; its event is owed (a queued call tells it, or the public call that is
+  replacing the content): no handler of the application's runs inside what frees a step. }
+procedure TTyCustomRichEdit.ReplaceCommandFreed(Sender: TObject);
+var
+  f: PTyRichSyncReplace;
+begin
+  f := FSyncReplace;
+  while f <> nil do
+  begin
+    if f^.Cmd = Sender then f^.Cmd := nil;
+    f := f^.Next;
+  end;
+  if Sender <> FReplaceCmd then Exit;
+  FReplaceCmd := nil;
+  FReplaceRan := False;
+  // (freed inside its own run: the piece that ran it ends the replace when the run returns)
+  if FInReplacePart or (FFindKind <> rfkReplace) then Exit;
+  EndFind(rfsCancelled, False);
 end;
 
 { What ended is told: the progress at its total first (also nothing found, cancelled, the
@@ -11067,15 +11131,15 @@ begin
   StopFind;
   if not AEvent then
   begin
-    { No handler is run where the content is torn down: the event is owed - to the public
-      call that replaced the content (PayFindOwed), else to a queued call. None from the
-      destructor. The text a replace ran on is gone: nothing to go on from. }
+    { No handler is run where the content is torn down or a step is being freed: the event
+      is owed - to the public call that replaced the content (PayFindOwed), else to a queued
+      call. None from the destructor. (Where the content went, ContentReplaced takes the
+      place to go on from out of what is owed: that text is gone.) }
     if not (csDestroying in ComponentState) then
     begin
       FOwedKind := FEndedKind;
       FOwedStop := AStop;
       FOwedTally := FEndedTally;
-      FOwedTally.ResumeAt := -1;
       ScheduleCall(FFindCall);
     end;
     Exit;
@@ -11134,17 +11198,38 @@ end;
   Followed beside what the command told (FReplaceFollowed): that stays true of the content the
   replace's last part left, and is what is told when that content is there again. }
 procedure TTyCustomRichEdit.ReplaceResumeFollows(const AChange: TTyRichChange);
-var
-  at, stop: TTyRichPos;
+
+  procedure Follow(var ATally: TTyRichReplaceTally);
+  var
+    at, stop: TTyRichPos;
+  begin
+    at := ATally.ResumeAt;
+    if (at < 0) or (AChange.Pos >= at) then Exit;
+    if AChange.Pos + AChange.OldLen <= at then
+      Inc(at, AChange.NewLen - AChange.OldLen)
+    else
+      // inside what changed: from where the change began
+      at := AChange.Pos;
+    if ATally.ResumeLength >= 0 then
+    begin
+      stop := ATally.ResumeAt + ATally.ResumeLength;
+      if AChange.Pos + AChange.OldLen <= stop then Inc(stop, AChange.NewLen - AChange.OldLen)
+      else if AChange.Pos < stop then stop := AChange.Pos + AChange.NewLen;
+      ATally.ResumeLength := Math.Max(Int64(0), stop - at);
+    end;
+    ATally.ResumeAt := at;
+  end;
+
 begin
+  // (an end still to be told - its step was freed under it: its place follows until then)
+  if FOwedKind = rfkReplace then Follow(FOwedTally);
   if (FFindKind <> rfkReplace) or FInReplacePart then Exit;
   if not FReplaceFollows then
   begin
     FReplaceFollows := True;
     FReplaceFollowed := FReplaceTally;
   end;
-  if FReplaceRan and (FReplaceCmd <> nil) and (FDoc.RedoStep = FReplaceCmd) and
-    (FReplaceCmd.Id = FReplaceId) then
+  if FReplaceRan and (FReplaceCmd <> nil) and (FDoc.RedoStep = FReplaceCmd) then
   begin
     { Its own step undone: nothing of what it did is left - it tells none replaced, and the
       range's start as the place to go on from. }
@@ -11154,21 +11239,7 @@ begin
     FReplaceFollowed.ResumeLength := FReplaceLength;
     Exit;
   end;
-  at := FReplaceFollowed.ResumeAt;
-  if (at < 0) or (AChange.Pos >= at) then Exit;
-  if AChange.Pos + AChange.OldLen <= at then
-    Inc(at, AChange.NewLen - AChange.OldLen)
-  else
-    // inside what changed: from where the change began
-    at := AChange.Pos;
-  if FReplaceFollowed.ResumeLength >= 0 then
-  begin
-    stop := FReplaceFollowed.ResumeAt + FReplaceFollowed.ResumeLength;
-    if AChange.Pos + AChange.OldLen <= stop then Inc(stop, AChange.NewLen - AChange.OldLen)
-    else if AChange.Pos < stop then stop := AChange.Pos + AChange.NewLen;
-    FReplaceFollowed.ResumeLength := Math.Max(Int64(0), stop - at);
-  end;
-  FReplaceFollowed.ResumeAt := at;
+  Follow(FReplaceFollowed);
 end;
 
 procedure TTyCustomRichEdit.ReportFindProgress(AKind: TTyRichFindKind; ADone, ATotal: Int64);
@@ -11204,6 +11275,7 @@ var
   gen: Int64;
 begin
   if FFindKind = rfkNone then Exit;
+  if (FFindKind = rfkReplace) and (FReplaceCmd = nil) then Exit;
   if FFindKind = rfkReplace then
     FReplaceCmd.Progress(done, total)
   else
@@ -11363,11 +11435,10 @@ begin
       finally
         FInReplacePart := False;
       end;
-      if not ok then FReplaceCmd := nil;
     end
     else
     begin
-      ok := (FDoc.UndoStep = FReplaceCmd) and (FReplaceCmd.Id = FReplaceId);
+      ok := FDoc.UndoStep = FReplaceCmd;
       if ok then
       begin
         FInReplacePart := True;
@@ -11380,21 +11451,16 @@ begin
     end;
   except
     // (the document reverted the part; the step, if any, stays the history's)
-    if FFindGen = gen then
-    begin
-      FReplaceCmd := nil;
-      EndFind(rfsCancelled, True);
-    end;
+    if FFindGen = gen then EndFind(rfsCancelled, True);
     raise;
   end;
   // (a handler of the part's change may have ended the replace, or started another)
   if FFindGen <> gen then Exit;
-  if not ok or (FDoc.UndoStep <> FReplaceCmd) then
+  if not ok or (FReplaceCmd = nil) or (FDoc.UndoStep <> FReplaceCmd) then
   begin
-    { Refused, or the step is not the replace's any more (a handler let it go, or put a step
-      of its own on it): what was done stays, and nothing of it is on the redo side. }
-    if FDoc.UndoStep <> FReplaceCmd then FReplaceRan := False;
-    FReplaceCmd := nil;
+    { Refused (the document freed the command: the reference went with it), or the step is
+      not the replace's any more (a handler let it go, or put a step of its own on it): what
+      was done stays, and nothing of it is on the redo side. }
     EndFind(rfsCancelled, True);
     Exit;
   end;
