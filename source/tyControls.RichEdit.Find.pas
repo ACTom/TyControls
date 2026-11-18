@@ -125,6 +125,7 @@ type
     FDepth: Integer;
     FHide: Integer;                       // > 0: inside a group passed over unread (a picture)
     FHidePictures: Boolean;
+    FOpenGroupsMatter: Boolean;
     FLooked, FHidden: Int64;
     function MaskOf(C: Cardinal): QWord;
   public
@@ -146,6 +147,10 @@ type
     function MayHold(ABuf: PByte; AStart, AStop: PtrInt; AHidePictures: Boolean = True): Boolean;
     { Bytes lexed, and bytes of pictures passed over without being lexed, since it was made. }
     property Looked: Int64 read FLooked;
+    { A closing brace whose group opened before the bytes may matter: a paragraph of the file
+      ended inside a destination read in part (TTyRtfParser.ParaEndInPart), so one may begin
+      inside such a group - such a brace then answers fvMay. }
+    property OpenGroupsMatter: Boolean read FOpenGroupsMatter write FOpenGroupsMatter;
     property Hidden: Int64 read FHidden;
   end;
 
@@ -924,6 +929,10 @@ begin
           begin
             Inc(used);
             Inc(FLooked);
+            { A closing brace whose group opened before the paragraph's bytes, in a file with
+              a destination read in part: the paragraph may have begun inside one, and what it
+              makes of the bytes is not known here. }
+            if (FDepth = 0) and FOpenGroupsMatter then Exit(fvMay);
             if FDepth > 0 then
             begin
               Dec(FDepth);
@@ -948,6 +957,8 @@ begin
             Inc(FLooked, tok.Stop - tok.Start);
             // the code pages may not be the ones the filter was made with
             if TyRtfWordSetsCodePages(buf, tok.NameStart, tok.NameLen) then Exit(fvMay);
+            // a destination the reader reads in part: neither of the two readings above
+            if TyRtfWordReadInPart(buf, tok.NameStart, tok.NameLen) then Exit(fvMay);
             c := TyRtfWordChar(buf, tok.NameStart, tok.NameLen, isU);
             // a word ends what a \uN before it was skipping
             t := 0;
@@ -1207,6 +1218,12 @@ begin
         if ok then FSegFilter[k] := TTyRichRawFilter.Create(FSegs[k], rfoMatchCase in FOptions, cps);
       end;
     end;
+  end;
+  if FFilterable then
+  begin
+    if FFilter <> nil then FFilter.OpenGroupsMatter := FLoad.Scan.ParaEndInPart;
+    for k := 0 to High(FSegFilter) do
+      if FSegFilter[k] <> nil then FSegFilter[k].OpenGroupsMatter := FLoad.Scan.ParaEndInPart;
   end;
   Result := FUseFilter and FFilterable;
 end;

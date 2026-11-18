@@ -67,6 +67,7 @@ type
     procedure TestARerunGoesOnWhereItStopped;
     procedure TestAParagraphIsFetchedOnce;
     procedure TestOneHugeParagraphKeepsNoListOfItsMatches;
+    procedure TestEveryPairOfDestinations;
   end;
 
 implementation
@@ -696,7 +697,7 @@ begin
 end;
 
 { The adversarial files (tests/fixtures/rtf/find, its cases.txt: the file, the needle as hex of
-  its UTF-8, m for match case, the places it is found - "-" none): read whole, lazily with the
+  its UTF-8, m for match case and w for whole word, the places it is found - "-" none): read whole, lazily with the
   filter and without it, the finder gives those places. Hex control bytes, a \u without a
   number, a font table and an \ansicpg given again in the body, a surrogate pair split by a
   group the reader passes over, a picture below the reader's group stack lost a hit before;
@@ -725,7 +726,9 @@ begin
       SetLength(needle, Length(parts[1]) div 2);
       for k := 1 to Length(needle) do
         needle[k] := Chr(StrToInt('$' + Copy(parts[1], 2 * k - 1, 2)));
-      if parts[2] = 'm' then opts := [rfoMatchCase] else opts := [];
+      opts := [];
+      if Pos('m', parts[2]) > 0 then Include(opts, rfoMatchCase);
+      if Pos('w', parts[2]) > 0 then Include(opts, rfoWholeWord);
       want := parts[3];
       if want = '-' then want := '';
       bytes := ReadFileBytes(FixtureDir('rtf') + 'find' + PathDelim + parts[0]);
@@ -751,7 +754,7 @@ begin
       end;
       Inc(n);
     end;
-    AssertEquals('the cases', 73, n);
+    AssertEquals('the cases', 88, n);
     { And two of our own: a code page that only a later font table or an ansicpg word brings, used by a
       paragraph whose bytes do not hold that table or word. }
     bytes := BytesOf(Rtf('{|rtf1|ansi|ansicpg1252|deff0{|fonttbl{|f0|fswiss Arial;}}|pard one' +
@@ -2549,6 +2552,125 @@ begin
   finally
     doc.Free;
   end;
+end;
+
+{ The lazily read document's unparsed paragraphs as they were before a find decoded any (so
+  that the next find meets their bytes again). }
+procedure ForgetDecodes(ADoc: TTyRichDocument);
+var
+  i: Integer;
+  src, n: Int64;
+begin
+  for i := 0 to ADoc.Text.ParaCount - 1 do
+    if ADoc.Text.ParaLazySource(i, src, n) then ADoc.Text.ForgetDecoded(src);
+end;
+
+{ Every pair of the destinations the reader tells apart (a word of each meaning of its own word
+  table, and an unknown starred and an unknown plain word): one inside the other in three shapes - text in the outer group before
+  the inner, after it, and a paragraph end inside the inner one - and every piece of one to four
+  characters of the text the whole read gives, searched in the whole read, lazily with the
+  filter and without it: the three agree. A destination added to the reader that the filter does
+  not follow (one read only in part, as upr is) is found here, whatever it is. The first shape
+  for every pair; the other two for a fixed sample of pairs. }
+procedure TTyRichFindTest.TestEveryPairOfDestinations;
+const
+  CSampleEvery = 3;
+var
+  words: TStringArray;
+  i, j, shape, files, needles, k, len, p1: Integer;
+  w1, w2, body: RawByteString;
+  full, lazy: TTyRichDocument;
+  codes: TTyRichCodeArray;
+  seen: TStringList;
+  needle: UTF8String;
+  want: string;
+
+  function Word(const AName: string): RawByteString;
+  begin
+    if AName = '*' then Result := '|*|zzqqx'
+    else if AName = '-' then Result := '|zzqqy'
+    else Result := '|' + AName;
+  end;
+
+  function Utf8Of(AFrom, ALen: Integer): UTF8String;
+  var
+    q: Integer;
+  begin
+    Result := '';
+    for q := AFrom to AFrom + ALen - 1 do
+      if codes[q] = TyRichFindParaEnd then Result := Result + #10
+      else Result := Result + U([codes[q]]);
+  end;
+
+begin
+  words := TyRtfDestinationWords;
+  AssertTrue('the reader names its destinations', Length(words) > 15);
+  SetLength(words, Length(words) + 2);
+  words[High(words) - 1] := '*';
+  words[High(words)] := '-';
+  files := 0;
+  needles := 0;
+  seen := TStringList.Create;
+  try
+    seen.Sorted := True;
+    seen.Duplicates := dupIgnore;
+    for i := 0 to High(words) do
+      for j := 0 to High(words) do
+        for shape := 0 to 2 do
+        begin
+          if (shape > 0) and (((i * Length(words) + j) mod CSampleEvery) <> 0) then Continue;
+          w1 := Word(words[i]);
+          w2 := Word(words[j]);
+          case shape of
+            0: body := 'a{' + w1 + ' b{' + w2 + ' xyz}}c';
+            1: body := 'a{' + w1 + '{' + w2 + ' xyz}b}c';
+          else
+            body := 'a{' + w1 + ' b{' + w2 + ' x|par yz}}c';
+          end;
+          full := LoadRtf(BytesOf(Rtf('{|rtf1|ansi|ansicpg1252|deff0{|fonttbl{|f0|fswiss Arial;}}' +
+            '|pard filler|par ' + body + '|par}')), True);
+          lazy := nil;
+          try
+            codes := TyRichFindCodes(full.Text.GetText(0, full.Text.Length));
+            // (the pieces that reach past the first paragraph, which every file shares)
+            p1 := 0;
+            while (p1 < Length(codes)) and (codes[p1] <> TyRichFindParaEnd) do Inc(p1);
+            seen.Clear;
+            for k := 0 to High(codes) do
+              for len := 1 to 4 do
+              begin
+                if (k + len > Length(codes)) or (k + len - 1 <= p1) then Continue;
+                needle := Utf8Of(k, len);
+                seen.Add(needle);
+              end;
+            if seen.Count = 0 then Continue;
+            Inc(files);
+            lazy := LoadRtf(BytesOf(Rtf('{|rtf1|ansi|ansicpg1252|deff0{|fonttbl{|f0|fswiss Arial;}}' +
+              '|pard filler|par ' + body + '|par}')), False);
+            for k := 0 to seen.Count - 1 do
+            begin
+              needle := seen[k];
+              if Pos(#$EF#$BF#$BC, needle) > 0 then Continue;
+              Inc(needles);
+              want := Positions(full, needle, []);
+              ForgetDecodes(lazy);
+              if Positions(lazy, needle, [], True) <> want then
+                Fail(Format('%s / %s, shape %d, "%s": lazily, filtered: %s, read whole: %s',
+                  [words[i], words[j], shape, needle, Positions(lazy, needle, [], True), want]));
+              ForgetDecodes(lazy);
+              if Positions(lazy, needle, [], False) <> want then
+                Fail(Format('%s / %s, shape %d, "%s": lazily, not filtered differs from the whole read',
+                  [words[i], words[j], shape, needle]));
+            end;
+          finally
+            lazy.Free;
+            full.Free;
+          end;
+        end;
+  finally
+    seen.Free;
+  end;
+  AssertTrue(Format('files %d, needles %d', [files, needles]), (files > 500) and (needles > 5000));
 end;
 
 initialization

@@ -3,8 +3,8 @@
 Small RTF files that attack the raw-byte filter of the finder (`tyControls.RichEdit.Find`): the
 filter looks for a needle in a paragraph's unparsed bytes and must never say "cannot match"
 where the reader would read the needle. `TTyRichFindTest.TestTheAdversarialFiles` reads
-`cases.txt` - per line, tab-separated: the file, the needle as hex of its UTF-8, `m` when the
-case must match, the places the needle is found (`-`: none) and what the file is about. Each
+`cases.txt` - per line, tab-separated: the file, the needle as hex of its UTF-8, the options (`m` match case,
+`w` whole word, `-` none), the places the needle is found (`-`: none) and what the file is about. Each
 file is searched read whole, read lazily with the filter and without it: all three must give
 those places. A file may serve two lines (two needles). They are kept byte for byte
 (`.gitattributes`: `tests/fixtures/rtf/** -text`); none of their words is anyone's.
@@ -84,3 +84,18 @@ those places. A file may serve two lines (two needles). They are kept byte for b
 | `V20.rtf` | 😀 |  | 8 | a pair split by a pn group with pntxtb holding a \|u |
 | `B13.rtf` | ffd8 |  | 8 | a picture below 4100 groups: the reader reads its hex as text |
 | `B13b.rtf` | ffd8 |  | 8 | text below 4100 groups |
+| `R1.rtf` | axyz |  | 7 | text directly in upr before its ud |
+| `R2.rtf` | ax |  | 7 | the same, one character each |
+| `R3.rtf` | xyzc |  | 8 | text directly in upr after its ud |
+| `R4.rtf` | u2more |  | 10 | a paragraph that begins inside ud, then upr's own text |
+| `R5.rtf` | 😀 |  | 8 | a pair: the high half in ud, a \|u directly in upr, the low half after |
+| `R6.rtf` | 中 |  | 8 | a lead byte in ud, a byte directly in upr, the trail after |
+| `R7.rtf` | ax |  | 7 | a control word that is a character directly in upr |
+| `R8.rtf` | ax |  | 7 | a hex byte directly in upr |
+| `R9.rtf` | axc |  | 7 | the ansi half as a group, as Word writes it |
+| `R10.rtf` | axc |  | 7 | a line break of the file directly in upr |
+| `R11.rtf` | axyz<0D><0A>c |  | 7 | a needle with a paragraph end, text directly in upr |
+| `R12.rtf` | axyzd |  | 7 | upr nested in ud nested in upr |
+| `R13.rtf` | ax |  | - | upr in a field result (an object: nothing to find) |
+| `R14.rtf` | axyz |  | 7 | upr, any case |
+| `R15.rtf` | axyz | w | 8 | upr, whole word |

@@ -138,6 +138,7 @@ type
     Dest: TTyRtfDest;
     DestOwner: Boolean;          // this group began Dest (its end finishes it)
     DestStart: PtrInt;           // where that group's brace is
+    InPart: Boolean;             // inside a destination read only in part (ReadInPart)
     Uc: Integer;
     // character
     FontNum: Integer;            // -1: \deff
@@ -304,6 +305,7 @@ type
     FCodePages: array of Integer;  // every code page this parser decoded or could decode with
     FCodePageN: Integer;
     FOverflowed: Boolean;
+    FParaEndInPart: Boolean;
     FDeff: Integer;
     FPaperW, FPaperH, FMargL, FMargR: Integer;
     FFonts: array of TTyRtfFont;
@@ -541,6 +543,10 @@ type
     // only counted, so no destination begins there (a \pict's hex is text). Of the index scan:
     // a finder looking at unparsed bytes then reads a picture's group as it reads any other.
     property GroupsOverflowed: Boolean read FOverflowed;
+    // A paragraph ended inside a destination read only in part (ReadInPart) somewhere in what
+    // this parser read. Of the index scan: the next paragraph of the file then begins inside
+    // such a group, and a finder looking at its bytes cannot know what the group makes of them.
+    property ParaEndInPart: Boolean read FParaEndInPart;
     property DefaultFont: Integer read FDeff;     // \deff, -1 none
     // Where the first font table and the first colour table before the body close (the
     // position of their closing brace), -1 when the header has none.
@@ -923,6 +929,13 @@ function TyRtfWordSetsCodePages(ABuf: PByte; ANameStart, ANameLen: Integer): Boo
 // A group that begins with this word holds no text the reader takes (\pict): its bytes need
 // not be looked at to find text.
 function TyRtfWordHidesGroup(ABuf: PByte; ANameStart, ANameLen: Integer): Boolean;
+// A word of a destination the reader reads only in part (ReadInPart): of its group some is the
+// paragraph's text and some is dropped (upr: what it holds directly goes, its ud is the text).
+// A find that meets one in bytes it reads cannot treat the group as either read or passed over.
+function TyRtfWordReadInPart(ABuf: PByte; ANameStart, ANameLen: Integer): Boolean;
+// A word of every destination the reader tells apart (its word table: words of one meaning
+// share one code - the first of them), for a test that tries each.
+function TyRtfDestinationWords: TStringArray;
 
 implementation
 
@@ -980,6 +993,12 @@ const
   kwDOpaque = 170;          // a non-text block: one object
   kwDCharExtra = 171;       // a property group: the run's Extra
   kwDParaExtra = 172;       // a property group: the paragraph's Extra
+
+  { The destinations the reader reads only in part - some of what their group holds is the
+    paragraph's text, some is dropped (HandleDestination: upr drops what it holds directly and
+    reads its ud). The find's filter cannot read such a group as either read or passed over
+    (TyRtfWordReadInPart): a destination added that is read in part goes here. }
+  ReadInPart = [kwDUpr, kwDUd];
 
 type
   TWordDef = record
@@ -1376,6 +1395,38 @@ end;
 function TyRtfWordHidesGroup(ABuf: PByte; ANameStart, ANameLen: Integer): Boolean;
 begin
   Result := LookupWord(@ABuf[ANameStart], ANameLen) = kwDPict;
+end;
+
+function TyRtfWordReadInPart(ABuf: PByte; ANameStart, ANameLen: Integer): Boolean;
+begin
+  Result := LookupWord(@ABuf[ANameStart], ANameLen) in ReadInPart;
+end;
+
+function TyRtfDestinationWords: TStringArray;
+var
+  i, n: Integer;
+
+  function KindListed(AIndex: Integer): Boolean;
+  var
+    q: Integer;
+  begin
+    for q := 0 to AIndex - 1 do
+      if WordTable[q].K = WordTable[AIndex].K then Exit(True);
+    Result := False;
+  end;
+
+begin
+  Result := nil;
+  SetLength(Result, Length(WordTable));
+  n := 0;
+  for i := 0 to High(WordTable) do
+    if (WordTable[i].K >= kwDFontTbl) and (LookupWord(@WordKeys[i].Name[0], WordKeys[i].Len) =
+      WordTable[i].K) and not KindListed(i) then
+    begin
+      Result[n] := WordTable[i].N;
+      Inc(n);
+    end;
+  SetLength(Result, n);
 end;
 
 // CJK ideographs, kana, Hangul, Bopomofo, CJK punctuation and the full-width forms: the
@@ -2715,7 +2766,12 @@ begin
       end
       else
         SkipAndPop;
-    kwDUpr: BeginDest(rdUpr);
+    kwDUpr:
+      begin
+        BeginDest(rdUpr);
+        // (its groups take it over: a paragraph that ends in them ends in a part-read group)
+        FS.Props.InPart := True;
+      end;
   else
     if FS.Star then
     begin
@@ -4257,6 +4313,7 @@ var
   inTable: Boolean;
   i: Integer;
 begin
+  if FS.Props.InPart then FParaEndInPart := True;
   if FS.InRowDef then EndRowDef;
   Flush;
   EnsureBody;

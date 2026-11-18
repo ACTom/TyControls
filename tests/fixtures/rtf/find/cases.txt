@@ -71,3 +71,18 @@ V19.rtf	F09F9880	-	8	a pair split by a stylesheet holding a |u
 V20.rtf	F09F9880	-	8	a pair split by a pn group with pntxtb holding a |u
 B13.rtf	66666438	-	8	a picture below 4100 groups: the reader reads its hex as text
 B13b.rtf	66666438	-	8	text below 4100 groups
+R1.rtf	6178797A	-	7	text directly in upr before its ud
+R2.rtf	6178	-	7	the same, one character each
+R3.rtf	78797A63	-	8	text directly in upr after its ud
+R4.rtf	75326D6F7265	-	10	a paragraph that begins inside ud, then upr's own text
+R5.rtf	F09F9880	-	8	a pair: the high half in ud, a |u directly in upr, the low half after
+R6.rtf	E4B8AD	-	8	a lead byte in ud, a byte directly in upr, the trail after
+R7.rtf	6178	-	7	a control word that is a character directly in upr
+R8.rtf	6178	-	7	a hex byte directly in upr
+R9.rtf	617863	-	7	the ansi half as a group, as Word writes it
+R10.rtf	617863	-	7	a line break of the file directly in upr
+R11.rtf	6178797A0D0A63	-	7	a needle with a paragraph end, text directly in upr
+R12.rtf	6178797A64	-	7	upr nested in ud nested in upr
+R13.rtf	6178	-	-	upr in a field result (an object: nothing to find)
+R14.rtf	6178797A	-	7	upr, any case
+R15.rtf	6178797A	w	8	upr, whole word
