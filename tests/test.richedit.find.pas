@@ -1463,6 +1463,31 @@ begin
     finally
       doc.Free;
     end;
+    { A needle with a paragraph end reads whole paragraphs, a window of them a step: the
+      window too is cut by the file's bytes. (A paragraph end and a letter: every picture's
+      paragraph is long enough to be the second one, so each is read.) }
+    doc := TTyRichDocument.Create;
+    try
+      m.Position := 0;
+      TyRichLoadRtf(doc, m);
+      f := TTyRichFinder.Create(doc, #10 + 'q', []);
+      try
+        steps := 0;
+        repeat
+          r := f.Step(Budget);
+          Inc(steps);
+        until r <> rfrMore;
+        AssertTrue('a paragraph end and a letter: none', r = rfrNotFound);
+        AssertTrue(Format('the pictures were read (%d of %d bytes)', [f.FileBytes, total]),
+          f.FileBytes > total - MB);
+        AssertTrue(Format('a window ends where the file''s bytes pass the budget (%d steps)',
+          [steps]), steps >= 8);
+      finally
+        f.Free;
+      end;
+    finally
+      doc.Free;
+    end;
   finally
     m.Free;
   end;
