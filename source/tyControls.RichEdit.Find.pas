@@ -76,6 +76,10 @@ const
   { The most matches a part of it replaces (the last of its range's: the others wait for the
     next part). }
   CRichReplacePartMatches = 8192;
+  { The ordinary edits of a part (a replacement with a paragraph end): while the part's matches
+    lie within this many characters they go the first one, then from the last back; farther
+    apart, from the first on (TTyRichReplaceAllCommand's run says why). }
+  CRichReplaceBackSpan = 32 * 1024;
 
 type
   TTyRichCodeArray = array of Cardinal;
@@ -2605,12 +2609,13 @@ end;
 
 procedure TTyRichReplaceAllCommand.Apply(ADoc: TTyRichDocument);
 var
-  i, r, para, left, n0, n: Integer;
+  i, k, r, para, left, n0, n: Integer;
   t: TTyRichText;
   runs: TTyRunArray;
   off, len0, d, p: TTyRichPos;
   fmt: TTyCharFormatId;
   last: TTyRichCodeArray;
+  back: Boolean;
 begin
   if FReadyCount = 0 then Exit;
   // (the first part of what a search found; the next ones only follow its own: ExecutePart)
@@ -2639,17 +2644,28 @@ begin
     Inc(FSkipped, left);
   end
   else if not FSimple then
-    { The ordinary edits, the first match first, each at its place moved by what the ones
-      before it changed. Forward on purpose: an edit makes its place a boundary of the
-      paragraph's pieces of text, which the text storage finds by counting characters from
-      the start of the piece the place is in. From the last match back every edit of a part
-      would count from the start of the same long piece - a line of n matches n times its
-      length; forward, the piece an edit leaves behind it starts at that edit, and the next
-      one counts only the characters between the two. (A match lies inside one paragraph and
-      takes the format of its first character's run: the order changes nothing else.) }
-    for i := 0 to n - 1 do
+  begin
+    { The ordinary edits, a delete and an insert a match. Their order is chosen for what an
+      edit costs in the text storage: it makes its place a boundary of the paragraph's pieces
+      of text, found by counting characters from the start of the piece the place is in. From
+      the last match back, every edit of a part would count from the start of the same long
+      piece - the part's matches times the stretch they lie in, and times the whole line
+      before them where the part's first match is far into a long paragraph. So the first
+      match goes first: the piece it leaves behind starts at it. Then, where the part's
+      matches lie close together (CRichReplaceBackSpan), from the last back - each counts that
+      short stretch at most, and the paragraphs the replacements make come to lie behind the
+      place being edited, which the text's tree takes best; farther apart, from the first on,
+      each counting only the characters between two matches. (A match lies inside one
+      paragraph and takes the format of its first character's run: the order changes nothing
+      else.) }
+    back := FReady[n - 1] - FReady[0] <= CRichReplaceBackSpan;
+    d := 0;
+    for k := 0 to n - 1 do
     begin
-      p := FReady[i] + (t.Length - len0);
+      if back and (k > 0) then i := n - k else i := k;
+      // (its place: moved by every one before it - from the last back, by the first alone)
+      if not back then d := t.Length - len0;
+      p := FReady[i] + d;
       para := t.ParaOfPos(p);
       off := p - t.ParaStart(para);
       runs := ADoc.RunsOf(para);
@@ -2659,7 +2675,9 @@ begin
       DeleteRange(ADoc, p, FLen);
       if FRepl <> '' then InsertText(ADoc, p, FRepl, fmt);
       Inc(FReplaced);
-    end
+      if k = 0 then d := t.Length - len0;
+    end;
+  end
   else
     // a needle with a paragraph end: the ordinary edits, the last first
     for i := n - 1 downto 0 do

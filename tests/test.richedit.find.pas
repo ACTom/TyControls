@@ -3200,10 +3200,11 @@ end;
 { One line of 80,000 touching whole-word matches, each replaced by a paragraph end and a
   letter (the ordinary edits, a delete and an insert a match): the parts are bounded - at most
   CRichReplacePartMatches matches each -, the limit on the undo step is looked at after each
-  (one part's worth is kept when the first reaches it), and the edits of a part cost the
-  stretch of text between them, not the line from its start each: the characters the text
-  storage counts to find the edits' places stay a small multiple of the text. Stopped at the
-  limit and started from where it said, the next part follows without a gap. }
+  (one part's worth is kept when the first reaches it), and an edit of a part costs a short
+  stretch of text, not the line from its start: what the text storage counts to find the
+  edits' places is bounded by the matches, by the text between them, and once by the text
+  before a part's first. Stopped at the limit and started from where it said, the next part
+  follows without a gap. }
 procedure TTyRichFindTest.TestALineOfTouchingMatchesIsReplacedInBoundedParts;
 const
   CCount = 80000;
@@ -3217,6 +3218,8 @@ var
   work: Int64;
   at, len: TTyRichPos;
   bef: TTyRichBefore;
+  limited: Boolean;
+  line: RawByteString;
 begin
   sb := TStringBuilder.Create;
   try
@@ -3250,11 +3253,59 @@ begin
     AssertEquals('a part takes at most its share of matches', CRichReplacePartMatches, most);
     AssertEquals('so many parts', (CCount + CRichReplacePartMatches - 1) div CRichReplacePartMatches, parts);
     work := doc.Text.SplitWork - work;
-    AssertTrue(Format('the edits count the text between them, not the line each (%d characters ' +
-      'counted for %d of text)', [work, Length(s)]), work <= 16 * Int64(Length(s)));
+    AssertTrue(Format('an edit counts a short stretch at most, not the line (%d characters ' +
+      'counted for %d matches)', [work, CCount]), work <= 4 * Int64(CRichReplaceBackSpan) * CCount);
     AssertTrue('the text', LinesOf(doc) = want);
   finally
     doc.Free;
+  end;
+  { What the edits count in the text storage, two more lines: matches far apart (each counts
+    the text between two, the part's first the text before it - once), and matches close
+    together far into the line (the first counts the line before them, the others the short
+    stretch behind it). }
+  for i := 0 to 1 do
+  begin
+    sb := TStringBuilder.Create;
+    try
+      if i = 0 then
+      begin
+        most := 12000;
+        for parts := 1 to most do
+        begin
+          sb.Append('a-');
+          sb.Append(StringOfChar('x', 200));
+          sb.Append(' ');
+        end;
+      end
+      else
+      begin
+        most := 5000;
+        sb.Append(StringOfChar('x', 1024 * 1024));
+        sb.Append(' ');
+        for parts := 1 to most do sb.Append('a-');
+      end;
+      line := sb.ToString;
+    finally
+      sb.Free;
+    end;
+    doc := TextDoc(line);
+    try
+      doc.MaxUndoBytes := 0;
+      work := doc.Text.SplitWork;
+      AssertEquals(Format('line %d: all of them', [i]), most,
+        ReplaceInParts(doc, 'a-', #10 + 'z', [rfoWholeWord], CRichReplaceRangeChars, before, parts, limited));
+      work := doc.Text.SplitWork - work;
+      if i = 0 then
+        AssertTrue(Format('far apart: the text between them, a few times (%d characters counted ' +
+          'for %d of text)', [work, Length(line)]), work <= 16 * Int64(Length(line)))
+      else
+        AssertTrue(Format('close together, far into the line: the line once, then the short ' +
+          'stretch (%d characters counted for %d matches behind %d of text)', [work, most,
+          Length(line)]), work <= 4 * Int64(CRichReplaceBackSpan) * most + 16 * Int64(Length(line)));
+      AssertEquals(Format('line %d: none left', [i]), 0, CountOf('a-', doc.Text.GetText(0, doc.Text.Length)));
+    finally
+      doc.Free;
+    end;
   end;
   // the limit: looked at after each part, so a step keeps one part's worth past it at most
   doc := TextDoc(s);
