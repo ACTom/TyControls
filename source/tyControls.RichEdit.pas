@@ -11031,6 +11031,17 @@ var
   at, stop: TTyRichPos;
 begin
   if (FFindKind <> rfkReplace) or FInReplacePart then Exit;
+  if FReplaceRan and (FReplaceCmd <> nil) and (FDoc.RedoStep = FReplaceCmd) and
+    (FReplaceCmd.Id = FReplaceId) then
+  begin
+    { Its own step undone: nothing of what it did is left - it tells none replaced, and the
+      range's start as the place to go on from. }
+    FReplaceTally.Replaced := 0;
+    FReplaceTally.Skipped := 0;
+    FReplaceTally.ResumeAt := FReplaceFrom;
+    FReplaceTally.ResumeLength := FReplaceLength;
+    Exit;
+  end;
   at := FReplaceTally.ResumeAt;
   if (at < 0) or (AChange.Pos >= at) then Exit;
   if AChange.Pos + AChange.OldLen <= at then

@@ -89,6 +89,7 @@ type
     procedure TestAHandlerMayFreeTheControl;
     procedure TestAReplaceOfAnIncompleteDocumentCountsInPieces;
     procedure TestAStoppedReplaceKeepsOnlyItsRecord;
+    procedure TestAReplaceUndoneTellsItsStart;
   end;
 
   // the control's protected seams (the find's piece and batch, the first slice)
@@ -1697,6 +1698,44 @@ begin
   finally
     FRich.FakeClock := False;
   end;
+end;
+
+{ A background replace stopped by the undo of its own step: nothing of it is left, and it says
+  so - none replaced, the range's start as the place to go on from; a replace from there
+  replaces all. }
+procedure TTyRichEditFindTest.TestAReplaceUndoneTellsItsStart;
+var
+  src: string;
+  res: TTyRichReplaceResult;
+  turns, n: Integer;
+begin
+  src := Lines(6000, 'MrMrMrMrMr ');
+  SetText(src);
+  FRich.FakeClock := True;
+  FRich.ClockStep := 1;
+  try
+    ResetEvents;
+    FRich.ReplaceAllAsync('Mr', 'Mr.');
+    TFindAccess(FRich).FindSlice := 2048;
+    turns := 0;
+    while FRich.FindRunning and (Pos('Mr.', Text) = 0) and (turns < 10000) do
+    begin
+      FRich.Turn;
+      Inc(turns);
+    end;
+    AssertTrue('a part went in', FRich.FindRunning and (Pos('Mr.', Text) > 0));
+    FRich.Document.Undo;
+    FRich.Turn;
+    AssertFalse('the undo stopped it', FRich.FindRunning);
+    AssertEquals('...told cancelled', Ord(rreCancelled), Ord(FReplaceResult.Ending));
+    AssertEquals('...nothing of it left', 0, FReplaceResult.Replaced);
+    AssertEquals('...on from the start', 0, FReplaceResult.ResumeAt);
+    AssertEquals('...to the end', -1, FReplaceResult.ResumeLength);
+  finally
+    FRich.FakeClock := False;
+  end;
+  n := FRich.ReplaceAll('Mr', 'Mr.', [], FReplaceResult.ResumeAt, FReplaceResult.ResumeLength, res);
+  AssertEquals('from there: all', 6000 * 5, n);
 end;
 
 initialization

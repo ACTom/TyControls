@@ -229,6 +229,8 @@ type
       would find its part refused by the document: TTyRichDocument.ExecutePart). }
     FKeepMoved: Boolean;
     FCap: Integer;                    // CollectRange: the most matches it collects (0: all)
+    FNoTouchCut: Boolean;             // ... but never stopping between two that touch
+    FHeld: TTyRichPos;                // the match after the cap, given first by the next call
     FCapped: Boolean;
     FFetchedBytes: Int64;
     FRangeLo, FRangeHi: Integer;
@@ -285,9 +287,10 @@ type
       call again with the same range; rfrFound / rfrNotFound: the range is read and its
       matches are Matches. }
     function CollectRange(ALo, AHi: Integer; AFrom, ATo: TTyRichPos;
-      ABudget: Int64; ACap: Integer = 0): TTyRichFindResult;
-    { CollectRange stopped at ACap matches (rfrFound), the range not read through: the next
-      call with the same range goes on right after the last one. }
+      ABudget: Int64; ACap: Integer = 0; ANoTouchCut: Boolean = False): TTyRichFindResult;
+    { CollectRange stopped at ACap matches (rfrFound; ANoTouchCut: or after more, never
+      between two matches that touch), the range not read through: the next call with the same
+      range goes on right after the last one. }
     property Capped: Boolean read FCapped;
     { The text before where the scan stands changed by ADelta characters and AParas paragraphs
       (a replace's own part, of the matches it collected): the scan goes on where it stood, in
@@ -405,6 +408,7 @@ type
     FFrom, FTo: TTyRichPos;           // the range, in the text it began on (FTo < 0: its end)
     FResume: TTyRichPos;              // behind the last match dealt with, in the text as it is
     FStuck: Boolean;
+    FTouchMatters: Boolean;           // a part may not end between two matches that touch
     FSimple: Boolean;                 // a paragraph end in the needle: every match first
     FFast: Boolean;                   // none in either: ReplaceInParas
     FAllAtOnce: Boolean;
@@ -438,6 +442,7 @@ type
     function Search(ABudget: Int64): Boolean;
     procedure Fail;
     function RangeEnd: TTyRichPos;
+    function TouchMatters: Boolean;
   protected
     procedure DoExecute(ADoc: TTyRichDocument); override;
     procedure DoContinue(ADoc: TTyRichDocument); override;
@@ -1077,6 +1082,7 @@ begin
   FRangeHi := -1;
   FPend := -1;
   FKeepPara := -1;
+  FHeld := -1;
   ParseNeedle(ANeedle);
   if (FMax >= 0) and (FMax - FMin < FLen) then FNever := True;
 end;
@@ -1266,17 +1272,23 @@ begin
       end;
     1:
       begin
+        if (FCap > 0) and (FMatchCount >= FCap) and not (FNoTouchCut and (AStart = FMin)) then
+        begin
+          { As many as a caller takes at a time, and this one does not touch the last (or a
+            cut there is harmless): it is held for the next call, the scan stands after it.
+            So the caller's part never ends between two matches that touch where that would
+            change what a whole word is for the second. }
+          FHeld := AStart;
+          FMin := AStart + FLen;
+          FStop := True;
+          Result := True;
+          Exit;
+        end;
         if FMatchCount = Length(FMatches) then SetLength(FMatches, FMatchCount * 2 + 64);
         FMatches[FMatchCount] := AStart;
         Inc(FMatchCount);
         // the next one begins after this one
         FMin := AStart + FLen;
-        if (FCap > 0) and (FMatchCount >= FCap) then
-        begin
-          // as many as a caller takes at a time: the scan stands right after this one
-          FStop := True;
-          Result := True;
-        end;
       end;
   else
     if AStart > FBest then FBest := AStart;
@@ -2130,7 +2142,7 @@ begin
 end;
 
 function TTyRichFinder.CollectRange(ALo, AHi: Integer; AFrom, ATo: TTyRichPos;
-  ABudget: Int64; ACap: Integer): TTyRichFindResult;
+  ABudget: Int64; ACap: Integer; ANoTouchCut: Boolean): TTyRichFindResult;
 begin
   Inc(FSteps);
   if FNever then Exit(rfrNotFound);
@@ -2151,6 +2163,15 @@ begin
     FCurByte := 0;
     FKeep := '';
     FKeepPara := -1;
+    FHeld := -1;
+  end;
+  // (the match the last call held back is this call's first)
+  if FHeld >= 0 then
+  begin
+    if FMatchCount = Length(FMatches) then SetLength(FMatches, FMatchCount * 2 + 64);
+    FMatches[FMatchCount] := FHeld;
+    Inc(FMatchCount);
+    FHeld := -1;
   end;
   FScanEnd := FText.ParaStart(AHi) + FText.ParaLength(AHi);
   if (ATo >= 0) and (ATo < FScanEnd) then FScanEnd := ATo;
@@ -2158,11 +2179,13 @@ begin
   FStop := False;
   if ABudget < 0 then FBudget := High(Int64) div 4 else FBudget := Max64(ABudget, 1);
   FCap := ACap;
+  FNoTouchCut := ANoTouchCut;
   FCapped := False;
   try
     ScanRange(AHi);
   finally
     FCap := 0;
+    FNoTouchCut := False;
   end;
   if FStop then
   begin
@@ -2179,6 +2202,7 @@ end;
 procedure TTyRichFinder.Moved(ADelta: TTyRichPos; AParas: Integer);
 begin
   Inc(FMin, ADelta);
+  if FHeld >= 0 then Inc(FHeld, ADelta);
   Inc(FNext, AParas);
   if FRangeHi >= 0 then Inc(FRangeHi, AParas);
   if FKeepPara >= 0 then
@@ -2270,6 +2294,22 @@ begin
   FResume := FFrom;
   Inc(GRichReplaceIds);
   FId := GRichReplaceIds;
+end;
+
+{ Whole word, a match right after another, a stop between them: run again from the stop, its
+  whole-word test looks at the text before it as it now is - the replacement's last character
+  where the single walk saw the needle's. Where the two would not answer alike (or the
+  replacement is empty: then it is the character before the other match), a part never ends
+  between two matches that touch. }
+function TTyRichReplaceAllCommand.TouchMatters: Boolean;
+var
+  r: TTyRichCodeArray;
+begin
+  Result := False;
+  if not (rfoWholeWord in FOptions) or (FFinder = nil) or FFinder.Never then Exit;
+  r := TyRichFindCodes(FRepl);
+  if Length(r) = 0 then Exit(True);
+  Result := Joins(FFinder.FLastChar, FFinder.FFirstChar) <> Joins(r[High(r)], FFinder.FFirstChar);
 end;
 
 { The range's end in the text as it is now. }
@@ -2392,6 +2432,7 @@ begin
     FFinder := TTyRichFinder.Create(FTarget, FFind, FOptions, FFrom, FTo);
     FFinder.Collect := True;
     FLen := FFinder.MatchLen;
+    FTouchMatters := TouchMatters;
     if FFinder.Never then
     begin
       FWalkDone := True;
@@ -2432,7 +2473,9 @@ begin
       FTarget.BeginRead;
       try
         // (the first one whatever its length: a needle may be longer than the range)
-        while (k < FAllCount) and ((k = FAllNext) or (FAll[k] + FLen - last <= FRangeChars)) do
+        // (and on over matches that touch, where a part may not end between them)
+        while (k < FAllCount) and ((k = FAllNext) or (FAll[k] + FLen - last <= FRangeChars) or
+          (FTouchMatters and (FAll[k] = FAll[k - 1] + FLen))) do
         begin
           Take(FAll[k] + FCharDelta);
           Inc(k);
@@ -2479,7 +2522,8 @@ begin
       may hold millions (a one-line file) - a list of all of them would cost what the step's
       record saves. The finder then stands after the last one, in the paragraph's text it
       keeps, and goes on from there after the part (Moved). }
-    r := FFinder.CollectRange(FRangeLo, FRangeHi, FFrom, stop, ABudget, CRichReplacePartMatches);
+    r := FFinder.CollectRange(FRangeLo, FRangeHi, FFrom, stop, ABudget, CRichReplacePartMatches,
+      FTouchMatters);
     if r = rfrMore then Exit(False);
     // (one read scope for the range's checks: the loader trims once, when it ends)
     FTarget.BeginRead;
@@ -2525,7 +2569,8 @@ begin
     part, moved by what this one changed - a paragraph of megabytes with matches all through
     it is replaced in parts too. }
   n := FReadyCount;
-  if n > CRichReplacePartMatches then n := CRichReplacePartMatches;
+  // (a part does not end between matches that touch where that matters: see TouchMatters)
+  if (n > CRichReplacePartMatches) and not FTouchMatters then n := CRichReplacePartMatches;
   if FFast then
   begin
     left := 0;

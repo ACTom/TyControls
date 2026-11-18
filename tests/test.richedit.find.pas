@@ -68,6 +68,7 @@ type
     procedure TestAParagraphIsFetchedOnce;
     procedure TestOneHugeParagraphKeepsNoListOfItsMatches;
     procedure TestEveryPairOfDestinations;
+    procedure TestAStopBetweenTouchingWholeWords;
   end;
 
 implementation
@@ -2671,6 +2672,90 @@ begin
     seen.Free;
   end;
   AssertTrue(Format('files %d, needles %d', [files, needles]), (files > 500) and (needles > 5000));
+end;
+
+{ One part of a replace of [AStart, AStart + ALength), then the replace is stopped as the
+  control stops it (it lets go of its walk); True when that part was its last. }
+function ReplaceOnePart(ADoc: TTyRichDocument; const ANeedle, ARepl: UTF8String;
+  AOptions: TTyRichFindOptions; AStart, ALength: TTyRichPos; out ATally: TTyRichReplaceTally): Boolean;
+var
+  cmd: TTyRichReplaceAllCommand;
+begin
+  ATally := Default(TTyRichReplaceTally);
+  cmd := TTyRichReplaceAllCommand.Create(ADoc, ANeedle, ARepl, AOptions, AStart, ALength);
+  cmd.Tally := @ATally;
+  cmd.Prepare(-1);
+  if not cmd.Ready then
+  begin
+    cmd.Free;
+    Exit(True);
+  end;
+  if not ADoc.Execute(cmd) then raise Exception.Create('the part did not run');
+  Result := cmd.Finished;
+  cmd.Tally := nil;
+  cmd.LetGo;
+end;
+
+{ Whole word, matches that touch in one paragraph of more of them than a part takes, the replace
+  stopped after every part and started again from where it said: it replaces what one walk
+  replaces - also where the replacement changes what the character before the next match is
+  (a stop between two that touch would have made the second no whole word any more). Each
+  text also with the pairs shifted, so that a part's last match is the first of two. }
+procedure TTyRichFindTest.TestAStopBetweenTouchingWholeWords;
+var
+  doc, one: TTyRichDocument;
+  s: RawByteString;
+  sb: TStringBuilder;
+  i, k, runs, total: Integer;
+  tally: TTyRichReplaceTally;
+  skipped: Integer;
+  at, len: TTyRichPos;
+  repl: UTF8String;
+begin
+  for k := 0 to 3 do
+  begin
+    sb := TStringBuilder.Create;
+    try
+      case k of
+        0, 1: for i := 0 to 19999 do sb.Append('a-');
+        2: for i := 0 to 9999 do sb.Append('a-a- ');
+      else
+        sb.Append('a- ');
+        for i := 0 to 9999 do sb.Append('a-a- ');
+      end;
+      s := sb.ToString;
+    finally
+      sb.Free;
+    end;
+    if k = 1 then repl := 'z-' else repl := 'zz';
+    one := TextDoc(s);
+    doc := TextDoc(s);
+    try
+      ReplaceIn(one, 'a-', repl, [rfoWholeWord], skipped);
+      at := 0;
+      len := -1;
+      runs := 0;
+      total := 0;
+      repeat
+        Inc(runs);
+        if ReplaceOnePart(doc, 'a-', repl, [rfoWholeWord], at, len, tally) then
+        begin
+          Inc(total, tally.Replaced);
+          Break;
+        end;
+        Inc(total, tally.Replaced);
+        at := tally.ResumeAt;
+        len := tally.ResumeLength;
+      until runs > 100;
+      AssertEquals(Format('%d: the same text as one walk', [k]), one.Text.GetText(0, one.Text.Length),
+        doc.Text.GetText(0, doc.Text.Length));
+      AssertEquals(Format('%d: as many', [k]), CountOf('a-', s) - CountOf('a-', one.Text.GetText(0,
+        one.Text.Length)), total);
+    finally
+      doc.Free;
+      one.Free;
+    end;
+  end;
 end;
 
 initialization
