@@ -62,6 +62,7 @@ type
     procedure TestReplaceStopsAtTheLimit;
     procedure TestReplaceSkipsANestedRow;
     procedure TestAStoppedReplaceLeavesNothingToRedo;
+    procedure TestAReplaceLetGoIsStoppedNotFinished;
     procedure TestReplaceParsesEachIntervalOnce;
     procedure TestReplaceUndoneSavesTheFile;
     procedure TestReplaceKeepsTheTableEdgeRule;
@@ -1960,6 +1961,77 @@ begin
     AssertTrue(doc.Execute(TTyRichInsertText.Create(0, 'x')));
     AssertFalse('not the newest step', doc.ExecutePart(cmd));
     AssertFalse('nothing to redo', doc.CanRedo);
+  finally
+    doc.Free;
+  end;
+end;
+
+{ "Let go of" and "through its range" are two states of a replace: one that is let go of
+  after a part - by its caller, by a step put on top of its own, by the undo of its step - is
+  Stopped, not Finished, also after its step is uncovered or redone; it finds nothing more.
+  One that walked through its range is Finished, and stays so let go, undone and redone. }
+procedure TTyRichFindTest.TestAReplaceLetGoIsStoppedNotFinished;
+var
+  s: RawByteString;
+  doc: TTyRichDocument;
+  i, way: Integer;
+  cmd: TTyRichReplaceAllCommand;
+  tally: TTyRichReplaceTally;
+  skipped: Integer;
+begin
+  s := '';
+  for i := 0 to 999 do s := s + 'a cat here' + #10;
+  for way := 0 to 2 do
+  begin
+    doc := TextDoc(s);
+    try
+      tally := Default(TTyRichReplaceTally);
+      cmd := TTyRichReplaceAllCommand.Create(doc, 'cat', 'dog', []);
+      cmd.Tally := @tally;
+      cmd.RangeChars := 512;
+      AssertTrue('a part found', cmd.Prepare(-1) and cmd.Ready);
+      AssertTrue('the first part', doc.Execute(cmd));
+      AssertFalse('running: not stopped', cmd.Stopped);
+      AssertFalse('running: not finished', cmd.Finished);
+      case way of
+        0: cmd.LetGo;
+        1:
+          begin
+            // a step on top of it, taken off again
+            AssertTrue(doc.Execute(TTyRichInsertText.Create(0, 'x')));
+            doc.Undo;
+          end;
+      else
+        doc.Undo;
+        doc.Redo;
+      end;
+      AssertTrue(Format('%d: it is the top step', [way]), doc.UndoStep = cmd);
+      AssertTrue(Format('%d: stopped', [way]), cmd.Stopped);
+      AssertFalse(Format('%d: not finished', [way]), cmd.Finished);
+      AssertTrue(Format('%d: a search finds nothing more', [way]), cmd.Prepare(-1) and not cmd.Ready);
+      AssertFalse(Format('%d: still not finished', [way]), cmd.Finished);
+      AssertEquals(Format('%d: a part of them replaced', [way]), tally.Replaced,
+        CountOf('dog', doc.Text.GetText(0, doc.Text.Length)));
+      AssertTrue(Format('%d: not all', [way]), (tally.Replaced > 0) and (tally.Replaced < 1000));
+      doc.Undo;
+      doc.Redo;
+      AssertTrue(Format('%d: undone and redone: stopped', [way]), cmd.Stopped and not cmd.Finished);
+    finally
+      doc.Free;
+    end;
+  end;
+  // through its range
+  doc := TextDoc(s);
+  try
+    AssertEquals('all of them', 1000, ReplaceIn(doc, 'cat', 'dog', [], skipped));
+    cmd := doc.UndoStep as TTyRichReplaceAllCommand;
+    AssertTrue('finished', cmd.Finished and not cmd.Stopped);
+    cmd.LetGo;
+    AssertTrue('let go: finished', cmd.Finished and not cmd.Stopped);
+    doc.Undo;
+    doc.Redo;
+    AssertTrue('undone and redone: finished', cmd.Finished and not cmd.Stopped);
+    AssertEquals('all of them again', 1000, CountOf('dog', doc.Text.GetText(0, doc.Text.Length)));
   finally
     doc.Free;
   end;

@@ -415,6 +415,7 @@ type
     FAllAtOnce: Boolean;
     FRangeChars: Int64;
     FStarted, FWalkDone, FLimited: Boolean;
+    FStopped: Boolean;                // let go of before the walk was through its range
     FTotal: TTyRichPos;               // the text's length when the walk began
     // the walk: the next range begins with FNextPara; the one being read; the paragraphs then
     FNextPara, FRangeLo, FRangeHi, FRangeParas: Integer;
@@ -468,8 +469,13 @@ type
     { A part waits for the next run (Execute, then TTyRichDocument.ExecutePart). }
     function Ready: Boolean;
     { Nothing is left to replace: the walk reached the range's end, the limit ended it, or it
-      Failed. }
+      Failed. A walk that was let go of before that is not finished: it is Stopped. }
     function Finished: Boolean;
+    { The walk was let go of before it was through its range (LetGo: its caller stopped it, a
+      step went on top of its own, its step was undone - also when it was redone since): it
+      finds and replaces nothing more, and what is left of its range is still to do, from
+      ResumeAt. Never together with Finished. }
+    property Stopped: Boolean read FStopped;
     { Where a run again would go on from: right behind the last match of the last part that
       ran, in the text as it is now - the range's start before any part ran; and the
       characters from there to the range's end (-1: to the text's end). Run again from there,
@@ -481,7 +487,8 @@ type
       the ordinary way never takes). }
     property Failed: Boolean read FStuck;
     { The walk will not go on (its caller stopped it before its end - a cancel, an edit, a
-      save): the finder and its kept paragraph text go, and what is left is the undo record. }
+      save): the finder and its kept paragraph text go, and what is left is the undo record.
+      A walk that was not through its range is Stopped from here on - not Finished. }
     procedure LetGo;
     { What it holds besides its undo record: the finder's kept text, the lists of matches. }
     function HeldBytes: Int64;
@@ -2432,7 +2439,7 @@ var
   mark: Int64;
 begin
   Result := True;
-  if (FReadyCount > 0) or FWalkDone or FLimited then Exit;
+  if (FReadyCount > 0) or FWalkDone or FLimited or FStopped then Exit;
   t := FTarget.Text;
   // (what Allowed knew was of the text before the last part)
   FAskedFrom := 0;
@@ -2712,7 +2719,8 @@ begin
   FAllNext := 0;
   FRangeOpen := False;
   FRangeLo := -1;
-  FWalkDone := True;
+  // (through its range, at the limit or failed it has ended already: that stays what it is)
+  if not (FWalkDone or FLimited) then FStopped := True;
 end;
 
 function TTyRichReplaceAllCommand.HeldBytes: Int64;
@@ -2724,16 +2732,18 @@ end;
 procedure TTyRichReplaceAllCommand.DoRedo(ADoc: TTyRichDocument);
 var
   highPos: TTyRichPos;
-  wasLimited: Boolean;
+  wasLimited, wasDone: Boolean;
 begin
   // what the first run replaced, again: the same walk, to where the first run ended
   // (and told to nobody: the tally was the first run's caller's)
   FTally := nil;
   highPos := FHighPos;
   wasLimited := FLimited;
+  wasDone := FWalkDone;
   FreeAndNil(FFinder);
   FStarted := False;
   FWalkDone := False;
+  FStopped := False;
   FLimited := False;
   FCollected := False;
   FReadyCount := 0;
@@ -2755,8 +2765,10 @@ begin
   finally
     FRedoTo := -1;
     FHighPos := highPos;
-    FWalkDone := True;
+    // as the first run ended: through its range, at the limit - or stopped before either
+    FWalkDone := wasDone or FStuck;
     FLimited := wasLimited;
+    FStopped := not (FWalkDone or FLimited);
     FreeAndNil(FFinder);
   end;
 end;

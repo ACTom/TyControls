@@ -90,6 +90,7 @@ type
     procedure TestAReplaceOfAnIncompleteDocumentCountsInPieces;
     procedure TestAStoppedReplaceKeepsOnlyItsRecord;
     procedure TestAReplaceUndoneTellsItsStart;
+    procedure TestAReplaceLetGoBetweenTwoTurnsIsNotDone;
   end;
 
   // the control's protected seams (the find's piece and batch, the first slice)
@@ -1809,6 +1810,87 @@ begin
   end;
   n := FRich.ReplaceAll('Mr', 'Mr.', [], FReplaceResult.ResumeAt, FReplaceResult.ResumeLength, res);
   AssertEquals('from there: all', 6000 * 5, n);
+end;
+
+{ A background replace whose step is covered and uncovered again between two of its turns - an
+  edit and its undo: set as the selection's text, run on the document, typed - or undone and
+  redone: the content is the one its last part left, so its next turn sees no change, and still
+  it is not through its range. It ends as cancelled, with what is replaced in the text as it
+  is and the place to go on from; a replace from there replaces the rest and nothing twice
+  (the replacement holds the needle): the text is what one replace of the whole makes it. }
+procedure TTyRichEditFindTest.TestAReplaceLetGoBetweenTwoTurnsIsNotDone;
+var
+  src, want: string;
+  res: TTyRichReplaceResult;
+  way, turns, n, total: Integer;
+  state: Int64;
+begin
+  src := Lines(6000, 'MrMrMrMrMr ');
+  SetText(src);
+  total := FRich.ReplaceAll('Mr', 'Mr.');
+  AssertEquals('one replace of the whole', 6000 * 5, total);
+  want := Text;
+  FRich.FakeClock := True;
+  FRich.ClockStep := 1;
+  try
+    for way := 0 to 3 do
+    begin
+      SetText(src);
+      FRich.ReplaceAllAsync('Mr', 'Mr.');
+      TFindAccess(FRich).FindSlice := 2048;
+      turns := 0;
+      while FRich.FindRunning and (Length(FProgress) < 6) and (turns < 10000) do
+      begin
+        FRich.Turn;
+        Inc(turns);
+      end;
+      AssertTrue(Format('%d: parts went in, more to come', [way]),
+        FRich.FindRunning and (Pos('Mr.', Text) > 0));
+      state := FRich.Document.ContentState;
+      case way of
+        0:
+          begin
+            FRich.SelStart := FRich.Document.Text.Length;
+            FRich.SelLength := 0;
+            FRich.SelText := 'q';
+            FRich.Undo;
+          end;
+        1:
+          begin
+            FRich.Document.Execute(TTyRichInsertText.Create(0, 'q'));
+            FRich.Document.Undo;
+          end;
+        2:
+          begin
+            FRich.SelStart := FRich.Document.Text.Length;
+            FRich.SelLength := 0;
+            FRich.Key8('q');
+            FRich.Undo;
+          end;
+      else
+        // its own step, undone and put back
+        FRich.Undo;
+        FRich.Redo;
+      end;
+      AssertEquals(Format('%d: the content its last part left is there again', [way]), state,
+        FRich.Document.ContentState);
+      AssertTrue(Format('%d: not noticed before its turn', [way]), FRich.FindRunning);
+      TurnUntilDone;
+      AssertEquals(Format('%d: told once', [way]), 1, Length(FDone));
+      AssertEquals(Format('%d: told cancelled, not done', [way]), Ord(rreCancelled),
+        Ord(FReplaceResult.Ending));
+      n := CountMatchesOf('Mr.', Text);
+      AssertTrue(Format('%d: a part of them is replaced (%d)', [way, n]), (n > 0) and (n < total));
+      AssertEquals(Format('%d: it tells what is replaced in the text', [way]), n, FReplaceResult.Replaced);
+      AssertTrue(Format('%d: a place to go on from', [way]), FReplaceResult.ResumeAt > 0);
+      n := FRich.ReplaceAll('Mr', 'Mr.', [], FReplaceResult.ResumeAt, FReplaceResult.ResumeLength, res);
+      AssertEquals(Format('%d: from there: through', [way]), Ord(rreDone), Ord(res.Ending));
+      AssertEquals(Format('%d: the rest, none twice', [way]), total, FReplaceResult.Replaced + n);
+      AssertTrue(Format('%d: the text one replace of the whole makes', [way]), Text = want);
+    end;
+  finally
+    FRich.FakeClock := False;
+  end;
 end;
 
 initialization

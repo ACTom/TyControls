@@ -725,7 +725,13 @@ type
     FReplaceCmd: TTyRichReplaceAllCommand;
     FReplaceRan: Boolean;
     FReplaceId: Int64;
+    { What its command did, as the command tells it - true of the content its last part left
+      (FFindState). A change it did not make leaves that as it is and is followed in
+      FReplaceFollowed (ReplaceResumeFollows): when the replace ends, the one that is true of
+      the content then is told. }
     FReplaceTally: TTyRichReplaceTally;
+    FReplaceFollowed: TTyRichReplaceTally;
+    FReplaceFollows: Boolean;
     FReplaceFrom, FReplaceLength: TTyRichPos;  // its range, as asked
     // what ended (StopFind), for its event
     FEndedKind: TTyRichFindKind;
@@ -10888,8 +10894,10 @@ begin
               cmd.Prepare(-1);
               if not cmd.Ready then
               begin
-                // (nothing more found: through the range - or a walk that failed)
-                complete := True;
+                { Nothing more found: through the range, or a walk that failed - or one a
+                  handler of the last part's change let go of (a step of its own put on top and
+                  taken off again): that one is not through. }
+                complete := cmd.Finished;
                 Break;
               end;
               if not ran then
@@ -10971,6 +10979,7 @@ begin
       FReplaceTally := Default(TTyRichReplaceTally);
       FReplaceTally.ResumeAt := AStart;
       FReplaceTally.ResumeLength := ALength;
+      FReplaceFollows := False;
       FReplaceCmd := TTyRichReplaceAllCommand.Create(FDoc, AFind, AReplace, FFindOpts, AStart,
         ALength);
       FReplaceCmd.Tally := @FReplaceTally;
@@ -11016,7 +11025,14 @@ procedure TTyCustomRichEdit.StopFind;
 begin
   FEndedKind := FFindKind;
   if FFindKind = rfkNone then Exit;
-  FEndedTally := FReplaceTally;
+  { What the command told is true of the content its last part left; with that content there
+    again (an edit undone, its own step undone and redone) it is told as it is. Otherwise what
+    followed the changes made since. }
+  if FReplaceFollows and ((FDoc.Text <> FText) or (FDoc.ContentState <> FFindState)) then
+    FEndedTally := FReplaceFollowed
+  else
+    FEndedTally := FReplaceTally;
+  FReplaceFollows := False;
   FFindKind := rfkNone;
   Inc(FFindGen);
   FreeAndNil(FFinder);
@@ -11114,38 +11130,45 @@ begin
 end;
 
 { A change of the text a background replace did not make (an edit, an undo): where it would go
-  on from moves with the text, so that what it tells is a place in the text as it is then. }
+  on from moves with the text, so that what it tells is a place in the text as it is then.
+  Followed beside what the command told (FReplaceFollowed): that stays true of the content the
+  replace's last part left, and is what is told when that content is there again. }
 procedure TTyCustomRichEdit.ReplaceResumeFollows(const AChange: TTyRichChange);
 var
   at, stop: TTyRichPos;
 begin
   if (FFindKind <> rfkReplace) or FInReplacePart then Exit;
+  if not FReplaceFollows then
+  begin
+    FReplaceFollows := True;
+    FReplaceFollowed := FReplaceTally;
+  end;
   if FReplaceRan and (FReplaceCmd <> nil) and (FDoc.RedoStep = FReplaceCmd) and
     (FReplaceCmd.Id = FReplaceId) then
   begin
     { Its own step undone: nothing of what it did is left - it tells none replaced, and the
       range's start as the place to go on from. }
-    FReplaceTally.Replaced := 0;
-    FReplaceTally.Skipped := 0;
-    FReplaceTally.ResumeAt := FReplaceFrom;
-    FReplaceTally.ResumeLength := FReplaceLength;
+    FReplaceFollowed.Replaced := 0;
+    FReplaceFollowed.Skipped := 0;
+    FReplaceFollowed.ResumeAt := FReplaceFrom;
+    FReplaceFollowed.ResumeLength := FReplaceLength;
     Exit;
   end;
-  at := FReplaceTally.ResumeAt;
+  at := FReplaceFollowed.ResumeAt;
   if (at < 0) or (AChange.Pos >= at) then Exit;
   if AChange.Pos + AChange.OldLen <= at then
     Inc(at, AChange.NewLen - AChange.OldLen)
   else
     // inside what changed: from where the change began
     at := AChange.Pos;
-  if FReplaceTally.ResumeLength >= 0 then
+  if FReplaceFollowed.ResumeLength >= 0 then
   begin
-    stop := FReplaceTally.ResumeAt + FReplaceTally.ResumeLength;
+    stop := FReplaceFollowed.ResumeAt + FReplaceFollowed.ResumeLength;
     if AChange.Pos + AChange.OldLen <= stop then Inc(stop, AChange.NewLen - AChange.OldLen)
     else if AChange.Pos < stop then stop := AChange.Pos + AChange.NewLen;
-    FReplaceTally.ResumeLength := Math.Max(Int64(0), stop - at);
+    FReplaceFollowed.ResumeLength := Math.Max(Int64(0), stop - at);
   end;
-  FReplaceTally.ResumeAt := at;
+  FReplaceFollowed.ResumeAt := at;
 end;
 
 procedure TTyCustomRichEdit.ReportFindProgress(AKind: TTyRichFindKind; ADone, ATotal: Int64);
@@ -11304,6 +11327,15 @@ begin
       Exit;
     end;
     EndFind(rfsDone, True);
+    Exit;
+  end;
+  { Let go of since its last part, with the content that part left there again - a step put on
+    top of its own and taken off (an edit and its undo), its own step undone and redone: its
+    walk is gone, and it is not through its range. It ends as stopped, with what it did and
+    the place to go on from. }
+  if (FReplaceCmd = nil) or FReplaceCmd.Stopped then
+  begin
+    EndFind(rfsCancelled, True);
     Exit;
   end;
   // a part is a range of paragraphs of the find's piece's size (as the clock sizes it)
