@@ -97,6 +97,7 @@ type
     procedure TestAReplaceLetGoBetweenTwoTurnsIsNotDone;
     procedure TestTheHistoryLetsGoOfARunningReplacesStep;
     procedure TestAReplaceGoesOnBetweenTouchingWholeWords;
+    procedure TestABackgroundFindTakesALargeParagraphATurn;
   end;
 
   // the control's protected seams (the find's piece and batch, the first slice)
@@ -2100,6 +2101,52 @@ begin
   AssertEquals('...but for the one behind the stop', CCount - 1, total);
   AssertEquals('...which stands as it was', 1, CountMatchesOf('a-', Text));
   FRich.Document.MaxUndoBytes := 0;
+end;
+
+{ A background find over paragraphs that are each larger in the file than the find's piece
+  (a picture of 300,000 bytes; the piece stays at its smallest under a clock that moves 10 ms
+  a reading, which also makes a turn one piece): the piece gets on by a paragraph at least,
+  so each picture takes a turn of its own, and the find ends - found, in the line behind
+  them. }
+procedure TTyRichEditFindTest.TestABackgroundFindTakesALargeParagraphATurn;
+var
+  s, hex: RawByteString;
+  sb: TStringBuilder;
+  i, turns: Integer;
+begin
+  SetLength(hex, 300000);
+  for i := 1 to Length(hex) do hex[i] := Chr(Ord('0') + (i mod 10));
+  sb := TStringBuilder.Create;
+  try
+    sb.Append(Rtf('{|rtf1|ansi|ansicpg1252|deff0{|fonttbl{|f0|fswiss Arial;}}|pard '));
+    for i := 1 to 3 do
+    begin
+      sb.Append(Rtf('{|pict|pngblip|picw10|pich10 '));
+      sb.Append(hex);
+      sb.Append(Rtf('}|par '));
+    end;
+    sb.Append(Rtf('tail zzz|par}'));
+    s := sb.ToString;
+  finally
+    sb.Free;
+  end;
+  LoadBytes(BytesOf(s));
+  FRich.FakeClock := True;
+  FRich.ClockStep := 10;
+  try
+    FRich.SelStart := 0;
+    ResetEvents;
+    FRich.FindNextAsync('zzz', []);
+    AssertTrue('the piece is smaller than a picture',
+      TFindAccess(FRich).FindSlice * 16 < Length(hex));
+    turns := TurnUntilDone(1000);
+    AssertEquals('told once', 1, Length(FDone));
+    AssertEquals('found', 'find found ended', FDone[0]);
+    AssertEquals('...in the line behind the pictures', 11, FRich.SelStart);
+    AssertEquals('a turn for each picture, and one for the line behind them', 4, turns);
+  finally
+    FRich.FakeClock := False;
+  end;
 end;
 
 type

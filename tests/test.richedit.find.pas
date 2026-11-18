@@ -28,6 +28,10 @@ type
       AOptions: TTyRichFindOptions): string;
     function WholePositions(ADoc: TTyRichDocument; const ANeedle: UTF8String;
       AOptions: TTyRichFindOptions): string;
+    function LazyPositions(const ABytes: TBytes; const ANeedle: UTF8String;
+      AOptions: TTyRichFindOptions): string; overload;
+    function LazyPositions(const ABytes: TBytes; const ANeedle: UTF8String;
+      AOptions: TTyRichFindOptions; out AParasRead: Int64; out AParsed: Integer): string; overload;
     function First(ADoc: TTyRichDocument; const ANeedle: UTF8String;
       AOptions: TTyRichFindOptions; AStart: TTyRichPos = 0; AEnd: TTyRichPos = -1): TTyRichPos;
     function Naive(ADoc: TTyRichDocument; const ANeedle: UTF8String;
@@ -56,6 +60,9 @@ type
     // the steps
     procedure TestAStepIsBounded;
     procedure TestAStepIsBoundedInBytes;
+    procedure TestAStepNeverReadsPastAParagraphsText;
+    procedure TestAParagraphLargerThanTheStepsBudget;
+    procedure TestAFindPastAPictureOfFortyMegabytes;
     procedure TestAFindWhileLoading;
     procedure TestAFindChangesNothing;
     // replacing
@@ -81,10 +88,26 @@ type
 
 implementation
 
+const
+  // what a paragraph costs a THeavyFinder: more than any budget, and by far more than any
+  // address a text can stand at
+  CHeavy = Int64(1) shl 58;
+
 type
   // the document's protected counts (what a find leaves behind)
   TDocAccess = class(TTyRichDocument)
   end;
+
+  // a finder for which every paragraph costs CHeavy to begin
+  THeavyFinder = class(TTyRichFinder)
+  protected
+    function ParaCost(AIndex: Integer): Int64; override;
+  end;
+
+function THeavyFinder.ParaCost(AIndex: Integer): Int64;
+begin
+  Result := CHeavy;
+end;
 
 const
   MB = 1024 * 1024;
@@ -346,6 +369,49 @@ begin
   end;
 end;
 
+{ The places in the file read lazily - the other leg of every comparison of the two reads, and
+  the one place that says what makes it the lazy one: the load is not a whole read, it parsed
+  nothing by itself, and the search had paragraphs parsed on demand exactly when it read any
+  (AParasRead; AParsed: the intervals parsed for it). A fresh load each time: a document
+  searched before would have its paragraphs parsed already. }
+function TTyRichFindTest.LazyPositions(const ABytes: TBytes; const ANeedle: UTF8String;
+  AOptions: TTyRichFindOptions; out AParasRead: Int64; out AParsed: Integer): string;
+var
+  doc: TTyRichDocument;
+  load: TTyRtfLoad;
+  f: TTyRichFinder;
+begin
+  doc := LoadRtf(ABytes, False);
+  try
+    load := TyRichRtfLoadOf(doc);
+    AssertTrue('the document was read lazily', (load <> nil) and not load.Whole);
+    AssertEquals('the load parsed nothing by itself', 0, load.ParseCount);
+    f := TTyRichFinder.Create(doc, ANeedle, AOptions);
+    try
+      f.Collect := True;
+      AssertTrue('collected to the end', f.Run = rfrNotFound);
+      Result := Joined(f);
+      AParasRead := f.ParasRead;
+    finally
+      f.Free;
+    end;
+    AParsed := load.ParseCount;
+    AssertEquals('paragraphs were parsed for the search, when it read any', AParasRead > 0,
+      AParsed > 0);
+  finally
+    doc.Free;
+  end;
+end;
+
+function TTyRichFindTest.LazyPositions(const ABytes: TBytes; const ANeedle: UTF8String;
+  AOptions: TTyRichFindOptions): string;
+var
+  read: Int64;
+  parsed: Integer;
+begin
+  Result := LazyPositions(ABytes, ANeedle, AOptions, read, parsed);
+end;
+
 function TTyRichFindTest.First(ADoc: TTyRichDocument; const ANeedle: UTF8String;
   AOptions: TTyRichFindOptions; AStart: TTyRichPos; AEnd: TTyRichPos): TTyRichPos;
 var
@@ -365,7 +431,7 @@ end;
 procedure TTyRichFindTest.CheckEveryWord(const AName: string; const ABytes: TBytes;
   ARtf: Boolean; AEncoding: TTyTextEncoding);
 var
-  full, lazy: TTyRichDocument;
+  full: TTyRichDocument;
   text: TTyRichCodeArray;
   words: TStringList;
   i, j: Integer;
@@ -429,20 +495,10 @@ begin
         AssertEquals(AName + ': read whole, ' + w, want, Positions(full, w, [rfoMatchCase]));
       if ARtf then
       begin
-        lazy := LoadRtf(ABytes, False);
-        try
-          AssertEquals(AName + ': lazily, ' + w, want, Positions(lazy, w, [rfoMatchCase]));
-        finally
-          lazy.Free;
-        end;
+        AssertEquals(AName + ': lazily, ' + w, want, LazyPositions(ABytes, w, [rfoMatchCase]));
         // any case
-        lazy := LoadRtf(ABytes, False);
-        try
-          AssertEquals(AName + ': lazily, any case, ' + w, Naive(full, w, []),
-            Positions(lazy, w, []));
-        finally
-          lazy.Free;
-        end;
+        AssertEquals(AName + ': lazily, any case, ' + w, Naive(full, w, []),
+          LazyPositions(ABytes, w, []));
       end
       else
         AssertEquals(AName + ': any case, ' + w, Naive(full, w, []), Positions(full, w, []));
@@ -585,7 +641,7 @@ procedure TTyRichFindTest.TestEveryFormTheReaderTakes;
 var
   body: RawByteString;
   bytes: TBytes;
-  full, lazy: TTyRichDocument;
+  full: TTyRichDocument;
   needles: array of UTF8String;
   i: Integer;
   want: string;
@@ -640,21 +696,11 @@ begin
     begin
       want := Naive(full, needles[i], []);
       AssertTrue(Format('needle %d is in the text', [i]), want <> '');
-      lazy := LoadRtf(bytes, False);
-      try
-        AssertEquals(Format('needle %d lazily', [i]), want, Positions(lazy, needles[i], []));
-      finally
-        lazy.Free;
-      end;
+      AssertEquals(Format('needle %d lazily', [i]), want, LazyPositions(bytes, needles[i], []));
     end;
     // and what is not in the text is not found
-    lazy := LoadRtf(bytes, False);
-    try
-      AssertEquals('ansi half: not text', '', Positions(lazy, 'ansi half', []));
-      AssertEquals('the bookmark''s name: not text', '', Positions(lazy, 'orqld', []));
-    finally
-      lazy.Free;
-    end;
+    AssertEquals('ansi half: not text', '', LazyPositions(bytes, 'ansi half', []));
+    AssertEquals('the bookmark''s name: not text', '', LazyPositions(bytes, 'orqld', []));
     // a font whose code page is not the file's: \ansicpg1252, the text in a GBK font
     full.Free;
     full := nil;
@@ -662,13 +708,8 @@ begin
       '{|f1|fnil|fcharset134 SimSun;}}|pard |f1 |''d6|''d0|''ce|''c4|f0  font|par}'));
     full := LoadRtf(bytes, True);
     AssertEquals('the GBK font''s text', '0', Naive(full, U([$4E2D, $6587]), []));
-    lazy := LoadRtf(bytes, False);
-    try
-      AssertEquals('found through the font''s code page', '0',
-        Positions(lazy, U([$4E2D, $6587]), []));
-    finally
-      lazy.Free;
-    end;
+    AssertEquals('found through the font''s code page', '0',
+      LazyPositions(bytes, U([$4E2D, $6587]), []));
   finally
     full.Free;
   end;
@@ -692,7 +733,7 @@ var
   parts: TStringArray;
   i, k, n: Integer;
   bytes: TBytes;
-  full, lazy: TTyRichDocument;
+  full: TTyRichDocument;
   needle: UTF8String;
   opts: TTyRichFindOptions;
   want: string;
@@ -723,13 +764,8 @@ begin
       finally
         full.Free;
       end;
-      lazy := LoadRtf(bytes, False);
-      try
-        AssertEquals(parts[0] + ' ' + parts[1] + ': lazily', want,
-          Positions(lazy, needle, opts));
-      finally
-        lazy.Free;
-      end;
+      AssertEquals(parts[0] + ' ' + parts[1] + ': lazily', want,
+        LazyPositions(bytes, needle, opts));
       Inc(n);
     end;
     AssertEquals('the cases', 135, n);
@@ -737,19 +773,10 @@ begin
       paragraph whose bytes do not hold that table or word. }
     bytes := BytesOf(Rtf('{|rtf1|ansi|ansicpg1252|deff0{|fonttbl{|f0|fswiss Arial;}}|pard one' +
       '{|fonttbl{|f5|fnil|fcharset134 SimSun;}}|par |f5 |''d6|''d0|par}'));
-    lazy := LoadRtf(bytes, False);
-    try
-      AssertEquals('a font of a later table', '4', Positions(lazy, U([$4E2D]), []));
-    finally
-      lazy.Free;
-    end;
+    AssertEquals('a font of a later table', '4', LazyPositions(bytes, U([$4E2D]), []));
     bytes := BytesOf(Rtf('{|rtf1|ansi|ansicpg1252|pard one|ansicpg1251|par |''cf|''f0|''e8|par}'));
-    lazy := LoadRtf(bytes, False);
-    try
-      AssertEquals('a later ansicpg', '4', Positions(lazy, U([$41F, $440, $438]), [rfoMatchCase]));
-    finally
-      lazy.Free;
-    end;
+    AssertEquals('a later ansicpg', '4',
+      LazyPositions(bytes, U([$41F, $440, $438]), [rfoMatchCase]));
   finally
     lines.Free;
   end;
@@ -856,17 +883,12 @@ var
       Rtf('|deff0{|fonttbl{|f0|fnil Some Font;}}|pard filler|par ') + ABody + Rtf('|par}');
     doc := LoadRtf(BytesOf(file_), True);
     try
-      want := Positions(doc, words[i], [rfoMatchCase]);
+      want := WholePositions(doc, words[i], [rfoMatchCase]);
     finally
       doc.Free;
     end;
     AssertEquals(Format('%s: %s, %s is read', [names[f], words[i], AForm]), '7', want);
-    lazy := LoadRtf(BytesOf(file_), False);
-    try
-      got := Positions(lazy, words[i], [rfoMatchCase]);
-    finally
-      lazy.Free;
-    end;
+    got := LazyPositions(BytesOf(file_), words[i], [rfoMatchCase]);
     AssertEquals(Format('%s: %s, %s is found', [names[f], words[i], AForm]), want, got);
     Inc(forms);
   end;
@@ -971,11 +993,10 @@ var
   s: RawByteString;
   bytes: TBytes;
   i: Integer;
-  full, lazy: TTyRichDocument;
-  load: TTyRtfLoad;
-  f: TTyRichFinder;
+  full: TTyRichDocument;
   needles: array[0..5] of UTF8String;
   want: string;
+  read: Int64;
   parsed: Integer;
 begin
   s := Rtf('{|rtf1|ansi|ansicpg1252|deff0{|fonttbl{|f0|fswiss Arial;}}|pard ');
@@ -999,37 +1020,21 @@ begin
     begin
       want := Naive(full, needles[i], []);
       AssertEquals(Format('needle %d: read whole', [i]), want, WholePositions(full, needles[i], []));
-      lazy := LoadRtf(bytes, False);
-      try
-        load := TyRichRtfLoadOf(lazy);
-        parsed := load.ParseCount;
-        f := TTyRichFinder.Create(lazy, needles[i], []);
-        try
-          f.Collect := True;
-          f.Run;
-          AssertEquals(Format('needle %d: the same places', [i]), want, Joined(f));
-          if i in [2, 3, 4] then
-          begin
-            AssertTrue(Format('needle %d: few paragraphs read (%d)', [i, f.ParasRead]),
-              f.ParasRead <= 4);
-            AssertTrue(Format('needle %d: few intervals parsed (%d)', [i, load.ParseCount - parsed]),
-              load.ParseCount - parsed <= 2);
-            // paragraph ends alone: the lengths say it all, outside a table nothing is read
-            if i in [2, 3] then
-            begin
-              AssertEquals(Format('needle %d: no paragraph read', [i]), 0, f.ParasRead);
-              AssertEquals(Format('needle %d: no interval parsed', [i]), 0, load.ParseCount - parsed);
-            end;
-          end
-          else
-            AssertTrue(Format('needle %d: every paragraph read (%d)', [i, f.ParasRead]),
-              f.ParasRead >= 3000);
-        finally
-          f.Free;
+      AssertEquals(Format('needle %d: the same places', [i]), want,
+        LazyPositions(bytes, needles[i], [], read, parsed));
+      if i in [2, 3, 4] then
+      begin
+        AssertTrue(Format('needle %d: few paragraphs read (%d)', [i, read]), read <= 4);
+        AssertTrue(Format('needle %d: few intervals parsed (%d)', [i, parsed]), parsed <= 2);
+        // paragraph ends alone: the lengths say it all, outside a table nothing is read
+        if i in [2, 3] then
+        begin
+          AssertEquals(Format('needle %d: no paragraph read', [i]), 0, read);
+          AssertEquals(Format('needle %d: no interval parsed', [i]), 0, parsed);
         end;
-      finally
-        lazy.Free;
-      end;
+      end
+      else
+        AssertTrue(Format('needle %d: every paragraph read (%d)', [i, read]), read >= 3000);
     end;
   finally
     full.Free;
@@ -1490,6 +1495,296 @@ begin
     end;
   finally
     m.Free;
+  end;
+end;
+
+{ A paragraph that costs more than the step's budget has left - by far more than any address
+  a text can stand at - is read to its end and not a byte farther. The cost is this test's (a
+  finder that weighs every paragraph so); the text is a plain one, whose paragraphs stand
+  one behind the other in memory: behind a paragraph's end come its separator and the next
+  paragraph, and that one holds the needle. A walk that went past the end would find the
+  needle there, in the step of the paragraph before: that step must end with nothing found,
+  having read that paragraph's bytes and none more. Also: an empty paragraph (nothing is
+  read, not its separator), a start inside the paragraph, the range a backward find reads,
+  and a replace's range. Every such paragraph is a step of its own - the first of its step
+  is always taken, so the search gets on and ends. }
+procedure TTyRichFindTest.TestAStepNeverReadsPastAParagraphsText;
+var
+  doc: TTyRichDocument;
+  cmd: TTyRichReplaceAllCommand;
+  f: TTyRichFinder;
+  r: TTyRichFindResult;
+  steps: Integer;
+begin
+  // the needle stands right behind the paragraph
+  doc := TextDoc('ab' + #10 + 'zzz' + #10 + 'c');
+  try
+    f := THeavyFinder.Create(doc, 'zzz', []);
+    try
+      r := f.Step(64);
+      AssertTrue('the first paragraph alone: nothing is found in it', r = rfrMore);
+      AssertEquals('...one paragraph begun', 1, f.ParasRead);
+      AssertEquals('...its two bytes read, none behind them', 2, f.TextBytes);
+      AssertEquals('...what it costs is counted', CHeavy, f.FileBytes);
+      r := f.Step(64);
+      AssertTrue('the next step: the next paragraph', r = rfrFound);
+      AssertEquals('...found where it is', 3, f.MatchPos);
+      AssertEquals('...two paragraphs begun', 2, f.ParasRead);
+    finally
+      f.Free;
+    end;
+  finally
+    doc.Free;
+  end;
+  // an empty paragraph: nothing is read - not the separator behind it
+  doc := TextDoc(#10 + 'zzz');
+  try
+    f := THeavyFinder.Create(doc, 'zzz', []);
+    try
+      r := f.Step(64);
+      AssertTrue('empty: nothing is found in it', r = rfrMore);
+      AssertEquals('empty: begun', 1, f.ParasRead);
+      AssertEquals('empty: no byte read', 0, f.TextBytes);
+      r := f.Step(64);
+      AssertTrue('empty: the next paragraph', r = rfrFound);
+      AssertEquals('empty: found where it is', 1, f.MatchPos);
+    finally
+      f.Free;
+    end;
+  finally
+    doc.Free;
+  end;
+  // a start inside the paragraph: what lies before is passed, the rest read - to the end
+  doc := TextDoc('abcdef' + #10 + 'zzz');
+  try
+    f := THeavyFinder.Create(doc, 'zzz', [], 3);
+    try
+      r := f.Step(64);
+      AssertTrue('from inside: nothing is found in it', r = rfrMore);
+      AssertEquals('from inside: three bytes passed', 3, f.PassedBytes);
+      AssertEquals('from inside: three read, none behind them', 3, f.TextBytes);
+      r := f.Step(64);
+      AssertTrue('from inside: the next paragraph', r = rfrFound);
+      AssertEquals('from inside: found where it is', 7, f.MatchPos);
+    finally
+      f.Free;
+    end;
+  finally
+    doc.Free;
+  end;
+  // every paragraph larger than the budget: a step each, and the search ends
+  doc := TextDoc('one' + #10 + 'two' + #10 + 'three' + #10 + 'the zzz');
+  try
+    f := THeavyFinder.Create(doc, 'zzz', []);
+    try
+      steps := 0;
+      repeat
+        r := f.Step(64);
+        Inc(steps);
+        AssertEquals(Format('step %d: a paragraph a step', [steps]), Int64(steps), f.ParasRead);
+      until (r <> rfrMore) or (steps >= 100);
+      AssertTrue('a step each: found', r = rfrFound);
+      AssertEquals('a step each: where it is', 18, f.MatchPos);
+      AssertEquals('a step each: four steps', 4, steps);
+      AssertEquals('a step each: the text read once', 18 + 3 - 3, f.TextBytes);
+    finally
+      f.Free;
+    end;
+  finally
+    doc.Free;
+  end;
+  // backward: the range is read forward, by the same rule
+  doc := TextDoc('zzz' + #10 + 'ab' + #10 + 'cd');
+  try
+    f := THeavyFinder.Create(doc, 'zzz', [rfoBackward]);
+    try
+      steps := 0;
+      repeat
+        r := f.Step(64);
+        Inc(steps);
+      until (r <> rfrMore) or (steps >= 100);
+      AssertTrue('backward: found', r = rfrFound);
+      AssertEquals('backward: where it is', 0, f.MatchPos);
+      AssertEquals('backward: a step a paragraph', 3, steps);
+      AssertEquals('backward: the text read once', 7, f.TextBytes);
+    finally
+      f.Free;
+    end;
+  finally
+    doc.Free;
+  end;
+  // a replace's range, read with a budget
+  doc := TextDoc('a,' + #10 + 'b,');
+  try
+    f := THeavyFinder.Create(doc, ',', []);
+    try
+      f.Collect := True;
+      r := f.CollectRange(0, 1, 0, -1, 64);
+      AssertTrue('a range: its first paragraph, then more', r = rfrMore);
+      AssertEquals('a range: two bytes read', 2, f.TextBytes);
+      r := f.CollectRange(0, 1, 0, -1, 64);
+      AssertTrue('a range: read through', r = rfrFound);
+      AssertEquals('a range: its matches', '1 4', Joined(f));
+      AssertEquals('a range: four bytes read', 4, f.TextBytes);
+    finally
+      f.Free;
+    end;
+  finally
+    doc.Free;
+  end;
+  { A budget, and a replace's range, as large as the type holds: neither is added to a place
+    where the sum would leave the text (a needle with a paragraph end cuts its window by
+    the budget, a replace its range of paragraphs by the range's characters - each from a
+    paragraph that does not begin at 0, so that there is a sum). }
+  doc := TextDoc('ab' + #10 + 'cd' + #10 + 'ab' + #10 + 'cd,');
+  try
+    f := TTyRichFinder.Create(doc, 'b' + #10 + 'c', [], 3);
+    try
+      AssertTrue('the largest budget: found', f.Step(High(Int64)) = rfrFound);
+      AssertEquals('...where it is', 7, f.MatchPos);
+    finally
+      f.Free;
+    end;
+    f := TTyRichFinder.Create(doc, 'cd', [], 3);
+    try
+      AssertTrue('the largest budget, no paragraph end: found', f.Step(High(Int64)) = rfrFound);
+      AssertEquals('...where it is', 3, f.MatchPos);
+    finally
+      f.Free;
+    end;
+    cmd := TTyRichReplaceAllCommand.Create(doc, 'cd', 'x', [], 3);
+    cmd.RangeChars := High(Int64);
+    cmd.AllAtOnce := True;
+    AssertTrue('the largest range: replaced', doc.Execute(cmd));
+    AssertTrue('...every one', doc.Text.GetText(0, doc.Text.Length) =
+      'ab' + #10 + 'x' + #10 + 'ab' + #10 + 'x,');
+  finally
+    doc.Free;
+  end;
+end;
+
+{ The budget's rule on a file read lazily, where a paragraph's bytes in the file count when
+  it is begun: three paragraphs that are each a picture - 300,000 bytes of the file, one
+  character of text -, one of formatting words alone - 4,000 bytes, no text -, a line
+  before them and one behind, and a budget of 1,000. A paragraph that does not fit ends the
+  step before it, and nothing of it is parsed for that step; the step that begins with it
+  takes it whole and ends with it. So: a step for the first line, one for each picture, one
+  for the paragraph without text (nothing is read: there is nothing), one for the last
+  line, where the needle is. }
+procedure TTyRichFindTest.TestAParagraphLargerThanTheStepsBudget;
+const
+  Budget = 1000;
+var
+  s, hex: RawByteString;
+  sb: TStringBuilder;
+  doc: TTyRichDocument;
+  f: TTyRichFinder;
+  r: TTyRichFindResult;
+  i, steps: Integer;
+  src, bytes, text0: Int64;
+begin
+  SetLength(hex, 300000);
+  for i := 1 to Length(hex) do hex[i] := Chr(Ord('0') + (i mod 10));
+  sb := TStringBuilder.Create;
+  try
+    sb.Append(Rtf('{|rtf1|ansi|ansicpg1252|deff0{|fonttbl{|f0|fswiss Arial;}}|pard first|par '));
+    for i := 1 to 3 do
+    begin
+      sb.Append(Rtf('{|pict|pngblip|picw10|pich10 '));
+      sb.Append(hex);
+      sb.Append(Rtf('}|par '));
+    end;
+    for i := 1 to 667 do sb.Append(Rtf('|b0|b '));
+    sb.Append(Rtf('|par tail zzz|par}'));
+    s := sb.ToString;
+  finally
+    sb.Free;
+  end;
+  doc := LoadRtf(BytesOf(s), False);
+  try
+    AssertEquals('a picture is one character', 1, doc.Text.ParaLength(1));
+    AssertEquals('the paragraph of formatting words has no text', 0, doc.Text.ParaLength(4));
+    AssertTrue('...and thousands of bytes in the file',
+      doc.Text.ParaLazySource(4, src, bytes) and (bytes >= 4000));
+    f := TTyRichFinder.Create(doc, 'zzz', []);
+    try
+      steps := 0;
+      repeat
+        text0 := f.TextBytes;
+        r := f.Step(Budget);
+        Inc(steps);
+        AssertEquals(Format('step %d: a paragraph a step', [steps]), Int64(steps), f.ParasRead);
+        // (the paragraph the step ended before: not parsed for it)
+        if steps <= 4 then
+          AssertTrue(Format('step %d: the next paragraph is not read yet', [steps]),
+            doc.Text.ParaLazySource(steps, src, bytes) and not doc.Text.IsDecoded(src));
+        if steps = 5 then
+          AssertEquals('the paragraph without text: nothing read', text0, f.TextBytes);
+      until (r <> rfrMore) or (steps >= 100);
+      AssertTrue('found behind them', r = rfrFound);
+      AssertEquals('...where it is', doc.Text.ParaStart(5) + 5, f.MatchPos);
+      AssertEquals('...in six steps', 6, steps);
+      AssertTrue(Format('the file''s bytes counted (%d of %d)', [f.FileBytes, Length(s)]),
+        (f.FileBytes > 3 * 300000) and (f.FileBytes <= Length(s)));
+    finally
+      f.Free;
+    end;
+  finally
+    doc.Free;
+  end;
+end;
+
+{ One file of the kind that broke: a paragraph that is one picture of 40 MB in the file, and a
+  word in the paragraph behind it. Found where it is - through to the end at once, and in
+  steps of a background find's smallest piece. (The file is made in memory and let go at
+  once.) }
+procedure TTyRichFindTest.TestAFindPastAPictureOfFortyMegabytes;
+const
+  CPicture = 40 * MB;
+var
+  s, hex: RawByteString;
+  bytes: TBytes;
+  doc: TTyRichDocument;
+  f: TTyRichFinder;
+  r: TTyRichFindResult;
+  i, steps: Integer;
+  want: TTyRichPos;
+begin
+  SetLength(hex, CPicture);
+  for i := 1 to Length(hex) do hex[i] := Chr(Ord('0') + (i mod 10));
+  s := Rtf('{|rtf1|ansi|ansicpg1252|deff0{|fonttbl{|f0|fswiss Arial;}}|pard a|par ' +
+    '{|pict|pngblip|picw10|pich10 ') + hex + Rtf('}|par tail zzz|par}');
+  hex := '';
+  bytes := BytesOf(s);
+  s := '';
+  doc := LoadRtf(bytes, False);
+  bytes := nil;
+  try
+    want := doc.Text.ParaStart(2) + 5;
+    f := TTyRichFinder.Create(doc, 'zzz', []);
+    try
+      AssertTrue('to the end at once: found', f.Run = rfrFound);
+      AssertEquals('...where it is', want, f.MatchPos);
+      AssertTrue(Format('...the picture''s bytes counted (%d)', [f.FileBytes]),
+        f.FileBytes > CPicture);
+    finally
+      f.Free;
+    end;
+    f := TTyRichFinder.Create(doc, 'zzz', []);
+    try
+      steps := 0;
+      repeat
+        r := f.Step(16 * 1024);
+        Inc(steps);
+      until (r <> rfrMore) or (steps >= 100);
+      AssertTrue('in steps: found', r = rfrFound);
+      AssertEquals('...where it is', want, f.MatchPos);
+      AssertEquals('...a step before the picture, one for it, one behind it', 3, steps);
+    finally
+      f.Free;
+    end;
+  finally
+    doc.Free;
   end;
 end;
 
@@ -2544,7 +2839,10 @@ begin
   finally
     doc.Free;
   end;
-  // an RTF paragraph of 2 MB read lazily: decoded once, not once a step
+  { An RTF paragraph of 2 MB read lazily: the step that begins it searches its whole text (it
+    is parsed in one piece, and larger than the budget: the step's first paragraph), so it
+    is decoded once; and a search that stops at a match inside it and goes on reads on in
+    the text it kept, not in a paragraph decoded again. }
   sb := TStringBuilder.Create;
   try
     sb.Append(Rtf('{|rtf1|ansi|deff0{|fonttbl{|f0 Arial;}}|pard first|par '));
@@ -2570,9 +2868,24 @@ begin
         Inc(steps);
       until (r <> rfrMore) or (steps > 10000);
       AssertEquals('found in the paragraph', doc.Text.ParaStart(1) + size - 5, f.MatchPos);
-      AssertTrue(Format('in many steps (%d)', [steps]), steps > 10);
+      AssertEquals('a step for the paragraph before it, one for it', 2, steps);
       AssertTrue(Format('decoded once (%d bytes for %d)', [f.FetchedBytes, size]),
-        f.FetchedBytes <= 2 * size + 64);
+        f.FetchedBytes <= size + 64);
+    finally
+      f.Free;
+    end;
+    f := TTyRichFinder.Create(doc, 'bold', []);
+    try
+      steps := 0;
+      i := 0;
+      repeat
+        r := f.Step(CBudget);
+        Inc(steps);
+        if r = rfrFound then Inc(i);
+      until (r = rfrNotFound) or (i = 200) or (steps > 10000);
+      AssertEquals('two hundred matches, a step each', 200, i);
+      AssertTrue(Format('...in the text kept: decoded once (%d bytes for %d)',
+        [f.FetchedBytes, size]), f.FetchedBytes <= size + 64);
     finally
       f.Free;
     end;
@@ -2631,17 +2944,6 @@ begin
   end;
 end;
 
-{ The lazily read document's unparsed paragraphs as they were before a find decoded any (so
-  that the next find meets their bytes again). }
-procedure ForgetDecodes(ADoc: TTyRichDocument);
-var
-  i: Integer;
-  src, n: Int64;
-begin
-  for i := 0 to ADoc.Text.ParaCount - 1 do
-    if ADoc.Text.ParaLazySource(i, src, n) then ADoc.Text.ForgetDecoded(src);
-end;
-
 { Every pair of the destinations the reader tells apart (a word of each meaning of its own word
   table, an unknown starred word, an unknown plain word, and an ordinary formatting group): one
   inside the other - text in the outer group before the inner, after it, and a paragraph end
@@ -2673,7 +2975,7 @@ var
   words: TStringArray;
   i, j, shape, files, needles, k, len, p1, place, ending: Integer;
   w1, w2, body, e, src: RawByteString;
-  full, lazy: TTyRichDocument;
+  full: TTyRichDocument;
   codes: TTyRichCodeArray;
   seen: TStringList;
   needle: UTF8String;
@@ -2761,7 +3063,6 @@ begin
             src := Rtf('{|rtf1|ansi|ansicpg1252|deff0{|fonttbl{|f0|fswiss Arial;}}' +
               '|pard filler|par ' + body + '|par}');
           full := LoadRtf(BytesOf(src), True);
-          lazy := nil;
           try
             codes := TyRichFindCodes(full.Text.GetText(0, full.Text.Length));
             // (the pieces that reach past the first paragraph, which every file shares)
@@ -2777,21 +3078,18 @@ begin
               end;
             if seen.Count = 0 then Continue;
             Inc(files);
-            lazy := LoadRtf(BytesOf(src), False);
             for k := 0 to seen.Count - 1 do
             begin
               needle := seen[k];
               if Pos(#$EF#$BF#$BC, needle) > 0 then Continue;
               Inc(needles);
               want := WholePositions(full, needle, []);
-              ForgetDecodes(lazy);
-              got := Positions(lazy, needle, []);
+              got := LazyPositions(BytesOf(src), needle, []);
               if got <> want then
                 Fail(Format('%s / %s, shape %d, "%s": lazily: %s, read whole: %s',
                   [words[i], words[j], shape, needle, got, want]));
             end;
           finally
-            lazy.Free;
             full.Free;
           end;
         end;
@@ -2970,8 +3268,7 @@ begin
           seen.Add(needle + '/' + IntToStr(Integer(opts)));
           Inc(needles);
           want := WholePositions(full, needle, opts);
-          ForgetDecodes(lazy);
-          got := Positions(lazy, needle, opts);
+          got := LazyPositions(bytes, needle, opts);
           if got <> want then
             Fail(Format('file %d, needle hex %s, options %d: lazily: [%s], read whole: [%s]',
               [n, HexOf(needle), Integer(opts), got, want]));

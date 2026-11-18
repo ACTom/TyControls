@@ -35,8 +35,9 @@ unit tyControls.RichEdit.Find;
   reader keeps of any read), so memory stays as bounded as the reader keeps it. A needle
   with paragraph ends is looked for paragraph by paragraph: a middle paragraph must be a
   segment whole (its length, from the paragraph tree, says much: two paragraph ends in a
-  row are an empty paragraph), the first must be as long as the first segment and the last
-  as long as the last; only the paragraphs of a match that may be there are read.
+  row are an empty paragraph), the first must be at least as long as the first segment and
+  the last at least as long as the last; only the paragraphs of a match that may be there
+  are read.
 
   An object never matches text - and a field (a link) is an object: its display text is not
   found. When field results become text the control shows, the finder must see them.
@@ -150,14 +151,16 @@ type
     FSrcFirst: Integer;
     { The scan of a needle without paragraph ends stands in paragraph FNext, FCurOff
       characters and FCurByte bytes into its text (both 0: at its start), the matcher's
-      state FK and FPend there. A step reads FBudget units. Backward, and for CollectRange:
-      the range FRangeLo .. FRangeHi being read (-1: none). }
+      state FK and FPend there. A step reads FBudget units; FStepBegan: it has begun a
+      paragraph, or read on in one (the budget's rule asks: Takes). Backward, and for
+      CollectRange: the range FRangeLo .. FRangeHi being read (-1: none). }
     FCurOff: TTyRichPos;
     FCurByte: PtrInt;
     FPassTo: TTyRichPos;              // characters of FNext passed, not matched (a start inside it)
     FK: Integer;
     FPend: Int64;
     FBudget: Int64;
+    FStepBegan: Boolean;
     { The text of paragraph FKeepPara, kept while the scan stands inside it and the document's
       content is as it was (FKeepState): fetched once, not once a step. }
     FKeep: RawByteString;
@@ -200,6 +203,12 @@ type
     function InTable(ASrc: Int64): Boolean;
     function StepForward(ABudget: Int64): TTyRichFindResult;
     function StepBackward(ABudget: Int64): TTyRichFindResult;
+  protected
+    { What paragraph AIndex takes off a step's budget when it is begun, besides its text:
+      the bytes it has in the file, for a paragraph of a lazily read file that was never
+      edited (the reader parses them for the search); 0 for any other. A descendant may
+      weigh paragraphs otherwise (a negative answer counts as 0). }
+    function ParaCost(AIndex: Integer): Int64; virtual;
   public
     { A finder of ANeedle in ADoc: a match starts at or after AStart and ends at or before
       AEnd (AEnd < 0: the text's end - for a document still loading, also as it grows).
@@ -210,12 +219,15 @@ type
     { Searches on for about ABudget units of work: a byte of text read is one, a paragraph
       begun sixteen, and a paragraph of a lazily read file as many more as it has bytes in
       the file (the reader parses them for the search: a picture's paragraph is one character
-      and may be megabytes). A paragraph whose text is larger than the budget is read in
-      pieces over several steps (the matcher keeps its state in it); the one thing a step
-      may go over its budget by is the paragraph it is in when the budget ends - a
-      paragraph is parsed in one piece (at most its interval group of the file is parsed for
-      it) - and, for a needle with paragraph ends, the paragraphs of one match window, which
-      are read whole. rfrFound: the next match is MatchPos (MatchLen characters); the next
+      and may be megabytes). A paragraph whose bytes in the file do not fit in what is left
+      of the budget is not begun: the step ends before it, and nothing of it is parsed -
+      unless the step has begun none yet: then it is searched in this step, its whole
+      text, however large, and the step ends with it (a step always gets on; a paragraph
+      is parsed in one piece - at most its interval group of the file is parsed for it).
+      Any other paragraph whose text is larger than the budget is read in pieces over
+      several steps (the matcher keeps its state in it). For a needle with paragraph ends
+      the paragraphs of one match window are read whole, the window cut by the same two
+      measures. rfrFound: the next match is MatchPos (MatchLen characters); the next
       Step goes on right after it (backward: before it). With Collect, matches are kept in
       Matches and the step goes on to its budget. rfrNotFound: no match is left. rfrMore:
       call again (Waiting: what can be searched is, and the document is still loading). }
@@ -583,6 +595,25 @@ begin
   SetLength(Result, n);
 end;
 
+const
+  { The paragraphs one walk of the scan reads at most, and those whose bytes in the file are
+    looked up at a time. }
+  CSourceBatch = 256;
+
+{ The budget's rule for a paragraph about to be begun, in this one place. ACost is what it
+  takes off the budget besides its text (TTyRichFinder.ParaCost: its bytes in the file, which
+  the reader parses in one piece), ALeft what is left of the step's budget, ABegan whether
+  the step has begun a paragraph or read on in one. It is begun when its cost fits in what
+  is left; otherwise the step ends before it - but for a step that has done nothing yet:
+  that one begins it all the same, searches its whole text, and ends with it. So a step
+  always gets on, a step is over its budget by one paragraph at most (its first), and what
+  a paragraph costs beyond the budget is never carried on as a negative budget: it ends
+  the step. }
+function Takes(ACost, ALeft: Int64; ABegan: Boolean): Boolean; inline;
+begin
+  Result := (ACost <= ALeft) or not ABegan;
+end;
+
 { Whole word: the character outside a match and the needle's own at that end make one word -
   both are word characters of the caret's rule (TyRichWordClass), and neither is of a script
   written without spaces, which bounds a word on both of its sides: the line breaker's set
@@ -801,8 +832,8 @@ var
   p, q, stop, lim, first: PByte;
   k, n, ringN: Integer;
   code, prev: Cardinal;
-  pos, pending: Int64;
-  matchCase, whole: Boolean;
+  pos, pending, cost: Int64;
+  matchCase, whole, begun, all: Boolean;
 
   // the scan stays in the paragraph: its text is kept for the next step (once)
   procedure KeepText;
@@ -828,19 +859,56 @@ var
     AContinue := False;
   end;
 
+  { Where reading from AFrom ends in this call: the paragraph's end for one begun over
+    the budget (all); else after as many bytes as the budget has units left, APerUnit
+    bytes a unit - a character at least, a call gets on - and never past the paragraph's
+    end. The budget is never added to a pointer: a count of bytes is, one that is not
+    negative and not more than what is left of the text (pointer arithmetic is checked
+    by nobody, and a pointer formed outside the text wraps and compares as it likes). }
+  function ReadTo(AFrom: PByte; APerUnit: Integer): PByte;
+  var
+    room, units: Int64;
+  begin
+    room := stop - AFrom;
+    units := FBudget;
+    if units < 1 then units := 1;
+    if all or (units > room div APerUnit) then Result := AFrom + room
+    else Result := AFrom + units * APerUnit;
+  end;
+
 begin
+  all := False;
+  cost := 0;
+  begun := (FCurOff = 0) and (FCurByte = 0);
+  if begun then
+  begin
+    // the paragraph is begun here - by the budget's rule, or the step ends before it
+    cost := ParaCost(AIndex);
+    if cost < 0 then cost := 0;
+    if not Takes(cost, FBudget, FStepBegan) then
+    begin
+      FBudget := 0;
+      AContinue := False;
+      Exit;
+    end;
+  end;
+  FStepBegan := True;
   Inc(FPieces);
   if Pointer(AText) <> Pointer(FKeep) then Inc(FFetchedBytes, ALen);
-  if (FCurOff = 0) and (FCurByte = 0) then
+  if begun then
   begin
     Inc(FParasRead);
-    // a paragraph of a lazily read file: its bytes there count (the reader parses them)
-    k := AIndex - FSrcFirst;
-    if (k >= 0) and (k < Length(FSrc)) and (FSrc[k] >= 0) then
+    Inc(FFileBytes, cost);
+    if cost > FBudget then
     begin
-      Inc(FFileBytes, FSrcBytes[k]);
-      Dec(FBudget, FSrcBytes[k]);
-    end;
+      { More than is left - the step's first paragraph: its whole text is searched in this
+        call and the step ends with it. The budget is spent; what is missing is carried
+        nowhere. }
+      all := True;
+      FBudget := 0;
+    end
+    else
+      Dec(FBudget, cost);
     if HiddenValue(AData) then
     begin
       // not there for a find: only its length counts
@@ -851,6 +919,10 @@ begin
       Exit;
     end;
   end;
+  { (The scan stands FCurByte bytes into the text it was in. A paragraph fetched again is
+    that text unless the document was changed behind the finder: no pointer leaves the
+    text even then.) }
+  if FCurByte > ALen then FCurByte := ALen;
   matchCase := rfoMatchCase in FOptions;
   whole := rfoWholeWord in FOptions;
   ringN := FLen + 1;
@@ -861,14 +933,7 @@ begin
       an eighth of a unit a byte, and in pieces like any reading. }
     p := AText + FCurByte;
     first := p;
-    // (an unbounded step's budget is near High(Int64): eight times it would not fit)
-    if FBudget < (stop - p) div 8 then
-    begin
-      lim := p + FBudget * 8;
-      if lim <= p then lim := p + 1;
-    end
-    else
-      lim := stop;
+    lim := ReadTo(p, 8);
     pos := FCurOff;
     while (pos < FPassTo) and (p < lim) do
     begin
@@ -900,13 +965,7 @@ begin
   end;
   p := AText + FCurByte;
   first := p;
-  if FBudget < stop - p then
-  begin
-    lim := p + FBudget;
-    if lim <= p then lim := p + 1;
-  end
-  else
-    lim := stop;
+  lim := ReadTo(p, 1);
   pos := FCurOff;
   k := FK;
   pending := FPend;
@@ -982,6 +1041,15 @@ begin
   if (FBudget <= 0) or FStop then AContinue := False;
 end;
 
+function TTyRichFinder.ParaCost(AIndex: Integer): Int64;
+var
+  k: Integer;
+begin
+  Result := 0;
+  k := AIndex - FSrcFirst;
+  if (k >= 0) and (k < Length(FSrc)) and (FSrc[k] >= 0) then Result := FSrcBytes[k];
+end;
+
 procedure TTyRichFinder.SourceOf(AIndex: Integer; AData: Pointer; ASrcOffset, ASrcBytes: Int64;
   var AContinue: Boolean);
 var
@@ -1001,8 +1069,6 @@ end;
 { Where the bytes of paragraphs AFirst .. (at most CSourceBatch of them, to ALast) are in the
   file: one walk, not a lookup each. }
 procedure TTyRichFinder.LoadSources(AFirst, ALast: Integer);
-const
-  CSourceBatch = 256;
 var
   i, n: Integer;
 begin
@@ -1022,13 +1088,20 @@ end;
 
 { Reads on from paragraph FNext (and from where the scan stands in it) to ALast, a needle
   without paragraph ends, until a match stops it (mode 0), FBudget is spent, or ALast is read.
-  Every paragraph is read in its text, in runs of one walk each; of a lazily read file a
-  run goes as far as the paragraphs' bytes in the file are known (LoadSources: what a
-  paragraph begun costs the step). }
+  Every paragraph is read in its text, in runs of one walk each (CSourceBatch paragraphs at
+  most; of a lazily read file as far as the paragraphs' bytes in the file are known:
+  LoadSources).
+
+  A walk has the reader parse a paragraph before ExactPara sees it. So the budget's rule
+  (Takes) is asked here first, for what the paragraphs cost alone: the walk goes no farther
+  than the paragraphs the budget lets the step begin, and a paragraph the step ends before
+  is not parsed for it. ExactPara asks again as it begins each: the text read since
+  counts too. }
 procedure TTyRichFinder.ScanRange(ALast: Integer);
 var
-  cont: Boolean;
-  e: Integer;
+  cont, began: Boolean;
+  e, i, fit: Integer;
+  left, cost: Int64;
 begin
   while (FBudget > 0) and not FStop and (FNext <= ALast) do
   begin
@@ -1049,14 +1122,37 @@ begin
       Continue;
     end;
     e := ALast;
+    if e - FNext >= CSourceBatch then e := FNext + CSourceBatch - 1;
     if Source <> nil then
     begin
       if (FNext < FSrcFirst) or (FNext >= FSrcFirst + Length(FSrc)) then
         LoadSources(FNext, ALast);
       if e > FSrcFirst + High(FSrc) then e := FSrcFirst + High(FSrc);
     end;
+    fit := FNext - 1;
+    left := FBudget;
+    began := FStepBegan;
+    for i := FNext to e do
+    begin
+      // (a paragraph the scan stands inside was begun, and counted, in an earlier step)
+      if (i = FNext) and ((FCurByte > 0) or (FCurOff > 0)) then cost := 0
+      else cost := ParaCost(i);
+      if cost < 0 then cost := 0;
+      if not Takes(cost, left, began) then Break;
+      fit := i;
+      began := True;
+      // (it spends what is left: the step ends with it)
+      if cost >= left then Break;
+      Dec(left, cost);
+    end;
+    if fit < FNext then
+    begin
+      // not even the next paragraph: the step ends before it
+      FBudget := 0;
+      Break;
+    end;
     FRunPos := FText.ParaStart(FNext);
-    FText.WalkParaTexts(FNext, e, @ExactPara, True);
+    FText.WalkParaTexts(FNext, fit, @ExactPara, True);
   end;
 end;
 
@@ -1339,16 +1435,19 @@ begin
   end;
 end;
 { A needle with paragraph ends reads whole paragraphs: the range from ALo is cut at about ABudget
-  characters, and where the file's bytes of its unparsed paragraphs pass ABudget - a picture's
-  paragraph is one character and may be megabytes. At least one paragraph. }
+  characters, and where the bytes in the file of its paragraphs that are a lazily read file's
+  own (never edited; parsed already or not) pass ABudget - a picture's paragraph is one
+  character and may be megabytes. At least one paragraph. }
 function TTyRichFinder.WindowHi(ALo, ALast: Integer; ABudget: Int64): Integer;
 var
   limit: TTyRichPos;
   i: Integer;
   bytes: Int64;
 begin
-  limit := FText.ParaStart(ALo) + Max64(ABudget, 1);
-  if limit > FText.Length then limit := FText.Length;
+  // (the budget is added only where the sum stays inside the text)
+  limit := FText.Length;
+  if Max64(ABudget, 1) < limit - FText.ParaStart(ALo) then
+    limit := FText.ParaStart(ALo) + Max64(ABudget, 1);
   Result := FText.ParaOfPos(limit);
   if Result > ALast then Result := ALast;
   if Result < ALo then Result := ALo;
@@ -1409,6 +1508,7 @@ begin
   FStop := False;
   FBest := -1;
   FBudget := Max64(ABudget, 1);
+  FStepBegan := False;
   if FParaEnds = 0 then
     ScanRange(lastPara)
   else
@@ -1478,6 +1578,7 @@ begin
   FMode := 2;
   FStop := False;
   FBudget := Max64(ABudget, 1);
+  FStepBegan := False;
   if FParaEnds = 0 then
   begin
     ScanRange(FRangeHi);
@@ -1568,6 +1669,7 @@ begin
   FMode := 1;
   FStop := False;
   if ABudget < 0 then FBudget := High(Int64) div 4 else FBudget := Max64(ABudget, 1);
+  FStepBegan := False;
   FCap := ACap;
   FCapped := False;
   try
@@ -1883,8 +1985,10 @@ begin
         Exit;
       end;
       FRangeLo := FNextPara;
-      limit := t.ParaStart(FNextPara) + FRangeChars;
-      if limit > stop then limit := stop;
+      // (the range's characters are added only where the sum stays before the end)
+      limit := stop;
+      if FRangeChars < stop - t.ParaStart(FNextPara) then
+        limit := t.ParaStart(FNextPara) + Max64(FRangeChars, 0);
       hi := t.ParaOfPos(limit);
       if hi < FRangeLo then hi := FRangeLo;
       FRangeHi := hi;
