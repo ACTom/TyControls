@@ -93,6 +93,7 @@ type
     procedure TestAReplaceUndoneTellsItsStart;
     procedure TestAReplaceLetGoBetweenTwoTurnsIsNotDone;
     procedure TestTheHistoryLetsGoOfARunningReplacesStep;
+    procedure TestAReplaceGoesOnBetweenTouchingWholeWords;
   end;
 
   // the control's protected seams (the find's piece and batch, the first slice)
@@ -1708,14 +1709,15 @@ end;
 
 { A background replace stopped before its end - cancelled, a key, a save, cancelled again, on
   one line of matches - leaves in the history its undo record only: its finder and the copy of
-  the paragraph it stood in go with every ending, and what it still holds is within what the
-  history counts. }
+  the paragraph it stood in go with every ending. While it runs the history counts for its
+  step what the step keeps, part by part; stopped, no more than that. }
 procedure TTyRichEditFindTest.TestAStoppedReplaceKeepsOnlyItsRecord;
 var
   sb: TStringBuilder;
   i, way, turns, depth: Integer;
   cmd: TTyRichReplaceAllCommand;
   m: TMemoryStream;
+  mem, hist: Int64;
 begin
   sb := TStringBuilder.Create;
   try
@@ -1745,6 +1747,16 @@ begin
       AssertTrue(Format('%d: a part went in', [way]), FRich.FindRunning);
       cmd := FRich.Document.UndoStep as TTyRichReplaceAllCommand;
       AssertTrue(Format('%d: while it runs, it keeps the line', [way]), cmd.HeldBytes > 0);
+      // more parts: what the history counts for the step grows by what the step keeps more
+      mem := cmd.MemSize;
+      hist := FRich.Document.HistoryBytes;
+      for i := 1 to 8 do FRich.Turn;
+      AssertTrue(Format('%d: still running', [way]), FRich.FindRunning and
+        (FRich.Document.UndoStep = cmd));
+      AssertTrue(Format('%d: its record grew with its parts', [way]), cmd.MemSize > mem);
+      AssertEquals(Format('%d: the history counts what the step keeps, part by part', [way]),
+        cmd.MemSize - mem, FRich.Document.HistoryBytes - hist);
+      hist := FRich.Document.HistoryBytes;
       case way of
         0, 3: FRich.CancelFind;
         1:
@@ -1768,7 +1780,10 @@ begin
         FRich.Document.Undo;
       cmd := FRich.Document.UndoStep as TTyRichReplaceAllCommand;
       AssertEquals(Format('%d: nothing but its record', [way]), 0, cmd.HeldBytes);
-      AssertTrue(Format('%d: counted by the history', [way]), FRich.Document.HistoryBytes >= cmd.HeldBytes);
+      // (but where the typed key's step is in the history too)
+      if way <> 1 then
+        AssertTrue(Format('%d: stopped, the history counts no more for it than while it ran', [way]),
+          FRich.Document.HistoryBytes <= hist);
       if way = 1 then FRich.Document.Redo;
     end;
   finally
@@ -1893,6 +1908,101 @@ begin
   finally
     FRich.FakeClock := False;
   end;
+end;
+
+{ Whole word, one line of matches that touch, a replacement that ends in a letter: a replace
+  that stops between two of them - at its undo limit, or cancelled - and is started again from
+  where it said replaces the second too, as one walk does: the control remembers, with the
+  place and the content then, how the walk saw the character before the place, and the replace
+  started exactly there with the content unchanged is told. The parts stay bounded (the limit
+  ends each call after one). An edit between the stop and the new start - anywhere - and the
+  match at the place is judged by the text as it is: behind a letter now, no whole word. }
+procedure TTyRichEditFindTest.TestAReplaceGoesOnBetweenTouchingWholeWords;
+const
+  CCount = 17000;
+var
+  sb: TStringBuilder;
+  src, want: string;
+  res: TTyRichReplaceResult;
+  i, calls, total, turns, depth: Integer;
+
+  function LineFeeds(const S: string): string;
+  begin
+    Result := StringReplace(S, #13#10, #10, [rfReplaceAll]);
+  end;
+
+begin
+  sb := TStringBuilder.Create;
+  try
+    for i := 1 to CCount do sb.Append('a-');
+    src := sb.ToString;
+    sb.Clear;
+    for i := 1 to CCount do sb.Append(#10 + 'z');
+    want := sb.ToString;
+  finally
+    sb.Free;
+  end;
+  // the documented loop: again from where it said while the limit ended it
+  SetText(src);
+  FRich.Document.MaxUndoBytes := 64 * 1024;
+  total := FRich.ReplaceAll('a-', #10 + 'z', [rfoWholeWord], 0, -1, res);
+  AssertEquals('the limit ended the first call', Ord(rreLimit), Ord(res.Ending));
+  AssertEquals('...after one part of them', CRichReplacePartMatches, total);
+  calls := 1;
+  while (res.Ending = rreLimit) and (calls < 100) do
+  begin
+    Inc(total, FRich.ReplaceAll('a-', #10 + 'z', [rfoWholeWord], res.ResumeAt, res.ResumeLength, res));
+    Inc(calls);
+  end;
+  AssertEquals('through in the end', Ord(rreDone), Ord(res.Ending));
+  AssertEquals('every one, also the ones right behind a stop', CCount, total);
+  AssertTrue('the text one walk makes', LineFeeds(Text) = want);
+  // in the background, cancelled after a part, started again from where it said
+  SetText(src);
+  FRich.Document.MaxUndoBytes := 0;
+  FRich.FakeClock := True;
+  FRich.ClockStep := 1;
+  try
+    total := 0;
+    calls := 0;
+    FReplaceResult.ResumeAt := 0;
+    FReplaceResult.ResumeLength := -1;
+    repeat
+      ResetEvents;
+      FRich.ReplaceAllAsync('a-', #10 + 'z', [rfoWholeWord], FReplaceResult.ResumeAt,
+        FReplaceResult.ResumeLength);
+      turns := 0;
+      depth := FRich.Document.UndoDepth;
+      while FRich.FindRunning and (FRich.Document.UndoDepth = depth) and (turns < 10000) do
+      begin
+        FRich.Turn;
+        Inc(turns);
+      end;
+      // (a part went in - or it ended, nothing left)
+      if FRich.FindRunning then FRich.CancelFind;
+      AssertEquals('told', 1, Length(FDone));
+      AssertTrue('a part takes at most its share', FReplaceResult.Replaced <= CRichReplacePartMatches);
+      Inc(total, FReplaceResult.Replaced);
+      Inc(calls);
+    until (FReplaceResult.Ending = rreDone) or (calls > 100);
+    AssertTrue(Format('in several starts (%d)', [calls]), calls >= 3);
+    AssertEquals('in the background: every one', CCount, total);
+    AssertTrue('in the background: the text one walk makes', LineFeeds(Text) = want);
+  finally
+    FRich.FakeClock := False;
+  end;
+  // an edit between the stop and the new start: judged by the text as it is
+  SetText(src);
+  FRich.Document.MaxUndoBytes := 64 * 1024;
+  total := FRich.ReplaceAll('a-', #10 + 'z', [rfoWholeWord], 0, -1, res);
+  AssertEquals('again: the limit', Ord(rreLimit), Ord(res.Ending));
+  FRich.Document.MaxUndoBytes := 0;
+  AssertTrue(FRich.Document.Execute(TTyRichInsertText.Create(FRich.Document.Text.Length, 'q')));
+  Inc(total, FRich.ReplaceAll('a-', #10 + 'z', [rfoWholeWord], res.ResumeAt, res.ResumeLength, res));
+  AssertEquals('after an edit: through', Ord(rreDone), Ord(res.Ending));
+  AssertEquals('...but for the one behind the stop', CCount - 1, total);
+  AssertEquals('...which stands as it was', 1, CountMatchesOf('a-', Text));
+  FRich.Document.MaxUndoBytes := 0;
 end;
 
 type

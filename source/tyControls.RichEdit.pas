@@ -742,9 +742,24 @@ type
     FReplaceFollowed: TTyRichReplaceTally;
     FReplaceFollows: Boolean;
     FReplaceFrom, FReplaceLength: TTyRichPos;  // its range, as asked
+    FReplaceWith: UTF8String;         // its replacement
+    { The last replace that stopped before its end: the place it said to go on from, the
+      content then (ContentState), and what its walk saw right before that place - with its
+      needle, replacement and options. A replace of the same three started at exactly that
+      place while the content is still that one goes on with it (ResumeBeforeFor): a match
+      that begins there is judged a whole word as the one walk judged it, by the text as it
+      was before what stood there was replaced. Any other start, or any change since, is
+      judged by the text as it is. }
+    FResumeValid: Boolean;
+    FResumeAt: TTyRichPos;
+    FResumeState: Int64;
+    FResumeBefore: TTyRichBefore;
+    FResumeFind, FResumeRepl: UTF8String;
+    FResumeOpts: TTyRichFindOptions;
     // what ended (StopFind), for its event
     FEndedKind: TTyRichFindKind;
     FEndedTally: TTyRichReplaceTally;
+    FEndedExact: Boolean;             // ... a replace's: true of the content as it is
     // an end the content's replacement owes its event (PayFindOwed)
     FOwedKind: TTyRichFindKind;
     FOwedStop: TTyRichFindStop;
@@ -785,6 +800,10 @@ type
     procedure PayFindOwed;
     procedure ReplaceResumeFollows(const AChange: TTyRichChange);
     procedure ReplaceCommandFreed(Sender: TObject);
+    procedure RememberResume(const AFind, AReplace: UTF8String; AOptions: TTyRichFindOptions;
+      const ATally: TTyRichReplaceTally; AExact: Boolean);
+    function ResumeBeforeFor(const AFind, AReplace: UTF8String; AOptions: TTyRichFindOptions;
+      AStart: TTyRichPos): TTyRichBefore;
     function SnapPosAfter(APos: TTyRichPos): TTyRichPos;
     procedure SelectFound(APos, ALen: TTyRichPos);
     procedure NoteFindTurn(AMs: Int64);
@@ -10853,6 +10872,7 @@ var
   marks: TTyRichStepMarks;
   load: TTyRtfLoad;
   len: TTyRichPos;
+  state: Int64;
 var
   life: TTyRichLife;
 begin
@@ -10897,6 +10917,11 @@ begin
         try
           sync.Cmd.Tally := @tally;
           sync.Cmd.OnFreed := @ReplaceCommandFreed;
+          // (on from where the last one stopped: what that one's walk saw before the place)
+          sync.Cmd.StartBefore := ResumeBeforeFor(AFind, AReplace, AOptions - [rfoBackward, rfoWrap],
+            AStart);
+          tally.ResumeBefore := sync.Cmd.StartBefore;
+          FResumeValid := False;
           marks := Default(TTyRichStepMarks);
           marks.HasBefore := True;
           marks.Before.Anchor := FSelAnchor;
@@ -10922,6 +10947,7 @@ begin
           complete := False;
           FEditHeard := False;
           FEditStep := nil;
+          state := FDoc.ContentState;
           Inc(FEditing);
           try
             repeat
@@ -10943,6 +10969,7 @@ begin
               else if not FDoc.ExecutePart(sync.Cmd) then Break;
               // (a handler of the part's change may have let the step go, or freed it)
               if (sync.Cmd = nil) or (FDoc.UndoStep <> sync.Cmd) then Break;
+              state := FDoc.ContentState;
               load := TyRichRtfLoadOf(FDoc);
               if load <> nil then load.Trim;
               if sync.Cmd.Finished then complete := True;
@@ -10953,6 +10980,9 @@ begin
           Result := tally.Replaced;
           if complete then AResult := ReplaceResultOf(rfsDone, tally)
           else AResult := ReplaceResultOf(rfsCancelled, tally);
+          // (stopped before its end: where it says to go on from, and what its walk saw there)
+          RememberResume(AFind, AReplace, AOptions - [rfoBackward, rfoWrap], tally,
+            (AResult.Ending in [rreCancelled, rreLimit]) and (FDoc.ContentState = state));
           if FEditHeard then
           begin
             // the step's selection after: where it stays (a document-API write keeps it)
@@ -11014,10 +11044,14 @@ begin
       FReplaceTally.ResumeAt := AStart;
       FReplaceTally.ResumeLength := ALength;
       FReplaceFollows := False;
+      FReplaceWith := AReplace;
       FReplaceCmd := TTyRichReplaceAllCommand.Create(FDoc, AFind, AReplace, FFindOpts, AStart,
         ALength);
       FReplaceCmd.Tally := @FReplaceTally;
       FReplaceCmd.OnFreed := @ReplaceCommandFreed;
+      // (on from where the last one stopped: what that one's walk saw before the place)
+      FReplaceCmd.StartBefore := ResumeBeforeFor(AFind, AReplace, FFindOpts, AStart);
+      FReplaceTally.ResumeBefore := FReplaceCmd.StartBefore;
       FReplaceCmd.RangeChars := FFindSlice;
       FReplaceRan := False;
       marks := Default(TTyRichStepMarks);
@@ -11064,7 +11098,8 @@ begin
   { What the command told is true of the content its last part left; with that content there
     again (an edit undone, its own step undone and redone) it is told as it is. Otherwise what
     followed the changes made since. }
-  if FReplaceFollows and ((FDoc.Text <> FText) or (FDoc.ContentState <> FFindState)) then
+  FEndedExact := (FDoc.Text = FText) and (FDoc.ContentState = FFindState);
+  if FReplaceFollows and not FEndedExact then
     FEndedTally := FReplaceFollowed
   else
     FEndedTally := FReplaceTally;
@@ -11125,10 +11160,41 @@ begin
   RaiseFindEnd(AKind, AStop, APos, ALen, ATally);
 end;
 
+{ A replace stopped before its end, and what it tells is true of the content as it is
+  (AExact): where it said to go on from is remembered with what its walk saw there. Any other
+  end forgets what was remembered. }
+procedure TTyCustomRichEdit.RememberResume(const AFind, AReplace: UTF8String;
+  AOptions: TTyRichFindOptions; const ATally: TTyRichReplaceTally; AExact: Boolean);
+begin
+  FResumeValid := AExact and (ATally.ResumeAt >= 0) and ATally.ResumeBefore.Known;
+  if not FResumeValid then Exit;
+  FResumeAt := ATally.ResumeAt;
+  FResumeState := FDoc.ContentState;
+  FResumeBefore := ATally.ResumeBefore;
+  FResumeFind := AFind;
+  FResumeRepl := AReplace;
+  FResumeOpts := AOptions;
+end;
+
+{ What a replace that starts at AStart is told of the character before its start: what the
+  replace that stopped exactly there saw - the same needle, replacement and options, the
+  content unchanged since -, else nothing (the text as it is says). }
+function TTyCustomRichEdit.ResumeBeforeFor(const AFind, AReplace: UTF8String;
+  AOptions: TTyRichFindOptions; AStart: TTyRichPos): TTyRichBefore;
+begin
+  Result := Default(TTyRichBefore);
+  if FResumeValid and (AStart = FResumeAt) and (FDoc.ContentState = FResumeState) and
+    (AOptions = FResumeOpts) and (AFind = FResumeFind) and (AReplace = FResumeRepl) then
+    Result := FResumeBefore;
+end;
+
 procedure TTyCustomRichEdit.EndFind(AStop: TTyRichFindStop; AEvent: Boolean);
 begin
   if FFindKind = rfkNone then Exit;
   StopFind;
+  if FEndedKind = rfkReplace then
+    RememberResume(FFindText, FReplaceWith, FFindOpts, FEndedTally, FEndedExact and
+      not FEndedTally.Failed and ((AStop = rfsCancelled) or FEndedTally.Limited));
   if not AEvent then
   begin
     { No handler is run where the content is torn down or a step is being freed: the event

@@ -73,6 +73,7 @@ type
     procedure TestEveryPairOfDestinations;
     procedure TestGeneratedRowsThatEndInsideADestination;
     procedure TestAStopBetweenTouchingWholeWords;
+    procedure TestALineOfTouchingMatchesIsReplacedInBoundedParts;
   end;
 
 implementation
@@ -3014,16 +3015,20 @@ begin
     [files, needles, begun]), (files = CFiles) and (needles > 10 * CFiles) and (begun > CFiles div 20));
 end;
 
-{ One part of a replace of [AStart, AStart + ALength), then the replace is stopped as the
-  control stops it (it lets go of its walk); True when that part was its last. }
+{ One part of a replace of [AStart, AStart + ALength) that goes on where another stopped -
+  ABefore: what that one said its walk saw before the place (its tally's ResumeBefore) -, then
+  the replace is stopped as the control stops it (it lets go of its walk); True when that part
+  was its last. }
 function ReplaceOnePart(ADoc: TTyRichDocument; const ANeedle, ARepl: UTF8String;
-  AOptions: TTyRichFindOptions; AStart, ALength: TTyRichPos; out ATally: TTyRichReplaceTally): Boolean;
+  AOptions: TTyRichFindOptions; AStart, ALength: TTyRichPos; const ABefore: TTyRichBefore;
+  out ATally: TTyRichReplaceTally): Boolean;
 var
   cmd: TTyRichReplaceAllCommand;
 begin
   ATally := Default(TTyRichReplaceTally);
   cmd := TTyRichReplaceAllCommand.Create(ADoc, ANeedle, ARepl, AOptions, AStart, ALength);
   cmd.Tally := @ATally;
+  cmd.StartBefore := ABefore;
   cmd.Prepare(-1);
   if not cmd.Ready then
   begin
@@ -3036,65 +3041,226 @@ begin
   cmd.LetGo;
 end;
 
-{ Whole word, matches that touch in one paragraph of more of them than a part takes, the replace
-  stopped after every part and started again from where it said: it replaces what one walk
-  replaces - also where the replacement changes what the character before the next match is
-  (a stop between two that touch would have made the second no whole word any more). Each
-  text also with the pairs shifted, so that a part's last match is the first of two. }
+{ A replace stopped after every part and started again from where it said, each start given
+  what the one before saw at that place (ACarry; without it every start is judged by the text
+  as it is): the matches replaced in all, AParts the parts it took. }
+function ReplaceChain(ADoc: TTyRichDocument; const ANeedle, ARepl: UTF8String;
+  AOptions: TTyRichFindOptions; ACarry: Boolean; out AParts: Integer): Integer;
+var
+  tally: TTyRichReplaceTally;
+  at, len: TTyRichPos;
+  before: TTyRichBefore;
+  last: Boolean;
+begin
+  Result := 0;
+  AParts := 0;
+  at := 0;
+  len := -1;
+  before := Default(TTyRichBefore);
+  repeat
+    Inc(AParts);
+    last := ReplaceOnePart(ADoc, ANeedle, ARepl, AOptions, at, len, before, tally);
+    Inc(Result, tally.Replaced);
+    at := tally.ResumeAt;
+    len := tally.ResumeLength;
+    if ACarry then before := tally.ResumeBefore;
+  until last or (AParts > 1000);
+end;
+
+{ Whole word, matches that touch in one paragraph of more of them than a part takes: a part
+  ends between two of them like anywhere else, and the replace stopped after every part and
+  started again from where it said replaces what one walk replaces - the text and the count -
+  because each start is told how the walk saw the character before it. Where the replacement
+  ends in a word character the text as it is would answer the other way (the second of two
+  touching matches no whole word any more): without what is carried the chain replaces fewer.
+  Replacements that end in a word character, in none, the empty one, and one with a paragraph
+  end; each text also with the pairs shifted, so that a part's last match is now the first of
+  two, now the second. }
 procedure TTyRichFindTest.TestAStopBetweenTouchingWholeWords;
+const
+  CRepl: array[0..4] of UTF8String = ('zz', 'z-', '', #10 + 'z', 'z' + #10);
 var
   doc, one: TTyRichDocument;
   s: RawByteString;
   sb: TStringBuilder;
-  i, k, runs, total: Integer;
-  tally: TTyRichReplaceTally;
+  i, k, r, parts, total, want: Integer;
   skipped: Integer;
-  at, len: TTyRichPos;
-  repl: UTF8String;
+  name: string;
+  f: TTyRichFinder;
+  bef: TTyRichBefore;
 begin
-  for k := 0 to 3 do
-  begin
-    sb := TStringBuilder.Create;
-    try
-      case k of
-        0, 1: for i := 0 to 19999 do sb.Append('a-');
-        2: for i := 0 to 9999 do sb.Append('a-a- ');
-      else
-        sb.Append('a- ');
-        for i := 0 to 9999 do sb.Append('a-a- ');
-      end;
-      s := sb.ToString;
-    finally
-      sb.Free;
-    end;
-    if k = 1 then repl := 'z-' else repl := 'zz';
-    one := TextDoc(s);
-    doc := TextDoc(s);
-    try
-      ReplaceIn(one, 'a-', repl, [rfoWholeWord], skipped);
-      at := 0;
-      len := -1;
-      runs := 0;
-      total := 0;
-      repeat
-        Inc(runs);
-        if ReplaceOnePart(doc, 'a-', repl, [rfoWholeWord], at, len, tally) then
-        begin
-          Inc(total, tally.Replaced);
-          Break;
+  for k := 0 to 2 do
+    for r := 0 to High(CRepl) do
+    begin
+      // (the replacements with a paragraph end - a delete and an insert a match - on one text)
+      if (r >= 3) and (k > 0) then Continue;
+      sb := TStringBuilder.Create;
+      try
+        // (more than two parts' matches each)
+        case k of
+          0: for i := 0 to 16999 do sb.Append('a-');
+          1: for i := 0 to 8499 do sb.Append('a-a- ');
+        else
+          sb.Append('a- ');
+          for i := 0 to 8499 do sb.Append('a-a- ');
         end;
-        Inc(total, tally.Replaced);
-        at := tally.ResumeAt;
-        len := tally.ResumeLength;
-      until runs > 100;
-      AssertEquals(Format('%d: the same text as one walk', [k]), one.Text.GetText(0, one.Text.Length),
-        doc.Text.GetText(0, doc.Text.Length));
-      AssertEquals(Format('%d: as many', [k]), CountOf('a-', s) - CountOf('a-', one.Text.GetText(0,
-        one.Text.Length)), total);
-    finally
-      doc.Free;
-      one.Free;
+        s := sb.ToString;
+      finally
+        sb.Free;
+      end;
+      name := Format('text %d, replacement %d', [k, r]);
+      one := TextDoc(s);
+      doc := TextDoc(s);
+      try
+        want := ReplaceIn(one, 'a-', CRepl[r], [rfoWholeWord], skipped);
+        AssertEquals(name + ': one walk replaces every one', CountOf('a-', s), want);
+        total := ReplaceChain(doc, 'a-', CRepl[r], [rfoWholeWord], True, parts);
+        AssertTrue(name + Format(': in parts (%d)', [parts]), parts >= 3);
+        AssertTrue(name + ': the same text as one walk', one.Text.GetText(0, one.Text.Length) =
+          doc.Text.GetText(0, doc.Text.Length));
+        AssertEquals(name + ': as many', want, total);
+      finally
+        doc.Free;
+        one.Free;
+      end;
     end;
+  // what is carried is what makes it exact: without it, a part's end between two that touch
+  // costs the second one where the replacement ends in a word character
+  sb := TStringBuilder.Create;
+  try
+    for i := 0 to 16999 do sb.Append('a-');
+    s := sb.ToString;
+  finally
+    sb.Free;
+  end;
+  doc := TextDoc(s);
+  try
+    total := ReplaceChain(doc, 'a-', 'zz', [rfoWholeWord], False, parts);
+    AssertTrue(Format('judged by the text as it is: fewer (%d)', [total]), total < 17000);
+    AssertEquals('... what is left, left as it was', 17000 - total,
+      CountOf('a-', doc.Text.GetText(0, doc.Text.Length)));
+  finally
+    doc.Free;
+  end;
+  // a finder given what stood before its start takes it for a match that begins exactly there
+  doc := TextDoc('zza-a- a-');
+  try
+    for i := 0 to 2 do
+    begin
+      f := TTyRichFinder.Create(doc, 'a-', [rfoWholeWord], 2);
+      try
+        bef := Default(TTyRichBefore);
+        bef.Known := i > 0;
+        if i = 1 then bef.Code := Ord('-') else bef.Code := Ord('y');
+        f.StartBefore := bef;
+        f.Collect := True;
+        f.Run;
+        case i of
+          0: AssertEquals('by the text (a letter before it): not the first', '4 7', Joined(f));
+          1: AssertEquals('told no letter stood there: the first too', '2 4 7', Joined(f));
+        else
+          AssertEquals('told a letter stood there: not the first', '4 7', Joined(f));
+        end;
+      finally
+        f.Free;
+      end;
+    end;
+  finally
+    doc.Free;
+  end;
+end;
+
+{ A document's text, its paragraph ends as line feeds whatever they are stored as. }
+function LinesOf(ADoc: TTyRichDocument): RawByteString;
+begin
+  Result := StringReplace(ADoc.Text.GetText(0, ADoc.Text.Length), #13#10, #10, [rfReplaceAll]);
+end;
+
+{ One line of 80,000 touching whole-word matches, each replaced by a paragraph end and a
+  letter (the ordinary edits, a delete and an insert a match): the parts are bounded - at most
+  CRichReplacePartMatches matches each -, the limit on the undo step is looked at after each
+  (one part's worth is kept when the first reaches it), and the edits of a part cost the
+  stretch of text between them, not the line from its start each: the characters the text
+  storage counts to find the edits' places stay a small multiple of the text. Stopped at the
+  limit and started from where it said, the next part follows without a gap. }
+procedure TTyRichFindTest.TestALineOfTouchingMatchesIsReplacedInBoundedParts;
+const
+  CCount = 80000;
+var
+  doc: TTyRichDocument;
+  s, want: RawByteString;
+  sb: TStringBuilder;
+  i, parts, before, most: Integer;
+  cmd: TTyRichReplaceAllCommand;
+  tally: TTyRichReplaceTally;
+  work: Int64;
+  at, len: TTyRichPos;
+  bef: TTyRichBefore;
+begin
+  sb := TStringBuilder.Create;
+  try
+    for i := 1 to CCount do sb.Append('a-');
+    s := sb.ToString;
+    sb.Clear;
+    for i := 1 to CCount do sb.Append(#10 + 'z');
+    want := sb.ToString;
+  finally
+    sb.Free;
+  end;
+  // no limit: every part bounded, the work linear
+  doc := TextDoc(s);
+  try
+    doc.MaxUndoBytes := 0;
+    tally := Default(TTyRichReplaceTally);
+    cmd := TTyRichReplaceAllCommand.Create(doc, 'a-', #10 + 'z', [rfoWholeWord]);
+    cmd.Tally := @tally;
+    parts := 0;
+    most := 0;
+    work := doc.Text.SplitWork;
+    repeat
+      cmd.Prepare(-1);
+      if not cmd.Ready then Break;
+      before := tally.Replaced;
+      if parts = 0 then AssertTrue(doc.Execute(cmd)) else AssertTrue(doc.ExecutePart(cmd));
+      Inc(parts);
+      if tally.Replaced - before > most then most := tally.Replaced - before;
+    until cmd.Finished;
+    AssertEquals('all of them', CCount, tally.Replaced);
+    AssertEquals('a part takes at most its share of matches', CRichReplacePartMatches, most);
+    AssertEquals('so many parts', (CCount + CRichReplacePartMatches - 1) div CRichReplacePartMatches, parts);
+    work := doc.Text.SplitWork - work;
+    AssertTrue(Format('the edits count the text between them, not the line each (%d characters ' +
+      'counted for %d of text)', [work, Length(s)]), work <= 16 * Int64(Length(s)));
+    AssertTrue('the text', LinesOf(doc) = want);
+  finally
+    doc.Free;
+  end;
+  // the limit: looked at after each part, so a step keeps one part's worth past it at most
+  doc := TextDoc(s);
+  try
+    doc.MaxUndoBytes := 64 * 1024;
+    tally := Default(TTyRichReplaceTally);
+    cmd := TTyRichReplaceAllCommand.Create(doc, 'a-', #10 + 'z', [rfoWholeWord]);
+    cmd.Tally := @tally;
+    AssertTrue(cmd.Prepare(-1) and cmd.Ready);
+    AssertTrue(doc.Execute(cmd));
+    AssertTrue('the first part reached the limit', cmd.Limited and cmd.Finished);
+    AssertEquals('one part of them', CRichReplacePartMatches, tally.Replaced);
+    cmd.Tally := nil;
+    cmd.LetGo;
+    // on from where it said, with what it saw there: the next part's worth, from that very place
+    at := tally.ResumeAt;
+    len := tally.ResumeLength;
+    bef := tally.ResumeBefore;
+    AssertEquals('it stopped behind what it replaced', Int64(2 * CRichReplacePartMatches), at);
+    AssertTrue('it says what stood before that place', bef.Known and (bef.Code = Ord('-')));
+    ReplaceOnePart(doc, 'a-', #10 + 'z', [rfoWholeWord], at, len, bef, tally);
+    AssertEquals('started again: the next part of them', CRichReplacePartMatches, tally.Replaced);
+    AssertTrue('... the limit again', tally.Limited);
+    AssertTrue('... none left out between the two', Copy(LinesOf(doc), 1, 4 * CRichReplacePartMatches + 2) =
+      Copy(want, 1, 4 * CRichReplacePartMatches) + 'a-');
+  finally
+    doc.Free;
   end;
 end;
 

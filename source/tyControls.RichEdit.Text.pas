@@ -219,6 +219,7 @@ type
     FDefaultHeight: Int64;
     FHeightEpoch: Int64;
     FNodeVisits: Int64;
+    FSplitWork: Int64;
     FSumScans: Int64;
     FProvider: TTyRichTextProvider;
     FOwnsProvider: Boolean;
@@ -493,6 +494,11 @@ type
     property AddedBytes: Int64 read FAddLen;
     { Tree nodes entered by lookups, for tests that check the index stays logarithmic. }
     property NodeVisits: Int64 read FNodeVisits write FNodeVisits;
+    { Characters counted from the start of a piece to a place inside it - to make the place a
+      piece boundary, or to take a part of the piece (every edit at a place inside a piece
+      does) -, for tests: edits walking forward through one long paragraph count each stretch
+      between them a few times, not the paragraph from its start each. }
+    property SplitWork: Int64 read FSplitWork;
     { Nodes whose summary was recomputed from their contents, for tests: an edit does that
       along its path, setting a height must not. }
     property SumScans: Int64 read FSumScans;
@@ -1822,6 +1828,7 @@ begin
   off := APos - before.Chars;
   Result := before.Entries;
   if off = 0 then Exit;
+  Inc(FSplitWork, off);
   ConvertToAdded(p);
   it := ItemAt(p);
   sep := PSep(it^);
@@ -1890,6 +1897,7 @@ begin
     kind := PKind(AItem^);
   end;
   content := len - SepBytes(sep);
+  Inc(FSplitWork, AFrom);
   b0 := ByteOfChar(text, content, AFrom);
   if ATo = AItem^.FChars then
     b1 := len

@@ -80,6 +80,14 @@ const
 type
   TTyRichCodeArray = array of Cardinal;
 
+  { What stood right before a place in the text, as a walk saw it there. Known False: nothing
+    is known - the text as it is says. Code: the character; TyRichFindParaEnd where a paragraph
+    began at the place (nothing stood before it). }
+  TTyRichBefore = record
+    Known: Boolean;
+    Code: Cardinal;
+  end;
+
   { rfoWrap is the control's (TTyCustomRichEdit.FindNext: past the end, on from the other
     end); a finder searches its range and does not look at it. }
   TTyRichFindOption = (rfoMatchCase, rfoWholeWord, rfoBackward, rfoWrap);
@@ -229,9 +237,9 @@ type
       would find its part refused by the document: TTyRichDocument.ExecutePart). }
     FKeepMoved: Boolean;
     FCap: Integer;                    // CollectRange: the most matches it collects (0: all)
-    FNoTouchCut: Boolean;             // ... but never stopping between two that touch
-    FHeld: TTyRichPos;                // the match after the cap, given first by the next call
     FCapped: Boolean;
+    FStartAt: TTyRichPos;             // the start it was made with
+    FStartBefore: TTyRichBefore;      // what stood before that, as its maker says
     FFetchedBytes: Int64;
     FRangeLo, FRangeHi: Integer;
     procedure ParseNeedle(const ANeedle: UTF8String);
@@ -241,6 +249,7 @@ type
     function HiddenValue(AData: Pointer): Boolean;
     function FilterReady: Boolean;
     function BeginsUnknown(AIndex: Integer): Boolean;
+    function BeforeCode: Cardinal;
     function Accept(AStart: TTyRichPos): Boolean;
     procedure NextPara;
     procedure LoadSources(AFirst, ALast: Integer);
@@ -288,11 +297,17 @@ type
       call again with the same range; rfrFound / rfrNotFound: the range is read and its
       matches are Matches. }
     function CollectRange(ALo, AHi: Integer; AFrom, ATo: TTyRichPos;
-      ABudget: Int64; ACap: Integer = 0; ANoTouchCut: Boolean = False): TTyRichFindResult;
-    { CollectRange stopped at ACap matches (rfrFound; ANoTouchCut: or after more, never
-      between two matches that touch), the range not read through: the next call with the same
-      range goes on right after the last one. }
+      ABudget: Int64; ACap: Integer = 0): TTyRichFindResult;
+    { CollectRange stopped at ACap matches (rfrFound), the range not read through: the next
+      call with the same range goes on right after the last one. }
     property Capped: Boolean read FCapped;
+    { What stood right before the finder's start (AStart), as whoever made the finder saw it:
+      taken for the whole-word test of a match that begins exactly there, in place of the
+      character the text has before it now. For a replace that goes on where another stopped:
+      that one replaced what stood before the place, and the one walk the two are parts of
+      judged the word boundary by the text as it was. Not Known (the default): the text as it
+      is. Set before the first step. }
+    property StartBefore: TTyRichBefore read FStartBefore write FStartBefore;
     { The text before where the scan stands changed by ADelta characters and AParas paragraphs
       (a replace's own part, of the matches it collected): the scan goes on where it stood, in
       the paragraph's text it keeps, its places moved by the change. }
@@ -359,6 +374,8 @@ type
       TTyRichReplaceAllCommand.ResumeAt), and the characters from there to the range's end
       (-1: to the text's end). }
     ResumeAt, ResumeLength: TTyRichPos;
+    { What the walk saw right before ResumeAt (TTyRichReplaceAllCommand.ResumeBefore). }
+    ResumeBefore: TTyRichBefore;
   end;
   PTyRichReplaceTally = ^TTyRichReplaceTally;
 
@@ -398,7 +415,15 @@ type
     replaced is the one step. ResumeAt says where it stopped: right behind the last match it
     dealt with, in the text as it is now; a new command from there (to the range's end,
     ResumeLength) replaces the rest and nothing twice - also where a replacement holds the
-    needle. A redo replays what the first run replaced, all of it at once. }
+    needle. A redo replays what the first run replaced, all of it at once.
+
+    Whole word, and a stop between two matches that touch: the walk judged the second by the
+    character before it in the text as it was - the first match's last -, and a new command
+    from ResumeAt would judge it by the replacement's last character, which may answer the
+    other way. So a stop also says what the walk saw there (ResumeBefore), and the command
+    that goes on from exactly that place, the text unchanged since, is given it (StartBefore):
+    the two replace what one walk replaces. A part ends between touching matches like
+    anywhere else. }
   TTyRichReplaceAllCommand = class(TTyRichCommand)
   private
     FTarget: TTyRichDocument;
@@ -409,7 +434,7 @@ type
     FFrom, FTo: TTyRichPos;           // the range, in the text it began on (FTo < 0: its end)
     FResume: TTyRichPos;              // behind the last match dealt with, in the text as it is
     FStuck: Boolean;
-    FTouchMatters: Boolean;           // a part may not end between two matches that touch
+    FStartBefore, FResumeBefore: TTyRichBefore;
     FSimple: Boolean;                 // a paragraph end in the needle: every match first
     FFast: Boolean;                   // none in either: ReplaceInParas
     FAllAtOnce: Boolean;
@@ -444,7 +469,7 @@ type
     function Search(ABudget: Int64): Boolean;
     procedure Fail;
     function RangeEnd: TTyRichPos;
-    function TouchMatters: Boolean;
+    procedure SetStartBefore(const AValue: TTyRichBefore);
   protected
     procedure DoExecute(ADoc: TTyRichDocument); override;
     procedure DoContinue(ADoc: TTyRichDocument); override;
@@ -483,6 +508,14 @@ type
       the place may be counted as Skipped again). }
     property ResumeAt: TTyRichPos read FResume;
     function ResumeLength: TTyRichPos;
+    { What stood right before ResumeAt in the text as the walk saw it: the last character of
+      the last match it replaced (a paragraph's end: TyRichFindParaEnd) - before any part
+      ran, what it was given as StartBefore. For the command that goes on from ResumeAt. }
+    property ResumeBefore: TTyRichBefore read FResumeBefore;
+    { For a command that goes on exactly where another stopped (that one's ResumeAt), the text
+      unchanged since: that one's ResumeBefore - what the walk saw before this command's
+      start (TTyRichFinder.StartBefore). Set before the first Prepare or run. }
+    property StartBefore: TTyRichBefore read FStartBefore write SetStartBefore;
     { The walk could not go on: a part that made no progress ended it (a guard: an end that
       the ordinary way never takes). }
     property Failed: Boolean read FStuck;
@@ -1089,7 +1122,7 @@ begin
   FRangeHi := -1;
   FPend := -1;
   FKeepPara := -1;
-  FHeld := -1;
+  FStartAt := AStart;
   ParseNeedle(ANeedle);
   if (FMax >= 0) and (FMax - FMin < FLen) then FNever := True;
 end;
@@ -1269,6 +1302,12 @@ begin
   Result := (cell.Index < Length(disp.Cells)) and (disp.Cells[cell.Index].HMerge = rcmContinue);
 end;
 
+{ StartBefore's character for the whole-word test (a paragraph's end: no character). }
+function TTyRichFinder.BeforeCode: Cardinal;
+begin
+  if FStartBefore.Code = TyRichFindParaEnd then Result := CNone else Result := FStartBefore.Code;
+end;
+
 { A match from AStart (its whole-word test passed): taken by the scan's mode. True: the walk
   stops here. }
 function TTyRichFinder.Accept(AStart: TTyRichPos): Boolean;
@@ -1284,23 +1323,17 @@ begin
       end;
     1:
       begin
-        if (FCap > 0) and (FMatchCount >= FCap) and not (FNoTouchCut and (AStart = FMin)) then
-        begin
-          { As many as a caller takes at a time, and this one does not touch the last (or a
-            cut there is harmless): it is held for the next call, the scan stands after it.
-            So the caller's part never ends between two matches that touch where that would
-            change what a whole word is for the second. }
-          FHeld := AStart;
-          FMin := AStart + FLen;
-          FStop := True;
-          Result := True;
-          Exit;
-        end;
         if FMatchCount = Length(FMatches) then SetLength(FMatches, FMatchCount * 2 + 64);
         FMatches[FMatchCount] := AStart;
         Inc(FMatchCount);
         // the next one begins after this one
         FMin := AStart + FLen;
+        if (FCap > 0) and (FMatchCount >= FCap) then
+        begin
+          // as many as a caller takes at a time: the scan stands right after this one
+          FStop := True;
+          Result := True;
+        end;
       end;
   else
     if AStart > FBest then FBest := AStart;
@@ -1481,6 +1514,8 @@ begin
       else
       begin
         if pos - FLen >= 0 then prev := FRing[(pos - FLen) mod ringN] else prev := CNone;
+        // (a match that begins where the finder was started: what its maker saw before it)
+        if FStartBefore.Known and (FRunPos + pos - FLen + 1 = FStartAt) then prev := BeforeCode;
         if not Joins(prev, FFirstChar) then
           pending := pos - FLen + 1;
       end;
@@ -1700,6 +1735,8 @@ begin
   if ok and whole and (s > 0) then
   begin
     if pos - s - 1 >= 0 then prev := FRing[(pos - s - 1) mod ringN] else prev := CNone;
+    // (a match that begins where the finder was started: what its maker saw before it)
+    if FStartBefore.Known and (FWinStart[i] + pos - s = FStartAt) then prev := BeforeCode;
     ok := not Joins(prev, FFirstChar);
   end;
   FWinTail[i] := Ord(ok);
@@ -2161,7 +2198,7 @@ begin
 end;
 
 function TTyRichFinder.CollectRange(ALo, AHi: Integer; AFrom, ATo: TTyRichPos;
-  ABudget: Int64; ACap: Integer; ANoTouchCut: Boolean): TTyRichFindResult;
+  ABudget: Int64; ACap: Integer): TTyRichFindResult;
 begin
   Inc(FSteps);
   if FNever then Exit(rfrNotFound);
@@ -2182,15 +2219,6 @@ begin
     FCurByte := 0;
     FKeep := '';
     FKeepPara := -1;
-    FHeld := -1;
-  end;
-  // (the match the last call held back is this call's first)
-  if FHeld >= 0 then
-  begin
-    if FMatchCount = Length(FMatches) then SetLength(FMatches, FMatchCount * 2 + 64);
-    FMatches[FMatchCount] := FHeld;
-    Inc(FMatchCount);
-    FHeld := -1;
   end;
   FScanEnd := FText.ParaStart(AHi) + FText.ParaLength(AHi);
   if (ATo >= 0) and (ATo < FScanEnd) then FScanEnd := ATo;
@@ -2198,13 +2226,11 @@ begin
   FStop := False;
   if ABudget < 0 then FBudget := High(Int64) div 4 else FBudget := Max64(ABudget, 1);
   FCap := ACap;
-  FNoTouchCut := ANoTouchCut;
   FCapped := False;
   try
     ScanRange(AHi);
   finally
     FCap := 0;
-    FNoTouchCut := False;
   end;
   if FStop then
   begin
@@ -2221,7 +2247,8 @@ end;
 procedure TTyRichFinder.Moved(ADelta: TTyRichPos; AParas: Integer);
 begin
   Inc(FMin, ADelta);
-  if FHeld >= 0 then Inc(FHeld, ADelta);
+  // (past its start, and the places before the scan are other ones now: nothing begins there)
+  FStartBefore.Known := False;
   Inc(FNext, AParas);
   if FRangeHi >= 0 then Inc(FRangeHi, AParas);
   if FKeepPara >= 0 then
@@ -2316,20 +2343,11 @@ begin
   FId := GRichReplaceIds;
 end;
 
-{ Whole word, a match right after another, a stop between them: run again from the stop, its
-  whole-word test looks at the text before it as it now is - the replacement's last character
-  where the single walk saw the needle's. Where the two would not answer alike (or the
-  replacement is empty: then it is the character before the other match), a part never ends
-  between two matches that touch. }
-function TTyRichReplaceAllCommand.TouchMatters: Boolean;
-var
-  r: TTyRichCodeArray;
+procedure TTyRichReplaceAllCommand.SetStartBefore(const AValue: TTyRichBefore);
 begin
-  Result := False;
-  if not (rfoWholeWord in FOptions) or (FFinder = nil) or FFinder.Never then Exit;
-  r := TyRichFindCodes(FRepl);
-  if Length(r) = 0 then Exit(True);
-  Result := Joins(FFinder.FLastChar, FFinder.FFirstChar) <> Joins(r[High(r)], FFinder.FFirstChar);
+  FStartBefore := AValue;
+  // (nothing replaced yet: where it would go on from is its start, with what stood before that)
+  if not FStarted then FResumeBefore := AValue;
 end;
 
 { The range's end in the text as it is now. }
@@ -2451,8 +2469,8 @@ begin
     FNextPara := t.ParaOfPos(FFrom);
     FFinder := TTyRichFinder.Create(FTarget, FFind, FOptions, FFrom, FTo);
     FFinder.Collect := True;
+    FFinder.StartBefore := FStartBefore;
     FLen := FFinder.MatchLen;
-    FTouchMatters := TouchMatters;
     if FFinder.Never then
     begin
       FWalkDone := True;
@@ -2493,9 +2511,7 @@ begin
       FTarget.BeginRead;
       try
         // (the first one whatever its length: a needle may be longer than the range)
-        // (and on over matches that touch, where a part may not end between them)
-        while (k < FAllCount) and ((k = FAllNext) or (FAll[k] + FLen - last <= FRangeChars) or
-          (FTouchMatters and (FAll[k] = FAll[k - 1] + FLen))) do
+        while (k < FAllCount) and ((k = FAllNext) or (FAll[k] + FLen - last <= FRangeChars)) do
         begin
           Take(FAll[k] + FCharDelta);
           Inc(k);
@@ -2542,8 +2558,7 @@ begin
       may hold millions (a one-line file) - a list of all of them would cost what the step's
       record saves. The finder then stands after the last one, in the paragraph's text it
       keeps, and goes on from there after the part (Moved). }
-    r := FFinder.CollectRange(FRangeLo, FRangeHi, FFrom, stop, ABudget, CRichReplacePartMatches,
-      FTouchMatters);
+    r := FFinder.CollectRange(FRangeLo, FRangeHi, FFrom, stop, ABudget, CRichReplacePartMatches);
     if r = rfrMore then Exit(False);
     // (one read scope for the range's checks: the loader trims once, when it ends)
     FTarget.BeginRead;
@@ -2574,8 +2589,9 @@ var
   i, r, para, left, n0, n: Integer;
   t: TTyRichText;
   runs: TTyRunArray;
-  off, len0, d: TTyRichPos;
+  off, len0, d, p: TTyRichPos;
   fmt: TTyCharFormatId;
+  last: TTyRichCodeArray;
 begin
   if FReadyCount = 0 then Exit;
   // (the first part of what a search found; the next ones only follow its own: ExecutePart)
@@ -2589,8 +2605,13 @@ begin
     part, moved by what this one changed - a paragraph of megabytes with matches all through
     it is replaced in parts too. }
   n := FReadyCount;
-  // (a part does not end between matches that touch where that matters: see TouchMatters)
-  if (n > CRichReplacePartMatches) and not FTouchMatters then n := CRichReplacePartMatches;
+  if n > CRichReplacePartMatches then n := CRichReplacePartMatches;
+  { What stands right before the place this part ends at, while it is still there: the last
+    character of its last match - how the walk sees the boundary of a match that begins right
+    behind it (ResumeBefore). }
+  last := TyRichFindCodes(t.GetText(FReady[n - 1] + FLen - 1, 1));
+  FResumeBefore.Known := Length(last) = 1;
+  if FResumeBefore.Known then FResumeBefore.Code := last[0];
   if FFast then
   begin
     left := 0;
@@ -2598,8 +2619,30 @@ begin
     Inc(FReplaced, n - left);
     Inc(FSkipped, left);
   end
+  else if not FSimple then
+    { The ordinary edits, the first match first, each at its place moved by what the ones
+      before it changed. Forward on purpose: an edit makes its place a boundary of the
+      paragraph's pieces of text, which the text storage finds by counting characters from
+      the start of the piece the place is in. From the last match back every edit of a part
+      would count from the start of the same long piece - a line of n matches n times its
+      length; forward, the piece an edit leaves behind it starts at that edit, and the next
+      one counts only the characters between the two. (A match lies inside one paragraph and
+      takes the format of its first character's run: the order changes nothing else.) }
+    for i := 0 to n - 1 do
+    begin
+      p := FReady[i] + (t.Length - len0);
+      para := t.ParaOfPos(p);
+      off := p - t.ParaStart(para);
+      runs := ADoc.RunsOf(para);
+      r := High(runs);
+      while (r > 0) and (runs[r].Start > off) do Dec(r);
+      if r >= 0 then fmt := runs[r].Format else fmt := ADoc.TypingFormatAt(p);
+      DeleteRange(ADoc, p, FLen);
+      if FRepl <> '' then InsertText(ADoc, p, FRepl, fmt);
+      Inc(FReplaced);
+    end
   else
-    // the ordinary edits, the last first
+    // a needle with a paragraph end: the ordinary edits, the last first
     for i := n - 1 downto 0 do
     begin
       para := t.ParaOfPos(FReady[i]);
@@ -2660,6 +2703,7 @@ begin
   FTally^.Failed := FStuck;
   FTally^.ResumeAt := FResume;
   FTally^.ResumeLength := ResumeLength;
+  FTally^.ResumeBefore := FResumeBefore;
 end;
 
 procedure TTyRichReplaceAllCommand.Run(ADoc: TTyRichDocument);
