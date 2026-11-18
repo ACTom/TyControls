@@ -54,7 +54,7 @@ type
     procedure TestChineseIsWrittenAsUnicodeEscapes;
     procedure TestAnEditAtTheEndOfALazyDocumentRewritesOnlyThatParagraph;
     procedure TestWindowsRichEditReadsWhatWeWrite;
-    // the rulings
+    // the writer's rules: what a save rewrites, the header, formats, lists, refusals, progress
     procedure TestEveryParagraphEditedInTurnLeavesTheOthersAlone;
     procedure TestAOneParagraphEditRewritesItsStretchOnly;
     procedure TestTheHeaderIsOnlyAddedTo;
@@ -1475,7 +1475,7 @@ begin
 end;
 {$ENDIF}
 
-{ ---- the rulings ---- }
+{ ---- the writer's rules: what a save rewrites, the header, formats, lists, refusals ---- }
 
 // The stretches of a save, one after the other.
 function StretchBytes(const AOut: TBytes; const AInfo: TTyRtfWriteInfo): RawByteString;

@@ -981,7 +981,7 @@ const
     '{`*`generator Riched20 10.0.19041}`viewkind4`uc1 ' +
     '`pard`sa200`sl276`slmult1`f0`fs22`lang9 see {{`field{`*`fldinst{HYPERLINK "http://x"}}' +
     '{`fldrslt{`ul`cf1`cf1`ul`f1`''d6`''d0`''ce`''c4}}}}`f0`fs22  here`par}';
-  // the source's header of probe C (SrcIdx's): f1 SimSun, two colours, s3 and cs5
+  // a source's header, as SrcIdx's: f1 SimSun, two colours, s3 and cs5
   SrcHeadC = '{`rtf1`ansi`ansicpg1252`deff0{`fonttbl{`f0`fswiss`fcharset0 Arial;}' +
     '{`f1`fnil`fcharset134 SimSun;}}{`colortbl;`red255`green0`blue0;`red0`green0`blue255;}' +
     '{`stylesheet{`s3 Quote;}{`*`cs5 Emph;}}';

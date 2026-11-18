@@ -37,7 +37,7 @@ type
     procedure TestEastAsianFontSwitching;
     procedure TestUnknownContentIsKept;
     procedure TestTablesRead;
-    // the rulings
+    // the reader's rules: paragraph ends, byte ranges, fields, pictures, lists, broken files
     procedure TestTheLastParDoesNotMakeAParagraph;
     procedure TestRangesTileTheFile;
     procedure TestKeptBytesAreTheFileBytes;
@@ -964,7 +964,7 @@ begin
   end;
 end;
 
-{ ---- the rulings ---- }
+{ ---- the reader's rules: paragraph ends, byte ranges, fields, pictures, lists, broken files ---- }
 
 procedure TTyRtfReadTest.TestTheLastParDoesNotMakeAParagraph;
 var

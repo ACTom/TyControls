@@ -1248,7 +1248,7 @@ var
 begin
   if FTemp = '' then
   begin
-    // the process id: two runs of this suite at once (mutation shards) have folders of their own
+    // the process id: two runs of this suite at once have folders of their own
     FTemp := IncludeTrailingPathDelimiter(GetTempDir(False)) + 'tyrichedit9a-' +
       IntToStr(GetProcessID) + '-' + IntToHex(Random($7FFFFFFF), 8) + PathDelim;
     ForceDirectories(FTemp);
@@ -1278,7 +1278,7 @@ begin
   Result := (r.Bottom > r.Top) and (r.Bottom > a.Top) and (r.Top < a.Bottom);
 end;
 
-{ The plan's: a 2,000,000-line txt loaded and its first screen painted lays out no more than
+{ A 2,000,000-line txt loaded and its first screen painted lays out no more than
   the visible lines and two screens. }
 procedure TTyRichEditControlTest.TestLoadShowsTheFirstScreenWithoutLayingOutTheRest;
 var
@@ -1305,7 +1305,7 @@ begin
     (FRich.VBar <> nil) and FRich.VBar.Visible and (FRich.VBar.Max > 100 * n));
 end;
 
-{ The plan's: the scroll position set to the middle lays out only around it. }
+{ The scroll position set to the middle lays out only around it. }
 procedure TTyRichEditControlTest.TestScrollingToTheMiddleLaysOutOnlyNearby;
 var
   n, mid: Integer;
@@ -1324,7 +1324,7 @@ begin
   AssertTrue(Format('%d paragraphs laid out', [FRich.LaidParas]), FRich.LaidParas <= 3 * n + 2);
 end;
 
-{ The plan's: laying out the paragraphs above (taller than their estimates) does not move the
+{ Laying out the paragraphs above (taller than their estimates) does not move the
   first line on screen; the scroll position (the sum of the heights above) moves instead. }
 procedure TTyRichEditControlTest.TestScrollPositionStaysPutWhenEstimatesAreCorrected;
 var
@@ -1366,7 +1366,7 @@ begin
     FRich.ParagraphRect(200).Top);
 end;
 
-{ The plan's: a format changed by code invalidates the changed paragraph's rectangle only; a
+{ A format changed by code invalidates the changed paragraph's rectangle only; a
   change of its height, it and what is below it. }
 procedure TTyRichEditControlTest.TestPartialRepaintCoversOnlyTheChangedParagraph;
 var
@@ -1426,7 +1426,7 @@ begin
   AssertTrue('in the same place', EqualRect(r5, FRich.ParagraphRect(120)));
 end;
 
-{ The plan's: zooming changes what is shown, not the document - no OnChange - and the page's
+{ Zooming changes what is shown, not the document - no OnChange - and the page's
   layout width scales with it; the zoom is clamped to 10 .. 500 and reports itself. }
 procedure TTyRichEditControlTest.TestZoomChangesDisplayOnly;
 var
@@ -5271,7 +5271,7 @@ begin
   AssertEquals('Select All', 5, FSelChanges);
 end;
 
-{ The plan's: a copy puts both flavours through the clipboard seam (never the system's); the
+{ A copy puts both flavours through the clipboard seam (never the system's); the
   RTF read back is the range - its paragraphs, their text, the formats of their characters (a
   bold run, a Chinese font), the last paragraph taken without its separator plain. }
 procedure TTyRichEditControlTest.TestCopyPutsRtfAndPlainText;

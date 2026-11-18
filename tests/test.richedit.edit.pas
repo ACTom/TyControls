@@ -707,7 +707,8 @@ end;
 
 { The design's hard line, by count: typing in the middle of a 2,000,000-line document lays out
   that paragraph alone, measures only its characters, enters a few tree nodes (log, not the
-  document) and paints only its band. Mutation: every input empties the layout cache - red. }
+  document) and paints only its band. (An input that emptied the layout cache would lay the
+  screen out again: the counts catch it.) }
 procedure TTyRichEditEditTest.TestTypingInALargeDocumentTouchesOneParagraph;
 var
   t: TTyRichText;

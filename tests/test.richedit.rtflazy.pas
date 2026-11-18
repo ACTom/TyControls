@@ -52,7 +52,7 @@ type
     procedure TestOpeningParsesOnlyWhatIsShown;
     procedure TestAnEditAtTheEndOfALazyDocumentRewritesOnlyThatParagraph;
     procedure TestAnEditAtTheEndOfALazyDocumentSavesTheRestVerbatim;
-    // the rulings
+    // the index, slices, tables across intervals, what stays parsed, undo over unparsed text
     procedure TestIndexCountsAreTheFullParse;
     procedure TestLoadingInSlices;
     procedure TestCancelKeepsWhatWasIndexed;
@@ -724,7 +724,7 @@ begin
   end;
 end;
 
-{ ---- the rulings ---- }
+{ ---- the index, slices, tables across intervals, what stays parsed, undo ---- }
 
 procedure TTyRtfLazyTest.TestIndexCountsAreTheFullParse;
 const

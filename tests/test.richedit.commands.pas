@@ -641,7 +641,7 @@ begin
   end;
 end;
 
-{ ---- the rulings' tests ---- }
+{ ---- the history's edges: a refused command, one change a step, the byte limit ---- }
 
 procedure TTyRichCommandsTest.TestRefusedCommandChangesNothing;
 var
