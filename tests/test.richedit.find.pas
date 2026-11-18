@@ -684,7 +684,8 @@ end;
   a lead byte left waiting in a field's result (its ? comes out before the field's object,
   whatever follows the result inside the field) are among them: forms a search that judged
   a paragraph by its bytes once lost a hit in. The places pin what the reader makes of
-  each, read whole and read lazily alike. }
+  each, read whole and read lazily alike - also of the default font named again in the
+  body, which once raised on reading. }
 procedure TTyRichFindTest.TestTheAdversarialFiles;
 var
   lines: TStringList;
@@ -731,7 +732,7 @@ begin
       end;
       Inc(n);
     end;
-    AssertEquals('the cases', 129, n);
+    AssertEquals('the cases', 135, n);
     { And two of our own: a code page that only a later font table or an ansicpg word brings, used by a
       paragraph whose bytes do not hold that table or word. }
     bytes := BytesOf(Rtf('{|rtf1|ansi|ansicpg1252|deff0{|fonttbl{|f0|fswiss Arial;}}|pard one' +
@@ -2857,7 +2858,9 @@ var
       else if kind < 51 then
         Result := Result + Pick(['|uc0 ', '|uc1 ', '|uc2 ', '|uc1'])
       else if kind < 57 then
-        Result := Result + Pick(['|f0 ', '|f1 ', '|f2 ', '|f3 ', '|f9 ', '|plain ', '|b ', '|b0'])
+        // (the default font named again among them: what has no font of its own changes)
+        Result := Result + Pick(['|f0 ', '|f1 ', '|f2 ', '|f3 ', '|f9 ', '|plain ', '|b ', '|b0',
+          '|deff3 ', '|deff1 '])
       else if kind < 66 then
         Result := Result + Pick(['|tab ', '|line ', '|emdash ', '|~', '|_', '|-', '|{', '|}', '||',
           '|*', '|:', '|bullet', '|chpgn ', '|sect ', '|page ', '|column '])

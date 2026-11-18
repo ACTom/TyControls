@@ -79,6 +79,7 @@ type
     procedure TestRandomEditsUndoneAndRedone;
     procedure TestAPlainParagraphUndoneAfterItsIntervalWentIsTheFilesOwn;
     procedure TestKeptValuesCostLittleInAnyOrder;
+    procedure TestTheDefaultFontNamedAgainInTheBody;
   end;
 
 implementation
@@ -3011,6 +3012,49 @@ begin
       s.Free;
       d.Free;
     end;
+  end;
+end;
+
+{ The default font named again in the body (\deffN after text): what has no font of its own
+  is in the new font from there on - its bytes too - and the index scan and a parse that
+  begins anywhere take the change at the same place: nothing raises, the index is the whole
+  parse's, and the lazy read is the whole read paragraph by paragraph in any order. (The
+  decoder is kept by the font's number, and the number of "no font" stays what it was: the
+  parse went on with the old default font's code page where the scan had looked the new
+  one up, a paragraph decoded to another count of characters than the index had for it,
+  and reading the file raised - also in a field's result, with the file cut short there.)
+  The files are D1 to D4 of tests/fixtures/rtf/find; the last names the default font in
+  the header alone, and reads as it always did. }
+procedure TTyRtfLazyTest.TestTheDefaultFontNamedAgainInTheBody;
+const
+  CBullet = #$E2#$80#$A2;
+  CObject = #$EF#$BF#$BC;
+  Names: array[0..3] of string = ('D1.rtf', 'D2.rtf', 'D3.rtf', 'D4.rtf');
+  Texts: array[0..3] of RawByteString = (
+    // (95 is a bullet in the Greek font, and the first half of a pair in Big5)
+    'filler' + #10 + CBullet + 'ab' + #10 + 'zz',
+    // (FE is a letter in the Greek font; in GBK the first half of a pair, left waiting)
+    'filler' + #10 + 't?' + CObject,
+    'filler' + #10 + 't?' + CObject + 'c' + #10 + 'zz',
+    'filler' + #10 + CBullet + 'ab' + #10 + 'zz');
+var
+  i: Integer;
+  b: TBytes;
+  full: TTyRichDocument;
+  s: RawByteString;
+begin
+  for i := 0 to High(Names) do
+  begin
+    b := ReadFileBytes(FixtureDir + 'find' + PathDelim + Names[i]);
+    full := LoadWith(b, True);
+    try
+      s := StringReplace(full.Text.GetText(0, full.Text.Length), #13#10, #10, [rfReplaceAll]);
+      AssertTrue(Names[i] + ': the text, read whole', s = Texts[i]);
+    finally
+      full.Free;
+    end;
+    CheckIndex(Names[i], b);
+    CheckLazyAgainstFull(Names[i], b, True);
   end;
 end;
 

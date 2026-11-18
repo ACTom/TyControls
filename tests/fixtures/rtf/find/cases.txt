@@ -127,3 +127,9 @@ X5.rtf	6162	m	0	a single-byte font: the byte is a character of the result, no ? 
 X6.rtf	623F	-	-	a whole pair in the result: no ? comes out
 X6.rtf	6162	m	0	a whole pair in the result: no ? comes out
 X7.rtf	623F	-	1	a lead byte left waiting in a result, an instruction before it and text behind
+D1.rtf	E280A26162	-	7	the default font named again after text: what has no font of its own is in the new one from there on
+D1.rtf	7A7A	m	11	the default font named again after text: what has no font of its own is in the new one from there on
+D2.rtf	743F	-	7	the default font named again in a field's result, a lead byte of the new one behind it, the file cut short there
+D3.rtf	743F	-	7	the same, the file whole
+D3.rtf	7A7A	m	12	the same, the file whole
+D4.rtf	E280A26162	-	7	the default font named in the header alone

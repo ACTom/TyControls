@@ -3627,6 +3627,12 @@ begin
     kwDeff:
       begin
         FDeff := p;
+        { Text without a font of its own is the new default font's from here on - its
+          bytes too: the decoder's code page is looked up again (it is kept by the font
+          number, and that number, none, stays what it was). Without this the index scan
+          and a parse that begins elsewhere looked it up at different places, and read a
+          paragraph after the word as different text. }
+        Inc(FFontGen);
         TablesChanged;
         CharChanged;
       end;

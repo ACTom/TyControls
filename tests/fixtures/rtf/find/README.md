@@ -9,7 +9,9 @@ whole and read lazily alike. `TTyRichFindTest.TestTheAdversarialFiles` reads `ca
 line, tab-separated: the file, the needle as hex of its UTF-8, the options (`m` match case,
 `w` whole word, `-` none), the places the needle is found (`-`: none) and what the file is
 about. Each file is searched read whole and read lazily: both must give those places. A file
-may serve two lines (two needles). They are kept byte for byte (`.gitattributes`:
+may serve two lines (two needles). The `D` files are of another kind: the default font named
+again in the body (`\deff`), where the reader's index and its parse once took the change at
+different places and reading the file raised. They are kept byte for byte (`.gitattributes`:
 `tests/fixtures/rtf/** -text`); none of their words is anyone's.
 
 | File | Needle | Case | Found at | What it is |
@@ -143,3 +145,9 @@ may serve two lines (two needles). They are kept byte for byte (`.gitattributes`
 | `X6.rtf` | b? |  | - | a whole pair in the result: no ? comes out |
 | `X6.rtf` | ab | m | 0 | a whole pair in the result: no ? comes out |
 | `X7.rtf` | b? |  | 1 | a lead byte left waiting in a result, an instruction before it and text behind |
+| `D1.rtf` | •ab |  | 7 | the default font named again after text: what has no font of its own is in the new one from there on |
+| `D1.rtf` | zz | m | 11 | the default font named again after text: what has no font of its own is in the new one from there on |
+| `D2.rtf` | t? |  | 7 | the default font named again in a field's result, a lead byte of the new one behind it, the file cut short there |
+| `D3.rtf` | t? |  | 7 | the same, the file whole |
+| `D3.rtf` | zz | m | 12 | the same, the file whole |
+| `D4.rtf` | •ab |  | 7 | the default font named in the header alone |
