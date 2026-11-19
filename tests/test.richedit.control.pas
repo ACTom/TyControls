@@ -6290,7 +6290,9 @@ begin
   FRich.ReleaseAt(right - 2, y);
   AssertEquals('the right half: the picture', Int64(1), FRich.SelStart);
   AssertEquals('the right half: its character', Int64(1), FRich.SelLength);
-  // a drag out of it, right and left: from the picture
+  // a drag out of it, right and left: from the picture (not selected before the press - a
+  // press on the selected picture drags it; a letter clear of its handles at scale 2 too)
+  Click(At(3));
   p := At(3);
   FRich.PressAt(left, y);
   FRich.MoveAt(p.X + 2, p.Y);

@@ -354,7 +354,7 @@ begin
 end;
 
 const
-  BuiltInCount = 15;
+  BuiltInCount = 17;
   // the commands from here on change a table: the sample gets one before 'ggg' first
   FirstTableEdit = 10;
   SampleTablePos = 20;
@@ -389,8 +389,11 @@ begin
     11: Result := TTyRichDeleteRow.Create(SampleTablePos, 0);
     12: Result := TTyRichInsertColumn.Create(SampleTablePos, 1);
     13: Result := TTyRichDeleteColumn.Create(SampleTablePos, 0);
+    14: Result := TTyRichResizeObject.Create(SamplePicturePos, 900, 450);
+    // from p0's middle over the object's paragraph into 'fff'; p1 (its object) copied into p0
+    15: Result := TTyRichMove.Create(4, 9, 17);
   else
-    Result := TTyRichResizeObject.Create(SamplePicturePos, 900, 450);
+    Result := TTyRichCopy.Create(10, 6, 2);
   end;
 end;
 

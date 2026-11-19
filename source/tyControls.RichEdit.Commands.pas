@@ -1,8 +1,8 @@
 unit tyControls.RichEdit.Commands;
 
 { The built-in commands of TTyRichEdit's document: insert text, delete, set character and
-  paragraph formats, insert an object, resize one, and a command made of commands (what an update block
-  becomes). Each is run by TTyRichDocument.Execute, and each changes the document only
+  paragraph formats, insert an object, resize one, copy or move a range to another place, and
+  a command made of commands (what an update block becomes). Each is run by TTyRichDocument.Execute, and each changes the document only
   through the primitives TTyRichCommand hands on, so the inherited undo (the records
   reverted, newest first) and redo (run again) are exact - none of them keeps text or a
   snapshot of its own. A program adds its own commands the same way. The table commands
@@ -173,6 +173,74 @@ type
     procedure GatherObjects(var AList: TTyRichObjectList; var ACount: Integer); override;
     { After the first run: what went in (nil before). }
     property Fragment: TTyRichFragment read FFragment;
+  end;
+
+  { Copies (TTyRichCopy) or moves (TTyRichMove) the characters [AFrom, AFrom + ALen) to ATo,
+    inside the same document, as one command and one undo step - the positions as they are
+    before it runs. What goes in at ATo is what the control's own clipboard round trip of
+    the range pastes there (TTyRichRangeContent says what is taken, TTyRichFragment how it
+    goes in): a copy takes every row a range that crosses a cell's or a row's edge meets,
+    whole, as copying it does; a range inside one cell goes as paragraphs; the document's
+    last paragraph taken to its end goes as a paragraph; rows go in as rows where ATo is in
+    no table, as the cell's text where it is in a cell; the paragraph marks a last row, or the
+    content's end, needs are this document's. The paragraphs keep their own formats; tables
+    go in as tables of their own (never the source's). The text is not copied - its pieces
+    go in, the same bytes - unless a paragraph of the range is still a lazy load's (then its
+    decoded text, once). A copy of an object is its clone (a picture's shares its bytes); a
+    move puts the very objects at the new place.
+    Refused (CanExecute False, nothing changes): the range (not empty) or ATo out of the
+    text; ATo where the content cannot go in (TTyRichDocument.CanChange: a row that holds a
+    nested table); for a copy ATo strictly inside the range (its ends are places: the copy
+    goes beside the content); for a move ATo inside the range or at either end (nothing would
+    move), a range the document cannot delete there (CanChange), one that crosses a cell's or
+    a row's edge without being whole rows, and one that is only the separator a user's cut
+    keeps (TTyRichDocument.UserRangeAllowed: a range that begins outside a table and ends
+    where its first row starts keeps that separator - so does the move).
+    A move deletes the range, then inserts it at ATo (less the range when ATo was after it).
+    Undo puts everything back as it was - the text's very pieces, the values, the objects,
+    the cells; redo does the same again with the values the first run made. What a step
+    holds: a move's delete record (the range's pieces and values, as references) and the
+    fragment (one value per paragraph that went in, the inserted pieces) - no copy of the
+    text. A huge range takes as long as a paste of it does. }
+  TTyRichRangeTransfer = class(TTyRichCommand)
+  private
+    FFrom, FLen, FTo: TTyRichPos;
+    FCut: TTyRichPos;
+    FAt: TTyRichPos;
+    FFragment: TTyRichFragment;
+    FPlaced: TTyRichRange;
+  protected
+    { True: the range goes (a move); False: it stays (a copy). }
+    function Moves: Boolean; virtual; abstract;
+    procedure DoExecute(ADoc: TTyRichDocument); override;
+  public
+    constructor Create(AFrom, ALen, ATo: TTyRichPos);
+    destructor Destroy; override;
+    function CanExecute(ADoc: TTyRichDocument): Boolean; override;
+    function MemSize: Int64; override;
+    procedure GatherObjects(var AList: TTyRichObjectList; var ACount: Integer); override;
+    property FromPos: TTyRichPos read FFrom;
+    property RangeLength: TTyRichPos read FLen;
+    property ToPos: TTyRichPos read FTo;
+    { After a run: where the content went (its characters, in the document as the run left
+      it). Empty before. }
+    property Placed: TTyRichRange read FPlaced;
+    { After the first run: what went in (nil before). }
+    property Fragment: TTyRichFragment read FFragment;
+  end;
+
+  TTyRichCopy = class(TTyRichRangeTransfer)
+  protected
+    function Moves: Boolean; override;
+  public
+    function Description: string; override;
+  end;
+
+  TTyRichMove = class(TTyRichRangeTransfer)
+  protected
+    function Moves: Boolean; override;
+  public
+    function Description: string; override;
   end;
 
   { Commands run as one: executed in order, undone newest first, one undo step. A part that
@@ -592,6 +660,127 @@ procedure TTyRichInsertFragment.GatherObjects(var AList: TTyRichObjectList; var 
 begin
   inherited GatherObjects(AList, ACount);
   if FFragment <> nil then FFragment.GatherObjects(AList, ACount);
+end;
+
+{ ---- TTyRichRangeTransfer ---- }
+
+constructor TTyRichRangeTransfer.Create(AFrom, ALen, ATo: TTyRichPos);
+begin
+  inherited Create;
+  FFrom := AFrom;
+  FLen := ALen;
+  FTo := ATo;
+  FCut := ALen;
+end;
+
+destructor TTyRichRangeTransfer.Destroy;
+begin
+  // the fragment's values are the document's: the history frees this before its document
+  FFragment.Free;
+  inherited Destroy;
+end;
+
+function TTyRichRangeTransfer.CanExecute(ADoc: TTyRichDocument): Boolean;
+var
+  s, n, len: TTyRichPos;
+begin
+  Result := False;
+  len := ADoc.Text.Length;
+  if (FLen <= 0) or (FFrom < 0) or (FFrom > len - FLen) or (FTo < 0) or (FTo > len) then Exit;
+  if Moves then
+  begin
+    if (FTo >= FFrom) and (FTo <= FFrom + FLen) then Exit;
+  end
+  else if (FTo > FFrom) and (FTo < FFrom + FLen) then
+    Exit;
+  // (asked outside a command's run: what is read is used in one scope)
+  ADoc.BeginRead;
+  try
+    if not ADoc.CanChange(FTo, 0) then Exit;
+    if Moves then
+    begin
+      s := FFrom;
+      n := FLen;
+      if not ADoc.UserRangeAllowed(s, n) or (n <= 0) or not ADoc.CanChange(s, n) then Exit;
+    end;
+    Result := True;
+  finally
+    ADoc.EndRead;
+  end;
+end;
+
+procedure TTyRichRangeTransfer.DoExecute(ADoc: TTyRichDocument);
+var
+  content: TTyRichRangeContent;
+  s, n, at: TTyRichPos;
+begin
+  if FFragment = nil then
+  begin
+    if Moves then
+    begin
+      // what a user's cut of the range deletes (the separator before a table kept)
+      s := FFrom;
+      n := FLen;
+      ADoc.BeginRead;
+      try
+        if not ADoc.UserRangeAllowed(s, n) or (n <= 0) then
+          raise ETyRichModel.CreateFmt('The range %d+%d cannot be moved', [FFrom, FLen]);
+      finally
+        ADoc.EndRead;
+      end;
+      FCut := n;
+    end;
+    // read before anything changes: a move deletes what it takes
+    content := TTyRichRangeContent.Create(ADoc, FFrom, FCut, not Moves);
+    try
+      at := FTo;
+      if Moves then
+      begin
+        DeleteRange(ADoc, FFrom, FCut);
+        if at > FFrom then Dec(at, FCut);
+      end;
+      FFragment := TTyRichFragment.CreateOfContent(ADoc, at, content, Moves);
+      FAt := at;
+    finally
+      content.Free;
+    end;
+  end
+  else if Moves then
+    DeleteRange(ADoc, FFrom, FCut);
+  InsertFragment(ADoc, FAt, FFragment);
+  FPlaced := TyRichRange(FAt, FFragment.CharCount);
+end;
+
+function TTyRichRangeTransfer.MemSize: Int64;
+begin
+  Result := inherited MemSize;
+  if FFragment <> nil then Inc(Result, FFragment.MemSize);
+end;
+
+procedure TTyRichRangeTransfer.GatherObjects(var AList: TTyRichObjectList; var ACount: Integer);
+begin
+  inherited GatherObjects(AList, ACount);
+  if FFragment <> nil then FFragment.GatherObjects(AList, ACount);
+end;
+
+function TTyRichCopy.Moves: Boolean;
+begin
+  Result := False;
+end;
+
+function TTyRichCopy.Description: string;
+begin
+  Result := rsRichUndoCopy;
+end;
+
+function TTyRichMove.Moves: Boolean;
+begin
+  Result := True;
+end;
+
+function TTyRichMove.Description: string;
+begin
+  Result := rsRichUndoMove;
 end;
 
 { ---- TTyRichCompositeCommand ---- }

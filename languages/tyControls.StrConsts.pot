@@ -725,6 +725,14 @@ msgstr ""
 msgid "Resize object"
 msgstr ""
 
+#: tycontrols.strconsts.rsrichundomove
+msgid "Move"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichundocopy
+msgid "Copy"
+msgstr ""
+
 #: tycontrols.strconsts.rsricheditincomplete
 msgid "The document was not loaded completely, so it cannot be saved."
 msgstr ""

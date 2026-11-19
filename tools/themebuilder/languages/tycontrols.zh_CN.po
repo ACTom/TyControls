@@ -886,6 +886,14 @@ msgstr "插入图片"
 msgid "Resize object"
 msgstr "调整对象大小"
 
+#: tycontrols.strconsts.rsrichundomove
+msgid "Move"
+msgstr "移动"
+
+#: tycontrols.strconsts.rsrichundocopy
+msgid "Copy"
+msgstr "复制"
+
 #: tycontrols.strconsts.rsricheditincomplete
 msgid "The document was not loaded completely, so it cannot be saved."
 msgstr "文档没有完整载入,不能保存。"

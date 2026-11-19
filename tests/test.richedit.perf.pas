@@ -47,6 +47,7 @@ type
     procedure TestA100MBRtfFileFirstScreenAndMiddle;
     procedure TestTabAndTheTableAnswersInALongTable;
     procedure TestAPictureResizedInALargeDocument;
+    procedure TestDraggingTheSelectionInALargeDocument;
   end;
 
 implementation
@@ -98,6 +99,7 @@ type
     procedure MoveTo(X, Y: Integer);
     procedure Release(X, Y: Integer);
     function Step: Boolean;
+    procedure DragTick;
   end;
 
 procedure TPerfRich.PaintInto(ABitmap: TBitmap);
@@ -145,6 +147,11 @@ end;
 function TPerfRich.Step: Boolean;
 begin
   Result := StepBackground;
+end;
+
+procedure TPerfRich.DragTick;
+begin
+  DragScrollTick(nil);
 end;
 
 { A PNG whose pixels do not compress: about AW x AH x 4 bytes. }
@@ -614,6 +621,128 @@ begin
     AssertTrue('the background work ended', steps < 20);
     AssertFalse('nothing left to do', TPerfRich(FRich).Step);
     AssertTrue(Format('the release in %.1f ms', [release]), release <= CKeystrokeMs);
+  finally
+    bmp.Free;
+  end;
+end;
+
+{ The selection dragged in a 100 MB txt: every move of the pointer (the place, the drop mark,
+  the cursor) to the end of its paint within 90 ms - forty moves across the view and twenty
+  ticks of the edge scrolling past its bottom -, then the release (a move of a line, to the
+  end of its paint). Then, through the commands, a move and a copy of 1 MB and of 50 MB of the
+  text inside the document, each with its undo (printed, not asserted: a huge drop may take
+  long, as a paste of that much does): no text copied (the add buffer grows by a few bytes at
+  most, asserted). }
+procedure TTyRichEditPerfTest.TestDraggingTheSelectionInALargeDocument;
+var
+  path: string;
+  bmp: TBitmap;
+  t: TTyRichText;
+  d: TTyRichDocument;
+  k, i, y: Integer;
+  a, at: TTyRichPos;
+  r, r2: TRect;
+  t0, one, worst, total, release: Double;
+  added: Int64;
+  sizes: array[0..1] of Int64;
+
+  procedure Transfer(const AWhat: string; ACmd: TTyRichCommand; ASize: Int64);
+  var
+    t1, run, back: Double;
+    add0: Int64;
+  begin
+    add0 := t.AddedBytes;
+    t1 := Clock;
+    AssertTrue(AWhat + ' runs', d.Execute(ACmd));
+    TPerfRich(FRich).PaintInto(bmp);
+    run := Clock - t1;
+    AssertTrue(AWhat + ': no text copied', t.AddedBytes - add0 <= 8);
+    t1 := Clock;
+    d.Undo;
+    TPerfRich(FRich).PaintInto(bmp);
+    back := Clock - t1;
+    Report(Format('%s of %d Mi characters of a 100 MB txt, to the end of its paint (not asserted)',
+      [AWhat, ASize div (1024 * 1024)]), run);
+    Report(Format('its undo (not asserted)', []), back);
+  end;
+
+begin
+  CheckRoom;
+  path := NewFile('.txt');
+  MakeText(path, CFileBytes);
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf32bit;
+    bmp.SetSize(FRich.Width, FRich.Height);
+    FRich.LoadFromFile(path);
+    d := FRich.Document;
+    t := d.Text;
+    FRich.ScrollY := t.TotalHeight div 2;
+    TPerfRich(FRich).PaintInto(bmp);
+    // the third line of the view, its first ten characters selected
+    k := FRich.TopParagraph + 2;
+    a := t.ParaStart(k);
+    FRich.SelStart := a;
+    FRich.SelLength := 10;
+    TPerfRich(FRich).PaintInto(bmp);
+    r := FRich.PositionRect(a + 2);
+    r2 := FRich.PositionRect(a + 3);
+    TPerfRich(FRich).Press((r.Left + r2.Left) div 2, (r.Top + r.Bottom) div 2);
+    TPerfRich(FRich).MoveTo((r.Left + r2.Left) div 2, r.Bottom + 20);
+    AssertTrue('the drag began', FRich.DropActive);
+    worst := 0;
+    total := 0;
+    for i := 0 to 39 do
+    begin
+      y := 60 + i * 15;
+      t0 := Clock;
+      TPerfRich(FRich).MoveTo(200 + (i mod 7) * 40, y);
+      TPerfRich(FRich).PaintInto(bmp);
+      one := Clock - t0;
+      total := total + one;
+      if one > worst then worst := one;
+    end;
+    Report('a drag across the view: a move to the end of its paint, the average of 40', total / 40);
+    Report('a drag across the view: the slowest move of 40', worst);
+    // past the bottom edge: the view scrolls at every tick
+    TPerfRich(FRich).MoveTo(300, FRich.Height + 30);
+    total := 0;
+    for i := 0 to 19 do
+    begin
+      t0 := Clock;
+      TPerfRich(FRich).DragTick;
+      TPerfRich(FRich).PaintInto(bmp);
+      one := Clock - t0;
+      total := total + one;
+      if one > worst then worst := one;
+    end;
+    Report('the edge scrolling: a tick to the end of its paint, the average of 20', total / 20);
+    TPerfRich(FRich).MoveTo(300, FRich.Height - 100);
+    TPerfRich(FRich).PaintInto(bmp);
+    added := t.AddedBytes;
+    t0 := Clock;
+    TPerfRich(FRich).Release(300, FRich.Height - 100);
+    TPerfRich(FRich).PaintInto(bmp);
+    release := Clock - t0;
+    Report('the release: ten characters moved, to the end of its paint', release);
+    AssertEquals('one step', 1, d.UndoDepth);
+    AssertTrue('the drop copied no text', t.AddedBytes - added <= 8);
+    d.Undo;
+    d.ClearUndo;
+    AssertTrue(Format('every move within %.1f ms', [worst]), worst <= CKeystrokeMs);
+    AssertTrue(Format('the release in %.1f ms', [release]), release <= CKeystrokeMs);
+    // 1 MB and 50 MB of the text moved and copied, from a quarter of the document to its
+    // three quarters
+    sizes[0] := 1024 * 1024;
+    sizes[1] := 50 * 1024 * 1024;
+    for i := 0 to 1 do
+    begin
+      a := t.ParaStart(t.ParaOfPos(t.Length div 8));
+      at := t.ParaStart(t.ParaOfPos(a + sizes[i] + t.Length div 8));
+      Transfer('a move', TTyRichMove.Create(a, sizes[i], at), sizes[i]);
+      Transfer('a copy', TTyRichCopy.Create(a, sizes[i], at), sizes[i]);
+    end;
+    WriteLn('TTyRichEditPerfTest: drag: peak working set: ' + PeakWorkingSet);
   finally
     bmp.Free;
   end;

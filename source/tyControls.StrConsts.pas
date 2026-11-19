@@ -304,6 +304,8 @@ resourcestring
   rsRichUndoDeleteTable  = 'Delete table';
   rsRichUndoInsertPicture = 'Insert picture';
   rsRichUndoResizeObject = 'Resize object';
+  rsRichUndoMove         = 'Move';
+  rsRichUndoCopy         = 'Copy';
 
   { --- TTyRichEdit loading and saving -----------------------------------------
     What a refused save or change says (ETyRichEdit). %s is the file. }

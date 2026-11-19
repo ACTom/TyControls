@@ -8579,6 +8579,7 @@ type
     property WrapMode;
     property Zoom;
     property ReadOnly;
+    property DragDropEditing;
     property WantTabs;
     property TextEncoding;
     property TextCodePage;

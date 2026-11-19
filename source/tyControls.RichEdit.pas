@@ -5,7 +5,9 @@ unit tyControls.RichEdit;
   typing, Backspace, Delete, Enter, Tab, undo and redo, cut, an input method's
   composition shown in the text and committed as typing, paste, tables (a new table, rows
   and columns inserted and deleted, Tab from cell to cell), pictures (inserted from code,
-  resized by the handles of a selected one). Every
+  resized by the handles of a selected one), the selection dragged to another place by the
+  mouse (moved, or copied with Ctrl: DragDropEditing, the receiving side DropEnter .. DropOn).
+  Every
   edit is a command of the document (Document.Execute),
   so all of it can be undone; ReadOnly turns the user's editing off and leaves a viewer, while
   code still changes the document through its commands, Lines and the editing methods.
@@ -300,6 +302,54 @@ type
     var AWidthTwips, AHeightTwips: Integer; var AAllow: Boolean) of object;
 
   TTyCustomRichEdit = class;
+
+  { What a drop does (TTyCustomRichEdit's receiving side): nothing - "not here" -, a move
+    (the content leaves its place) or a copy. }
+  TTyRichDropEffect = (rdeNone, rdeMove, rdeCopy);
+  TTyRichDropEffects = set of TTyRichDropEffect;
+
+  { What a drop offers the control (TTyCustomRichEdit.DropEnter .. DropOn): content in the
+    flavours a paste takes, read only when the drop goes in, and where it comes from. A
+    control's own selection (Source the control itself, SourceRange the selection) goes in by
+    TTyRichMove / TTyRichCopy; any other offer as a paste of its flavours does, in the
+    paste's order (RTF, then a picture, then the text). Who gives the offer (the control's
+    own drag, the platform's drag, another control) owns it, and frees it after DropLeave or
+    DropOn. The defaults offer nothing. }
+  TTyRichDropOffer = class
+  public
+    function Flavours: TTyRichClipFlavours; virtual;
+    function ReadRtf: RawByteString; virtual;
+    { As TTyCustomRichEdit.ReadClipboardPicture: the picture formats in the order they are
+      tried (AIndex 0, 1, ...), False past the last, ABytes nil when that one is not there. }
+    function ReadPicture(AIndex: Integer; out AKind: TTyRichImageKind;
+      out ABytes: TBytes): Boolean; virtual;
+    function ReadText: string; virtual;
+    { The control whose selection this is; nil: another program's content. }
+    function Source: TTyCustomRichEdit; virtual;
+    function SourceRange(out AFrom, ALen: TTyRichPos): Boolean; virtual;
+    { What its source lets a drop do with it ([rdeCopy] by default: a source that only lends
+      its data). }
+    function Allowed: TTyRichDropEffects; virtual;
+    { A drop took it with AEffect (a move: the source is to take its content away - nothing
+      to do for a control's own selection, whose move did that). }
+    procedure Taken(AEffect: TTyRichDropEffect); virtual;
+  end;
+
+  { A control's selection as a drop offers it: its range when the drag began, as RTF and as
+    plain text the way a copy writes them (read only if asked); a move or a copy. }
+  TTyRichSelectionOffer = class(TTyRichDropOffer)
+  private
+    FOwner: TTyCustomRichEdit;
+    FFrom, FLen: TTyRichPos;
+  public
+    constructor Create(AOwner: TTyCustomRichEdit; AFrom, ALen: TTyRichPos);
+    function Flavours: TTyRichClipFlavours; override;
+    function ReadRtf: RawByteString; override;
+    function ReadText: string; override;
+    function Source: TTyCustomRichEdit; override;
+    function SourceRange(out AFrom, ALen: TTyRichPos): Boolean; override;
+    function Allowed: TTyRichDropEffects; override;
+  end;
 
   { A call the control queues to the application's message loop (TApplication.QueueAsyncCall):
     the next turn of the background work, a selection report a snap made outside a user
@@ -643,6 +693,31 @@ type
     // the cursor of the handle the pointer was last seen over (crDefault: none)
     FOverHandle: TCursor;
     FOnObjectResize: TTyRichObjectResizeEvent;
+    { Dragging the selection (DragDropEditing). A left press inside the selection waits
+      (FDragPending) for a move past the drag threshold, from FPressPoint, before the drag
+      begins; a release first is the click it would have been (at FPressPlace). The drop's
+      session (DropEnter .. DropLeave / DropOn): its offer (FDropOwn: the control's own
+      drag's, freed by the control), the place under the pointer and the verdict there
+      (FDropPos, FDropAtEnd, FDropEffect), the pointer and the keys last known, and
+      whether the selection dragged can be moved at all (FDropCuttable). FDropRect: the
+      drop mark on the surface (raster pixels of the view, as FHandleRect). FEatMenu: a right
+      press ended a drag - its menu is not shown. }
+    FDragDropEditing: Boolean;
+    FDragPending: Boolean;
+    FPressPoint: TPoint;
+    FPressPlace: TTyRichPos;
+    FPressAtEnd: Boolean;
+    FDragPressObj: TTyRichPos;
+    FDropOffer: TTyRichDropOffer;
+    FDropOwn: Boolean;
+    FDropPos: TTyRichPos;
+    FDropAtEnd: Boolean;
+    FDropEffect: TTyRichDropEffect;
+    FDropPoint: TPoint;
+    FDropShift: TShiftState;
+    FDropCuttable: Boolean;
+    FDropRect: TRect;
+    FEatMenu: Boolean;
     { The input method. A composition goes in at FCompPos (the caret when it began)
       and is not the document's: the layouter shows FCompText there (SetComposition), in
       FCompFormat (the typing format then), the input method's caret and clause in it
@@ -1090,6 +1165,24 @@ type
     procedure ExtendDragTo(X, Y: Integer);
     procedure StopDrag;
     procedure StartDragTimer;
+    { Dragging the selection: a press may begin one (DragStartOpen, PressInSelection); the
+      click a press and release without a drag is (PlainClick); the control's own drag
+      begun, ended with nothing done, its edge scrolling, the mark's place and the drop's
+      work. }
+    function DragStartOpen: Boolean;
+    function PressInSelection(X, Y: Integer): Boolean;
+    procedure PlainClick(X, Y: Integer; AQ: TTyRichPos; AAtEnd: Boolean; AObj: TTyRichPos);
+    procedure ReleasePending;
+    procedure BeginSelectionDrag(X, Y: Integer; AShift: TShiftState);
+    procedure CancelSelectionDrag;
+    function OwnDragging: Boolean;
+    procedure DropScrollTick;
+    function DropPlaceAt(X, Y: Integer; out AAtEnd: Boolean): TTyRichPos;
+    function DropMarkRaster(out ARect: TRect): Boolean;
+    procedure ShowDropCursor;
+    function DropInto(AOffer: TTyRichDropOffer; APos: TTyRichPos; AEffect: TTyRichDropEffect;
+      AShift: TShiftState): TTyRichDropEffect;
+    procedure SetDragDropEditing(AValue: Boolean);
     procedure SetScrollXRaster(AValue: Integer);
     function GetSelText: string;
     procedure SetSelText(const AValue: string);
@@ -1224,6 +1317,15 @@ type
     procedure CutSelection(AUser: Boolean);
     { What a copy puts on the clipboard, of [AStart, AStart + ALen): both flavours. }
     procedure CopyRange(AStart, ALen: TTyRichPos);
+    { [AStart, AStart + ALen) as a copy writes it as RTF ('' when the writer refuses it). }
+    function RangeRtf(AStart, ALen: TTyRichPos): RawByteString;
+    { What a paste does with AOffer's flavours (AHave of them) over [AStart, AStart + ALen),
+      one step named AName, once the place was found to take an edit: the paste's whole body
+      (PasteFromClipboard says what goes in and what is refused). ASelect: what went in is
+      selected (a drop), else the caret is behind it (a paste). True: it went in. }
+    function InsertOffer(AOffer: TTyRichDropOffer; AHave: TTyRichClipFlavours; AStart,
+      ALen: TTyRichPos; AAs: TTyRichPasteAs; const AName: string;
+      ASelect: Boolean = False): Boolean;
     { A clipboard's text made fit to insert (see PasteFromClipboard). }
     function PastedText(const AText: RawByteString): UTF8String;
     { The width a picture pasted at APos may take, in twips: the view's text width (0 when
@@ -1371,6 +1473,9 @@ type
       control's table actions); any other command's reasons are its own - told as a range
       that cannot be edited. }
     function CommandRefusal(ACmd: TTyRichCommand): string; virtual;
+    { The reason a copy or a move of [AFrom, AFrom + ALen) to ATo was refused (CommandRefusal of
+      one like it: the refused one is freed by then). }
+    function LateTransferRefusal(AFrom, ALen, ATo: TTyRichPos; AMove: Boolean): string;
     { The parts a descendant may make its own: the document (called once, from the
       constructor), the device the layout measures and draws with, the layouter. }
     function CreateDocument: TTyRichDocument; virtual;
@@ -1530,6 +1635,30 @@ type
     { The left button is down now (the system's state, not a message's): what tells a capture
       taken away during a drag of a handle from the one its own release lets go of. }
     function LeftButtonHeld: Boolean; virtual;
+    { What a drop of AOffer at APos would do (the receiving side asks it at every move and at
+      the drop), AShift the keys held. By default: nothing inside the selection dragged (for
+      a move also at its ends, and anywhere when that selection cannot be moved: it crosses a
+      cell's edge, or the document keeps it), where the document cannot take the content
+      (CanChange: a row that holds a nested table), while the document takes no edit
+      (loading, saving), in a plain text document for an offer of a picture alone, or for an
+      offer of nothing; else a copy with Ctrl held (or what its source allows), a move of the
+      control's own selection without; another offer is a copy. A descendant may decide
+      otherwise (rdeNone: not here). }
+    function DropEffectAt(AOffer: TTyRichDropOffer; APos: TTyRichPos;
+      AShift: TShiftState): TTyRichDropEffect; virtual;
+    { The pointer's shape during the control's own drag: crDrag for a move, crMultiDrag for a
+      copy, crNoDrop where nothing would happen. }
+    function DropCursor(AEffect: TTyRichDropEffect): TCursor; virtual;
+    { How far the pointer goes, pressed inside the selection, before the drag begins (the
+      system's: Mouse.DragThreshold). }
+    function DragThreshold: Integer; virtual;
+    { The drop mark in client pixels (rounded outward): False when none is shown. }
+    function DropMark(out ARect: TRect): Boolean;
+    { A press inside the selection waits for a move to become a drag. }
+    property DragPending: Boolean read FDragPending;
+    { The verdict at the drop's place now (rdeNone also when no drop is under way). }
+    property DropEffectNow: TTyRichDropEffect read FDropEffect;
+    procedure KeyUp(var Key: Word; Shift: TShiftState); override;
     { OnSelectionChange, when the caret or the anchor moved since it was last raised. }
     procedure DoSelectionChange; virtual;
     { A copy's two flavours to the clipboard, in one Open .. Close of LCL's Clipboard: the RTF
@@ -2036,6 +2165,27 @@ type
       its file's group said besides (scaling words, cropping, other representations of the
       picture) is not kept - it is written at its new size from the model. }
     property OnObjectResize: TTyRichObjectResizeEvent read FOnObjectResize write FOnObjectResize;
+    { The receiving side of a drop: DropEnter when an offer comes over the control, DropOver
+      at each move (and the edge scrolling's ticks), DropLeave when it goes away with nothing
+      dropped, DropOn at the drop. X, Y client pixels; AShift the keys held. Each answers what
+      a drop there would do (DropOn: what it did). The place is where a click would put the
+      caret (the text area's edge line when the pointer is past it); the drop mark shows it
+      while the verdict is a move or a copy (DropEffectAt); near an edge of the text, or past
+      it, the view scrolls as a drag-select does. The drop: the control's own selection by
+      TTyRichMove / TTyRichCopy (one undo step, rsRichUndoMove / rsRichUndoCopy), another
+      offer as a paste of its flavours (one step named by the effect); the content dropped is
+      selected and scrolled into view. What the place or the selection does not take is told
+      once (OnEditRefused, the paste's and the cut's reasons); a drop inside the selection
+      does nothing and tells nothing. Read-only, disabled or DragDropEditing False: no
+      session (DropEnter answers rdeNone). The control's own drag uses these; the platform's
+      drag and another control feed them the same way. }
+    function DropEnter(AOffer: TTyRichDropOffer; X, Y: Integer;
+      AShift: TShiftState): TTyRichDropEffect;
+    function DropOver(X, Y: Integer; AShift: TShiftState): TTyRichDropEffect;
+    procedure DropLeave;
+    function DropOn(X, Y: Integer; AShift: TShiftState): TTyRichDropEffect;
+    { A drop's session is under way (DropEnter .. DropLeave / DropOn). }
+    function DropActive: Boolean;
     { ITyTextEditActions: Undo, Redo, Cut, Copy, Paste (PasteFromClipboard; offered when
       CanPaste) and Select All. With ReadOnly the menu shows the editing items unavailable and
       they do nothing. }
@@ -2407,6 +2557,17 @@ type
       the document with ReadOnly True. The user's actions called by code (CutToClipboard,
       PasteFromClipboard, ClearSelection, Undo, Redo) do nothing, as Delphi's. }
     property ReadOnly: Boolean read FReadOnly write SetReadOnly default False;
+    { True: the selection - text or an object - can be dragged to another place of the
+      control: a left press inside it and a move past the system's drag threshold begin the
+      drag, the drop mark shows where it would go, the release moves it there, or copies it
+      with Ctrl held (each one undo step; the clipboard is not used). Esc, the right button,
+      the capture lost, a key that is not a modifier, a change of the selection or of the
+      content end the drag with nothing changed; a release inside the selection does
+      nothing; a press and release without a drag is the click it always was. Not with
+      ReadOnly, nor while the document takes no edit; DragMode dmAutomatic leaves the press to
+      LCL's own drag (no drag of the selection begins). False: a press inside the selection
+      is a plain click, as before, and no drop is taken (DropEnter answers rdeNone). }
+    property DragDropEditing: Boolean read FDragDropEditing write SetDragDropEditing default True;
     { True: Tab inserts a tab character (Shift+Tab and Ctrl+Tab too, as the memo) - in a table
       Tab goes to the next cell and Shift+Tab to the one before (Word's keys: see KeyDown),
       and Ctrl+Tab inserts the tab character. False (the default, as the memo): Tab is left
@@ -2474,6 +2635,7 @@ type
     property WrapMode;
     property Zoom;
     property ReadOnly;
+    property DragDropEditing;
     property WantTabs;
     property TextEncoding;
     property TextCodePage;
@@ -2594,6 +2756,11 @@ const
   { A table action's place for the caret (TTyRichEditPlace.Caret): worked out once it ran
     (TTyCustomRichEdit.TableEditCaret). }
   CRichPlaceTable = -3;
+  { A drop's place for the anchor and the caret: the content where it went
+    (TTyRichRangeTransfer.Placed), worked out once it ran. }
+  CRichPlaceInserted = -4;
+  // where what the edit changed begins (the anchor of a drop's paste: what went in selected)
+  CRichPlaceChangeStart = -5;
   { The table actions (TTyCustomRichEdit.FTableKind). }
   CTableInsertTable = 0;
   CTableInsertRow = 1;
@@ -3195,6 +3362,8 @@ begin
   FLines := TTyRichEditLines.Create(Self);
   FCaretShown := True;
   FCopyWaitChars := CRichCopyWaitChars;
+  FDragDropEditing := True;
+  FDropPos := -1;
   FConsBudgetWork := CRichConsistWork;
   FConsBudgetBytes := CRichConsistParseBytes;
   FFindSlice := CRichFindMinStepChars;
@@ -3222,6 +3391,9 @@ begin
     life := life^.Next;
   end;
   FLife := nil;
+  // a drag of the selection: its offer is the control's
+  if FDropOwn then FreeAndNil(FDropOffer);
+  FDropOffer := nil;
   { A composition ends first, while the window and the document are still there: dropped,
     and the input method told so (what it answers inside that finds none) - otherwise it
     stays open in the thread's input context for whatever gets the focus next. After this
@@ -3421,6 +3593,12 @@ begin
   if AValue then EndComposition(False);
   // a viewer resizes nothing: a drag of a handle ends, and the handles go (or come back)
   if AValue then CancelResize;
+  // nor drags its selection, nor takes a drop
+  if AValue then
+  begin
+    CancelSelectionDrag;
+    DropLeave;
+  end;
   SyncObjectOverlay;
   { A focused control's input context was told at the window's activation whether the
     system's composition window is wanted (WMImeSetContext); no activation comes now, so it
@@ -4111,6 +4289,8 @@ begin
   if (FEditing = 0) and ((AAnchor <> FSelAnchor) or (ACaret <> FCaret)) then EndTypingRun;
   // a drag of a handle is of the selection it began with
   if FResizing and ((AAnchor <> FSelAnchor) or (ACaret <> FCaret)) then CancelResize;
+  if (FDragPending or OwnDragging) and ((AAnchor <> FSelAnchor) or (ACaret <> FCaret)) then
+    CancelSelectionDrag;
   { The selection set again - also to the same place, and by an edit's own placing - ends a
     pending format (as on Windows' rich edit); a façade's write keeps the selection and it. }
   if FApiWrite = 0 then FHasPendingFmt := False;
@@ -4493,6 +4673,8 @@ var
 begin
   // a handle's size cursor, also where it reaches over the text beside the object
   if FResizing then Exit(HandleCursor(FResizeHandle));
+  // the control's own drag of the selection: what a release would do
+  if OwnDragging then Exit(DropCursor(FDropEffect));
   if not ViewBehind and ObjectHandleAt(X, Y, h) then Exit(HandleCursor(h));
   if PtInRect(TextArea(Rect(0, 0, Width, Height), ViewPPI), Point(X, Y)) then
     Result := crIBeam
@@ -4520,6 +4702,16 @@ begin
   if not IsEnabled or (csDesigning in ComponentState) then Exit;
   // another press during a drag of a handle (another button): the drag ends, nothing done
   CancelResize;
+  { Another press during a drag of the selection (the right button): the drag ends and the
+    press does nothing else - the selection stays, and its menu does not come. }
+  FEatMenu := False;
+  if FDragPending or OwnDragging then
+  begin
+    CancelSelectionDrag;
+    FEatMenu := Button = mbRight;
+    inherited MouseDown(Button, Shift, X, Y);
+    Exit;
+  end;
   { A press while composing is placed on what the user saw: the text with the composition in
     it (the hit test answers the document's positions behind it), taken before the
     composition ends. A point on the composition is its place, behind it. The object under
@@ -4645,17 +4837,20 @@ begin
     else
     begin
       if clicks > 3 then FClickCount := 1;
-      { A click on an object selects it (one that can be resized shows its handles). The
-        object is the pressed unit, as a word is after a double click: it stays selected
-        while the pointer moves on it, and a drag extends from it. }
       if o = -2 then o := ObjectAt(X, Y, q);
-      if o >= 0 then
+      { A press inside the selection (on its text, or on a selected object's body) may begin
+        a drag of it: nothing changes until the pointer moves past the drag threshold, or the
+        button comes up (the click it would have been). }
+      if DragStartOpen and PressInSelection(X, Y) then
       begin
-        Select(o, o + 1, False);
-        FDragUnit := 4;
-      end
-      else
-        Select(q, q, atEnd);
+        FDragPending := True;
+        FPressPoint := Point(X, Y);
+        FPressPlace := q;
+        FPressAtEnd := atEnd;
+        FDragPressObj := o;
+        Exit;
+      end;
+      PlainClick(X, Y, q, atEnd, o);
     end;
   end;
   FDragFrom := GetSelStart;
@@ -4719,6 +4914,21 @@ begin
   else Select(FDragTo, a, False);
 end;
 
+{ A click on the text: on an object it selects it (one that can be resized shows its handles).
+  The object is the pressed unit, as a word is after a double click: it stays selected while
+  the pointer moves on it, and a drag extends from it. Elsewhere the caret goes there. }
+procedure TTyCustomRichEdit.PlainClick(X, Y: Integer; AQ: TTyRichPos; AAtEnd: Boolean;
+  AObj: TTyRichPos);
+begin
+  if AObj >= 0 then
+  begin
+    Select(AObj, AObj + 1, False);
+    FDragUnit := 4;
+  end
+  else
+    Select(AQ, AQ, AAtEnd);
+end;
+
 procedure TTyCustomRichEdit.StartDragTimer;
 begin
   // (no drag begins in the form designer: MouseDown takes no press there)
@@ -4735,6 +4945,7 @@ end;
 procedure TTyCustomRichEdit.StopDrag;
 begin
   CancelResize;
+  CancelSelectionDrag;
   FDragging := False;
   if FDragTimer <> nil then FDragTimer.Enabled := False;
   if MouseCapture then MouseCapture := False;
@@ -4747,6 +4958,12 @@ var
 begin
   if not IsEnabled then Exit;
   inherited MouseMove(Shift, X, Y);
+  // a press inside the selection: past the drag threshold the drag begins
+  if FDragPending and not ViewBehind and ((Abs(X - FPressPoint.X) > DragThreshold) or
+    (Abs(Y - FPressPoint.Y) > DragThreshold)) then
+    BeginSelectionDrag(X, Y, Shift);
+  // the drop's place, mark and verdict follow the pointer (the cursor below says it)
+  if OwnDragging then DropOver(X, Y, Shift);
   { The arrow over the padding (a cursor set by the user is left alone): GetCursor answers it
     from where the pointer was last seen, which is what LCL-Win32 shows on the window's
     set-cursor message. GTK, Qt and Cocoa set a window's cursor only when told: the
@@ -4754,7 +4971,8 @@ begin
     again). }
   c := CursorAt(X, Y);
   FOverPadding := c = crDefault;
-  if (c = crSizeNWSE) or (c = crSizeNESW) or (c = crSizeNS) or (c = crSizeWE) then
+  if (c = crSizeNWSE) or (c = crSizeNESW) or (c = crSizeNS) or (c = crSizeWE) or
+    (c = crDrag) or (c = crMultiDrag) or (c = crNoDrop) then
     FOverHandle := c
   else
     FOverHandle := crDefault;
@@ -4765,7 +4983,7 @@ begin
     if not ViewBehind then MoveResize(X, Y, Shift);
     Exit;
   end;
-  if not FDragging then Exit;
+  if not FDragging or OwnDragging then Exit;
   // inside the document's update the drag waits
   if ViewBehind then Exit;
   FDragPoint := Point(X, Y);
@@ -4786,6 +5004,11 @@ var
   area: TRect;
   est, steps: Integer;
 begin
+  if FDropOffer <> nil then
+  begin
+    DropScrollTick;
+    Exit;
+  end;
   if not FDragging or not IsEnabled or not IsVisible then
   begin
     StopDrag;
@@ -4816,7 +5039,15 @@ procedure TTyCustomRichEdit.MouseUp(Button: TMouseButton; Shift: TShiftState; X,
 begin
   inherited MouseUp(Button, Shift, X, Y);
   if Button <> mbLeft then Exit;
-  if FResizing then FinishResize(X, Y, Shift) else StopDrag;
+  if FResizing then
+    FinishResize(X, Y, Shift)
+  else
+  begin
+    // a press inside the selection let go without a drag: the click it was
+    if FDragPending then ReleasePending
+    else if OwnDragging then DropOn(X, Y, Shift);
+    StopDrag;
+  end;
 end;
 
 procedure TTyCustomRichEdit.CaptureChanged;
@@ -4830,6 +5061,14 @@ begin
   if FResizing and not MouseCapture then
     if LeftButtonHeld then CancelResize
     else FinishResize(FResizeLast.X, FResizeLast.Y, FResizeShift);
+  { The same for a drag of the selection: taken away with the button down, it ends with
+    nothing done; let go by the release itself, the release is done here - the drop at the
+    pointer's last place with the keys last known (or the click a press without a drag
+    was) - and the button-up after it finds nothing to do. }
+  if (FDragPending or OwnDragging) and not MouseCapture then
+    if LeftButtonHeld then CancelSelectionDrag
+    else if FDragPending then ReleasePending
+    else DropOn(FDropPoint.X, FDropPoint.Y, FDropShift);
   if FDragging and not MouseCapture then StopDrag;
 end;
 
@@ -4847,6 +5086,558 @@ procedure TTyCustomRichEdit.VisibleChanged;
 begin
   inherited VisibleChanged;
   StopDrag;
+end;
+
+{ ---- dragging the selection, and the receiving side of a drop ---- }
+
+function TTyRichDropOffer.Flavours: TTyRichClipFlavours;
+begin
+  Result := [];
+end;
+
+function TTyRichDropOffer.ReadRtf: RawByteString;
+begin
+  Result := '';
+end;
+
+function TTyRichDropOffer.ReadPicture(AIndex: Integer; out AKind: TTyRichImageKind;
+  out ABytes: TBytes): Boolean;
+begin
+  AKind := rikPng;
+  ABytes := nil;
+  Result := False;
+end;
+
+function TTyRichDropOffer.ReadText: string;
+begin
+  Result := '';
+end;
+
+function TTyRichDropOffer.Source: TTyCustomRichEdit;
+begin
+  Result := nil;
+end;
+
+function TTyRichDropOffer.SourceRange(out AFrom, ALen: TTyRichPos): Boolean;
+begin
+  AFrom := 0;
+  ALen := 0;
+  Result := False;
+end;
+
+function TTyRichDropOffer.Allowed: TTyRichDropEffects;
+begin
+  Result := [rdeCopy];
+end;
+
+procedure TTyRichDropOffer.Taken(AEffect: TTyRichDropEffect);
+begin
+end;
+
+constructor TTyRichSelectionOffer.Create(AOwner: TTyCustomRichEdit; AFrom, ALen: TTyRichPos);
+begin
+  inherited Create;
+  FOwner := AOwner;
+  FFrom := AFrom;
+  FLen := ALen;
+end;
+
+function TTyRichSelectionOffer.Flavours: TTyRichClipFlavours;
+begin
+  Result := [rcfRtf, rcfText];
+end;
+
+function TTyRichSelectionOffer.ReadRtf: RawByteString;
+begin
+  Result := FOwner.RangeRtf(FFrom, FLen);
+end;
+
+function TTyRichSelectionOffer.ReadText: string;
+begin
+  Result := FOwner.RangeText(FFrom, FLen);
+end;
+
+function TTyRichSelectionOffer.Source: TTyCustomRichEdit;
+begin
+  Result := FOwner;
+end;
+
+function TTyRichSelectionOffer.SourceRange(out AFrom, ALen: TTyRichPos): Boolean;
+begin
+  AFrom := FFrom;
+  ALen := FLen;
+  Result := True;
+end;
+
+function TTyRichSelectionOffer.Allowed: TTyRichDropEffects;
+begin
+  Result := [rdeMove, rdeCopy];
+end;
+
+type
+  // the clipboard as a paste reads it: the control's own seams
+  TTyRichClipboardOffer = class(TTyRichDropOffer)
+  private
+    FOwner: TTyCustomRichEdit;
+  public
+    constructor Create(AOwner: TTyCustomRichEdit);
+    function Flavours: TTyRichClipFlavours; override;
+    function ReadRtf: RawByteString; override;
+    function ReadPicture(AIndex: Integer; out AKind: TTyRichImageKind;
+      out ABytes: TBytes): Boolean; override;
+    function ReadText: string; override;
+  end;
+
+constructor TTyRichClipboardOffer.Create(AOwner: TTyCustomRichEdit);
+begin
+  inherited Create;
+  FOwner := AOwner;
+end;
+
+function TTyRichClipboardOffer.Flavours: TTyRichClipFlavours;
+begin
+  Result := FOwner.ClipboardFlavours;
+end;
+
+function TTyRichClipboardOffer.ReadRtf: RawByteString;
+begin
+  Result := FOwner.ReadClipboardRtf;
+end;
+
+function TTyRichClipboardOffer.ReadPicture(AIndex: Integer; out AKind: TTyRichImageKind;
+  out ABytes: TBytes): Boolean;
+begin
+  Result := FOwner.ReadClipboardPicture(AIndex, AKind, ABytes);
+end;
+
+function TTyRichClipboardOffer.ReadText: string;
+begin
+  Result := FOwner.ReadClipboardText;
+end;
+
+function TTyCustomRichEdit.DragStartOpen: Boolean;
+begin
+  // whatever makes every edit impossible makes no drag (the press is a click, as before)
+  Result := FDragDropEditing and (DragMode <> dmAutomatic) and not FReadOnly and IsEnabled and
+    HasSelection and not ViewBehind and (RefusalReason = '');
+end;
+
+{ The point is on the selection as it is painted: its text (the paragraph end's mark too) or a
+  selected object - only the block under the point is asked. }
+function TTyCustomRichEdit.PressInSelection(X, Y: Integer): Boolean;
+var
+  area: TRect;
+  s, k, i: Integer;
+  lx, ly: Int64;
+  a, b, start, stop: TTyRichPos;
+  rs: TRectArray;
+  t: TTyRichText;
+begin
+  Result := False;
+  if not HasSelection or not FViewValid or (FBlockCount = 0) then Exit;
+  if not PtInRect(TextWindowRect, Point(X, Y)) then Exit;
+  area := TextArea(Rect(0, 0, Width, Height), ViewPPI);
+  s := Math.Max(1, FScale);
+  lx := (Int64(X) - area.Left) * s + FScrollX;
+  ly := (Int64(Y) - area.Top) * s;
+  a := GetSelStart;
+  b := a + GetSelLength;
+  t := FDoc.Text;
+  for k := 0 to FBlockCount - 1 do
+  begin
+    if (ly < FBlocks[k].Top) or (ly >= FBlocks[k].Top + FBlocks[k].Height) then Continue;
+    start := t.ParaStart(FBlocks[k].FirstPara);
+    stop := t.ParaStart(FBlocks[k].LastPara) + t.ParaLength(FBlocks[k].LastPara);
+    if (b <= start) or (a > stop) then Exit;
+    rs := FBlocks[k].Layout.SelectionRects(Math.Max(a - start, 0),
+      Math.Min(b - start, stop - start + 1));
+    ly := ly - FBlocks[k].Top;
+    for i := 0 to High(rs) do
+      if (lx >= rs[i].Left) and (lx < rs[i].Right) and (ly >= rs[i].Top) and
+        (ly < rs[i].Bottom) then
+        Exit(True);
+    Exit;
+  end;
+end;
+
+procedure TTyCustomRichEdit.ReleasePending;
+begin
+  if not FDragPending then Exit;
+  FDragPending := False;
+  if ViewBehind then Exit;
+  FDragUnit := 1;
+  PlainClick(FPressPoint.X, FPressPoint.Y, FPressPlace, FPressAtEnd, FDragPressObj);
+  FWishValid := False;
+  CaretMoved;
+  DoSelectionChange;
+end;
+
+function TTyCustomRichEdit.OwnDragging: Boolean;
+begin
+  Result := (FDropOffer <> nil) and FDropOwn;
+end;
+
+function TTyCustomRichEdit.DropActive: Boolean;
+begin
+  Result := FDropOffer <> nil;
+end;
+
+procedure TTyCustomRichEdit.BeginSelectionDrag(X, Y: Integer; AShift: TShiftState);
+var
+  offer: TTyRichSelectionOffer;
+begin
+  FDragPending := False;
+  if FDropOffer <> nil then DropLeave;
+  offer := TTyRichSelectionOffer.Create(Self, GetSelStart, GetSelLength);
+  FDropOwn := True;
+  try
+    DropEnter(offer, X, Y, AShift);
+  finally
+    // (no session: the control takes no drop now)
+    if FDropOffer <> offer then
+    begin
+      FDropOwn := False;
+      offer.Free;
+    end;
+  end;
+end;
+
+procedure TTyCustomRichEdit.CancelSelectionDrag;
+begin
+  FDragPending := False;
+  if OwnDragging then DropLeave;
+end;
+
+function TTyCustomRichEdit.DragThreshold: Integer;
+begin
+  Result := Mouse.DragThreshold;
+end;
+
+function TTyCustomRichEdit.DropCursor(AEffect: TTyRichDropEffect): TCursor;
+begin
+  case AEffect of
+    rdeMove: Result := crDrag;
+    rdeCopy: Result := crMultiDrag;
+  else
+    Result := crNoDrop;
+  end;
+end;
+
+procedure TTyCustomRichEdit.ShowDropCursor;
+begin
+  if OwnDragging then FOverHandle := DropCursor(FDropEffect) else FOverHandle := crDefault;
+  if inherited GetCursor = crIBeam then SetTempCursor(GetCursor);
+end;
+
+function TTyCustomRichEdit.DropPlaceAt(X, Y: Integer; out AAtEnd: Boolean): TTyRichPos;
+var
+  area: TRect;
+begin
+  AAtEnd := False;
+  // the pointer held to the text: past an edge, the line along that edge (as a drag-select)
+  area := TextArea(Rect(0, 0, Width, Height), ViewPPI);
+  X := Math.Max(area.Left, Math.Min(X, area.Right - 1));
+  Y := Math.Max(area.Top, Math.Min(Y, area.Bottom - 1));
+  Result := HitClient(X, Y, AAtEnd);
+  if Result > FDoc.Text.Length then Result := FDoc.Text.Length;
+end;
+
+function TTyCustomRichEdit.DropEffectAt(AOffer: TTyRichDropOffer; APos: TTyRichPos;
+  AShift: TShiftState): TTyRichDropEffect;
+var
+  f, n: TTyRichPos;
+  al: TTyRichDropEffects;
+  fl: TTyRichClipFlavours;
+  asCopy: Boolean;
+begin
+  Result := rdeNone;
+  if (AOffer = nil) or (APos < 0) or (APos > FDoc.Text.Length) then Exit;
+  if FReadOnly or not IsEnabled or (RefusalReason <> '') then Exit;
+  al := AOffer.Allowed;
+  if (AOffer.Source = Self) and AOffer.SourceRange(f, n) then
+  begin
+    asCopy := ((ssCtrl in AShift) and (rdeCopy in al)) or not (rdeMove in al);
+    if asCopy then
+    begin
+      // its ends are places for a copy: it goes beside the content
+      if not (rdeCopy in al) or ((APos > f) and (APos < f + n)) then Exit;
+      Result := rdeCopy;
+    end
+    else
+    begin
+      // a move to its own place, or of what cannot be moved, is nothing
+      if ((APos >= f) and (APos <= f + n)) or not FDropCuttable then Exit;
+      Result := rdeMove;
+    end;
+  end
+  else
+  begin
+    fl := AOffer.Flavours;
+    if fl = [] then Exit;
+    // a plain text document takes text only
+    if PlainTextDocument and (fl * [rcfRtf, rcfText] = []) then Exit;
+    if rdeCopy in al then Result := rdeCopy
+    else if rdeMove in al then Result := rdeMove;
+  end;
+  if (Result <> rdeNone) and not FDoc.CanChange(APos, 0) then Result := rdeNone;
+end;
+
+function TTyCustomRichEdit.DropEnter(AOffer: TTyRichDropOffer; X, Y: Integer;
+  AShift: TShiftState): TTyRichDropEffect;
+var
+  f, n: TTyRichPos;
+begin
+  Result := rdeNone;
+  if (FDropOffer <> nil) and (FDropOffer <> AOffer) then
+  begin
+    // (a drag of the control's own is under way: it gives way)
+    if FDropOwn then CancelSelectionDrag else DropLeave;
+  end;
+  if (AOffer = nil) or not FDragDropEditing or FReadOnly or not IsEnabled or
+    (csDesigning in ComponentState) then Exit;
+  FDropOffer := AOffer;
+  FDropPos := -1;
+  FDropEffect := rdeNone;
+  { This control's own selection is moved by its cut's rule: one that crosses a cell's edge
+    (not whole rows), or that the document keeps, cannot move - asked once. }
+  FDropCuttable := False;
+  if (AOffer.Source = Self) and AOffer.SourceRange(f, n) and (n > 0) then
+  begin
+    FDoc.BeginRead;
+    try
+      FDropCuttable := FDoc.UserRangeAllowed(f, n) and (n > 0) and FDoc.CanChange(f, n);
+    finally
+      FDoc.EndRead;
+    end;
+  end;
+  Result := DropOver(X, Y, AShift);
+end;
+
+function TTyCustomRichEdit.DropOver(X, Y: Integer; AShift: TShiftState): TTyRichDropEffect;
+var
+  area: TRect;
+  band: Integer;
+  q: TTyRichPos;
+  atEnd: Boolean;
+begin
+  Result := rdeNone;
+  if FDropOffer = nil then Exit;
+  FDropPoint := Point(X, Y);
+  FDropShift := AShift;
+  // inside the document's update the place waits
+  if ViewBehind then Exit(FDropEffect);
+  area := TextArea(Rect(0, 0, Width, Height), ViewPPI);
+  { Near an edge of the text, or past it, the view scrolls (the drag-select's timer and
+    speeds): a drop from elsewhere never has the pointer outside the control. }
+  band := Math.Max(1, (FEstimate div Math.Max(1, FScale)) div 2);
+  if (Y < area.Top + band) or (Y >= area.Bottom - band) or ((FWidestSeen > FViewW) and
+    ((X < area.Left + band) or (X >= area.Right - band))) then
+    StartDragTimer
+  else if FDragTimer <> nil then
+    FDragTimer.Enabled := False;
+  q := DropPlaceAt(X, Y, atEnd);
+  FDropPos := q;
+  FDropAtEnd := atEnd;
+  if q < 0 then FDropEffect := rdeNone
+  else FDropEffect := DropEffectAt(FDropOffer, q, AShift);
+  // the mark: its old place and its new one painted again, nothing else
+  SyncObjectOverlay;
+  if FDropOwn then ShowDropCursor;
+  Result := FDropEffect;
+end;
+
+procedure TTyCustomRichEdit.DropLeave;
+var
+  o: TTyRichDropOffer;
+  own: Boolean;
+begin
+  if FDropOffer = nil then Exit;
+  o := FDropOffer;
+  own := FDropOwn;
+  FDropOffer := nil;
+  FDropOwn := False;
+  FDropEffect := rdeNone;
+  FDropPos := -1;
+  if FDragTimer <> nil then FDragTimer.Enabled := False;
+  if not IsRectEmpty(FDropRect) then
+  begin
+    InvalidateTextRect(FDropRect.Left, FDropRect.Top, FDropRect.Right, FDropRect.Bottom);
+    FDropRect := Rect(0, 0, 0, 0);
+  end;
+  if own then
+  begin
+    o.Free;
+    ShowDropCursor;
+  end;
+end;
+
+function TTyCustomRichEdit.DropOn(X, Y: Integer; AShift: TShiftState): TTyRichDropEffect;
+var
+  o: TTyRichDropOffer;
+  own: Boolean;
+  e: TTyRichDropEffect;
+  q: TTyRichPos;
+begin
+  Result := rdeNone;
+  if FDropOffer = nil then Exit;
+  e := DropOver(X, Y, AShift);
+  q := FDropPos;
+  o := FDropOffer;
+  own := FDropOwn;
+  // the session ends first: what the drop does is an edit like any other
+  FDropOwn := False;
+  DropLeave;
+  try
+    if q >= 0 then Result := DropInto(o, q, e, AShift);
+  finally
+    if own then
+    begin
+      o.Free;
+      ShowDropCursor;
+    end;
+  end;
+end;
+
+function TTyCustomRichEdit.DropInto(AOffer: TTyRichDropOffer; APos: TTyRichPos;
+  AEffect: TTyRichDropEffect; AShift: TShiftState): TTyRichDropEffect;
+var
+  f, n, s, m: TTyRichPos;
+  asCopy: Boolean;
+  place: TTyRichEditPlace;
+  cmd: TTyRichCommand;
+  stepName: string;
+  fl: TTyRichClipFlavours;
+begin
+  Result := rdeNone;
+  if FReadOnly or not IsEnabled or ViewBehind then Exit;
+  if (AOffer.Source = Self) and AOffer.SourceRange(f, n) then
+  begin
+    if AEffect = rdeNone then asCopy := ssCtrl in AShift else asCopy := AEffect = rdeCopy;
+    // inside the selection (for a move at its ends too): nothing happens, nothing is told
+    if asCopy and (APos > f) and (APos < f + n) then Exit;
+    if not asCopy and (APos >= f) and (APos <= f + n) then Exit;
+    // what the cut and the paste refuse, told once
+    if not asCopy then
+    begin
+      if not EditAllowed(f, n, False, True) then Exit;
+      s := f;
+      m := n;
+      if not UserRangeAllowed(s, m) then Exit;
+      // (only the separator a cut keeps: nothing to move)
+      if m <= 0 then Exit;
+    end;
+    if not EditAllowed(APos, 0, True, True) then Exit;
+    if LongParaRefused(APos, 'x') then Exit;
+    // (a descendant's own "not here": nothing told)
+    if AEffect = rdeNone then Exit;
+    if asCopy then cmd := TTyRichCopy.Create(f, n, APos)
+    else cmd := TTyRichMove.Create(f, n, APos);
+    place := Default(TTyRichEditPlace);
+    place.Anchor := CRichPlaceInserted;
+    place.Caret := CRichPlaceInserted;
+    if RunMade(cmd, place, True) then Result := AEffect;
+    Exit;
+  end;
+  // another's content: a paste of its flavours at the place
+  if not EditAllowed(APos, 0, True, True) then Exit;
+  if LongParaRefused(APos, 'x') then Exit;
+  fl := AOffer.Flavours;
+  if AEffect = rdeNone then
+  begin
+    // (a picture alone in a plain text document: the paste's reason)
+    if PlainTextDocument and (fl * [rcfRtf, rcfText] = []) and (rcfPicture in fl) then
+      EditRefused(rsRichEditRefusedPlainPaste);
+    Exit;
+  end;
+  if AEffect = rdeMove then stepName := rsRichUndoMove else stepName := rsRichUndoCopy;
+  if InsertOffer(AOffer, fl, APos, 0, rpaBest, stepName, True) then
+  begin
+    Result := AEffect;
+    AOffer.Taken(AEffect);
+  end;
+end;
+
+procedure TTyCustomRichEdit.DropScrollTick;
+var
+  area: TRect;
+  est, steps, band: Integer;
+begin
+  if not IsEnabled or not IsVisible then
+  begin
+    if FDropOwn then CancelSelectionDrag
+    else if FDragTimer <> nil then FDragTimer.Enabled := False;
+    Exit;
+  end;
+  // inside the document's update: no query, the drag waits
+  if ViewBehind then Exit;
+  area := TextArea(Rect(0, 0, Width, Height), ViewPPI);
+  est := Math.Max(1, FEstimate div Math.Max(1, FScale));
+  band := Math.Max(1, est div 2);
+  // a line a tick, and one more for every line's height the pointer is past the edge
+  steps := 0;
+  if FDropPoint.Y < area.Top + band then
+    steps := -(1 + Math.Max(0, area.Top - FDropPoint.Y) div est)
+  else if FDropPoint.Y >= area.Bottom - band then
+    steps := 1 + Math.Max(0, FDropPoint.Y - area.Bottom) div est;
+  if steps <> 0 then ScrollRasterBy(Int64(steps) * Math.Max(1, FEstimate));
+  if FWidestSeen > FViewW then
+  begin
+    steps := 0;
+    if FDropPoint.X < area.Left + band then
+      steps := -(1 + Math.Max(0, area.Left - FDropPoint.X) div est)
+    else if FDropPoint.X >= area.Right - band then
+      steps := 1 + Math.Max(0, FDropPoint.X - area.Right) div est;
+    if steps <> 0 then SetScrollXRaster(FScrollX + steps * Math.Max(1, FEstimate));
+  end;
+  // the place under the pointer in the text that came
+  if FDropOffer <> nil then DropOver(FDropPoint.X, FDropPoint.Y, FDropShift);
+end;
+
+function TTyCustomRichEdit.DropMarkRaster(out ARect: TRect): Boolean;
+var
+  r: TRect;
+  lw: Integer;
+begin
+  ARect := Rect(0, 0, 0, 0);
+  Result := False;
+  if (FDropOffer = nil) or (FDropEffect = rdeNone) or (FDropPos < 0) or ViewBehind or
+    not FViewValid then Exit;
+  if not CaretRaster(Math.Min(FDropPos, FDoc.Text.Length), FDropAtEnd, r) then Exit;
+  // twice the overlay's line, on the caret's place (drawn dotted: never the blinking caret)
+  lw := OverlayLinePx;
+  ARect := Rect(r.Left - lw, r.Top, r.Left + lw, r.Bottom);
+  Result := ARect.Bottom > ARect.Top;
+end;
+
+function TTyCustomRichEdit.DropMark(out ARect: TRect): Boolean;
+var
+  r: TRect;
+begin
+  ARect := Rect(0, 0, 0, 0);
+  Settle;
+  Result := DropMarkRaster(r);
+  if Result then
+    ARect := ClientOf(TextArea(Rect(0, 0, Width, Height), ViewPPI), r.Left, r.Top, r.Right,
+      r.Bottom);
+end;
+
+procedure TTyCustomRichEdit.SetDragDropEditing(AValue: Boolean);
+begin
+  if FDragDropEditing = AValue then Exit;
+  FDragDropEditing := AValue;
+  if AValue then Exit;
+  // off: a drag under way ends, and a drop from elsewhere is taken no more
+  if FDropOwn then CancelSelectionDrag;
+  FDragPending := False;
+  DropLeave;
+end;
+
+procedure TTyCustomRichEdit.KeyUp(var Key: Word; Shift: TShiftState);
+begin
+  inherited KeyUp(Key, Shift);
+  // Ctrl let go during the control's own drag: a move again, without a move of the pointer
+  if OwnDragging and ((Key = VK_CONTROL) or (Key = VK_LCONTROL) or (Key = VK_RCONTROL)) then
+    DropOver(FDropPoint.X, FDropPoint.Y, FDropShift - [ssCtrl]);
 end;
 
 { ---- a selected object's handles, and resizing it ---- }
@@ -5064,16 +5855,27 @@ begin
       InvalidateTextRect(cur.Left, cur.Top, cur.Right, cur.Bottom);
     FPreviewRect := cur;
   end;
+  // a drop's mark where the view has its place now
+  if not DropMarkRaster(cur) then cur := Rect(0, 0, 0, 0);
+  if not EqualRect(cur, FDropRect) then
+  begin
+    if not IsRectEmpty(FDropRect) then
+      InvalidateTextRect(FDropRect.Left, FDropRect.Top, FDropRect.Right, FDropRect.Bottom);
+    if not IsRectEmpty(cur) then
+      InvalidateTextRect(cur.Left, cur.Top, cur.Right, cur.Bottom);
+    FDropRect := cur;
+  end;
 end;
 
 procedure TTyCustomRichEdit.PaintObjectOverlay(ABitmap: TBGRABitmap; AX, AY: Integer;
   const AClip: TRect; const AStyle: TTyRichPaintStyle);
 var
   pos: TTyRichPos;
-  box, r, old, clip: TRect;
+  box, r, old, clip, mark: TRect;
   rs: TTyRichHandleRects;
   h: TTyRichHandle;
-  lw: Integer;
+  lw, y: Integer;
+  marked: Boolean;
 
   procedure Outline(const R: TRect);
   begin
@@ -5085,7 +5887,8 @@ var
 
 begin
   if ABitmap = nil then Exit;
-  if not HandleObject(pos, box) and not FResizing then Exit;
+  marked := DropMarkRaster(mark);
+  if not HandleObject(pos, box) and not FResizing and not marked then Exit;
   old := ABitmap.ClipRect;
   if not IntersectRect(clip, AClip, old) then Exit;
   ABitmap.ClipRect := clip;
@@ -5108,6 +5911,19 @@ begin
       r := PreviewRectOf(FResizeW, FResizeH);
       Types.OffsetRect(r, AX, AY);
       Outline(r);
+    end;
+    // the drop mark: dotted, in the object frame's colour, so it is never the blinking caret
+    if marked then
+    begin
+      r := mark;
+      Types.OffsetRect(r, AX, AY);
+      y := r.Top;
+      while y < r.Bottom do
+      begin
+        ABitmap.FillRect(r.Left, y, r.Right, Math.Min(y + 2 * lw, r.Bottom), AStyle.ObjectFrame,
+          dmSet);
+        Inc(y, 4 * lw);
+      end;
     end;
   finally
     ABitmap.ClipRect := old;
@@ -6363,7 +7179,6 @@ var
   s, n: TTyRichPos;
   rtf: RawByteString;
   txt: string;
-  st: TTyRichStringOut;
   wait: Boolean;
 begin
   s := AStart;
@@ -6372,23 +7187,30 @@ begin
   if wait then BeginWait;
   try
     txt := RangeText(s, n);
-    rtf := '';
-    FDoc.BaseFontName := TyEffectiveFontName(CurrentStyle.FontName);
-    st := TTyRichStringOut.Create;
-    try
-      try
-        TyRichSaveRtfRange(FDoc, st, s, n);
-        rtf := st.Take;
-      except
-        // a range the RTF writer refuses (a changed row holding a nested table): the text alone
-        on ETyRichRtfWrite do rtf := '';
-      end;
-    finally
-      st.Free;
-    end;
+    rtf := RangeRtf(s, n);
     WriteClipboard(rtf, txt);
   finally
     if wait then EndWait;
+  end;
+end;
+
+function TTyCustomRichEdit.RangeRtf(AStart, ALen: TTyRichPos): RawByteString;
+var
+  st: TTyRichStringOut;
+begin
+  Result := '';
+  FDoc.BaseFontName := TyEffectiveFontName(CurrentStyle.FontName);
+  st := TTyRichStringOut.Create;
+  try
+    try
+      TyRichSaveRtfRange(FDoc, st, AStart, ALen);
+      Result := st.Take;
+    except
+      // a range the RTF writer refuses (a changed row holding a nested table): the text alone
+      on ETyRichRtfWrite do Result := '';
+    end;
+  finally
+    st.Free;
   end;
 end;
 
@@ -6460,9 +7282,25 @@ var
   refusal, cannot: string;
   lateWhy: Boolean;
   edit: TTyRichTableEdit;
+  xfer: Boolean;
+  xFrom, xLen, xTo: TTyRichPos;
+  xMove: Boolean;
 begin
   Result := False;
   refusal := '';
+  { A copy or a move of a range: its reason (the places' rows, the cells) asked only when it was
+    refused, from one like it. }
+  xfer := ACmd is TTyRichRangeTransfer;
+  xFrom := 0;
+  xLen := 0;
+  xTo := 0;
+  xMove := ACmd is TTyRichMove;
+  if xfer then
+  begin
+    xFrom := TTyRichRangeTransfer(ACmd).FromPos;
+    xLen := TTyRichRangeTransfer(ACmd).RangeLength;
+    xTo := TTyRichRangeTransfer(ACmd).ToPos;
+  end;
   { Asked before: a command the document refuses is freed by it. A built-in table command
     would read its whole table for a reason that is rarely needed: its edit (a record) is
     kept instead, and the reason asked only when the command was refused. }
@@ -6474,6 +7312,8 @@ begin
     edit := TTyRichTableCommand(ACmd).Edit;
     cannot := '';
   end
+  else if xfer then
+    cannot := ''
   else
     cannot := CommandRefusal(ACmd);
   c := FCaret;
@@ -6533,6 +7373,7 @@ begin
     PayModifiedOwed;
     // CanExecute said no: the reason that holds for that command (asked of one like it)
     if lateWhy then cannot := LateTableRefusal(edit);
+    if xfer then cannot := LateTransferRefusal(xFrom, xLen, xTo, xMove);
     Refuse(cannot, AUser);
     Exit;
   end;
@@ -6563,8 +7404,38 @@ begin
   end;
 end;
 
-function TTyCustomRichEdit.CommandRefusal(ACmd: TTyRichCommand): string;
+function TTyCustomRichEdit.LateTransferRefusal(AFrom, ALen, ATo: TTyRichPos;
+  AMove: Boolean): string;
+var
+  cmd: TTyRichCommand;
 begin
+  if AMove then cmd := TTyRichMove.Create(AFrom, ALen, ATo)
+  else cmd := TTyRichCopy.Create(AFrom, ALen, ATo);
+  try
+    Result := CommandRefusal(cmd);
+  finally
+    cmd.Free;
+  end;
+end;
+
+function TTyCustomRichEdit.CommandRefusal(ACmd: TTyRichCommand): string;
+var
+  x: TTyRichRangeTransfer;
+begin
+  { A copy or a move: where a place's row keeps its text (a nested table's), else for a move a
+    range across cells, else the range. }
+  if ACmd is TTyRichRangeTransfer then
+  begin
+    x := TTyRichRangeTransfer(ACmd);
+    if not FDoc.CanChange(x.ToPos, 0) or ((ACmd is TTyRichMove) and
+      not FDoc.CanChange(x.FromPos, x.RangeLength)) then
+      Result := rsRichEditRefusedFixedRow
+    else if ACmd is TTyRichMove then
+      Result := rsRichEditRefusedCells
+    else
+      Result := rsRichEditRefusedRange;
+    Exit;
+  end;
   if ACmd is TTyRichTableCommand then
     Exit(TableRefusalText(TTyRichTableCommand(ACmd).Refusal(FDoc), TTyRichTableCommand(ACmd).Edit));
   // a resize is refused where its place cannot change, else for its object
@@ -6670,12 +7541,17 @@ begin
     CRichPlaceStays: q := FCaret;
     // a table action's: worked out from the table as the edit left it
     CRichPlaceTable: q := TableEditCaret;
+    // a drop's: the content where it went
+    CRichPlaceInserted: q := TTyRichRangeTransfer(cmd).Placed.Pos +
+      TTyRichRangeTransfer(cmd).Placed.Len;
   else
     q := place.Caret + grow;
   end;
   case place.Anchor of
     CRichPlaceChangeEnd: a := q;
     CRichPlaceStays: a := FSelAnchor;
+    CRichPlaceInserted: a := TTyRichRangeTransfer(cmd).Placed.Pos;
+    CRichPlaceChangeStart: a := FEditChange.Pos;
   else
     a := place.Anchor + grow;
   end;
@@ -8185,6 +9061,42 @@ procedure TTyCustomRichEdit.PasteFromClipboard(AAs: TTyRichPasteAs);
 var
   have: TTyRichClipFlavours;
   s, n: TTyRichPos;
+  offer: TTyRichClipboardOffer;
+
+  function Wanted(AFlavour: TTyRichClipFlavour): Boolean;
+  begin
+    Result := (AFlavour in have) and ((AAs = rpaBest) or (Ord(AAs) = Ord(AFlavour) + 1));
+  end;
+
+begin
+  EndOwedLoad;
+  // the door of a user's edit: a composition goes in first
+  EndCompositionForUser;
+  if FReadOnly or not IsEnabled or ViewBehind then Exit;
+  have := ClipboardFlavours;
+  if not (Wanted(rcfRtf) or Wanted(rcfPicture) or Wanted(rcfText)) then Exit;
+  s := GetSelStart;
+  n := GetSelLength;
+  { As typing over the selection asks: the document takes edits, no row that holds a nested
+    table is in the way, the cells (may keep a selection's last separator), the cut of a
+    paragraph too long to lay out (nothing goes in past what is shown). }
+  if not EditAllowed(s, n, True, True) then Exit;
+  if not UserRangeAllowed(s, n) then Exit;
+  if LongParaRefused(s, 'x') then Exit;
+  offer := TTyRichClipboardOffer.Create(Self);
+  try
+    InsertOffer(offer, have, s, n, AAs, rsRichUndoPaste);
+  finally
+    offer.Free;
+  end;
+end;
+
+function TTyCustomRichEdit.InsertOffer(AOffer: TTyRichDropOffer; AHave: TTyRichClipFlavours;
+  AStart, ALen: TTyRichPos; AAs: TTyRichPasteAs; const AName: string;
+  ASelect: Boolean): Boolean;
+var
+  have: TTyRichClipFlavours;
+  s, n: TTyRichPos;
   place: TTyRichEditPlace;
   rtf: RawByteString;
   raw: string;
@@ -8214,20 +9126,10 @@ var
   end;
 
 begin
-  EndOwedLoad;
-  // the door of a user's edit: a composition goes in first
-  EndCompositionForUser;
-  if FReadOnly or not IsEnabled or ViewBehind then Exit;
-  have := ClipboardFlavours;
-  if not (Wanted(rcfRtf) or Wanted(rcfPicture) or Wanted(rcfText)) then Exit;
-  s := GetSelStart;
-  n := GetSelLength;
-  { As typing over the selection asks: the document takes edits, no row that holds a nested
-    table is in the way, the cells (may keep a selection's last separator), the cut of a
-    paragraph too long to lay out (nothing goes in past what is shown). }
-  if not EditAllowed(s, n, True, True) then Exit;
-  if not UserRangeAllowed(s, n) then Exit;
-  if LongParaRefused(s, 'x') then Exit;
+  Result := False;
+  have := AHave;
+  s := AStart;
+  n := ALen;
   Settle;
   // a table goes into a table, or over a selection in one, as its text (no nested tables)
   FDoc.BeginRead;
@@ -8238,7 +9140,8 @@ begin
   finally
     FDoc.EndRead;
   end;
-  fmt := TypingFormat;
+  // (a drop goes in at a place of its own: the format there, not the selection's)
+  if ASelect then fmt := FDoc.TypingFormatAt(s) else fmt := TypingFormat;
   waiting := False;
   cmd := nil;
   try
@@ -8257,14 +9160,14 @@ begin
         end;
         if Wanted(rcfText) then
         begin
-          raw := ReadClipboardText;
+          raw := AOffer.ReadText;
           Wait(Length(raw));
           txt := PastedText(raw);
           raw := '';
         end;
         if (txt = '') and Wanted(rcfRtf) then
         begin
-          rtf := ReadClipboardRtf;
+          rtf := AOffer.ReadRtf;
           Wait(Length(rtf));
           txt := PastedText(RtfAsText(rtf));
           rtf := '';
@@ -8281,7 +9184,7 @@ begin
         or it holds no character and no paragraph mark: the next flavour then. }
       if (cmd = nil) and not PlainTextDocument and Wanted(rcfRtf) then
       begin
-        rtf := ReadClipboardRtf;
+        rtf := AOffer.ReadRtf;
         Wait(Length(rtf));
         if rtf <> '' then
         begin
@@ -8332,7 +9235,7 @@ begin
       if (cmd = nil) and not PlainTextDocument and Wanted(rcfPicture) then
       begin
         i := 0;
-        while (cmd = nil) and ReadClipboardPicture(i, kind, bytes) do
+        while (cmd = nil) and AOffer.ReadPicture(i, kind, bytes) do
         begin
           Inc(i);
           if bytes = nil then Continue;
@@ -8350,7 +9253,7 @@ begin
       end;
       if (cmd = nil) and not PlainTextDocument and Wanted(rcfText) then
       begin
-        raw := ReadClipboardText;
+        raw := AOffer.ReadText;
         Wait(Length(raw));
         txt := PastedText(raw);
         raw := '';
@@ -8366,7 +9269,7 @@ begin
     end;
     if cmd = nil then Exit;
     // one step: the selection's deletion and the paste, never merged with typing
-    comp := TTyRichCompositeCommand.Create(rsRichUndoPaste);
+    comp := TTyRichCompositeCommand.Create(AName);
     if n > 0 then comp.Add(TTyRichDelete.Create(s, n));
     comp.Add(cmd);
     cmd := nil;
@@ -8375,7 +9278,9 @@ begin
     place.Anchor := CRichPlaceChangeEnd;
     place.Caret := s + n;
     place.ByGrowth := True;
-    RunMade(comp, place, True);
+    // (a drop: what went in selected, from where the change began)
+    if ASelect then place.Anchor := CRichPlaceChangeStart;
+    Result := RunMade(comp, place, True);
   finally
     cmd.Free;
     if waiting then EndWait;
@@ -8443,8 +9348,9 @@ begin
     FinishEdit(marks.Before.Anchor, marks.Before.Caret, marks.Before.AtLineEnd, True)
   else if ARedo and marks.HasAfter then
   begin
-    // a resize redone: its object selected again, with its handles, as the drag left it
-    if FDoc.UndoStep is TTyRichResizeObject then
+    { a resize redone: its object selected again, with its handles, as the drag left it; a
+      move or a copy redone: the content selected where it went, as the drop left it }
+    if (FDoc.UndoStep is TTyRichResizeObject) or (FDoc.UndoStep is TTyRichRangeTransfer) then
       FinishEdit(marks.After.Anchor, marks.After.Caret, marks.After.AtLineEnd)
     else
       FinishEdit(marks.After.Caret, marks.After.Caret, marks.After.AtLineEnd);
@@ -9639,6 +10545,13 @@ end;
 
 procedure TTyCustomRichEdit.DoContextPopup(MousePos: TPoint; var Handled: Boolean);
 begin
+  // a right press that ended a drag of the selection: no menu
+  if FEatMenu then
+  begin
+    FEatMenu := False;
+    Handled := True;
+    Exit;
+  end;
   // as the memo: OnContextPopup first, then a user's PopupMenu (LCL shows it), else ours
   inherited DoContextPopup(MousePos, Handled);
   if Handled or (PopupMenu <> nil) then Exit;
@@ -10981,6 +11894,8 @@ begin
   loadOwn := (FInStep and FDoc.Loading) or FInCancel;
   // a drag of a handle measured the object as it was: any change ends it, nothing done
   CancelResize;
+  // so does a drag of the selection: its range and its place were of the text as it was
+  CancelSelectionDrag;
   // (a background replace's place to go on from follows an edit it did not make)
   if not loadOwn and ((FFindKind = rfkReplace) or (FOwedKind = rfkReplace)) then
     ReplaceResumeFollows(AChange);
@@ -11188,6 +12103,7 @@ begin
   InvalidateSurface;
   FHandleRect := Rect(0, 0, 0, 0);
   FPreviewRect := Rect(0, 0, 0, 0);
+  FDropRect := Rect(0, 0, 0, 0);
   InvalidateArea(Rect(0, 0, Width, Height));
   if FViewPPI > 0 then UpdateBars(False);
   if composed then ImeEndOnWidgetset(False);
@@ -14610,6 +15526,7 @@ begin
   // the handles and the outline on the surface go with its pixels
   MoveOverlay(FHandleRect, ADX, ADY, AFrom);
   MoveOverlay(FPreviewRect, ADX, ADY, AFrom);
+  MoveOverlay(FDropRect, ADX, ADY, AFrom);
   if (FSurface = nil) or FAllDirty then Exit;
   s := Math.Max(1, FScale);
   if (FSurfW <> Width) or (FSurfH <> Height) or (FSurfScale <> s) then
@@ -15304,6 +16221,27 @@ begin
   if FResizing and not (Key in [VK_SHIFT, VK_CONTROL, VK_MENU, VK_LSHIFT, VK_RSHIFT, VK_LCONTROL,
     VK_RCONTROL, VK_LMENU, VK_RMENU, VK_LWIN, VK_RWIN]) then
     CancelResize;
+  { A drag of the selection (or a press inside it waiting for one): Esc ends it with nothing
+    changed (the key taken); Ctrl going down makes the drop a copy at once, without a move
+    of the pointer (KeyUp: a move again); any other key that is not a modifier ends it too,
+    and does what it does. }
+  if FDragPending or OwnDragging then
+  begin
+    if Key = VK_ESCAPE then
+    begin
+      CancelSelectionDrag;
+      Key := 0;
+      Exit;
+    end;
+    if Key in [VK_CONTROL, VK_LCONTROL, VK_RCONTROL] then
+    begin
+      if OwnDragging then DropOver(FDropPoint.X, FDropPoint.Y, FDropShift + [ssCtrl]);
+      Exit;
+    end;
+    if not (Key in [VK_SHIFT, VK_MENU, VK_LSHIFT, VK_RSHIFT, VK_LMENU, VK_RMENU, VK_LWIN,
+      VK_RWIN]) then
+      CancelSelectionDrag;
+  end;
   { Inside the document's update a key that moves or copies does nothing: the view does not
     know the text yet. The viewer's keys are still taken - they never go on to the form. }
   if ViewBehind then

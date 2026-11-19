@@ -192,6 +192,14 @@ uses
 - **调整大小保留什么**:图片的字节和格式(写字板的 `\wmetafile8` 还是那个图元文件,JPEG 还是那个 JPEG,逐字节一致);撤销调整会放回原来那个图片对象，所以打开文件、调整大小、撤销再保存，得到的还是原文件的字节。**不保留什么**:调整过大小的图片按新的大小从模型写出，所以文件里图片组除图片本身以外的内容——缩放字(`\picscalex`)、裁剪、同一张图片的其他表示(`\nonshppict`)和属性(`\picprop`)——不再保留。
 - **控件画不了的图元文件**(EMF,或者不只是一张位图的 WMF)显示成一个框;写字板里只含一张位图的图元文件照常画出来。两种都和其他图片一样可以选中、调整大小，字节按读到的原样保存。
 
+### 拖动选区
+
+- **在控件里拖动**:在选区上(它的文字，或者选中的图片上手柄以外的地方)按下左键，移动超过系统的拖动阈值，就开始拖动选区;松手时把它移到那里，按住 Ctrl 时复制过去(拖动中按下或松开 Ctrl 都行，指针形状立刻跟着变)。移动和复制各算一步撤销(名字是"移动""复制");之后内容在新位置保持选中，撤销会把文字、格式、对象、单元格和选区都恢复原样。按下又松开、中间没有拖动，就是普通的单击;Shift、双击和三击的作用和原来一样。
+- **放下是什么**:等于把选区剪切(复制)后粘贴到那个位置，只是合成一步——格式、对象都带着，整行在表格外仍是行，放进单元格里就成为单元格的文字;跨单元格的范围复制时整行带上，和复制到剪贴板一样。不经过剪贴板。移动的图片还是原来那个图片(撤销后保存，得到的还是原文件的字节);复制出的图片和原图共用同一份字节。对应的命令是 `tyControls.RichEdit.Commands` 里的 `TTyRichMove` 和 `TTyRichCopy`,代码也可以直接对文档执行。
+- **拖动的时候**:一条虚线标记显示选区会放到哪里，颜色是主题里对象边框的颜色(`TyRichEditObject` 的 `border-color`);指针显示移动(`crDrag`)、复制(`crMultiDrag`)或"不能放这里"(`crNoDrop`);指针靠近或超出文字区的边缘时，视图像拖选时一样滚动。在选区里面松手，或者移动时在选区的开头、结尾松手，什么也不做;放不进内容的位置(含嵌套表格的行)、跨单元格的选区的移动、还在载入的文档，会被拒绝，原因通过 `OnEditRefused` 告诉。按 Esc、按右键、失去鼠标捕获、按下修饰键以外的键、选区或内容有了变化，拖动都会结束，什么也不改。
+- **`DragDropEditing`**(发布的属性，默认 `True`)可以关掉这个功能：关掉以后，在选区上按下就是普通的单击，和以前一样。`ReadOnly` 时也不能拖。`DragMode = dmAutomatic` 时，按下开始的是 LCL 自己的拖动(`OnStartDrag`、`OnDragOver`、`OnDragDrop` 这些事件),选区不会被拖动。
+- **和 Windows 富文本控件的不同**(Delphi 的 `TRichEdit`,Windows 上的 RichMemo):那里拖动选区是 OLE 拖放，别的程序也能接收;这里目前只在控件内部。接收的一方(`DropEnter`、`DropOver`、`DropLeave`、`DropOn`,参数是一个 `TTyRichDropOffer`)是公开的，别的控件或平台的拖放可以把内容交给它;`DropEffectAt` 和 `DropCursor` 是受保护的虚方法，派生类可以自己决定。
+
 ### 没有的东西
 
 - **Delphi 的类型名**:属性类是 `TTyRichTextAttributes` 和 `TTyRichParaAttributes`,集合类型是 `TTyRichConsistentAttributes`、`TTyRichConsistentParaAttributes` 和 `TTySubscriptType`。成员名和 Delphi 一样(`caBold`、`cpaAlignment`、`sstSuperscript` ……),所以用到这些值的代码能编译，用 Delphi 类型名声明变量的代码不能。序号也不同。
@@ -242,6 +250,7 @@ uses
 - **选区和编辑**:`CaretIndex`(光标所在的那一端)、`CollapseSelection`、`BeginEdit` / `EndEdit`(多次写入合成一步撤销)、`RangeText`。
 - **表格**:`InsertTable`、`InsertRow`、`InsertColumn`、`DeleteRow`、`DeleteColumn`、`DeleteTable`、`InTable` 和各个 `Can…` 函数;Tab 在单元格之间移动(见上面的"表格")。
 - **图片**:`InsertPictureFromFile`、`InsertPictureFromStream`、`InsertPicture`、`CanInsertPicture`;选中图片的手柄和拖手柄调整大小,`OnObjectResize`(见上面的"图片")。
+- **拖动选区**:用鼠标移动，或按住 Ctrl 复制,`DragDropEditing`,接收的一方 `DropEnter` / `DropOver` / `DropLeave` / `DropOn`(见上面的"拖动选区")。
 - **查找和替换**:`FindNext`、`FindNextAsync`、`ReplaceAll`(三种形式)、`ReplaceAllAsync`、`CancelFind`、`FindRunning`、`OnFindProgress`、`OnFindDone`、`OnReplaceDone`。一次替换算一步撤销，不受 `ReadOnly` 限制。
 - **`Action` 是发布的**,和 `TTyMemo` 一样(Delphi 的 `TRichEdit` 和 LCL 的 `TMemo` 不发布它):关联了动作时，点击编辑区会执行它;它的 `Caption` 不会进入文字。
 - **大文件**:RTF 文件在后台读入(`Loading`、`FinishLoading`、`CancelLoad`、`OnLoadProgress`);`OnSaveProgress` 报告保存进度。
