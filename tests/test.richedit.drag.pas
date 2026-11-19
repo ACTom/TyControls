@@ -2117,6 +2117,23 @@ var
   x0: Integer;
   offer: TTestOffer;
   r: TDragProbe;
+  n1: Integer;
+
+  function CountFrame: Integer;
+  var
+    x, y: Integer;
+    q: TBGRAPixel;
+  begin
+    Result := 0;
+    for y := 0 to FRich.Surf.Height - 1 do
+      for x := 0 to FRich.Surf.Width - 1 do
+      begin
+        q := FRich.Surf.GetPixel(x, y);
+        if (q.red = st.ObjectFrame.red) and (q.green = st.ObjectFrame.green) and
+          (q.blue = st.ObjectFrame.blue) then Inc(Result);
+      end;
+  end;
+
 begin
   // the reasons of a refused move or copy, through the user's door
   LoadRtf(FRich, StrOfBytes(FixtureBytes('word-table-merged.rtf')));
@@ -2176,15 +2193,12 @@ begin
   px := FRich.Surf.GetPixel(m2.Left, m2.Top);
   AssertTrue('the new mark drawn', (px.red = st.ObjectFrame.red) and (px.green = st.ObjectFrame.green) and
     (px.blue = st.ObjectFrame.blue));
-  // where the old mark's pixels went with the text (the scroll moved the surface)
-  pOld := Point(m.Left, m.Top - (FRich.ScrollY));
-  if (pOld.Y >= FRich.Area.Top) and not ((pOld.X >= m2.Left) and (pOld.X < m2.Right) and
-    (pOld.Y >= m2.Top) and (pOld.Y < m2.Bottom)) then
-  begin
-    px := FRich.Surf.GetPixel(pOld.X, pOld.Y);
-    AssertFalse('no dot left where the old mark went', (px.red = st.ObjectFrame.red) and
-      (px.green = st.ObjectFrame.green) and (px.blue = st.ObjectFrame.blue));
-  end;
+  // no dot of the old mark left where the scroll moved the surface's pixels: as many dots as a
+  // repaint of everything gives
+  n1 := CountFrame;
+  FRich.RedrawAll;
+  PaintAll;
+  AssertEquals('the dots after the scroll: those of a whole repaint', CountFrame, n1);
   FRich.Press(VK_ESCAPE, [ssLeft]);
   // a drop where a paragraph is too long to lay out: the paste's reason
   LoadText(StringOfChar('a', CRichMaxParaLayoutChars) + #13#10 + 'b');
@@ -2204,7 +2218,18 @@ begin
   FRich.WrapMode := rwmNone;
   LoadText(StringOfChar('w', 400) + #13#10'second');
   Sel(0, 3);
-  StartDrag(Mid(1), Point(FRich.Area.Right - 1, Mid(1).Y));
+  // first the mark across a horizontal scroll of the kept surface (its pixels moved aside)
+  StartDrag(Mid(1), Point(150, Mid(1).Y));
+  PaintAll;
+  AssertTrue('a mark on the long line', FRich.Mark(m));
+  FRich.WheelH(120);
+  PaintAll;
+  AssertTrue('scrolled aside', FRich.ScrollX > 0);
+  n1 := CountFrame;
+  FRich.RedrawAll;
+  PaintAll;
+  AssertEquals('the dots after the scroll aside: those of a whole repaint', CountFrame, n1);
+  FRich.MoveWith(FRich.Area.Right - 1, Mid(1).Y, []);
   x0 := FRich.ScrollX;
   FRich.DragTick;
   AssertTrue('near the right edge: scrolled right', FRich.ScrollX > x0);
