@@ -137,6 +137,7 @@ type
     procedure TestACutCopiesWhatItRemoves;
     procedure TestARefusedCommandIsToldItsOwnReason;
     procedure TestPastesAndTheirUndoKeepTheSurfaceRight;
+    procedure TestEditsInsideAFieldsResultAreRefused;
   end;
 
 implementation
@@ -2725,6 +2726,62 @@ end;
 { pastes that change the heights of the view's paragraphs - several paragraphs of
   other sizes into the view's middle, lines of text, a picture -, their undo and redo: the kept
   surface equals a full redraw after each, at device scale 1 and 2. }
+{ A hyperlink read from a file: its stored result is text between the field's two marks, and
+  it cannot be changed - a character typed in it, Backspace and Delete there, Enter, a Delete
+  right before it (its open mark alone), a Backspace right after it (its close mark alone): each
+  refused and told why, nothing changed. The caret goes through it and back with the arrows,
+  with and without Shift; typing beside it works. }
+procedure TTyRichEditEditTest.TestEditsInsideAFieldsResultAreRefused;
+const
+  BS = #92;
+  // 这里 [链接] 末: the open mark at 3, the close mark at 6
+  Link = '{' + BS + 'rtf1' + BS + 'ansi' + BS + 'ansicpg936{' + BS + 'fonttbl{' + BS + 'f0' + BS + 'fcharset134 SimSun;}}' + BS + 'pard' + BS + 'f0 ' + BS + '''d5' + BS + '''e2' + BS + '''c0' + BS + '''ef {' + BS + 'field{' + BS + '*' + BS + 'fldinst HYPERLINK "x"}{' + BS + 'fldrslt {' + BS + 'ul ' + BS + '''c1' + BS + '''b4' + BS + '''bd' + BS + '''d3}}} ' + BS + '''c4' + BS + '''a9' + BS + 'par}';
+var
+  d: TTyRichDocument;
+  len: Int64;
+  i: Integer;
+begin
+  LoadRtf(Link);
+  d := FRich.Document;
+  len := d.Text.Length;
+  AssertEquals('the result is text', 9, len);
+  FRich.SelStart := 5;
+  ResetEvents;
+  Chars('x');
+  Press(VK_BACK);
+  Press(VK_DELETE);
+  Press(VK_RETURN);
+  AssertEquals('four keys inside it refused', 4, FRich.Refused);
+  AssertTrue('why: ' + FRich.LastReason, Pos('field''s result', FRich.LastReason) > 0);
+  FRich.SelStart := 3;
+  Press(VK_DELETE);
+  FRich.SelStart := 7;
+  Press(VK_BACK);
+  AssertEquals('its marks alone refused', 6, FRich.Refused);
+  // a selection from before it into it, typed over
+  FRich.SelStart := 1;
+  FRich.SelLength := 4;
+  Chars('y');
+  AssertEquals('half of it typed over: refused', 7, FRich.Refused);
+  AssertEquals('nothing changed', len, d.Text.Length);
+  AssertEquals('no step', 0, d.UndoDepth);
+  // the caret through the paragraph and back, then selecting through it
+  FRich.SelStart := 0;
+  for i := 1 to 12 do Press(VK_RIGHT);
+  for i := 1 to 12 do Press(VK_LEFT);
+  for i := 1 to 12 do Press(VK_RIGHT, [ssShift]);
+  Press(VK_END);
+  Press(VK_HOME, [ssShift]);
+  Press(VK_LEFT);
+  AssertEquals('still nothing changed', len, d.Text.Length);
+  // beside it
+  FRich.SelStart := 3;
+  Chars('Q');
+  FRich.SelStart := 8;
+  Chars('R');
+  AssertEquals('typed before and after it', len + 2, d.Text.Length);
+end;
+
 procedure TTyRichEditEditTest.TestPastesAndTheirUndoKeepTheSurfaceRight;
 const
   Rtf = '{\rtf1\ansi{\fonttbl{\f0 Arial;}}\pard\qc\f0\fs48 Big one\par\pard\fs16 small\par' +

@@ -262,7 +262,8 @@ expected('hand-word-zh.expected.txt', wzh_paras)
 # (\s1 and the style sheet), a field, a tracked insertion and deletion, a comment, a footnote,
 # a formula, a bookmark. hand-word-unknown.visible.txt is the text of the paragraphs with every
 # object character (U+FFFC) taken out: how many objects the blocks become is the reader's
-# business, the text around them is not.
+# business, the text around them is not. The field's stored result is text (链接) between two
+# marks, which are object characters too.
 W_REVTBL = '{\\*\\revtbl {Unknown;}{TyControls;}}'
 W_FIELD = (
     '{\\field{\\*\\fldinst ' + W_RUN + '\\hich\\af37\\dbch\\af13\\loch\\f37  HYPERLINK "https://example.com/" }}'
@@ -283,7 +284,7 @@ W_MATH = (
     '\\af34 \\ltrch\\fcs0 \\i\\f34\\insrsid2103427 2}}}}}')
 wun_visible = [
     '不认识的内容',
-    '这里有一个。',
+    '这里有一个链接。',
     '修订：新加的字删掉的字',
     '批注在这几个字上。',
     '脚注在这里。',
@@ -412,6 +413,50 @@ wl = (
     + wl_body(wl_paras[6], '\\par}\r\n\x00'))
 put(RTF, 'hand-word-list.rtf', wl.encode('ascii'))
 expected('hand-word-list.expected.txt', wl_paras)
+
+# hand-word-toc.rtf: a table of contents as Word writes one - a TOC field whose stored result is
+# 40 paragraphs, each entry a HYPERLINK \l field (the link's look: \cs15\ul\cf2) holding the
+# entry's Chinese text, a tab (right-aligned, dot leader: \tqr\tldot\tx8296) and a nested
+# PAGEREF field with the page number (some with Word's \*\datafield). The TOC field opens in the
+# middle of a paragraph (after the text before it) and closes in the middle of one (the text
+# after it follows in the same paragraph). hand-word-toc.visible.txt is the text of the
+# paragraphs with the field marks (U+FFFC) taken out.
+W_TOC_PARD = ('\\pard\\plain \\ltrpar\\s20\\ql \\li0\\ri0\\widctlpar\\tqr\\tldot\\tx8296\\wrapdefault'
+              '\\aspalpha\\aspnum\\faauto\\adjustright\\rin0\\lin0\\itap0 ' + W_CHPF)
+TOC_TITLES = ['绪论', '背景', '方法', '实验', '结果', '讨论', '结论', '附录']
+TOC_N = 40
+
+
+def toc_label(i):
+    return '第%d章 %s' % (i, TOC_TITLES[(i - 1) % len(TOC_TITLES)])
+
+
+def toc_entry(i):
+    anchor = '_Toc%d' % (482100 + i)
+    data = ''
+    if i % 3 == 0:
+        data = '{\\*\\datafield 08d0c9ea79f9bace118c8200aa004ba90b02000000080000000d0000005f0054006f006300}'
+    return ('{\\field{\\*\\fldinst ' + W_RUN + ' HYPERLINK \\\\l "' + anchor + '" }}'
+            '{\\fldrslt ' + w_cjk(toc_label(i), '\\cs15\\ul\\cf2') + W_RUN[:-1] + '\\webhidden \\tab }'
+            '{\\field{\\*\\fldinst ' + W_RUN + ' PAGEREF ' + anchor + ' \\\\h }' + data + '}'
+            '{\\fldrslt ' + W_RUN[:-1] + '\\webhidden ' + str(2 + 3 * i) + '}}}}}')
+
+
+toc_visible = ['目录', '说明：' + toc_label(1) + '\t5']
+toc_visible += [toc_label(i) + '\t' + str(2 + 3 * i) for i in range(2, TOC_N)]
+toc_visible += [toc_label(TOC_N) + '\t' + str(2 + 3 * TOC_N) + '正文从这里开始。', '最后一段。']
+toc = (
+    w_head()
+    + W_PARD + w_cjk('目录', '\\b') + W_PAR + '\r\n'
+    + W_TOC_PARD + w_cjk('说明：')
+    + '{\\field\\fldedit{\\*\\fldinst ' + W_RUN + ' TOC \\\\o "1-3" \\\\h \\\\z \\\\u }}{\\fldrslt '
+    + toc_entry(1) + W_PAR + '\r\n'
+    + ''.join(W_TOC_PARD + toc_entry(i) + W_PAR + '\r\n' for i in range(2, TOC_N))
+    + W_TOC_PARD + toc_entry(TOC_N) + '}}' + w_cjk('正文从这里开始。') + W_PAR + '\r\n'
+    + W_PARD + w_cjk('最后一段。') + W_PAR
+    + W_TAIL)
+put(RTF, 'hand-word-toc.rtf', toc.encode('ascii'))
+put(RTF, 'hand-word-toc.visible.txt', ''.join(p + '\n' for p in toc_visible).encode('utf-8'))
 
 # ---------------------------------------------------------------- hand-end-*.rtf
 # Files that end where a paragraph is still open (a writer cut short, or one that leaves the

@@ -45,7 +45,7 @@ S9.rtf	6161616161616161616161616161616161616161616161616161616161616161616161616
 S10.rtf	6974656D	-	7	a list marker is no text of the paragraph
 S11.rtf	6162	-	7	a star symbol in the middle
 S12.rtf	615C7B627D	-	7	an escaped backslash and braces
-F1.rtf	6D616E75616C	-	-	the display text of a hyperlink
+F1.rtf	6D616E75616C	-	16	the stored result of a hyperlink
 F2.rtf	63686170746572	-	-	a word with a bookmark inside
 V1.rtf	F09F9880	-	8	a surrogate pair split by a skipped pntext group holding a |u
 V2.rtf	F09F9880	-	-	a surrogate pair split by an upr whose ud holds a |u
@@ -83,7 +83,7 @@ R9.rtf	617863	-	7	the ansi half as a group, as Word writes it
 R10.rtf	617863	-	7	a line break of the file directly in upr
 R11.rtf	6178797A0D0A63	-	7	a needle with a paragraph end, text directly in upr
 R12.rtf	6178797A64	-	7	upr nested in ud nested in upr
-R13.rtf	6178	-	-	upr in a field result (an object: nothing to find)
+R13.rtf	6178	-	-	upr in a field result: its ud is the result's text, between the field's marks
 R14.rtf	6178797A	-	7	upr, any case
 R15.rtf	6178797A	w	8	upr, whole word
 T1.rtf	7963	-	11	a row end inside ud right after the last cell: the next paragraph begins inside ud
@@ -94,42 +94,42 @@ T5.rtf	79630D0A64	-	11	the same, a needle with a paragraph end
 T6.rtf	7963	-	13	text before the row end: the row end ends a paragraph inside ud
 T7.rtf	797A63	-	11	the row end in ud, then upr's own text and a second ud
 T8.rtf	794A63	-	11	a row end inside an ordinary group after the last cell
-L1.rtf	623F	-	8	a lead byte left waiting in a field's result: its ? comes out before the field
+L1.rtf	713F	-	10	a lead byte left waiting in a field's result: its ? comes out in the result
 L2.rtf	623F	-	8	the same, the file cut short inside the result
-L3.rtf	623F	-	8	the same, inside a group of the result
-L4.rtf	623F	-	8	the same, the lead byte raw
-L5.rtf	623F	-	8	two fields, a lead byte left in each
-L6.rtf	623F	-	8	the same, a paragraph after
-L7.rtf	623F	-	8	the same, in upr's ud inside the result
-L8.rtf	623F	-	-	the lead byte before the field, its trail in the result: no ? at all
+L3.rtf	713F	-	10	the same, inside a group of the result
+L4.rtf	713F	-	10	the same, the lead byte raw
+L5.rtf	713F	-	10	two fields, a lead byte left in each
+L6.rtf	713F	-	10	the same, a paragraph after
+L7.rtf	713F	-	10	the same, in upr's ud inside the result
+L8.rtf	623F	-	8	the lead byte before the field, its trail in the result: the field's open mark parts them, the lead byte is a ?
 L9.rtf	623F	-	-	a character after the lead byte in the result: the ? is the result's
 L10.rtf	623F	-	-	a lead byte left in a list's marker: none comes out
-W1.rtf	623F	-	1	a lead byte left waiting in a field's result, text of the field itself before and behind the result
-W2.rtf	623F	-	1	the same, spaces between the field's groups
-W3.rtf	623F	-	1	the same, a hex byte behind the result
-W4.rtf	623F	-	1	the same, a character word behind the result
-W5.rtf	623F	-	1	the same, a |u behind the result
-W6.rtf	623F	-	1	the same, a control symbol behind the result
-W7.rtf	623F	-	1	the same, in an inner field of a result that has text
+W1.rtf	3F	-	3	a lead byte left waiting in a field's result, text of the field itself before and behind the result
+W2.rtf	3F	-	6	the same, spaces between the field's groups
+W3.rtf	3F	-	3	the same, a hex byte behind the result
+W4.rtf	3F	-	3	the same, a character word behind the result
+W5.rtf	3F	-	3	the same, a |u behind the result
+W6.rtf	3F	-	3	the same, a control symbol behind the result
+W7.rtf	3F	-	5	the same, in an inner field of a result that has text
 W8.rtf	623F	-	1	the same, the file cut short behind the text
-W9.rtf	623F	-	1	the same, the lead byte raw
-W10.rtf	623F	-	8	the same, in a later paragraph
-W10.rtf	720A61623F	-	5	the same, in a later paragraph
-W11.rtf	623F	-	1	the same, a Shift-JIS font
-W12.rtf	623F	-	1	the same, a character word before the result
-W13.rtf	623F	-	1	the same, in a table cell
-X1.rtf	623F	-	1	a lead byte left waiting in a result, nothing before the result
-X2.rtf	623F	-	1	the same, nothing behind the result
-X3.rtf	623F	-	1	the same, a line break of the source before and behind the result
-X4.rtf	623F	-	1	the same, a formatting word before and behind the result
+W9.rtf	3F	-	3	the same, the lead byte raw
+W10.rtf	713F	-	10	the same, in a later paragraph
+W10.rtf	720A6162	-	5	the same, in a later paragraph
+W11.rtf	3F	-	3	the same, a Shift-JIS font
+W12.rtf	3F	-	3	the same, a character word before the result
+W13.rtf	3F	-	3	the same, in a table cell
+X1.rtf	3F	-	3	a lead byte left waiting in a result, nothing before the result
+X2.rtf	3F	-	3	the same, nothing behind the result
+X3.rtf	3F	-	3	the same, a line break of the source before and behind the result
+X4.rtf	3F	-	3	the same, a formatting word before and behind the result
 X5.rtf	623F	-	-	a single-byte font: the byte is a character of the result, no ? comes out
 X5.rtf	6162	m	0	a single-byte font: the byte is a character of the result, no ? comes out
 X6.rtf	623F	-	-	a whole pair in the result: no ? comes out
 X6.rtf	6162	m	0	a whole pair in the result: no ? comes out
-X7.rtf	623F	-	1	a lead byte left waiting in a result, an instruction before it and text behind
+X7.rtf	3F	-	3	a lead byte left waiting in a result, an instruction before it and text behind
 D1.rtf	E280A26162	-	7	the default font named again after text: what has no font of its own is in the new one from there on
 D1.rtf	7A7A	m	11	the default font named again after text: what has no font of its own is in the new one from there on
 D2.rtf	743F	-	7	the default font named again in a field's result, a lead byte of the new one behind it, the file cut short there
-D3.rtf	743F	-	7	the same, the file whole
-D3.rtf	7A7A	m	12	the same, the file whole
+D3.rtf	7D3F	-	9	the same, the file whole: the field is shown, its result between its marks
+D3.rtf	7A7A	m	14	the same, the file whole: the field is shown, its result between its marks
 D4.rtf	E280A26162	-	7	the default font named in the header alone

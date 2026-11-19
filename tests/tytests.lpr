@@ -305,7 +305,8 @@ uses
   test.richedit.objects,
   test.richedit.drag,
   test.richedit.dropacross,
-  test.richedit.perf;
+  test.richedit.perf,
+  test.richedit.fields;
 
 type
   TTyTestRunner = class(TTestRunner)

@@ -63,7 +63,7 @@ different places and reading the file raised. They are kept byte for byte (`.git
 | `S10.rtf` | item |  | 7 | a list marker is no text of the paragraph |
 | `S11.rtf` | ab |  | 7 | a star symbol in the middle |
 | `S12.rtf` | a\{b} |  | 7 | an escaped backslash and braces |
-| `F1.rtf` | manual |  | - | the display text of a hyperlink |
+| `F1.rtf` | manual |  | 16 | the stored result of a hyperlink (text between the field's two marks) |
 | `F2.rtf` | chapter |  | - | a word with a bookmark inside |
 | `V1.rtf` | 😀 |  | 8 | a surrogate pair split by a skipped pntext group holding a \|u |
 | `V2.rtf` | 😀 |  | - | a surrogate pair split by an upr whose ud holds a \|u |
@@ -101,7 +101,7 @@ different places and reading the file raised. They are kept byte for byte (`.git
 | `R10.rtf` | axc |  | 7 | a line break of the file directly in upr |
 | `R11.rtf` | axyz<0D><0A>c |  | 7 | a needle with a paragraph end, text directly in upr |
 | `R12.rtf` | axyzd |  | 7 | upr nested in ud nested in upr |
-| `R13.rtf` | ax |  | - | upr in a field result (an object: nothing to find) |
+| `R13.rtf` | ax |  | - | upr in a field result: its ud is the result's text, between the field's marks |
 | `R14.rtf` | axyz |  | 7 | upr, any case |
 | `R15.rtf` | axyz | w | 8 | upr, whole word |
 | `T1.rtf` | yc |  | 11 | a row end inside ud right after the last cell: the next paragraph begins inside ud |
@@ -112,42 +112,42 @@ different places and reading the file raised. They are kept byte for byte (`.git
 | `T6.rtf` | yc |  | 13 | text before the row end: the row end ends a paragraph inside ud |
 | `T7.rtf` | yzc |  | 11 | the row end in ud, then upr's own text and a second ud |
 | `T8.rtf` | yJc |  | 11 | a row end inside an ordinary group after the last cell |
-| `L1.rtf` | b? |  | 8 | a lead byte left waiting in a field's result: its ? comes out before the field |
+| `L1.rtf` | q? |  | 10 | a lead byte left waiting in a field's result: its ? comes out in the result |
 | `L2.rtf` | b? |  | 8 | the same, the file cut short inside the result |
-| `L3.rtf` | b? |  | 8 | the same, inside a group of the result |
-| `L4.rtf` | b? |  | 8 | the same, the lead byte raw |
-| `L5.rtf` | b? |  | 8 | two fields, a lead byte left in each |
-| `L6.rtf` | b? |  | 8 | the same, a paragraph after |
-| `L7.rtf` | b? |  | 8 | the same, in upr's ud inside the result |
-| `L8.rtf` | b? |  | - | the lead byte before the field, its trail in the result: no ? at all |
+| `L3.rtf` | q? |  | 10 | the same, inside a group of the result |
+| `L4.rtf` | q? |  | 10 | the same, the lead byte raw |
+| `L5.rtf` | q? |  | 10 | two fields, a lead byte left in each |
+| `L6.rtf` | q? |  | 10 | the same, a paragraph after |
+| `L7.rtf` | q? |  | 10 | the same, in upr's ud inside the result |
+| `L8.rtf` | b? |  | 8 | the lead byte before the field, its trail in the result: the field's open mark parts them, the lead byte is a ? |
 | `L9.rtf` | b? |  | - | a character after the lead byte in the result: the ? is the result's |
 | `L10.rtf` | b? |  | - | a lead byte left in a list's marker: none comes out |
-| `W1.rtf` | b? |  | 1 | a lead byte left waiting in a field's result, text of the field itself before and behind the result |
-| `W2.rtf` | b? |  | 1 | the same, spaces between the field's groups |
-| `W3.rtf` | b? |  | 1 | the same, a hex byte behind the result |
-| `W4.rtf` | b? |  | 1 | the same, a character word behind the result |
-| `W5.rtf` | b? |  | 1 | the same, a \|u behind the result |
-| `W6.rtf` | b? |  | 1 | the same, a control symbol behind the result |
-| `W7.rtf` | b? |  | 1 | the same, in an inner field of a result that has text |
+| `W1.rtf` | ? |  | 3 | a lead byte left waiting in a field's result, text of the field itself before and behind the result |
+| `W2.rtf` | ? |  | 6 | the same, spaces between the field's groups |
+| `W3.rtf` | ? |  | 3 | the same, a hex byte behind the result |
+| `W4.rtf` | ? |  | 3 | the same, a character word behind the result |
+| `W5.rtf` | ? |  | 3 | the same, a \|u behind the result |
+| `W6.rtf` | ? |  | 3 | the same, a control symbol behind the result |
+| `W7.rtf` | ? |  | 5 | the same, in an inner field of a result that has text |
 | `W8.rtf` | b? |  | 1 | the same, the file cut short behind the text |
-| `W9.rtf` | b? |  | 1 | the same, the lead byte raw |
-| `W10.rtf` | b? |  | 8 | the same, in a later paragraph |
-| `W10.rtf` | r<0A>ab? |  | 5 | the same, in a later paragraph |
-| `W11.rtf` | b? |  | 1 | the same, a Shift-JIS font |
-| `W12.rtf` | b? |  | 1 | the same, a character word before the result |
-| `W13.rtf` | b? |  | 1 | the same, in a table cell |
-| `X1.rtf` | b? |  | 1 | a lead byte left waiting in a result, nothing before the result |
-| `X2.rtf` | b? |  | 1 | the same, nothing behind the result |
-| `X3.rtf` | b? |  | 1 | the same, a line break of the source before and behind the result |
-| `X4.rtf` | b? |  | 1 | the same, a formatting word before and behind the result |
+| `W9.rtf` | ? |  | 3 | the same, the lead byte raw |
+| `W10.rtf` | q? |  | 10 | the same, in a later paragraph |
+| `W10.rtf` | r<0A>ab |  | 5 | the same, in a later paragraph |
+| `W11.rtf` | ? |  | 3 | the same, a Shift-JIS font |
+| `W12.rtf` | ? |  | 3 | the same, a character word before the result |
+| `W13.rtf` | ? |  | 3 | the same, in a table cell |
+| `X1.rtf` | ? |  | 3 | a lead byte left waiting in a result, nothing before the result |
+| `X2.rtf` | ? |  | 3 | the same, nothing behind the result |
+| `X3.rtf` | ? |  | 3 | the same, a line break of the source before and behind the result |
+| `X4.rtf` | ? |  | 3 | the same, a formatting word before and behind the result |
 | `X5.rtf` | b? |  | - | a single-byte font: the byte is a character of the result, no ? comes out |
 | `X5.rtf` | ab | m | 0 | a single-byte font: the byte is a character of the result, no ? comes out |
 | `X6.rtf` | b? |  | - | a whole pair in the result: no ? comes out |
 | `X6.rtf` | ab | m | 0 | a whole pair in the result: no ? comes out |
-| `X7.rtf` | b? |  | 1 | a lead byte left waiting in a result, an instruction before it and text behind |
+| `X7.rtf` | ? |  | 3 | a lead byte left waiting in a result, an instruction before it and text behind |
 | `D1.rtf` | •ab |  | 7 | the default font named again after text: what has no font of its own is in the new one from there on |
 | `D1.rtf` | zz | m | 11 | the default font named again after text: what has no font of its own is in the new one from there on |
 | `D2.rtf` | t? |  | 7 | the default font named again in a field's result, a lead byte of the new one behind it, the file cut short there |
-| `D3.rtf` | t? |  | 7 | the same, the file whole |
-| `D3.rtf` | zz | m | 12 | the same, the file whole |
+| `D3.rtf` | }? |  | 9 | the same, the file whole: the field is shown, its result between its marks |
+| `D3.rtf` | zz | m | 14 | the same, the file whole: the field is shown, its result between its marks |
 | `D4.rtf` | •ab |  | 7 | the default font named in the header alone |

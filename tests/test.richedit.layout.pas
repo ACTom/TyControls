@@ -56,6 +56,9 @@ type
     procedure TearDown; override;
   published
     procedure TestCjkBreaksBetweenCharactersButNotBeforeClosingPunctuation;
+    // a field's stored result
+    procedure TestALinkWrapsInItsOwnLook;
+    procedure TestATableOfContentsIsLaidOutAsItsParagraphs;
     procedure TestLatinBreaksAtSpacesAndForcesLongWords;
     procedure TestMissingGlyphFallsBack;
     procedure TestWrapModes;
@@ -664,6 +667,68 @@ begin
     if (APos >= L.Fragments[i].First) and (APos < L.Fragments[i].First + L.Fragments[i].Count) then
       Exit(L.Fragments[i]);
   Fail(Format('no fragment holds position %d', [APos]));
+end;
+
+{ A hyperlink's stored result is the paragraph's text: it wraps at its spaces like any text,
+  in its own look (underlined), and the field's two marks take no width. }
+procedure TTyRichLayoutTest.TestALinkWrapsInItsOwnLook;
+var
+  d: TTyRichDocument;
+  st: TBytesStream;
+  L: TTyParaLayout;
+  i, inside: Integer;
+const
+  BS = #92;
+  // see [the manual of the rich edit control, read with care] now: the open mark at 4
+  Src = '{' + BS + 'rtf1' + BS + 'ansi{' + BS + 'fonttbl{' + BS + 'f0 Test;}}' + BS + 'pard' + BS +
+    'f0 see {' + BS + 'field{' + BS + '*' + BS + 'fldinst HYPERLINK "x"}{' + BS + 'fldrslt {' + BS +
+    'ul the manual of the rich edit control, read with care}}} now' + BS + 'par}';
+begin
+  d := TTyRichDocument.Create;
+  FDocs.Add(d);
+  st := TBytesStream.Create(BytesOf(Src));
+  try
+    TyRichLoadRtf(d, st);
+  finally
+    st.Free;
+  end;
+  L := Lay(d, 0, 160);
+  AssertTrue(Format('it wraps: %d lines', [L.LineCount]), L.LineCount > 2);
+  inside := 0;
+  for i := 1 to L.LineCount - 1 do
+    if (L.Lines[i].First > 5) and (L.Lines[i].First < 56) then Inc(inside);
+  AssertTrue('lines begin inside the link', inside > 0);
+  AssertEquals('the open mark takes no width', 0, FragAt(L, 4).Width);
+  AssertEquals('nor the close one', 0, FragAt(L, 56).Width);
+  AssertTrue('the link underlined', fsUnderline in d.Formats.CharFormat(FragAt(L, 5).Format).Style);
+  AssertTrue('to its end', fsUnderline in d.Formats.CharFormat(FragAt(L, 55).Format).Style);
+  AssertFalse('the text before it is not', fsUnderline in d.Formats.CharFormat(FragAt(L, 0).Format).Style);
+end;
+
+{ A table of contents is its paragraphs: each entry lays out as its own line, its number after
+  a tab with a dot leader. }
+procedure TTyRichLayoutTest.TestATableOfContentsIsLaidOutAsItsParagraphs;
+var
+  d: TTyRichDocument;
+  L: TTyParaLayout;
+  k, i, tabs: Integer;
+begin
+  d := LoadFixture('hand-word-toc.rtf');
+  AssertEquals('its paragraphs', 42, d.Text.ParaCount);
+  for k := 2 to 39 do
+  begin
+    L := Lay(d, k, 2000);
+    AssertEquals(Format('entry %d: one line', [k]), 1, L.LineCount);
+    tabs := 0;
+    for i := 0 to L.FragmentCount - 1 do
+      if L.Fragments[i].Kind = rfkTab then
+      begin
+        Inc(tabs);
+        AssertTrue(Format('entry %d: its leader', [k]), L.Fragments[i].Leader = ttlDot);
+        AssertTrue(Format('entry %d: the tab reaches its stop', [k]), L.Fragments[i].Width > 0);
+      end;
+    AssertEquals(Format('entry %d: one tab', [k]), 1, tabs);
+  end;
 end;
 
 { A narrow paragraph of Chinese with its punctuation: it breaks between the characters, and
