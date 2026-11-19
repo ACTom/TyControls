@@ -341,9 +341,10 @@ type
     Which matches: leftmost, never overlapping, as a forward find has them; a replacement is
     never searched again ("a" by "aa" replaces each "a" once). Each takes the format of the
     first character it replaces (a paragraph's end: what typing there gets). A match the
-    document will not let a user's edit change - a row that holds a nested table
-    (CanChange), a cell's or a row's edge (TTyRichDocument.UserRangeAllowed) - is left
-    and counted (Skipped).
+    document will not let a user's edit change - a row that holds a nested table or a
+    field's result, which is read-only (CanChange; a paragraph with a field is asked match by
+    match), a cell's or a row's edge (TTyRichDocument.UserRangeAllowed) - is left and
+    counted (Skipped).
 
     The limit: when the step keeps CRichReplaceLimitFactor times the document's MaxUndoBytes
     (and that is > 0), the replace ends after the range that reached it - Limited: what was
@@ -389,6 +390,7 @@ type
     FReadyFresh: Boolean;             // none of them replaced yet
     FAskedFrom, FAskedTo: TTyRichPos; // the paragraph Allowed asked last, and its answer
     FAskedAnswer: Boolean;
+    FAskedFields: Boolean;            // ... it has a field's mark or starts inside a result
     FAll: array of TTyRichPos;        // the simple way: every match
     FAllCount, FAllNext: Integer;     // ... and the next to replace
     FCollected: Boolean;
@@ -1742,6 +1744,19 @@ begin
   Result := ADoc.UserRangeAllowed(s, n) and (s = APos) and (n = ALen);
 end;
 
+{ Paragraph AIndex starts inside a field's result or holds a field's mark. }
+function ParaHoldsFields(ADoc: TTyRichDocument; AIndex: Integer): Boolean;
+var
+  runs: TTyRunArray;
+  i: Integer;
+begin
+  if ADoc.ParaFieldDepth(AIndex) > 0 then Exit(True);
+  runs := ADoc.RunsOf(AIndex);
+  for i := 0 to High(runs) do
+    if runs[i].Obj is TTyRichFieldMark then Exit(True);
+  Result := False;
+end;
+
 function HasBreak(const S: UTF8String): Boolean;
 var
   i: Integer;
@@ -1837,13 +1852,18 @@ begin
   if FSimple then Exit(MatchAllowed(FTarget, APos, FLen));
   { A match inside one paragraph never reaches across an edge: only its paragraph's row is
     asked, once a paragraph (a paragraph of megabytes may hold millions of matches). }
-  if (APos >= FAskedFrom) and (APos < FAskedTo) then Exit(FAskedAnswer);
-  t := FTarget.Text;
-  k := t.ParaOfPos(APos);
-  FAskedFrom := t.ParaStart(k);
-  FAskedTo := FAskedFrom + t.ParaLength(k);
-  FAskedAnswer := FTarget.CanChange(APos, FLen);
+  if (APos < FAskedFrom) or (APos >= FAskedTo) then
+  begin
+    t := FTarget.Text;
+    k := t.ParaOfPos(APos);
+    FAskedFrom := t.ParaStart(k);
+    FAskedTo := FAskedFrom + t.ParaLength(k);
+    // (a field's result refuses its own matches, not the paragraph's others: asked of each)
+    FAskedAnswer := FTarget.ChangeRefusal(APos, FLen) <> rcrFixedRow;
+    FAskedFields := ParaHoldsFields(FTarget, k);
+  end;
   Result := FAskedAnswer;
+  if Result and FAskedFields then Result := FTarget.CanChange(APos, FLen);
 end;
 
 procedure TTyRichReplaceAllCommand.Take(APos: TTyRichPos);

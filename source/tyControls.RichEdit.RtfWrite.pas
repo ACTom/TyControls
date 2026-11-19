@@ -49,6 +49,16 @@ unit tyControls.RichEdit.RtfWrite;
 // was read with: they name fonts, colours, styles and lists by the numbers of that file's
 // tables. They are written back into that file. (For whoever carries content from one
 // document to another: such fragments cannot simply go along.)
+//
+// A field shown as its result (TTyRichFieldMark): where both its marks are among what is
+// written, the open mark's bytes go out as they are - the field's whole group - and nothing of
+// what lies between the marks (its text, objects, paragraph ends); after them the character
+// format is written again, and when the field's bytes ended paragraphs, the paragraph the
+// close mark is in has its properties written again. A mark whose partner is not written
+// writes nothing: what lies between goes out as the formatted text it is. A stretch begins and
+// ends only where the file has no field open (CleanAt), so in a save of a file both marks of
+// every field are in the stretch that holds one of them; the bytes of a field nobody can
+// change inside are the file's bytes, whatever was edited around it.
 
 {$mode objfpc}{$H+}
 {$modeswitch advancedrecords}
@@ -323,6 +333,12 @@ type
     FNumList: TTyListFormat;
     FUc: Integer;            // the \uc the file has in effect where the stretch begins
     FHavePrev: Boolean;      // a paragraph of the stretch is written and not yet ended
+    { Inside a field that goes out as its bytes (TTyRichFieldMark): the fields open since its
+      open mark, its own counted (0: none); FPrevInField: the paragraph written last ended
+      inside it - its end is in those bytes. }
+    FSkip: Integer;
+    FSkipPara: Integer;      // the paragraph that field began in
+    FPrevInField: Boolean;
     FPrevCell: TTyRichCell;  // its cell
     // a range (TyRichSaveRtfRange): its paragraphs, what of its end paragraphs goes out
     FRange: Boolean;
@@ -330,6 +346,7 @@ type
     FLastWritten: Integer;
     FRangeSrc, FRangeBytes: array of Int64;
     FRangeOwn: array of Boolean;
+    FRangeEnd: TTyRichPos;   // the range's end in the document
     // output
     procedure Flush;
     procedure Tick;
@@ -395,6 +412,7 @@ type
     procedure StartRow(ACell: TTyRichCell);
     procedure EndPara(ACell, ANext: TTyRichCell);
     procedure WriteRowDef(ARow: TTyRichRow);
+    function FieldWhole(AIndex: Integer; AChar: Int64): Boolean;
     procedure WritePara(AIndex: Integer; AFormat: TTyParaFormatId; const ARuns: TTyRunArray;
       AInCell: Boolean; AText: PByte; ALen: PtrInt);
     procedure WriteParaFormat(AInfo: PParaInfo; AInCell: Boolean; AFirstFont, ANumber: Integer);
@@ -1761,7 +1779,11 @@ begin
   // (the stretch starts and ends between rows: the plan saw to that)
   FHavePrev := False;
   FPrevCell := nil;
+  FSkip := 0;
+  FPrevInField := False;
   FDoc.Text.WalkParaTexts(AFirst, AFirst + ACount - 1, @StretchPara);
+  // (one that ended inside a field written as its bytes: they ended it)
+  if FPrevInField then Exit;
   { A range's last paragraph taken in part, without its separator: no \par (pasted, it adds
     no line break and takes the paragraph it lands in). One taken whole - also the document's
     last paragraph, which has no separator, when LastWhole says so - ends with its \par: a
@@ -1792,10 +1814,13 @@ begin
     if not FCopy.LastWhole and (AIndex = FCopy.LastPara) then pf := FDoc.DefaultParaFormatId;
     FLastWritten := AIndex;
   end;
-  if FHavePrev then EndPara(FPrevCell, cell);
-  if (cell <> nil) and (not FHavePrev or (FPrevCell = nil) or (FPrevCell.Row <> cell.Row)) then
+  // (a paragraph that ends, or begins, inside a field written as its bytes: they end it)
+  if FHavePrev and not FPrevInField then EndPara(FPrevCell, cell);
+  if (cell <> nil) and (FSkip = 0) and
+     (not FHavePrev or (FPrevCell = nil) or (FPrevCell.Row <> cell.Row)) then
     StartRow(cell);
   WritePara(AIndex, pf, runs, cell <> nil, AText, ALen);
+  FPrevInField := FSkip > 0;
   FPrevCell := cell;
   FHavePrev := True;
   Inc(FDone);
@@ -1882,48 +1907,107 @@ var
   ch, runEnd: Int64;
   r, firstFont, number: Integer;
   code: Cardinal;
+  m: TTyRichFieldMark;
+
+  // the paragraph's own properties (and its list number): before its text, or after a field
+  // written as its bytes that ended in it
+  procedure Props;
+  begin
+    // The item's number - and for every paragraph, which list it is of: the next item's
+    // number goes on from it (ListNumber). A number that is not written (Word's list table
+    // says it) is worked out only when that costs nothing.
+    number := 0;
+    if pi^.Fmt.List.Kind in [lkNone, lkBullet] then
+    begin
+      FNumPara := AIndex;
+      FNumList := pi^.Fmt.List;
+      FNum := 0;
+    end
+    else if (pi^.Mode in [lmPn, lmGen]) or (FNumPara = AIndex - 1) then
+      number := ListNumber(AIndex, pi^.Fmt.List)
+    else
+      FNumPara := -2;
+    if (AFormat <> FCurPara) or (AInCell <> FCurInCell) then
+    begin
+      WriteParaFormat(pi, AInCell, firstFont, number);
+      FCurPara := AFormat;
+      FCurInCell := AInCell;
+    end
+    else if (pi^.Mode in [lmPn, lmGen]) and (pi^.Fmt.List.Kind <> lkNone) then
+      // the same list goes on: only the item's own text
+      WritePnText(pi, firstFont, number);
+  end;
+
+  // the object character's bytes passed
+  procedure PassChar;
+  begin
+    if p < ALen then
+    begin
+      Inc(p, TyRichNextChar(AText + p, ALen - p, code));
+      Inc(ch);
+    end;
+  end;
+
 begin
   pi := ParaInfo(AFormat);
   firstFont := -1;
   if Length(ARuns) > 0 then firstFont := FontNumOf(ARuns[0].Format);
-  // The item's number - and for every paragraph, which list it is of: the next item's
-  // number goes on from it (ListNumber). A number that is not written (Word's list table
-  // says it) is worked out only when that costs nothing.
-  number := 0;
-  if pi^.Fmt.List.Kind in [lkNone, lkBullet] then
-  begin
-    FNumPara := AIndex;
-    FNumList := pi^.Fmt.List;
-    FNum := 0;
-  end
-  else if (pi^.Mode in [lmPn, lmGen]) or (FNumPara = AIndex - 1) then
-    number := ListNumber(AIndex, pi^.Fmt.List)
-  else
-    FNumPara := -2;
-  if (AFormat <> FCurPara) or (AInCell <> FCurInCell) then
-  begin
-    WriteParaFormat(pi, AInCell, firstFont, number);
-    FCurPara := AFormat;
-    FCurInCell := AInCell;
-  end
-  else if (pi^.Mode in [lmPn, lmGen]) and (pi^.Fmt.List.Kind <> lkNone) then
-    // the same list goes on: only the item's own text
-    WritePnText(pi, firstFont, number);
+  // (a paragraph that begins inside a field going out as its bytes: those wrote its start)
+  if FSkip = 0 then Props;
   p := 0;
   ch := 0;
   for r := 0 to High(ARuns) do
   begin
     if r < High(ARuns) then runEnd := ARuns[r + 1].Start else runEnd := High(Int64);
+    if ARuns[r].Obj is TTyRichFieldMark then
+    begin
+      m := TTyRichFieldMark(ARuns[r].Obj);
+      if FSkip > 0 then
+      begin
+        // inside a field written as its bytes: only its nesting is followed, to its close
+        if m.Kind = rfmOpen then Inc(FSkip) else Dec(FSkip);
+        if FSkip = 0 then
+        begin
+          { Out of the field's group. A group's end gives the reader back the properties it
+            had before the group; the character state is taken as not known all the same. A
+            field whose bytes ended paragraphs leaves the reader in this paragraph with the
+            properties of the one it began in: this one's are written again. }
+          FCurChar := -1;
+          if AIndex <> FSkipPara then
+          begin
+            FCurPara := -1;
+            Props;
+          end;
+        end;
+      end
+      else if (m.Kind = rfmOpen) and FieldWhole(AIndex, ch) then
+      begin
+        // its field as the file has it: the bytes, then nothing up to its close mark
+        if ARuns[r].Format <> FCurChar then WriteCharFormat(ARuns[r].Format);
+        RawUnder(m.Bytes, m.RawUc);
+        FSkip := 1;
+        FSkipPara := AIndex;
+      end;
+      // (a mark whose partner is not written: nothing - what is between goes as text)
+      PassChar;
+      Continue;
+    end;
+    if FSkip > 0 then
+    begin
+      // the run is the field's result: its bytes are passed
+      while (ch < runEnd) and (p < ALen) do
+      begin
+        Inc(p, TyRichNextChar(AText + p, ALen - p, code));
+        Inc(ch);
+      end;
+      Continue;
+    end;
     if ARuns[r].Format <> FCurChar then WriteCharFormat(ARuns[r].Format);
     if ARuns[r].Obj <> nil then
     begin
       WriteObject(ARuns[r].Obj);
       // its one character
-      if p < ALen then
-      begin
-        Inc(p, TyRichNextChar(AText + p, ALen - p, code));
-        Inc(ch);
-      end;
+      PassChar;
       Continue;
     end;
     while (ch < runEnd) and (p < ALen) do
@@ -1953,6 +2037,21 @@ begin
         Inc(ch);
       end;
   end;
+end;
+
+{ The open mark at character AChar of paragraph AIndex as it is written (a range's first
+  paragraph is cut: its characters from the range's start) has its close mark among what is
+  written: a whole document's or a stretch's - a stretch begins and ends outside every field
+  (CleanAt), so always - or, for a range, before the range's end. }
+function TRtfWriter.FieldWhole(AIndex: Integer; AChar: Int64): Boolean;
+var
+  at, partner: TTyRichPos;
+begin
+  if not FRange then Exit(True);
+  at := FDoc.Text.ParaStart(AIndex) + AChar;
+  if AIndex = FCopy.FirstPara then Inc(at, FCopy.FromChar);
+  partner := FDoc.FieldPartner(at);
+  Result := (partner > at) and (partner < FRangeEnd);
 end;
 
 // What {\*\pn ...} sets from the model's list.
@@ -2331,6 +2430,8 @@ end;
 
 procedure TRtfWriter.WriteObject(AObj: TTyRichObject);
 begin
+  // (a field's mark is WritePara's: its field's bytes, or nothing)
+  if AObj is TTyRichFieldMark then Exit;
   if AObj is TTyRichOpaque then
     RawUnder(TTyRichOpaque(AObj).Bytes, AObj.RawUc)
   else if AObj is TTyRichPicture then
@@ -2728,6 +2829,9 @@ begin
   FParaCount := FDoc.Text.ParaCount;
   FRange := True;
   FCopy := ARange;
+  if not ARange.Empty then
+    FRangeEnd := FDoc.Text.ParaStart(ARange.LastPara) + ARange.ToChar +
+      Ord(ARange.LastSeparator);
   FLastWritten := -1;
   FDoc.BeginRead;
   try

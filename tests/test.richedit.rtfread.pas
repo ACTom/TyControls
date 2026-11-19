@@ -731,6 +731,38 @@ var
       AssertEquals(AWhat + ': the whole group', GroupEnd(b, at), at + Length(o.Bytes));
   end;
 
+  procedure CheckField(const APrefix: RawByteString);
+  var
+    r: TTyRunArray;
+    i, opens, closes: Integer;
+    mk: TTyRichFieldMark;
+    at: Int64;
+  begin
+    r := d.RunsOf(1);
+    opens := 0;
+    closes := 0;
+    mk := nil;
+    for i := 0 to High(r) do
+      if r[i].Obj is TTyRichFieldMark then
+        if TTyRichFieldMark(r[i].Obj).Kind = rfmOpen then
+        begin
+          Inc(opens);
+          mk := TTyRichFieldMark(r[i].Obj);
+        end
+        else
+          Inc(closes);
+    AssertEquals('field: one open mark', 1, opens);
+    AssertEquals('field: one close mark', 1, closes);
+    AssertText('field: its result', U('这里有一个' + ObjChar + '链接' + ObjChar + '。'),
+      ParaText(d, 1));
+    AssertTrue('field: its bytes', Pos(APrefix, mk.Bytes) = 1);
+    at := IndexOfStr(b, mk.Bytes, m.Paras[1].Start);
+    AssertTrue('field: its bytes are in the file', at >= 0);
+    AssertTrue('field: inside its paragraph', at + Length(mk.Bytes) <= m.Paras[1].Stop);
+    AssertEquals('field: the whole group', GroupEnd(b, at), at + Length(mk.Bytes));
+    AssertTrue('field: the link is underlined', fsUnderline in CharAt(d, 1, 6).Style);
+  end;
+
   procedure Check(const AName: string; const AField, AAnchor, AComment, AFormula,
     ADataStore: RawByteString; ADeletedStop: Integer);
   var
@@ -749,10 +781,9 @@ var
       AssertTrue('style sheet in the header', Pos('{\stylesheet{', header) > 0);
       AssertTrue('\s1 on the heading', HasFragment(ParaFmt(d, 0).Extra, '\s1'));
       AssertFalse('no \s1 on the next paragraph', HasFragment(ParaFmt(d, 1).Extra, '\s1'));
-      // the field
-      CheckOpaque('field', 1, AField);
-      AssertText('field result', U('链接'), o.DisplayText);
-      AssertText('the field''s bytes', '}}}', Copy(o.Bytes, Length(o.Bytes) - 2, 3));
+      // the field: its result is the paragraph's text between its two marks, the open one
+      // keeps the field's bytes as they are in the file, in its paragraph
+      CheckField(AField);
       // the revisions: the table in the header, the marks on the runs
       AssertTrue('revision table in the header',
         Pos('{\*\revtbl {Unknown;}{TyControls;}}', header) > 0);
@@ -1165,26 +1196,31 @@ end;
 procedure TTyRtfReadTest.TestFieldShowsItsResult;
 const
   Src: RawByteString = '{\rtf1\ansi\ansicpg936{\fonttbl{\f0\fcharset134 S;}}\f0 a{\field' +
-    '{\*\fldinst HYPERLINK "x"}{\fldrslt {\b \''c1\''b4\u25991?}}}b\par}';
+    '{\*\fldinst HYPERLINK "x"}{\fldrslt {\b \''c1\''b4\' + 'u25991?}}}b\par}';
 var
   d: TTyRichDocument;
   o, c: TTyRichObject;
 begin
+  // the stored result is the paragraph's own text, with its formats, between the field's
+  // two marks; the open mark keeps the field's bytes
   d := LoadString(Src);
   try
-    CheckParas('field', d, ['a' + ObjChar + 'b']);
+    CheckParas('field', d, ['a' + ObjChar + '链文' + ObjChar + 'b']);
     o := ObjAt(d, 0, 1);
-    AssertTrue('an opaque object', o is TTyRichOpaque);
-    AssertText('display text', U('链文'), TTyRichOpaque(o).DisplayText);
+    AssertTrue('the open mark', (o is TTyRichFieldMark) and (TTyRichFieldMark(o).Kind = rfmOpen));
     AssertText('bytes', Copy(Src, Pos('{\field', Src), Pos('}}}b', Src) + 3 - Pos('{\field', Src)),
-      TTyRichOpaque(o).Bytes);
+      TTyRichFieldMark(o).Bytes);
     c := o.Clone;
     try
-      AssertText('clone keeps it', TTyRichOpaque(o).DisplayText, TTyRichOpaque(c).DisplayText);
+      AssertText('clone keeps them', TTyRichFieldMark(o).Bytes, TTyRichFieldMark(c).Bytes);
     finally
       c.Free;
     end;
-    AssertFalse('b is not bold', fsBold in CharAt(d, 0, 2).Style);
+    o := ObjAt(d, 0, 4);
+    AssertTrue('the close mark', (o is TTyRichFieldMark) and (TTyRichFieldMark(o).Kind = rfmClose));
+    AssertTrue('its result is bold', fsBold in CharAt(d, 0, 2).Style);
+    AssertTrue('all of it', fsBold in CharAt(d, 0, 3).Style);
+    AssertFalse('b is not bold', fsBold in CharAt(d, 0, 5).Style);
   finally
     d.Free;
   end;

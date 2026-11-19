@@ -48,6 +48,11 @@ type
     procedure TestReplaceAllLeavesResults;
     procedure TestTablesAndObjectsAroundFields;
     procedure TestPastesAndMovesTakeWholeFields;
+    // the model's own word on fields
+    procedure TestTheDepthOfEveryParagraphFollowsEveryEdit;
+    procedure TestTheFieldAroundAPlaceAndAMarksPartner;
+    procedure TestARefusalSaysItIsAField;
+    procedure TestTheOpenMarkKeepsTheFieldsBytes;
   end;
 
 implementation
@@ -1432,6 +1437,330 @@ begin
       d.Text.ParaStart(1) + 2)));
     AssertEquals('moved', '/[]', AllObjects(d));
     AssertEquals('its bytes once', 1, CountRaw(FieldGroup(LinkRtf, 1), StrOfBytes(SaveOut(d))));
+  finally
+    d.Free;
+  end;
+end;
+
+{ ---- what the model says of fields ---- }
+
+{ The invariant every document keeps (TTyRichDocument's paragraph values): the first paragraph
+  starts outside every field, each next one as deep as the one before leaves it, never below
+  0, and the last one ends outside them. '' when it holds. }
+function DepthsWrong(ADoc: TTyRichDocument): string;
+var
+  k, i, depth: Integer;
+  runs: TTyRunArray;
+begin
+  depth := 0;
+  for k := 0 to ADoc.Text.ParaCount - 1 do
+  begin
+    if ADoc.ParaFieldDepth(k) <> depth then
+      Exit(Format('paragraph %d starts %d deep, its marks before say %d', [k, ADoc.ParaFieldDepth(k), depth]));
+    runs := ADoc.RunsOf(k);
+    for i := 0 to High(runs) do
+      if runs[i].Obj is TTyRichFieldMark then
+        if TTyRichFieldMark(runs[i].Obj).Kind = rfmOpen then Inc(depth)
+        else
+        begin
+          Dec(depth);
+          if depth < 0 then Exit(Format('paragraph %d: a close mark with no open one', [k]));
+        end;
+  end;
+  if depth <> 0 then Exit(Format('%d fields open at the end', [depth]));
+  Result := '';
+end;
+
+procedure CheckDepths(ATest: TTestCase; const AMsg: string; ADoc: TTyRichDocument);
+begin
+  ATest.AssertEquals(AMsg + ': the depths', '', DepthsWrong(ADoc));
+end;
+
+{ Every edit the document allows keeps each paragraph's depth what its marks make it: typing,
+  a split and a join beside fields, a whole field deleted, copied and moved, a fragment with a
+  field pasted, a table and its row, formats, a replace - and the undo and redo of each; and
+  random allowed edits, undone, give the file back. }
+procedure TTyRichFieldsTest.TestTheDepthOfEveryParagraphFollowsEveryEdit;
+var
+  b: TBytes;
+  d, src: TTyRichDocument;
+  n, i, steps: Integer;
+  closeAt, p, len, a, z: TTyRichPos;
+  ends: Boolean;
+  f: TTyCharFormat;
+  pf: TTyParaFormat;
+  tally: TTyRichReplaceTally;
+  cmd: TTyRichReplaceAllCommand;
+  t: string;
+
+  procedure Step(const AWhat: string; ACmd: TTyRichCommand);
+  begin
+    AssertTrue(AWhat + ': made', d.Execute(ACmd));
+    Inc(steps);
+    CheckDepths(Self, AWhat, d);
+    d.Undo;
+    CheckDepths(Self, AWhat + ', undone', d);
+    d.Redo;
+    CheckDepths(Self, AWhat + ', redone', d);
+  end;
+
+begin
+  b := Fixture('hand-word-toc.rtf');
+  d := LoadDoc(b, False);
+  try
+    CheckDepths(Self, 'read', d);
+    steps := 0;
+    n := d.Text.ParaCount;
+    closeAt := d.Text.ParaStart(40) + d.Text.ParaLength(40) - 8;
+    Step('typed first', TTyRichInsertText.Create(0, 'X'));
+    Step('a paragraph split before the contents', TTyRichInsertText.Create(2, #10));
+    closeAt := closeAt + 2;
+    Step('a paragraph split right after it', TTyRichInsertText.Create(closeAt, 'ab' + #10 + 'cd'));
+    Step('the paragraph after it joined', TTyRichDelete.Create(closeAt + 2, 1));
+    Step('the paragraph before it joined', TTyRichDelete.Create(d.Text.ParaStart(1) - 1, 1));
+    // a whole entry's link copied out of it, after the contents
+    p := d.Text.ParaStart(10);
+    Step('an entry''s link copied', TTyRichCopy.Create(p, d.Text.ParaLength(10), d.Text.Length));
+    // the whole contents copied to the end, then moved to the start
+    p := 0;
+    while not (d.ObjectAt(p) is TTyRichFieldMark) do Inc(p);
+    len := d.FieldPartner(p) + 1 - p;
+    Step('the contents copied', TTyRichCopy.Create(p, len, d.Text.Length));
+    Step('the contents moved', TTyRichMove.Create(d.Text.Length - len, len, 0));
+    src := TyRichReadRtfFragment(BytesOf(LinkRtf), ends);
+    Step('a link pasted', TTyRichInsertFragment.Create(d.Text.ParaStart(d.Text.ParaCount - 1), src, ends));
+    Step('a table before it', TTyRichInsertTable.Create(0, 2, 2));
+    Step('a row of it deleted', TTyRichDeleteRow.Create(0, 0));
+    f := TyDefaultCharFormat;
+    f.Style := [fsItalic];
+    Step('all italic', TTyRichSetCharFormat.Create(TyRichRange(0, d.Text.Length), [cffItalic], f));
+    pf := TyDefaultParaFormat;
+    pf.SpaceAfter := 55;
+    Step('every paragraph spaced', TTyRichSetParaFormat.Create(0, d.Text.ParaCount - 1, [pffSpaceAfter], pf));
+    tally := Default(TTyRichReplaceTally);
+    cmd := TTyRichReplaceAllCommand.Create(d, 'X', 'x' + #10 + 'y', [rfoMatchCase]);
+    cmd.AllAtOnce := True;
+    cmd.Tally := @tally;
+    Step('a replace', cmd);
+    // the whole contents deleted
+    p := 0;
+    while (p < d.Text.Length) and not (d.ObjectAt(p) is TTyRichFieldMark) do Inc(p);
+    Step('a field deleted', TTyRichDelete.Create(p, d.FieldPartner(p) - p + 1));
+    for i := 1 to steps do d.Undo;
+    CheckDepths(Self, 'all undone', d);
+    AssertTrue('all undone: the file', SameBytes(b, SaveOut(d)));
+  finally
+    d.Free;
+  end;
+  // random edits the document allows, then all undone
+  FSeed := 7;
+  d := LoadDoc(b, False);
+  try
+    steps := 0;
+    for i := 1 to 300 do
+    begin
+      p := NextRandom(d.Text.Length + 1);
+      // (half the time a place right beside a field: out of each field around it, to one of its ends)
+      if NextRandom(2) = 0 then
+        while d.FieldRangeAt(p, a, z) do
+          if NextRandom(2) = 0 then p := a else p := z + 1;
+      case NextRandom(3) of
+        0: if d.Execute(TTyRichInsertText.Create(p, 'z')) then Inc(steps);
+        1: if d.Execute(TTyRichInsertText.Create(p, #10)) then Inc(steps);
+      else
+        begin
+          len := NextRandom(40) + 1;
+          if p + len > d.Text.Length then len := d.Text.Length - p;
+          if (len > 0) and d.Execute(TTyRichDelete.Create(p, len)) then Inc(steps);
+        end;
+      end;
+      t := DepthsWrong(d);
+      if t <> '' then Fail(Format('random edit %d: %s', [i, t]));
+    end;
+    AssertTrue(Format('edits made: %d', [steps]), steps > 50);
+    for i := 1 to d.UndoDepth do d.Undo;
+    CheckDepths(Self, 'random edits undone', d);
+    AssertTrue('random edits undone: the file', SameBytes(b, SaveOut(d)));
+  finally
+    d.Free;
+  end;
+  AssertTrue(n > 0);
+end;
+
+{ How deep a place is, the field around it and a mark's partner - read from the place's own
+  paragraph and the field's paragraphs, not the whole document: in a table of contents in the
+  middle of a large lazily read file only the intervals of the contents are parsed. }
+procedure TTyRichFieldsTest.TestTheFieldAroundAPlaceAndAMarksPartner;
+var
+  d: TTyRichDocument;
+  a, z, p, tocOpen, tocClose: TTyRichPos;
+  load: TTyRtfLoad;
+  s: RawByteString;
+  b: TBytes;
+  parses, spans, i: Integer;
+  tocStart, tocStop: Int64;
+begin
+  d := LoadDoc(BytesOf(LinkRtf), False);
+  try
+    AssertEquals('before the open mark', 0, d.FieldDepthAt(LinkOpen));
+    AssertEquals('after it', 1, d.FieldDepthAt(LinkOpen + 1));
+    AssertEquals('before the close mark', 1, d.FieldDepthAt(LinkClose));
+    AssertEquals('after it', 0, d.FieldDepthAt(LinkClose + 1));
+    AssertTrue('the field around 5', d.FieldRangeAt(LinkOpen + 2, a, z));
+    AssertEquals('its open mark', LinkOpen, a);
+    AssertEquals('its close mark', LinkClose, z);
+    AssertFalse('none before it', d.FieldRangeAt(LinkOpen, a, z));
+    AssertEquals('none: -1', -1, a);
+    AssertEquals('the open mark''s partner', LinkClose, d.FieldPartner(LinkOpen));
+    AssertEquals('the close mark''s partner', LinkOpen, d.FieldPartner(LinkClose));
+    AssertEquals('no mark there', -1, d.FieldPartner(LinkOpen + 1));
+  finally
+    d.Free;
+  end;
+  d := LoadDoc(Fixture('hand-word-toc.rtf'), False);
+  try
+    tocOpen := d.Text.ParaStart(1) + 3;
+    tocClose := d.Text.ParaStart(40) + d.Text.ParaLength(40) - 9;
+    AssertTrue('its open mark', d.ObjectAt(tocOpen) is TTyRichFieldMark);
+    AssertEquals('the contents'' partner', tocClose, d.FieldPartner(tocOpen));
+    AssertEquals('and back', tocOpen, d.FieldPartner(tocClose));
+    // inside an entry's link: the link
+    p := d.Text.ParaStart(10) + 2;
+    AssertEquals('two deep', 2, d.FieldDepthAt(p));
+    AssertTrue('the link', d.FieldRangeAt(p, a, z));
+    AssertEquals('the link''s open mark', d.Text.ParaStart(10), a);
+    AssertEquals('the link''s close mark', d.Text.ParaStart(10) + d.Text.ParaLength(10) - 1, z);
+    // at an entry's end, after its link: the contents
+    p := d.Text.ParaStart(10) + d.Text.ParaLength(10);
+    AssertTrue('the contents', d.FieldRangeAt(p, a, z));
+    AssertEquals('the contents'' open mark', tocOpen, a);
+    AssertEquals('the contents'' close mark', tocClose, z);
+    for i := 2 to 40 do
+      AssertEquals(Format('paragraph %d starts inside it', [i]), 1, d.ParaFieldDepth(i));
+    AssertEquals('the one after it does not', 0, d.ParaFieldDepth(41));
+  finally
+    d.Free;
+  end;
+  // the cost: contents in the middle of a large file, read lazily
+  s := TocRtf(1500, 6000);
+  b := BytesOf(s);
+  tocStart := Pos(Rtf('{|field|fldedit'), s) - 1;
+  tocStop := tocStart + Length(FieldGroup(s, 1));
+  d := LoadDoc(b, False);
+  try
+    load := TyRichRtfLoadOf(d);
+    load.MaxResidentIntervals := MaxInt;
+    spans := 0;
+    for i := 0 to load.IntervalCount - 1 do
+      if (load.IntervalStart(i) < tocStop) and
+         ((i = load.IntervalCount - 1) or (load.IntervalStart(i + 1) > tocStart)) then
+        Inc(spans);
+    p := d.Text.ParaStart(6000 + 750) + 3;
+    parses := load.ParseCount;
+    AssertTrue('inside the contents', d.FieldRangeAt(p, a, z));
+    AssertTrue('the link around it', d.FieldRangeAt(z + 1, a, z));
+    AssertEquals('the contents', 6000, d.Text.ParaOfPos(a));
+    AssertTrue(Format('only the contents'' intervals parsed: %d of %d (%d span it)',
+      [load.ParseCount - parses, load.IntervalCount, spans]), load.ParseCount - parses <= spans + 1);
+    AssertTrue('a file of many intervals', load.IntervalCount > 2 * spans);
+  finally
+    d.Free;
+  end;
+end;
+
+{ A refusal names its reason: the document's (ChangeRefusal), the engine's (ETyRichRefused's
+  Field), a composite's part, a table edit's (rtrInField) and a built-in command's
+  (TyRichCommandRefusal). }
+procedure TTyRichFieldsTest.TestARefusalSaysItIsAField;
+var
+  d: TTyRichDocument;
+  comp: TTyRichCompositeCommand;
+  cmd: TTyRichCommand;
+  field: Boolean;
+  f: TTyCharFormat;
+begin
+  d := LoadDoc(BytesOf(LinkRtf), False);
+  try
+    AssertTrue('an insert inside', d.ChangeRefusal(LinkOpen + 1, 0) = rcrField);
+    AssertTrue('a delete of one mark', d.ChangeRefusal(LinkOpen, 1) = rcrField);
+    AssertTrue('a delete of the whole field', d.ChangeRefusal(LinkOpen, LinkClose - LinkOpen + 1) = rcrNone);
+    // the engine
+    field := False;
+    try
+      d.Execute(TTyRichCopy.Create(LinkOpen - 1, 3, d.Text.ParaStart(1)));
+    except
+      on E: ETyRichRefused do field := E.Field and not E.FixedRow;
+    end;
+    AssertTrue('half a field copied: refused as a field', field);
+    // a part of a composite
+    comp := TTyRichCompositeCommand.Create;
+    comp.Add(TTyRichInsertText.Create(0, 'a'));
+    comp.Add(TTyRichInsertText.Create(LinkOpen + 2, 'b'));
+    field := False;
+    try
+      d.Execute(comp);
+    except
+      on E: ETyRichRefused do field := E.Field and not E.FixedRow;
+    end;
+    AssertTrue('a composite''s part: refused as a field', field);
+    AssertEquals('nothing kept', 0, d.UndoDepth);
+    AssertTrue('a table', d.TableEditRefusal(TyRichTableEdit(rtkInsertTable, LinkOpen + 1, 0, 2, 2)) = rtrInField);
+    f := TyDefaultCharFormat;
+    cmd := TTyRichSetCharFormat.Create(TyRichRange(LinkOpen + 1, 2), [cffBold], f);
+    try
+      AssertFalse('a format of the result', cmd.CanExecute(d));
+      AssertTrue('a format of the result: a field''s', TyRichCommandRefusal(d, cmd) = rcrField);
+    finally
+      cmd.Free;
+    end;
+    cmd := TTyRichDelete.Create(LinkClose, 1);
+    try
+      AssertTrue('a delete of the close mark: a field''s', TyRichCommandRefusal(d, cmd) = rcrField);
+    finally
+      cmd.Free;
+    end;
+  finally
+    d.Free;
+  end;
+end;
+
+{ The open mark keeps the field's group as the file has it and the \uc it was read under; the
+  close mark keeps nothing; a clone is the same mark and shares the bytes; a mark is never
+  inserted or replaced on its own. }
+procedure TTyRichFieldsTest.TestTheOpenMarkKeepsTheFieldsBytes;
+var
+  d: TTyRichDocument;
+  o, c, k: TTyRichFieldMark;
+  n1, n2: Int64;
+begin
+  d := LoadDoc(BytesOf(LinkRtf), False);
+  try
+    o := d.ObjectAt(LinkOpen) as TTyRichFieldMark;
+    c := d.ObjectAt(LinkClose) as TTyRichFieldMark;
+    AssertTrue('open', o.Kind = rfmOpen);
+    AssertTrue('close', c.Kind = rfmClose);
+    AssertRaw(Self, 'its bytes', FieldGroup(LinkRtf, 1), o.Bytes);
+    AssertEquals('the close one keeps none', 0, Length(c.Bytes));
+    AssertEquals('one field', o.Id, c.Id);
+    AssertEquals('where its group is in the file', Pos(Rtf('{|field'), LinkRtf) - 1, o.Id);
+    AssertEquals('read under \uc1', 1, o.RawUc);
+    k := o.Clone as TTyRichFieldMark;
+    try
+      AssertTrue('a clone: the same kind', k.Kind = rfmOpen);
+      AssertEquals('the same field', o.Id, k.Id);
+      AssertTrue('the same bytes, shared', o.SharedData(n1) = k.SharedData(n2));
+      AssertEquals('counted as its bytes', Length(o.Bytes), n1);
+    finally
+      k.Free;
+    end;
+    n1 := TTyRichFieldMark.NewId;
+    n2 := TTyRichFieldMark.NewId;
+    AssertTrue('an identity of its own for a mark made here', (n1 < 0) and (n2 < n1));
+    // (the command holds the mark, and lets go of it when it is refused)
+    k := TTyRichFieldMark.Create(rfmOpen, TTyRichFieldMark.NewId, '{}');
+    AssertFalse('a mark alone: refused', d.Execute(TTyRichInsertObject.Create(0, k)));
+    AssertEquals('nothing kept', 0, d.UndoDepth);
+    AssertTrue('the file', SameBytes(BytesOf(LinkRtf), SaveOut(d)));
   finally
     d.Free;
   end;

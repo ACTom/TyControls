@@ -329,6 +329,8 @@ resourcestring
   rsRichEditRefusedPlainPaste = 'A plain text document takes only text: a picture or formatted text cannot be pasted into it.';
   rsRichEditRefusedMemory     = 'There is not enough memory to paste this.';
   rsRichEditRefusedPasteRows  = 'Table rows cannot be pasted over rows of a table: paste them outside the table, or into a cell as its text.';
+  { A field's stored result (TTyRichFieldMark): the engine raises it too. }
+  rsRichEditRefusedField      = 'This text is a field''s result (a link, a page number, a table of contents). It cannot be changed here; select the whole field to delete it.';
   { A picture inserted from code (TTyCustomRichEdit.InsertPictureFromFile and the other
     insert methods) that cannot go in. %s is the system's message. }
   rsRichEditRefusedPlainPicture = 'A plain text document cannot hold a picture.';

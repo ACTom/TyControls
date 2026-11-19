@@ -290,6 +290,8 @@ begin
   if A is TTyRichOpaque then
     Exit(SameRaw(TTyRichOpaque(A).Bytes, TTyRichOpaque(B).Bytes) and
       SameRaw(TTyRichOpaque(A).DisplayText, TTyRichOpaque(B).DisplayText));
+  // the mark at either edge of a field shown as text: the open one keeps the field's bytes
+  if not (A is TTyRichPicture) then Exit(A.DataBytes = B.DataBytes);
   pa := A as TTyRichPicture;
   pb := B as TTyRichPicture;
   Result := (pa.PictureFormat = pb.PictureFormat) and (pa.WidthTwips = pb.WidthTwips) and
@@ -380,19 +382,37 @@ end;
   place in its paragraph AK (the paragraph the paste went into): '' when B holds the range -
   every paragraph's text, every character's format and object, the format of every paragraph
   pasted with its mark, and the cells of rows pasted as rows. }
+{ The character at APos goes out with a range [ARangeStart, ARangeStop) of ADoc: any but a
+  field's mark, and a mark only with its partner (a copy writes a field whose two marks are in
+  it, and of one that is not the text alone). }
+function RangeKeeps(ADoc: TTyRichDocument; APos, ARangeStart, ARangeStop: TTyRichPos): Boolean;
+var
+  o: TTyRichObject;
+  q: TTyRichPos;
+begin
+  o := ADoc.ObjectAt(APos);
+  if not (o is TTyRichFieldMark) then Exit(True);
+  q := ADoc.FieldPartner(APos);
+  if TTyRichFieldMark(o).Kind = rfmOpen then Result := (q > APos) and (q < ARangeStop)
+  else Result := (q >= ARangeStart) and (q < APos);
+end;
+
 function PasteDiff(A: TTyRichDocument; AFrom, ALen: TTyRichPos; B: TTyRichDocument; AK: Integer;
-  AHead: Integer; ASaved: Boolean = False): string;
+  AHead: Integer; ASaved: Boolean = False; AResultsAsBytes: Boolean = False): string;
 var
   R: TTyRichCopyRange;
-  k, j, i, bk, off: Integer;
-  c0, c1: TTyRichPos;
-  ta, tb: RawByteString;
+  k, j, i, bk, off, m, n: Integer;
+  c0, c1, rs, re: TTyRichPos;
+  ta, tb, tf: RawByteString;
   sa, sb: TCharSpots;
   ca, cb: TTyRichCell;
   fa, fb: TTyCharFormat;
+  kept: array of Integer;
 begin
   R := TyRichCopyRange(A, AFrom, ALen);
   if R.Empty then Exit('');
+  rs := A.Text.ParaStart(R.FirstPara) + R.FromChar;
+  re := A.Text.ParaStart(R.LastPara) + R.ToChar + Ord(R.LastSeparator);
   // rows pasted after text: the text kept a paragraph of its own
   if (AHead > 0) and not R.InOneCell and (PastedCell(A, R, R.FirstPara) <> nil) then
   begin
@@ -409,20 +429,33 @@ begin
     if k = R.FirstPara then c0 := R.FromChar;
     if k = R.LastPara then c1 := R.ToChar;
     if j = 0 then off := AHead else off := 0;
-    ta := ParaText(A, k);
-    ta := Copy(ta, CharOffset(ta, c0) + 1, CharOffset(ta, c1) - CharOffset(ta, c0));
+    // the characters the range takes (RangeKeeps), and their text
+    tf := ParaText(A, k);
+    ta := '';
+    kept := nil;
+    SetLength(kept, c1 - c0);
+    n := 0;
+    for i := c0 to c1 - 1 do
+      if RangeKeeps(A, A.Text.ParaStart(k) + i, rs, re) then
+      begin
+        kept[n] := i;
+        Inc(n);
+        ta := ta + Copy(tf, CharOffset(tf, i) + 1, CharOffset(tf, i + 1) - CharOffset(tf, i));
+      end;
+    SetLength(kept, n);
     tb := ParaText(B, bk);
     tb := Copy(tb, CharOffset(tb, off) + 1, Length(ta));
     if not SameRaw(ta, tb) then
       Exit(Format('paragraph %d: text <%s> / <%s>', [k, Shown(ta), Shown(tb)]));
-    if c1 > c0 then
+    if n > 0 then
     begin
       sa := SpotsOf(A, k);
       sb := SpotsOf(B, bk);
-      for i := c0 to c1 - 1 do
+      for m := 0 to n - 1 do
       begin
+        i := kept[m];
         fa := sa[i].Format;
-        fb := sb[i - c0 + off].Format;
+        fb := sb[m + off].Format;
         // a run that names no font is shown in A's default one, which the paste names
         if fa.FontName = '' then
         begin
@@ -433,9 +466,13 @@ begin
         { Saved: a font with no charset of its own is written with the one its text calls for
           (the writer's rule for a document of its own), and reads back with it. }
         if ASaved and (fa.Charset = DEFAULT_CHARSET) then fa.Charset := fb.Charset;
+        { AResultsAsBytes: a field's result was written as the field's bytes, which name the
+          source file's header entries - in another document's header they name others (its
+          text and its marks are compared all the same) }
+        if AResultsAsBytes and (A.FieldDepthAt(A.Text.ParaStart(k) + i) > 0) then Continue;
         if not fa.Equals(fb) then
           Exit(Format('paragraph %d character %d: %s / %s', [k, i, Describe(fa), Describe(fb)]));
-        if not SameObject(sa[i].Obj, sb[i - c0 + off].Obj) then
+        if not SameObject(sa[i].Obj, sb[m + off].Obj) then
           Exit(Format('paragraph %d character %d: the object', [k, i]));
       end;
     end;
@@ -528,6 +565,20 @@ begin
 end;
 
 // The first opaque object of ADoc's paragraphs (nil none).
+function PictureCount(ADoc: TTyRichDocument): Integer;
+var
+  k, i: Integer;
+  runs: TTyRunArray;
+begin
+  Result := 0;
+  for k := 0 to ADoc.Text.ParaCount - 1 do
+  begin
+    runs := ADoc.RunsOf(k);
+    for i := 0 to High(runs) do
+      if runs[i].Obj is TTyRichPicture then Inc(Result);
+  end;
+end;
+
 function FirstOpaque(ADoc: TTyRichDocument): TTyRichOpaque;
 var
   k, i: Integer;
@@ -612,7 +663,6 @@ var
   all: TBytes;
   body: RawByteString;
   b: TTyRichDocument;
-  o: TTyRichOpaque;
   what: string;
   k: Integer;
 begin
@@ -625,17 +675,19 @@ begin
   ATest.AssertEquals(AWhat + ': no underline colour', 0, PosRaw(BS + 'ulc', body));
   ATest.AssertEquals(AWhat + ': no border colour', 0, PosRaw(BS + 'brdrcf', body));
   ATest.AssertEquals(AWhat + ': no cell shading', 0, PosRaw(BS + 'clcbpat', body));
-  ATest.AssertTrue(AWhat + ': the field''s instruction', PosRaw(BS + 'fldinst HYPERLINK "http://x"', body) > 0);
-  ATest.AssertTrue(AWhat + ': its result as Unicode', PosRaw(BS + 'fldrslt ' + BS + 'u20013?' + BS +
-    'u25991?', body) > 0);
+  { A field shown as its result goes into another file as that result's text: its marks,
+    whose bytes name the source's entries, are left out (the field is not made again around
+    its content). }
+  ATest.AssertEquals(AWhat + ': no field', 0, PosRaw(BS + 'field', body));
+  ATest.AssertTrue(AWhat + ': its result as Unicode', PosRaw(BS + 'u20013?' + BS + 'u25991?', body) > 0);
   ATest.AssertTrue(AWhat + ': the border kept', PosRaw(BS + 'brdrb', body) > 0);
   ATest.AssertTrue(AWhat + ': the cell''s border kept', PosRaw(BS + 'clbrdrb', body) > 0);
   b := LoadDoc(all, True);
   try
-    o := FirstOpaque(b);
-    ATest.AssertNotNull(AWhat + ': the field read back', o);
-    ATest.AssertTrue(AWhat + ': its text is Chinese, not "' + Shown(o.DisplayText) + '"',
-      SameRaw(o.DisplayText, U($4E2D) + U($6587)));
+    ATest.AssertNull(AWhat + ': no object read back', FirstOpaque(b));
+    k := 0;
+    while (k < b.Text.ParaCount) and (PosRaw(U($4E2D) + U($6587), ParaText(b, k)) = 0) do Inc(k);
+    ATest.AssertTrue(AWhat + ': its result read back, Chinese', k < b.Text.ParaCount);
     ATest.AssertFalse(AWhat + ': ' + what, AnyTableNumber(b, what));
     k := 0;
     while (k < b.Text.ParaCount) and (b.CellAt(k) = nil) do Inc(k);
@@ -733,14 +785,17 @@ begin
     AssertEquals('the field''s bytes twice', 2, CountRaw(Field, body));
     b := LoadDoc(all, True);
     try
+      // (each field is its result between its two marks)
       n := 0;
       for k := 0 to b.Text.ParaCount - 1 do
       begin
         runs := b.RunsOf(k);
-        if (Length(runs) > 1) and (runs[1].Obj is TTyRichOpaque) then
+        if (Length(runs) > 1) and (runs[1].Obj is TTyRichFieldMark) then
         begin
           Inc(n);
-          AssertTrue('its text', SameRaw(TTyRichOpaque(runs[1].Obj).DisplayText, U($4E2D) + U($6587)));
+          // ("plain " before it)
+          AssertTrue('its text', SameRaw(Copy(ParaText(b, k), 7, 12),
+            U($FFFC) + U($4E2D) + U($6587) + U($FFFC)));
         end;
       end;
       AssertEquals('two fields', 2, n);
@@ -996,7 +1051,6 @@ var
   filtered: Boolean;
   all: TBytes;
   body: RawByteString;
-  o: TTyRichOpaque;
   cf: TTyCharFormat;
 begin
   d := LoadDoc(RawBytes(ATgt), False);
@@ -1017,14 +1071,13 @@ begin
       ATest.AssertTrue(AWhat + ': Wingdings in the header', PosRaw('Wingdings', StrOfBytes(all)) > 0);
     ATest.AssertEquals(AWhat + ': no \''xx of the source''s font: ' + Shown(body), 0,
       PosRaw(Esc('`''d6`''d0'), body));
+    // (the field's marks name the source's font: they are left out, its result goes as text)
     ATest.AssertTrue(AWhat + ': the field''s text as Unicode: ' + Shown(body),
-      PosRaw(Esc('`fldrslt `u20013?`u25991?'), body) > 0);
+      PosRaw(Esc('`u20013?`u25991?'), body) > 0);
     b := LoadDoc(all, True);
     try
-      o := FirstOpaque(b);
-      ATest.AssertNotNull(AWhat + ': the field read back', o);
-      ATest.AssertTrue(AWhat + ': its text is Chinese, not "' + Shown(o.DisplayText) + '"',
-        SameRaw(o.DisplayText, U($4E2D) + U($6587)));
+      ATest.AssertTrue(AWhat + ': its text read back is Chinese, not "' + Shown(ParaText(b, 1)) + '"',
+        PosRaw(U($4E2D) + U($6587), ParaText(b, 1)) > 0);
     finally
       b.Free;
     end;
@@ -1055,15 +1108,14 @@ end;
 
 { a field's result of bare \'xx bytes - no index word in the field - is decoded by
   the source's code page (its font has no charset), or after \plain by its default font. Into
-  a file of another code page or default font such bytes are another text: the field is made
-  again from what it showed. }
+  a file of another code page or default font such bytes are another text: the result goes as
+  the text it showed (the field's marks are left out). }
 procedure TTyRichEditPasteTest.TestAFieldsBareBytesBetweenCodePagesAndDefaultFonts;
 var
   d, b: TTyRichDocument;
   filtered: Boolean;
   all: TBytes;
   body: RawByteString;
-  o: TTyRichOpaque;
 begin
   { \plain over ASCII in a symbol font: the default font Wingdings shows J as U+F04A; in the
     target's Times it would be a J }
@@ -1076,9 +1128,9 @@ begin
     AssertEquals('not the bare J: ' + Shown(body), 0, PosRaw(Esc('`plain J'), body));
     b := LoadDoc(all, True);
     try
-      o := FirstOpaque(b);
-      AssertNotNull('the field read back', o);
-      AssertTrue('the symbol it showed, not "' + Shown(o.DisplayText) + '"', SameRaw(o.DisplayText, U($F04A)));
+      // (the field's result goes as its text: the symbol)
+      AssertTrue('the symbol it showed, not "' + Shown(ParaText(b, 1)) + '"',
+        PosRaw(U($F04A), ParaText(b, 1)) > 0);
     finally
       b.Free;
     end;
@@ -1138,11 +1190,12 @@ begin
       for k := 0 to b.Text.ParaCount - 1 do
       begin
         runs := b.RunsOf(k);
+        // (each field is its result between its two marks)
         for i := 0 to High(runs) do
-          if runs[i].Obj is TTyRichOpaque then
+          if (runs[i].Obj is TTyRichFieldMark) and (TTyRichFieldMark(runs[i].Obj).Kind = rfmOpen) then
           begin
             Inc(n);
-            AssertTrue('its text', SameRaw(TTyRichOpaque(runs[i].Obj).DisplayText, U($4E2D) + U($6587)));
+            AssertTrue('its text', PosRaw(U($FFFC) + U($4E2D) + U($6587) + U($FFFC), ParaText(b, k)) > 0);
           end;
         if ParaText(b, k) = 'last' then
           AssertEquals('the added font read back', 'Georgia',
@@ -1165,8 +1218,17 @@ begin
     AssertTrue('a filter', filtered);
     body := SavedBody(d, all);
     AssertEquals('the file''s field kept: ' + Shown(body), 2, CountRaw(Esc(Field), body));
-    AssertEquals('the field naming the added font made again', 0, PosRaw(Esc('`fldrslt`f2'), body));
-    AssertTrue('... from its text', PosRaw(Esc('`fldinst HYPERLINK "http://g"}{`fldrslt g}'), body) > 0);
+    // (a field whose bytes name a font the file lacks goes as its result's text)
+    AssertEquals('the field naming the added font left out', 0, PosRaw(Esc('`fldrslt`f2'), body));
+    AssertEquals('... its marks with it', 0, PosRaw('http://g', body));
+    b := LoadDoc(all, True);
+    try
+      k := 0;
+      while (k < b.Text.ParaCount) and (ParaText(b, k) <> 'g g h') do Inc(k);
+      AssertTrue('... its text kept', k < b.Text.ParaCount);
+    finally
+      b.Free;
+    end;
   finally
     d.Free;
   end;
@@ -1214,9 +1276,9 @@ begin
   end;
 end;
 
-{ a field made again keeps the pictures of its result (a linked image, a picture
-  with a hyperlink): after its text, as they are - one that is the whole result, and one
-  after text with its shape and non-shape forms. }
+{ the pictures of a field's result (a linked image, a picture with a hyperlink) go into
+  another file with the result, which is the field's text there (its marks are left out):
+  one that is the whole result, and one after text with its shape and non-shape forms. }
 procedure TTyRichEditPasteTest.TestAFieldMadeAgainKeepsItsResultsPictures;
 const
   Pic = '{`pict`pngblip`picwgoal1000`pichgoal1000 89504e470d0a1a0a}';
@@ -1226,7 +1288,6 @@ var
   filtered: Boolean;
   all: TBytes;
   body: RawByteString;
-  o: TTyRichOpaque;
 begin
   d := LoadDoc(RawBytes(TgtIdx), False);
   try
@@ -1234,16 +1295,14 @@ begin
       '`pard`f0 a {`field{`*`fldinst`f0 INCLUDEPICTURE "http://x/y.png"}{`fldrslt ' + Pic + '}} b ' +
       '{`field{`*`fldinst HYPERLINK "http://z"}{`fldrslt`f1`cf1 go' + Shp + '}} c`par}')), filtered));
     body := SavedBody(d, all);
-    AssertTrue('the picture that is the result: ' + Shown(body),
-      PosRaw(Esc('`fldinst INCLUDEPICTURE "http://x/y.png"}{`fldrslt ' + Pic + '}}'), body) > 0);
-    AssertTrue('the pictures after the text',
-      PosRaw(Esc('`fldinst HYPERLINK "http://z"}{`fldrslt go' + Shp + '}}'), body) > 0);
-    AssertEquals('no \f1 in a result', 0, PosRaw(Esc('`fldrslt`f1'), body));
+    AssertTrue('the picture that is the result: ' + Shown(body), PosRaw(Esc(Pic), body) > 0);
+    AssertTrue('the pictures after the text', PosRaw(Esc('go' + Shp), body) > 0);
+    AssertEquals('no field', 0, PosRaw(Esc('`field'), body));
+    AssertEquals('no \f1 of the source', 0, PosRaw(Esc('`f1`cf1'), body));
     b := LoadDoc(all, True);
     try
-      o := FirstOpaque(b);
-      AssertNotNull('read back', o);
-      AssertTrue('a picture in it', PosRaw(Esc('`pngblip'), o.Bytes) > 0);
+      AssertNull('read back: no object of bytes', FirstOpaque(b));
+      AssertEquals('read back: two pictures', 2, PictureCount(b));
     finally
       b.Free;
     end;
@@ -2458,7 +2517,9 @@ begin
         c := LoadDoc(SaveOut(b), True);
         // (the last paragraph of the paste is the new document's own one)
         last := a.Text.ParaCount - 1;
-        dd := PasteDiff(a, 0, a.Text.Length, c, 0, 0, True);
+        // (pasted with no filter: a field's bytes go along as they are, into a document whose
+        // header names other entries)
+        dd := PasteDiff(a, 0, a.Text.Length, c, 0, 0, True, True);
         if dd <> '' then Fail(sr.Name + ': ' + dd);
         AssertTrue(sr.Name + ': paragraphs', c.Text.ParaCount >= last + 1);
         for k := 0 to last - 1 do
@@ -3310,7 +3371,8 @@ var
   all: TBytes;
   body: RawByteString;
 begin
-  // as the result of a field made again (INCLUDEPICTURE in \f1)
+  // as the result of a field (INCLUDEPICTURE in \f1): a field shown as its result goes into
+  // another file as that result, the picture, which goes as it goes alone
   d := LoadDoc(RawBytes(Esc(Tgt)), False);
   try
     AssertTrue('pasted', PasteAcross(d, d.Text.ParaStart(1), RawBytes(Esc(H +
@@ -3322,7 +3384,7 @@ begin
     AssertEquals('no bytes of the source''s code page: ' + Shown(body), 0, PosRaw(Esc('`''d6'), body));
     AssertEquals('...no properties group', 0, PosRaw('picprop', body));
     AssertTrue('the image kept', PosRaw('pngblip', body) > 0);
-    AssertTrue('the other picture too', PosRaw('wmetafile8', body) > 0);
+    AssertEquals('no field', 0, PosRaw('INCLUDEPICTURE', body));
   finally
     d.Free;
   end;

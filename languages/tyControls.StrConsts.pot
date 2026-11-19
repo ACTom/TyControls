@@ -801,6 +801,10 @@ msgstr ""
 msgid "Table rows cannot be pasted over rows of a table: paste them outside the table, or into a cell as its text."
 msgstr ""
 
+#: tycontrols.strconsts.rsricheditrefusedfield
+msgid "This text is a field's result (a link, a page number, a table of contents). It cannot be changed here; select the whole field to delete it."
+msgstr ""
+
 #: tycontrols.strconsts.rsricheditrefusedplainpicture
 msgid "A plain text document cannot hold a picture."
 msgstr ""

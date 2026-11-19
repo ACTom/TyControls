@@ -30,6 +30,16 @@ unit tyControls.RichEdit.RtfRead;
 // marks opaque) as one TTyRichOpaque character. And the file is cut into a header, one byte
 // range per paragraph and a trailer, which together are the file, so that a writer can put an
 // unchanged paragraph back exactly as it was read.
+//
+// A field ({\field{\*\fldinst ...}{\fldrslt ...}}: a hyperlink, a page number, a table of
+// contents) whose stored result can be shown is read as that result - text in its formats,
+// paragraphs, tabs, pictures, fields nested in it - between two TTyRichFieldMark characters;
+// the open mark keeps the field's whole group as the file has it. One function decides it
+// (TTyRtfParser.FieldShown), for the index scan and every parse alike; a field it does not
+// show (no result, a result that holds a table, a section break or a header, one nested too
+// deep, one the file never closes) is one TTyRichOpaque character as any block is. The fields
+// open where a paragraph begins are part of the state a snapshot keeps, so a parse that resumes
+// inside a long result reads what the whole parse reads.
 
 {$mode objfpc}{$H+}
 {$modeswitch advancedrecords}
@@ -98,7 +108,9 @@ type
 
   TTyRtfDest = (rdNormal, rdFontTable, rdFontEntry, rdColorTable, rdListTable, rdList,
     rdListLevel, rdOverrideTable, rdOverride, rdPict, rdShpPict, rdField, rdFieldResult, rdPn,
-    rdUpr, rdListText);
+    rdUpr, rdListText,
+    // a field whose result is read as content: its group (the result's group is rdNormal)
+    rdFieldShown);
   TTyRtfSlot = (sloNone, sloLoch, sloHich, sloDbch, sloOther);
   TTyRtfAbsorb = (absNone, absLast, absCurrent);
 
@@ -205,6 +217,8 @@ type
     CellIdx, RowMax: Integer;
     TableOpen, Nested: Boolean;
     RowNested: Boolean;          // the row being read holds a nested table
+    Fields: Integer;             // fields whose result is being read as content (open marks)
+    ParaFields: Integer;         // ... open where the current paragraph began
   end;
 
   // A snapshot: everything the parse depends on at a point between two tokens (with the
@@ -257,6 +271,7 @@ type
     TextStart: PtrInt;           // building: its UTF-8 in the parser's output (no separator)
     TextLen: Integer;
     ListText: UTF8String;        // building: its {\listtext} / {\pntext}, '' none
+    FieldDepth: Integer;         // fields open at its start (TTyRichFieldMark pairs)
   end;
 
   TTyRtfRowRec = record
@@ -429,6 +444,8 @@ type
     procedure ProcessByte(B: Byte);
     procedure EmitObject(AObj: TTyRichObject);
     procedure EmitOpaque(AStart, AStop: PtrInt; const ADisplay: UTF8String);
+    function FieldShown(AStart: PtrInt; out AStop: PtrInt): Boolean;
+    procedure EmitFieldMark(AKind: TTyRichFieldMarkKind; AStart, AStop: PtrInt);
     procedure PutOut(ACode: Cardinal);
     procedure PutField(ACode: Cardinal);
     procedure AddRun(AFormat: TTyCharFormatId; AObj: TTyRichObject);
@@ -851,6 +868,10 @@ function TyRichRtfTablesAgree(ASource, ATarget: TTyRichDocument): Boolean;
 // from its image (its \pict's other words go), and any other object (a footnote, a comment,
 // a shape, an embedded object, an equation) is left out - with its display text in its
 // place where it has one (only a field's result has one, and a field is made again).
+// A field shown as its result (TTyRichFieldMark) keeps its two marks where the tables agree
+// and its open mark's bytes name nothing the target's file lacks; otherwise both marks are
+// left out and the result goes as the content it is (its formats as above) - the field is
+// not made again around it.
 function TyRichFragmentFilterFor(ASource, ATarget: TTyRichDocument): TTyRichFragmentFilter;
 // ABytes (a fragment of a format's Extra, a row's definition, an object's bytes) hold a
 // control word whose number is an index into a table of the file's header: a font (\f, \af,
@@ -2496,7 +2517,7 @@ end;
 function TTyRtfParser.HandleDestination(AKw: Integer): Boolean;
 var
   content: Boolean;
-  start: PtrInt;
+  start, stop: PtrInt;
 begin
   Result := True;
   start := FS.GroupStart;
@@ -2586,6 +2607,14 @@ begin
         else SkipAndPop;
         Exit;
       end;
+    rdFieldShown:
+      begin
+        // its result is content like any (the group's end gives the field's group back);
+        // the instruction and the rest of the field's own groups make none
+        if AKw = kwDFldRslt then FS.Props.Dest := rdNormal
+        else SkipAndPop;
+        Exit;
+      end;
     rdShpPict:
       begin
         if AKw = kwDPict then
@@ -2660,7 +2689,19 @@ begin
       end;
     kwDField:
       begin
-        if content then EnsureBody;
+        if content then
+        begin
+          EnsureBody;
+          if FieldShown(start, stop) then
+          begin
+            // its result is read as content between two marks; the open mark keeps the
+            // group's bytes
+            EmitFieldMark(rfmOpen, start, stop);
+            BeginDest(rdFieldShown);
+            Inc(FS.Fields);
+            Exit;
+          end;
+        end;
         BeginDest(rdField);
         if FFieldNest = 0 then FFieldLen := 0;
         Inc(FFieldNest);
@@ -2832,6 +2873,12 @@ begin
         Dec(FFieldNest);
         if (FFieldNest = 0) and (FS.Props.Dest = rdNormal) then
           EmitOpaque(AOld.DestStart, FTokStop, Copy(FFieldText, 1, FFieldLen));
+      end;
+    rdFieldShown:
+      begin
+        // after its result: the close mark (its partner is known by where the group began)
+        Dec(FS.Fields);
+        EmitFieldMark(rfmClose, AOld.DestStart, FTokStop);
       end;
   end;
 end;
@@ -4214,6 +4261,142 @@ begin
   EmitObject(o);
 end;
 
+const
+  // fields nested deeper than this, counted from the body (a field in a field's result is one
+  // deeper), stay one object of their bytes
+  CRtfMaxShownFields = 8;
+
+function NameIs(ABuf: PByte; const T: TTyRtfToken; const AName: string): Boolean; inline;
+begin
+  Result := (T.NameLen = Length(AName)) and CompareMem(@ABuf[T.NameStart], PChar(AName), T.NameLen);
+end;
+
+{ THE decision whether the field whose group begins at AStart (its brace; its \field was just
+  read) is shown: its stored result read as the document's content between two field marks
+  (TTyRichFieldMark) - or kept as one object of its bytes, as before. Both the index scan and
+  every parse decide here, from the same state, so a lazy load and a whole one read the same
+  paragraphs; no other code decides it. AStop: where the group ends (after its closing brace),
+  -1 when the file ends first. One lexer pass over the group's bytes (nested fields' bytes
+  included: a field shown in a shown field decides again, over its own bytes only).
+  Shown when all of these hold:
+  - the group closes before the file ends, and its groups stay within the depth the reader
+    keeps (MaxDepth);
+  - it has a result (its \fldrslt group) with something in it: text, a character, a picture
+    (the field's instruction and data, its \*\fldinst and \*\datafield groups, are not that);
+  - nothing in the group is of a table (\trowd \cell \row \nestcell \nestrow \intbl, \itap
+    above 0), a section's (\sect, \sectd), or a header, footer, footnote or annotation group;
+  - no paragraph end in it (\par) when the field stands in a table cell;
+  - it nests, with the fields shown around it, no deeper than CRtfMaxShownFields. }
+function TTyRtfParser.FieldShown(AStart: PtrInt; out AStop: PtrInt): Boolean;
+var
+  lex: TTyRtfLexer;
+  t: TTyRtfToken;
+  depth, top, resultDepth, skipDepth, kw, p: Integer;
+  fieldAt: array[0..CRtfMaxShownFields + 1] of Integer;
+  first, inCell, content: Boolean;
+begin
+  Result := False;
+  AStop := -1;
+  FillChar(fieldAt, SizeOf(fieldAt), 0);
+  inCell := FS.Props.InTable or (FS.Props.Itap > 0) or (FS.CellIdx > 0);
+  lex.Init(FBuf, AStart, FLen);
+  depth := 0;
+  top := 0;               // fields open in the group (fieldAt: the depth each began at)
+  resultDepth := 0;       // inside the field's own result: the depth that result began at
+  skipDepth := 0;         // inside an instruction or data group: its depth
+  content := False;
+  first := False;
+  while lex.Next(t) do
+  begin
+    case t.Kind of
+      rtkGroupStart:
+        begin
+          Inc(depth);
+          // (the group the reader would only count: it could not read the field's end)
+          if FS.Depth - 1 + depth >= MaxDepth then Exit;
+          first := True;
+          Continue;
+        end;
+      rtkGroupEnd:
+        begin
+          if (top > 0) and (fieldAt[top - 1] = depth) then Dec(top);
+          if depth = resultDepth then resultDepth := 0;
+          if depth = skipDepth then skipDepth := 0;
+          Dec(depth);
+          if depth = 0 then
+          begin
+            AStop := t.Stop;
+            Exit(content);
+          end;
+        end;
+      rtkWord:
+        begin
+          kw := LookupWord(@FBuf[t.NameStart], t.NameLen);
+          case kw of
+            kwTrowd, kwCell, kwRow, kwNestCell, kwNestRow, kwIntbl, kwDHeaderFooter: Exit;
+            kwItap: if t.HasParam and (t.Param > 0) then Exit;
+            kwPar: if inCell then Exit;
+          end;
+          if NameIs(FBuf, t, 'sect') or NameIs(FBuf, t, 'sectd') or
+             (first and (NameIs(FBuf, t, 'footnote') or NameIs(FBuf, t, 'annotation'))) then
+            Exit;
+          if first then
+          begin
+            if kw = kwDField then
+            begin
+              if FS.Fields + top + 1 > CRtfMaxShownFields then Exit;
+              fieldAt[top] := depth;
+              Inc(top);
+            end
+            else if (kw = kwDFldRslt) and (depth = 2) and (resultDepth = 0) then
+              // the field's own result (a nested field's is inside it)
+              resultDepth := depth
+            else if ((kw = kwDFldInst) or NameIs(FBuf, t, 'datafield')) and (skipDepth = 0) then
+              skipDepth := depth;
+          end;
+          if (resultDepth > 0) and (skipDepth = 0) and not content then
+            case kw of
+              kwU, kwPar, kwLine..kwZwnbo, kwObjWord, kwDPict, kwDShpPict: content := True;
+            end;
+        end;
+      rtkText:
+        if (resultDepth > 0) and (skipDepth = 0) and not content then
+          for p := t.Start to t.Stop - 1 do
+            if not (FBuf[p] in [0, 10, 13]) then
+            begin
+              content := True;
+              Break;
+            end;
+      rtkHex, rtkBin:
+        if (resultDepth > 0) and (skipDepth = 0) then content := True;
+      rtkSymbol:
+        if (resultDepth > 0) and (skipDepth = 0) and (t.Value <> Ord('*')) then content := True;
+    end;
+    // (\* keeps a group's first word coming)
+    if not ((t.Kind = rtkSymbol) and (t.Value = Ord('*'))) then first := False;
+  end;
+end;
+
+{ A field mark, a character of the paragraph (counted alone by the scan). The open mark keeps
+  the field group's bytes [AStart, AStop) and the \uc in effect where it begins - the one its
+  bytes were read under; the close mark knows its field by where that group began. }
+procedure TTyRtfParser.EmitFieldMark(AKind: TTyRichFieldMarkKind; AStart, AStop: PtrInt);
+var
+  m: TTyRichFieldMark;
+begin
+  if Counting then
+  begin
+    EmitObject(nil);
+    Exit;
+  end;
+  if AKind = rfmOpen then
+    m := TTyRichFieldMark.Create(rfmOpen, AStart, Fragment(Range(AStart, AStop)), FS.Props.Uc)
+  else
+    m := TTyRichFieldMark.Create(rfmClose, AStart);
+  FObjects.Add(m);
+  EmitObject(m);
+end;
+
 procedure TTyRtfParser.EndParagraph(AKind: TTyRtfParaKind);
 var
   rec: ^TTyRtfParaRec;
@@ -4235,6 +4418,9 @@ begin
   rec^.TextLen := 0;
   rec^.Chars := FCurChars;
   rec^.Src := Range(FS.Boundary, FTok.Stop);
+  rec^.FieldDepth := FS.ParaFields;
+  // (the paragraph that begins next: as deep as the field marks so far leave it)
+  FS.ParaFields := FS.Fields;
   if not Counting then
   begin
     if FRunN = 0 then AddRun(CharFormatFor(rccLoch), nil);
@@ -5645,7 +5831,8 @@ begin
   g := GroupFor(ASrc, i);
   if i < 0 then Exit;
   ValueParts(g, i, cell, lt);
-  Result := TRtfBuild.MakeValue(FDoc, AIndex, g.Recs[i].Format, g.Recs[i].Runs, cell, lt);
+  Result := TRtfBuild.MakeValue(FDoc, AIndex, g.Recs[i].Format, g.Recs[i].Runs, cell, lt,
+    g.Recs[i].FieldDepth);
 end;
 
 // Sets the formats of the group's paragraphs that are still unparsed (found through their
@@ -5683,7 +5870,7 @@ begin
     Exit;
   end;
   ValueParts(AGroup, AIndex, cell, lt);
-  if TRtfBuild.SetParagraph(FDoc, j, rec^.Format, rec^.Runs, cell, lt) then
+  if TRtfBuild.SetParagraph(FDoc, j, rec^.Format, rec^.Runs, cell, lt, rec^.FieldDepth) then
   begin
     v := TRtfBuild.ParagraphValue(FDoc, j);
     TRtfBuild.HoldValue(FDoc, v);
@@ -5954,7 +6141,7 @@ var
 begin
   ValueParts(AGroup, AIndex, cell, lt);
   v := TRtfBuild.MakeValue(FDoc, APara, AGroup.Recs[AIndex].Format, AGroup.Recs[AIndex].Runs,
-    cell, lt);
+    cell, lt, AGroup.Recs[AIndex].FieldDepth);
   Result := v = AValue;
   TRtfBuild.ReleaseValue(FDoc, v);
 end;
@@ -6435,6 +6622,10 @@ type
     FLight: Boolean;
     FFonts: array of Integer;
     FColorCount: Integer;
+    { The field marks met so far whose field is open: kept (True) or left out with its
+      partner - the two marks of a field go along together or not at all. }
+    FMarks: array of Boolean;
+    FMarkN: Integer;
     function HasFont(ANum: Integer): Boolean;
     function ForeignWord(ABuf: PByte; const T: TTyRtfToken): Boolean;
     function Foreign(const ABytes: RawByteString; AText: Boolean): Boolean;
@@ -6900,6 +7091,28 @@ var
 begin
   AText := '';
   Result := AObj;
+  if AObj is TTyRichFieldMark then
+  begin
+    { A field shown as content keeps its marks only where its bytes mean the same - where the
+      header tables agree and they name nothing the target's file lacks; elsewhere the marks
+      are left out and its result goes along as the formatted text it is (making the field
+      again around its content is not done here). The close mark goes as its open mark went. }
+    if TTyRichFieldMark(AObj).Kind = rfmOpen then
+    begin
+      if FMarkN = Length(FMarks) then SetLength(FMarks, FMarkN * 2 + 4);
+      FMarks[FMarkN] := FLight and not Foreign(TTyRichFieldMark(AObj).Bytes, True);
+      if not FMarks[FMarkN] then Result := nil;
+      Inc(FMarkN);
+    end
+    else if FMarkN = 0 then
+      Result := nil
+    else
+    begin
+      Dec(FMarkN);
+      if not FMarks[FMarkN] then Result := nil;
+    end;
+    Exit;
+  end;
   if AObj is TTyRichOpaque then
   begin
     o := TTyRichOpaque(AObj);

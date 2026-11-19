@@ -1982,7 +1982,8 @@ var
 begin
   v1 := Visits(2000);
   v2 := Visits(4000);
-  AssertTrue(Format('once each: %d for 2000', [v1]), v1 <= 2000 + 2);
+  // (a field shown as its result is two objects, its marks)
+  AssertTrue(Format('once each: %d for 2000 fields', [v1]), v1 <= 2 * 2000 + 2);
   AssertTrue(Format('linear: %d for 2000, %d for 4000', [v1, v2]), v2 <= 2 * v1 + 4);
 end;
 

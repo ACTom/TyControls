@@ -405,6 +405,12 @@ const
       '{\pntext\f1\' + 'u8226\''a1\''f1\tab}y\par \pard after \' + 'u25991\''ce\''c4\par}'
   );
 
+{ The character at APos is a field's: one of its marks, or a character of its result. }
+function FieldChar(ADoc: TTyRichDocument; APos: TTyRichPos): Boolean;
+begin
+  Result := (ADoc.ObjectAt(APos) is TTyRichFieldMark) or (ADoc.FieldDepthAt(APos) > 0);
+end;
+
 function InlineName(AIndex: Integer): string;
 begin
   Result := 'inline ' + IntToStr(AIndex);
@@ -421,6 +427,8 @@ begin
   if A is TTyRichOpaque then
     Exit(SameRaw(TTyRichOpaque(A).Bytes, TTyRichOpaque(B).Bytes) and
       SameRaw(TTyRichOpaque(A).DisplayText, TTyRichOpaque(B).DisplayText));
+  // the mark at either edge of a field shown as text: the open one keeps the field's bytes
+  if not (A is TTyRichPicture) then Exit(A.DataBytes = B.DataBytes);
   pa := A as TTyRichPicture;
   pb := B as TTyRichPicture;
   Result := (pa.PictureFormat = pb.PictureFormat) and (pa.WidthTwips = pb.WidthTwips) and
@@ -1232,6 +1240,12 @@ begin
       begin
         d := LoadDoc(b, False);
         try
+          // (a paragraph whose mark is a field result's keeps its format: nothing to see)
+          if d.ParaEndsInField(k) then
+          begin
+            Inc(k, step);
+            Continue;
+          end;
           p := TyDefaultParaFormat;
           p.RightIndent := 77;
           SetPara(d, k, [pffRightIndent], p);
@@ -1254,9 +1268,10 @@ begin
           modelParas := SplitParas(AsParagraphs(ModelAsRichEditText(d)));
           AssertEquals(Format('%s paragraph %d: the control''s paragraphs', [names[i], k]),
             d.Text.ParaCount, Length(gotParas));
-          // the model cannot say what the control shows for a field, a footnote or a
-          // formula, and the control does not load WordPad's metafiles without a window
-          objects := (Pos('word-unknown', names[i]) > 0) or (Pos('wp-zh-picture', names[i]) > 0);
+          // the model cannot say what the control shows for a field (its marks), a footnote
+          // or a formula, and the control does not load WordPad's metafiles without a window
+          objects := (Pos('word-unknown', names[i]) > 0) or (Pos('wp-zh-picture', names[i]) > 0) or
+            (Pos('word-toc', names[i]) > 0);
           for j := 0 to High(gotParas) do
             if not objects and (j >= info.Stretches[0].FirstPara) and
                (j < info.Stretches[0].FirstPara + info.Stretches[0].ParaCount) then
@@ -1599,7 +1614,8 @@ begin
       end;
       AssertRaw(msg + ': its text', expected, ParaText(w, APara));
       pe := AFull.Formats.ParaFormat(AFull.ParaFormatOf(APara));
-      if AKind = ekParaFormat then pe.SpaceBefore := 77;
+      // (a paragraph whose mark is a field result's keeps its format)
+      if (AKind = ekParaFormat) and not AFull.ParaEndsInField(APara) then pe.SpaceBefore := 77;
       AssertTrue(Format('%s: its paragraph format %s / %s', [msg, DescribePara(pe),
         DescribePara(w.Formats.ParaFormat(w.ParaFormatOf(APara)))]),
         pe.Equals(w.Formats.ParaFormat(w.ParaFormatOf(APara))));
@@ -1623,7 +1639,10 @@ begin
           end
           else if c > mid then i := c - 1;
         e := so[i].Format;
-        if (AKind = ekCharFormat) and ((c < mid) or (len = 0)) then Include(e.Style, fsUnderline);
+        // (a field's marks and result keep their look)
+        if (AKind = ekCharFormat) and ((c < mid) or (len = 0)) and
+           not FieldChar(AFull, AFull.Text.ParaStart(APara) + i) then
+          Include(e.Style, fsUnderline);
         // (the optional hyphen before a character is that character's alone)
         if (AKind = ekInsert) and (c = mid) and (e.Extra.Count > 0) and
            SameRaw(e.Extra.Item(e.Extra.Count - 1), '\-') then
@@ -1732,6 +1751,8 @@ begin
         n := full.Text.ParaCount;
         for k := 0 to n - 1 do
         begin
+          // (a paragraph whose mark is a field result's keeps its format)
+          if full.ParaEndsInField(k) then Continue;
           d := LoadDoc(b, False);
           try
             p := TyDefaultParaFormat;
@@ -1753,7 +1774,15 @@ begin
             // the paragraphs of its table row; outside a table itself alone - also where
             // a group spans paragraphs (it is closed and opened again around the stretch)
             row := 0;
-            if cell = nil then row := 1
+            if full.ParaFieldDepth(k) > 0 then
+            begin
+              // a paragraph that begins inside a field's result: the stretch is from the
+              // paragraph where that field begins (a field's bytes are never cut)
+              j := k;
+              while full.ParaFieldDepth(j) > 0 do Dec(j);
+              row := k - j + 1;
+            end
+            else if cell = nil then row := 1
             else
               for j := 0 to n - 1 do
                 if (full.CellAt(j) <> nil) and (full.CellAt(j).Row = cell.Row) then Inc(row);
@@ -2477,8 +2506,11 @@ begin
   full := LoadDoc(b, True);
   try
     AssertEquals('seven paragraphs', 7, full.Text.ParaCount);
+    // (a field shown as its result: its open mark keeps the field's bytes)
     AssertEquals('a field under \uc2', 2, ObjectOf(full, 0).RawUc);
-    AssertRaw('its result is one character', ZhZhong, TTyRichOpaque(ObjectOf(full, 0)).DisplayText);
+    AssertRaw('its result is its text', 'a' + TyRichObjectChar + ZhZhong + TyRichObjectChar + 'b',
+      ParaText(full, 0));
+    AssertRaw('its bytes', Field, TTyRichFieldMark(ObjectOf(full, 0)).Bytes);
     AssertEquals('a block under \uc2', 2, ObjectOf(full, 1).RawUc);
     AssertEquals('a block in a group that set \uc1', 1, ObjectOf(full, 2).RawUc);
     AssertEquals('a block under \uc0', 0, ObjectOf(full, 3).RawUc);
@@ -2509,8 +2541,9 @@ begin
       o := SaveDoc(d, info);
       text := StretchText(o, info);
       AssertEquals('all seven rewritten', 7, info.RewrittenParas);
+      // (after a field written as its bytes the character format is written again)
       AssertTrue('the field between \uc2 and \uc1: ' + Shown(text),
-        PosRaw('Xa\uc2' + Field + '\uc1 b\par', text) > 0);
+        PosRaw('Xa\uc2' + Field + '\uc1\plain', text) > 0);
       AssertTrue('the block between \uc2 and \uc1: ' + Shown(text),
         PosRaw('Xc\uc2' + Block2 + '\uc1 d\par', text) > 0);
       AssertTrue('a block read under \uc1 as it is: ' + Shown(text),
@@ -2564,7 +2597,9 @@ begin
     AssertTrue('between \uc2 and \uc1: ' + Shown(text),
       PosRaw('a\uc2' + Field + '\uc1 b\uc2' + Pict + '\uc1\par', text) > 0);
     r := LoadDoc(o, True);
-    AssertRaw('read back', ParaText(d, 0), ParaText(r, 0));
+    // (a field's bytes read back as the field, its result between its two marks)
+    AssertRaw('read back', 'a' + TyRichObjectChar + ZhZhong + TyRichObjectChar + 'b' +
+      TyRichObjectChar, ParaText(r, 0));
   finally
     r.Free;
     d.Free;
@@ -3860,14 +3895,59 @@ end;
   first and last cut where the range cuts them), every character's format and object, the
   format of every paragraph taken as a paragraph (all but a last one taken without its
   separator), and the cells of a range that takes rows. }
+{ The character at APos goes out with a range [ARangeStart, ARangeStop) of ADoc: any but a
+  field's mark, and a mark only with its partner - a writer writes a field whose two marks are
+  in what it writes, and of one that is not the text alone. }
+function RangeKeeps(ADoc: TTyRichDocument; APos, ARangeStart, ARangeStop: TTyRichPos): Boolean;
+var
+  o: TTyRichObject;
+  q: TTyRichPos;
+begin
+  o := ADoc.ObjectAt(APos);
+  if not (o is TTyRichFieldMark) then Exit(True);
+  q := ADoc.FieldPartner(APos);
+  if TTyRichFieldMark(o).Kind = rfmOpen then Result := (q > APos) and (q < ARangeStop)
+  else Result := (q >= ARangeStart) and (q < APos);
+end;
+
+type
+  TOffsets = array of Integer;
+
+{ The characters [AFrom, ATo) of paragraph AIndex that a range keeps (RangeKeeps), their
+  offsets in it, and their text. }
+function KeptOfPara(ADoc: TTyRichDocument; AIndex: Integer; AFrom, ATo, ARangeStart,
+  ARangeStop: TTyRichPos; out AText: RawByteString): TOffsets;
+var
+  i, n: Integer;
+  t, txt: RawByteString;
+  ps: TTyRichPos;
+begin
+  Result := nil;
+  SetLength(Result, ATo - AFrom);
+  n := 0;
+  t := ParaText(ADoc, AIndex);
+  txt := '';
+  ps := ADoc.Text.ParaStart(AIndex);
+  for i := AFrom to ATo - 1 do
+    if RangeKeeps(ADoc, ps + i, ARangeStart, ARangeStop) then
+    begin
+      Result[n] := i;
+      Inc(n);
+      Cat(txt, Copy(t, CharOffset(t, i) + 1, CharOffset(t, i + 1) - CharOffset(t, i)));
+    end;
+  SetLength(Result, n);
+  AText := txt;
+end;
+
 function RangeDiff(A: TTyRichDocument; AFrom, ALen: TTyRichPos; B: TTyRichDocument): string;
 var
   R: TTyRichCopyRange;
-  k, j, i: Integer;
-  c0, c1: TTyRichPos;
+  k, j, i, m: Integer;
+  c0, c1, rs, re: TTyRichPos;
   ta, tb: RawByteString;
   sa, sb: TCharSpots;
   ca, cb: TTyRichCell;
+  kept: TOffsets;
 begin
   R := TyRichCopyRange(A, AFrom, ALen);
   if R.Empty then
@@ -3875,6 +3955,8 @@ begin
     if B.Text.Length <> 0 then Exit('an empty range read back as text');
     Exit('');
   end;
+  rs := A.Text.ParaStart(R.FirstPara) + R.FromChar;
+  re := A.Text.ParaStart(R.LastPara) + R.ToChar + Ord(R.LastSeparator);
   if B.Text.ParaCount <> R.LastPara - R.FirstPara + 1 then
     Exit(Format('%d paragraphs read back, %d taken', [B.Text.ParaCount,
       R.LastPara - R.FirstPara + 1]));
@@ -3885,22 +3967,22 @@ begin
     c1 := A.Text.ParaLength(k);
     if k = R.FirstPara then c0 := R.FromChar;
     if k = R.LastPara then c1 := R.ToChar;
-    ta := ParaText(A, k);
-    ta := Copy(ta, CharOffset(ta, c0) + 1, CharOffset(ta, c1) - CharOffset(ta, c0));
+    kept := KeptOfPara(A, k, c0, c1, rs, re, ta);
     tb := ParaText(B, j);
     if not SameRaw(ta, tb) then
       Exit(Format('paragraph %d: text <%s> / <%s>', [k, Shown(ta), Shown(tb)]));
-    if c1 > c0 then
+    if Length(kept) > 0 then
     begin
       sa := SpotsOf(A, k);
       sb := SpotsOf(B, j);
-      for i := c0 to c1 - 1 do
+      for m := 0 to High(kept) do
       begin
-        if not sa[i].Format.Equals(sb[i - c0].Format) then
+        i := kept[m];
+        if not sa[i].Format.Equals(sb[m].Format) then
           Exit(Format('paragraph %d character %d: %s / %s', [k, i, DescribeChar(sa[i].Format),
-            DescribeChar(sb[i - c0].Format)]));
+            DescribeChar(sb[m].Format)]));
         // (by content: a picture of a document of our own is read back with the bytes we wrote)
-        if not SameObject(sa[i].Obj, sb[i - c0].Obj, False) then
+        if not SameObject(sa[i].Obj, sb[m].Obj, False) then
           Exit(Format('paragraph %d character %d: the object', [k, i]));
       end;
     end;

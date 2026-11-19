@@ -1309,6 +1309,7 @@ type
     { AUser (a key, the menu): EditRefused; otherwise (code) ETyRichEdit is raised. }
     procedure Refuse(const AReason: string; AUser: Boolean);
     function EngineRefusal(E: Exception): string;
+    function ChangeRefusalText(APos, ALen: TTyRichPos): string;
     { A user's insert of AText at APos would put its end past the cut of a paragraph too long
       to lay out whole: refused (told), True. }
     function LongParaRefused(APos: TTyRichPos; const AText: UTF8String): Boolean;
@@ -8315,7 +8316,16 @@ begin
   Result := RefusalReason;
   if Result <> '' then Exit;
   if (E is ETyRichRefused) and ETyRichRefused(E).FixedRow then Result := rsRichEditRefusedFixedRow
+  else if (E is ETyRichRefused) and ETyRichRefused(E).Field then Result := rsRichEditRefusedField
   else Result := rsRichEditRefusedRange;
+end;
+
+{ The reason the document gives for refusing a change at APos (ALen: a deletion's length): a
+  row that holds a nested table, or a field's result. }
+function TTyCustomRichEdit.ChangeRefusalText(APos, ALen: TTyRichPos): string;
+begin
+  if FDoc.ChangeRefusal(APos, ALen) = rcrField then Result := rsRichEditRefusedField
+  else Result := rsRichEditRefusedFixedRow;
 end;
 
 procedure TTyCustomRichEdit.Refuse(const AReason: string; AUser: Boolean);
@@ -8342,9 +8352,10 @@ begin
   { Asked before the command is made: a composite (a selection typed over) that the engine
     refused half way would be reverted, but would have reported a change on the way (Modified
     stays: the history numbers only a content it kept). }
-  if (reason = '') and (((ALen > 0) and not FDoc.CanChange(APos, ALen)) or
-    (AInsert and not FDoc.CanChange(APos, 0))) then
-    reason := rsRichEditRefusedFixedRow;
+  if (reason = '') and (ALen > 0) and not FDoc.CanChange(APos, ALen) then
+    reason := ChangeRefusalText(APos, ALen);
+  if (reason = '') and AInsert and not FDoc.CanChange(APos, 0) then
+    reason := ChangeRefusalText(APos, 0);
   Result := reason = '';
   if not Result then Refuse(reason, AUser);
 end;
@@ -8503,9 +8514,10 @@ begin
   if ACmd is TTyRichRangeTransfer then
   begin
     x := TTyRichRangeTransfer(ACmd);
-    if not FDoc.CanChange(x.ToPos, 0) or ((ACmd is TTyRichMove) and
-      not FDoc.CanChange(x.FromPos, x.RangeLength)) then
-      Result := rsRichEditRefusedFixedRow
+    if not FDoc.CanChange(x.ToPos, 0) then
+      Result := ChangeRefusalText(x.ToPos, 0)
+    else if (ACmd is TTyRichMove) and not FDoc.CanChange(x.FromPos, x.RangeLength) then
+      Result := ChangeRefusalText(x.FromPos, x.RangeLength)
     else if ACmd is TTyRichMove then
       Result := rsRichEditRefusedCells
     else
@@ -8517,16 +8529,18 @@ begin
   // a resize is refused where its place cannot change, else for its object
   if ACmd is TTyRichResizeObject then
   begin
-    if not FDoc.CanChange(TTyRichResizeObject(ACmd).Pos, 0) then Result := rsRichEditRefusedFixedRow
+    if not FDoc.CanChange(TTyRichResizeObject(ACmd).Pos, 0) then
+      Result := ChangeRefusalText(TTyRichResizeObject(ACmd).Pos, 0)
     else Result := rsRichEditRefusedRange;
     Exit;
   end;
-  // (the engine's composite says FixedRow for the same parts: tyControls.RichEdit.Commands)
-  if (ACmd is TTyRichInsertText) or (ACmd is TTyRichDelete) or (ACmd is TTyRichInsertObject) or
-    (ACmd is TTyRichInsertFragment) then
-    Result := rsRichEditRefusedFixedRow
+  // (the engine's composite says the same for the same parts: tyControls.RichEdit.Commands)
+  case TyRichCommandRefusal(FDoc, ACmd) of
+    rcrFixedRow: Result := rsRichEditRefusedFixedRow;
+    rcrField: Result := rsRichEditRefusedField;
   else
     Result := rsRichEditRefusedRange;
+  end;
 end;
 
 procedure TTyCustomRichEdit.FinishEdit(AAnchor, ACaret: TTyRichPos; AAtEnd: Boolean;
@@ -9048,6 +9062,7 @@ begin
     rtrNestedTable: Result := rsRichEditRefusedNestedTable;
     rtrNotWhole: Result := rsRichEditRefusedTableNotWhole;
     rtrIrregularRows: Result := rsRichEditRefusedIrregularRows;
+    rtrInField: Result := rsRichEditRefusedField;
     rtrOutOfRange:
       // (a row or cell index out of range is no person's doing: the actions name existing ones)
       if AEdit.Kind = rtkInsertTable then

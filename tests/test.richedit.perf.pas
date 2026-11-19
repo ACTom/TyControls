@@ -45,6 +45,7 @@ type
   published
     procedure TestA100MBTextFileFirstScreenAndMiddle;
     procedure TestA100MBRtfFileFirstScreenAndMiddle;
+    procedure TestA100MBRtfOfFieldsFirstScreenContentsAndKeys;
     procedure TestTabAndTheTableAnswersInALongTable;
     procedure TestAPictureResizedInALargeDocument;
     procedure TestDraggingTheSelectionInALargeDocument;
@@ -363,6 +364,101 @@ begin
   end;
 end;
 
+{ RTF written with | for each backslash. }
+function Bar(const S: RawByteString): RawByteString;
+var
+  i: Integer;
+begin
+  Result := S;
+  UniqueString(Result);
+  for i := 1 to Length(Result) do
+    if Result[i] = '|' then Result[i] := #92;
+end;
+
+{ About ABytes of RTF with fields, as Word writes them: ALinks hyperlinks (two a paragraph, their
+  results Chinese, underlined, coloured), a table of contents of AEntries entries (each a
+  hyperlink holding its text, a tab with a dot leader and a page number field) after the first
+  half of them, then plain paragraphs as MakeRtf's to the size. AFirstLinkPara: the first
+  paragraph of links after the contents; ATocParas: where the contents' paragraphs are. }
+procedure MakeFieldsRtf(const APath: string; ABytes: Int64; ALinks, AEntries: Integer;
+  out ATocFirst, ATocLast, ALinkAfter: Integer);
+var
+  f: TFileStream;
+  buf: TMemoryStream;
+  n, i, para: Integer;
+
+  procedure Spill;
+  begin
+    if buf.Size > 1024 * 1024 then
+    begin
+      f.WriteBuffer(buf.Memory^, buf.Size);
+      buf.Clear;
+    end;
+  end;
+
+  function Link(AN: Integer): RawByteString;
+  begin
+    Result := Bar('{|field{|*|fldinst HYPERLINK "http://example.com/page' + IntToStr(AN) +
+      '"}{|fldrslt {|cs15|ul|cf1|f1 |u38142?|u25509?' + IntToStr(AN) + '}}}');
+  end;
+
+  procedure Links(ACount: Integer);
+  var
+    k: Integer;
+  begin
+    for k := 1 to ACount div 2 do
+    begin
+      Inc(n, 2);
+      WriteRaw(buf, Bar('|pard|f0 Paragraph ' + IntToStr(para) + ' links to ') + Link(n - 1) +
+        Bar(' and to ') + Link(n) + Bar(' with more words after them.|par') + #13#10);
+      Inc(para);
+      Spill;
+    end;
+  end;
+
+begin
+  f := TFileStream.Create(APath, fmCreate);
+  buf := TMemoryStream.Create;
+  try
+    WriteRaw(buf, Bar('{|rtf1|ansi|ansicpg936|deff0{|fonttbl{|f0|fswiss|fcharset0 Arial;}' +
+      '{|f1|fnil|fcharset134 SimSun;}}' + #13#10 + '{|colortbl ;|red0|green0|blue255;}' +
+      #13#10 + '|viewkind4|uc1|pard|f0|fs20 '));
+    n := 0;
+    para := 0;
+    Links(ALinks div 2);
+    // the contents: opened after text, closed before text
+    ATocFirst := para;
+    WriteRaw(buf, Bar('|pard|tqr|tldot|tx8000 Contents: {|field|fldedit{|*|fldinst TOC ||o "1-3" ||h}{|fldrslt '));
+    for i := 1 to AEntries do
+    begin
+      WriteRaw(buf, Bar('{|field{|*|fldinst HYPERLINK ||l "_Toc' + IntToStr(i) + '"}{|fldrslt ' +
+        '{|cs15|ul|cf1|f1 |u31532?' + IntToStr(i) + '|u31456? Chapter ' + IntToStr(i) + '|tab ' +
+        '{|field{|*|fldinst PAGEREF _Toc' + IntToStr(i) + ' ||h}{|fldrslt ' + IntToStr(3 * i) + '}}}}}'));
+      if i < AEntries then WriteRaw(buf, Bar('|par |pard|tqr|tldot|tx8000 ') + #13#10);
+      Inc(para);
+      Spill;
+    end;
+    WriteRaw(buf, Bar('}} and the text after it.|par') + #13#10);
+    ATocLast := para - 1;
+    ALinkAfter := para + 1;
+    WriteRaw(buf, Bar('|pard|f0 The paragraph after the contents.|par') + #13#10);
+    Inc(para);
+    Links(ALinks - ALinks div 2);
+    while f.Size + buf.Size < ABytes do
+    begin
+      WriteRaw(buf, Bar('|pard Paragraph ' + IntToStr(para) + ' with |b bold|b0  and |cf1 coloured|cf0  ' +
+        'words, |f1|u20013?|u25991?|u27979?|u35797?|f0  and more text.|par') + #13#10);
+      Inc(para);
+      Spill;
+    end;
+    WriteRaw(buf, '}' + #13#10);
+    f.WriteBuffer(buf.Memory^, buf.Size);
+  finally
+    buf.Free;
+    f.Free;
+  end;
+end;
+
 { The files of a run that was killed (the gate's time limit) are left behind; a run sweeps
   those older than a day at its start (a run going on at the same time keeps its own). }
 procedure SweepOldFiles;
@@ -585,6 +681,93 @@ begin
       [midTop, indexed]), midTop > indexed div 4);
     AssertTrue('the view in the middle of the whole',
       FRich.TopParagraph > FRich.Document.Text.ParaCount div 4);
+  finally
+    bmp.Free;
+  end;
+end;
+
+{ A 100 MB RTF of fields - 200,000 hyperlinks with Chinese results and a table of contents of
+  5,000 entries among plain paragraphs: LoadFromFile to the end of the first paint within 3 s;
+  once loaded, a jump to the middle of the contents and one to the end, each set and painted
+  within 300 ms; a character typed right before a link, and one in the paragraph after the
+  contents, each from the key to the end of its paint within 90 ms. Printed: those, the rest
+  of the index, the peak working set. }
+procedure TTyRichEditPerfTest.TestA100MBRtfOfFieldsFirstScreenContentsAndKeys;
+var
+  path: string;
+  bmp: TBitmap;
+  t0, first, mid, last, keyLink, keyAfter: Double;
+  tocFirst, tocLast, linkAfter, p, depth: Integer;
+  at: TTyRichPos;
+  t: TTyRichText;
+begin
+  CheckRoom;
+  path := NewFile('.rtf');
+  MakeFieldsRtf(path, CFileBytes, 200000, 5000, tocFirst, tocLast, linkAfter);
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf32bit;
+    bmp.SetSize(FRich.Width, FRich.Height);
+    t0 := Clock;
+    FRich.LoadFromFile(path);
+    TPerfRich(FRich).PaintInto(bmp);
+    first := Clock - t0;
+    Report(Format('rtf of fields %d MB: load (first slice, %d paragraphs) and first paint',
+      [SizeOfFile(path) div (1024 * 1024), FRich.Document.Text.ParaCount]), first);
+    t0 := Clock;
+    FRich.FinishLoading;
+    Report(Format('rtf of fields: the rest indexed (%d paragraphs; not asserted)',
+      [FRich.Document.Text.ParaCount]), Clock - t0);
+    t := FRich.Document.Text;
+    // the middle of the contents: the view put there and painted
+    p := (tocFirst + tocLast) div 2;
+    t0 := Clock;
+    FRich.SelStart := t.ParaStart(p) + 3;
+    FRich.ScrollCaretIntoView;
+    TPerfRich(FRich).PaintInto(bmp);
+    mid := Clock - t0;
+    Report(Format('rtf of fields: a jump to the middle of the contents (paragraph %d)', [p]), mid);
+    AssertTrue(Format('the view at the contents'' middle (paragraph %d)', [FRich.TopParagraph]),
+      Abs(FRich.TopParagraph - p) < 100);
+    t0 := Clock;
+    TPerfRich(FRich).Key(VK_END, [ssCtrl]);
+    TPerfRich(FRich).PaintInto(bmp);
+    last := Clock - t0;
+    Report('rtf of fields: a jump to the end', last);
+    AssertTrue('the view at the end', FRich.TopParagraph > t.ParaCount - 200);
+    // a key right before a link: the link's open mark is the first object of its paragraph
+    p := linkAfter + 10;
+    at := t.ParaStart(p);
+    while FRich.Document.ObjectAt(at) = nil do Inc(at);
+    FRich.SelStart := at;
+    FRich.ScrollCaretIntoView;
+    TPerfRich(FRich).PaintInto(bmp);
+    depth := FRich.Document.UndoDepth;
+    t0 := Clock;
+    TPerfRich(FRich).TypeChar('x');
+    TPerfRich(FRich).PaintInto(bmp);
+    keyLink := Clock - t0;
+    AssertEquals('typed before the link', depth + 1, FRich.Document.UndoDepth);
+    Report('rtf of fields: a character typed right before a link, to the end of its paint', keyLink);
+    // in the paragraph after the contents
+    at := t.ParaStart(tocLast + 1) + 3;
+    FRich.SelStart := at;
+    FRich.ScrollCaretIntoView;
+    TPerfRich(FRich).PaintInto(bmp);
+    depth := FRich.Document.UndoDepth;
+    t0 := Clock;
+    TPerfRich(FRich).TypeChar('y');
+    TPerfRich(FRich).PaintInto(bmp);
+    keyAfter := Clock - t0;
+    AssertEquals('typed after the contents', depth + 1, FRich.Document.UndoDepth);
+    Report('rtf of fields: a character typed in the paragraph after the contents, to the end of its paint',
+      keyAfter);
+    WriteLn('TTyRichEditPerfTest: rtf of fields: peak working set: ' + PeakWorkingSet);
+    AssertTrue(Format('the first screen in %.0f ms', [first]), first <= CFirstScreenMs);
+    AssertTrue(Format('the contents'' middle in %.0f ms', [mid]), mid <= CScrollMs);
+    AssertTrue(Format('the end in %.0f ms', [last]), last <= CScrollMs);
+    AssertTrue(Format('a key before a link in %.1f ms', [keyLink]), keyLink <= CKeystrokeMs);
+    AssertTrue(Format('a key after the contents in %.1f ms', [keyAfter]), keyAfter <= CKeystrokeMs);
   finally
     bmp.Free;
   end;

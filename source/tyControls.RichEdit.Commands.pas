@@ -56,7 +56,9 @@ type
 
   { Sets the AMask fields of the characters in ARange (the others keep theirs). AKeepNone:
     of the name and the size, those a character with none of its own keeps none of
-    (TTyRichDocument.ApplyCharFormat). }
+    (TTyRichDocument.ApplyCharFormat). The marks and the results of fields in the range keep
+    their look (a result is read-only); a range of nothing else - one wholly inside a
+    result - is refused (CanExecute False: TTyRichDocument.FieldOnly). }
   TTyRichSetCharFormat = class(TTyRichCommand)
   private
     FRange: TTyRichRange;
@@ -68,10 +70,13 @@ type
   public
     constructor Create(const ARange: TTyRichRange; AMask: TTyCharFormatMask;
       const AValue: TTyCharFormat; AKeepNone: TTyCharFormatMask = []);
+    function CanExecute(ADoc: TTyRichDocument): Boolean; override;
     function Description: string; override;
   end;
 
-  { Sets the AMask fields of paragraphs AFirstPara..ALastPara. }
+  { Sets the AMask fields of paragraphs AFirstPara..ALastPara. A paragraph whose paragraph
+    mark is a field's result's keeps its format (TTyRichDocument.ParaEndsInField); a range
+    of only such paragraphs is refused (CanExecute False). }
   TTyRichSetParaFormat = class(TTyRichCommand)
   private
     FFirst, FLast: Integer;
@@ -82,6 +87,7 @@ type
   public
     constructor Create(AFirstPara, ALastPara: Integer; AMask: TTyParaFormatMask;
       const AValue: TTyParaFormat);
+    function CanExecute(ADoc: TTyRichDocument): Boolean; override;
     function Description: string; override;
   end;
 
@@ -333,6 +339,12 @@ type
   end;
 
 function TyRichRange(APos, ALen: TTyRichPos): TTyRichRange;
+{ Why ACmd, a built-in command whose CanExecute said no, was refused by ADoc's rules: the
+  insert and delete commands by their place (TTyRichDocument.ChangeRefusal: a row that holds
+  a nested table, a field's result), an insert of a field's mark alone and the format
+  commands by fields (rcrField: a range of field results only). rcrNone for any other
+  command: its own reasons. }
+function TyRichCommandRefusal(ADoc: TTyRichDocument; ACmd: TTyRichCommand): TTyRichChangeRefusal;
 function TyRichTableEdit(AKind: TTyRichTableEditKind; APos: TTyRichPos; AIndex: Integer;
   ARows: Integer = 0; ACols: Integer = 0; AWidth: Integer = 0): TTyRichTableEdit;
 
@@ -461,6 +473,11 @@ begin
   ApplyCharFormat(ADoc, FRange.Pos, FRange.Len, FMask, FValue, FKeepNone);
 end;
 
+function TTyRichSetCharFormat.CanExecute(ADoc: TTyRichDocument): Boolean;
+begin
+  Result := not ADoc.FieldOnly(FRange.Pos, FRange.Len);
+end;
+
 function TTyRichSetCharFormat.Description: string;
 begin
   Result := rsRichUndoCharFormat;
@@ -483,6 +500,19 @@ end;
 procedure TTyRichSetParaFormat.DoExecute(ADoc: TTyRichDocument);
 begin
   ApplyParaFormat(ADoc, FFirst, FLast, FMask, FValue);
+end;
+
+function TTyRichSetParaFormat.CanExecute(ADoc: TTyRichDocument): Boolean;
+var
+  i: Integer;
+begin
+  Result := True;
+  // (out of range: the primitive's error)
+  if (FFirst < 0) or (FLast >= ADoc.Text.ParaCount) or (FFirst > FLast) then Exit;
+  // one paragraph that ends outside every field is enough: it is read first
+  for i := FFirst to FLast do
+    if not ADoc.ParaEndsInField(i) then Exit;
+  Result := False;
 end;
 
 function TTyRichSetParaFormat.Description: string;
@@ -513,7 +543,8 @@ end;
 
 function TTyRichInsertObject.CanExecute(ADoc: TTyRichDocument): Boolean;
 begin
-  Result := ADoc.CanChange(FPos, 0);
+  // (a field's mark goes in only with its field: InsertObject raises for one)
+  Result := not (FObject is TTyRichFieldMark) and ADoc.CanChange(FPos, 0);
 end;
 
 procedure TTyRichInsertObject.DoExecute(ADoc: TTyRichDocument);
@@ -845,6 +876,35 @@ begin
   Result := FItems.Count;
 end;
 
+{ Why a built-in command that asked CanExecute was refused - the document's rule its place
+  meets; rcrNone for any other command (its own reason). }
+function PartRefusal(ADoc: TTyRichDocument; C: TTyRichCommand): TTyRichChangeRefusal;
+begin
+  Result := rcrNone;
+  if C is TTyRichInsertText then
+    Result := ADoc.ChangeRefusal(TTyRichInsertText(C).FPos[0], 0)
+  else if C is TTyRichDelete then
+    Result := ADoc.ChangeRefusal(TTyRichDelete(C).FPos, TTyRichDelete(C).FLen)
+  else if C is TTyRichInsertObject then
+  begin
+    if TTyRichInsertObject(C).FObject is TTyRichFieldMark then Result := rcrField
+    else Result := ADoc.ChangeRefusal(TTyRichInsertObject(C).FPos, 0);
+  end
+  else if C is TTyRichInsertFragment then
+    Result := ADoc.ChangeRefusal(TTyRichInsertFragment(C).FPos, 0)
+  else if (C is TTyRichSetCharFormat) or (C is TTyRichSetParaFormat) then
+    Result := rcrField;
+  // (a row's refusal of an insert that is not told by its place: as before, the row's)
+  if (Result = rcrNone) and ((C is TTyRichInsertText) or (C is TTyRichDelete) or
+     (C is TTyRichInsertObject) or (C is TTyRichInsertFragment)) then
+    Result := rcrFixedRow;
+end;
+
+function TyRichCommandRefusal(ADoc: TTyRichDocument; ACmd: TTyRichCommand): TTyRichChangeRefusal;
+begin
+  Result := PartRefusal(ADoc, ACmd);
+end;
+
 procedure TTyRichCompositeCommand.DoExecute(ADoc: TTyRichDocument);
 var
   c: TTyRichCommand;
@@ -858,9 +918,13 @@ begin
     if not c.CanExecute(ADoc) then
     begin
       e := ETyRichRefused.CreateFmt(rsRichModelPartRefused, [FDone, c.ClassName]);
-      // the built-in text commands ask only CanChange: a row that holds a nested table
-      e.FixedRow := (c is TTyRichInsertText) or (c is TTyRichDelete) or
-        (c is TTyRichInsertObject) or (c is TTyRichInsertFragment);
+      { The built-in text commands ask only CanChange: a row that holds a nested table, or a
+        field's result (ChangeRefusal says which); the format commands refuse only a range
+        of field results. }
+      case PartRefusal(ADoc, c) of
+        rcrFixedRow: e.FixedRow := True;
+        rcrField: e.Field := True;
+      end;
       raise e;
     end;
     ExecuteChild(ADoc, c);

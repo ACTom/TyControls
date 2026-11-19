@@ -392,6 +392,8 @@ begin
   if A is TTyRichOpaque then
     Exit((TTyRichOpaque(A).Bytes = TTyRichOpaque(B).Bytes) and
       (TTyRichOpaque(A).DisplayText = TTyRichOpaque(B).DisplayText));
+  // the mark at either edge of a field shown as text: the open one keeps the field's bytes
+  if not (A is TTyRichPicture) then Exit(A.DataBytes = B.DataBytes);
   pa := A as TTyRichPicture;
   pb := B as TTyRichPicture;
   Result := (pa.PictureFormat = pb.PictureFormat) and (pa.WidthTwips = pb.WidthTwips) and
@@ -3035,7 +3037,8 @@ const
     'filler' + #10 + CBullet + 'ab' + #10 + 'zz',
     // (FE is a letter in the Greek font; in GBK the first half of a pair, left waiting)
     'filler' + #10 + 't?' + CObject,
-    'filler' + #10 + 't?' + CObject + 'c' + #10 + 'zz',
+    // (a field shown as its result: \} and the waiting half between its two marks)
+    'filler' + #10 + 't' + CObject + '}?' + CObject + 'c' + #10 + 'zz',
     'filler' + #10 + CBullet + 'ab' + #10 + 'zz');
 var
   i: Integer;
