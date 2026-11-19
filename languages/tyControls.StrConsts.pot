@@ -693,6 +693,26 @@ msgctxt "tycontrols.strconsts.rsrichundoreplace"
 msgid "Replace"
 msgstr ""
 
+#: tycontrols.strconsts.rsrichundoinserttable
+msgid "Insert table"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichundoinsertrow
+msgid "Insert row"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichundodeleterow
+msgid "Delete row"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichundoinsertcolumn
+msgid "Insert column"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichundodeletecolumn
+msgid "Delete column"
+msgstr ""
+
 #: tycontrols.strconsts.rsricheditincomplete
 msgid "The document was not loaded completely, so it cannot be saved."
 msgstr ""

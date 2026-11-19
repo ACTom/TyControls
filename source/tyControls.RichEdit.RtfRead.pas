@@ -713,6 +713,14 @@ type
     // whether its interval is parsed at the moment or not - or the one value all plain
     // parsed paragraphs share, when the file makes the paragraph plain: FileMakes).
     function OwnsValue(ASrcOffset: Int64; AValue: Pointer): Boolean;
+    // Paragraph AIndex is in a part of a table (TTyRichTable.Cut): True when that table of
+    // the file can be edited as one - the load is done, the table is not bigger than
+    // CRtfBigTableBytes - with the paragraphs its parts have together, AFirst .. ALast:
+    // the parts next to each other that lie in the table's bytes (each part known by a
+    // paragraph of it that is still the file's text). Reads the parts' paragraphs; call it
+    // inside a read scope. False for a part of a big table, while the file loads, and when
+    // a part next to it has no paragraph left that tells whose it is.
+    function WholeTableOf(AIndex: Integer; out AFirst, ALast: Integer): Boolean;
     // For a writer: the reader's state at byte APos of the file - a paragraph's start, or the
     // trailer's - scanned from the snapshot before it (no paragraph is parsed, nothing is
     // set in the document). Asking for rising positions goes on from the last one. False
@@ -4806,6 +4814,8 @@ type
     procedure LoadParagraph(ADoc: TTyRichDocument; AIndex: Integer); override;
     procedure ParagraphRead(ADoc: TTyRichDocument; AIndex: Integer); override;
     procedure ReadsEnded(ADoc: TTyRichDocument); override;
+    function WholeTable(ADoc: TTyRichDocument; AIndex: Integer;
+      out AFirst, ALast: Integer): Boolean; override;
   end;
 
   TRtfBuild = class(TTyRichDocBuilder)
@@ -4852,6 +4862,12 @@ procedure TRtfLoader.ReadsEnded(ADoc: TTyRichDocument);
 begin
   // what the scope kept parsed past the limit can go now
   Load.Trim;
+end;
+
+function TRtfLoader.WholeTable(ADoc: TTyRichDocument; AIndex: Integer;
+  out AFirst, ALast: Integer): Boolean;
+begin
+  Result := Load.WholeTableOf(AIndex, AFirst, ALast);
 end;
 
 function TyRichRtfLoadOf(ADoc: TTyRichDocument): TTyRtfLoad;
@@ -5305,6 +5321,7 @@ var
   tr: TTyRtfTableRec;
   t: TTyRichTable;
   global: Int64;
+  cut: Boolean;
 begin
   lastPara := IntervalParaStop(ALast) - 1;
   Result := TTyRtfGroup.Create;
@@ -5337,6 +5354,8 @@ begin
         j := k;
         Break;
       end;
+    // (tr.Locked: what the table holds - merged cells, a nested table; cut: where it lies)
+    cut := False;
     if j >= 0 then
     begin
       global := FIntervalPara[AFirst] + j;
@@ -5346,11 +5365,11 @@ begin
         x := FScan.TableExtent(k);
         if (x.LastPara < 0) or ((x.LastPara >= global) and
            ((x.FirstPara < FIntervalPara[AFirst]) or (x.LastPara > lastPara))) then
-          tr.Locked := True;
+          cut := True;
       end;
     end;
-    if tr.RowCount > 0 then t := TTyRichTable.Create(tr.Rows[0].Cellx, tr.Locked)
-    else t := TTyRichTable.Create([], tr.Locked);
+    if tr.RowCount > 0 then t := TTyRichTable.Create(tr.Rows[0].Cellx, tr.Locked, cut)
+    else t := TTyRichTable.Create([], tr.Locked, cut);
     t.AddRef;
     Result.Tables[i] := t;
     for j := 0 to tr.RowCount - 1 do
@@ -5938,6 +5957,88 @@ begin
     cell, lt);
   Result := v = AValue;
   TRtfBuild.ReleaseValue(FDoc, v);
+end;
+
+function TTyRtfLoad.WholeTableOf(AIndex: Integer; out AFirst, ALast: Integer): Boolean;
+var
+  t: TTyRichTable;
+  f, l, pf, pl, lo, hi, mid, xi: Integer;
+  x: TTyRtfTableExtent;
+  src: Int64;
+
+  // a paragraph of the part AFrom .. ATo still the file's text: where its bytes start
+  function PartSource(AFrom, ATo: Integer; out ASrc: Int64): Boolean;
+  var
+    k: Integer;
+    n: Int64;
+  begin
+    for k := AFrom to ATo do
+      if FDoc.Text.ParaLazySource(k, ASrc, n) then Exit(True);
+    ASrc := -1;
+    Result := False;
+  end;
+
+  function InTable(ASrc: Int64): Boolean;
+  begin
+    Result := (ASrc >= x.Start) and (ASrc < x.Stop);
+  end;
+
+  // the paragraphs of the part paragraph AIndex is in when it is a part of this table
+  function PartOfIt(AIndex: Integer; out AFrom, ATo: Integer; out AUnknown: Boolean): Boolean;
+  var
+    u: TTyRichTable;
+    s: Int64;
+  begin
+    AUnknown := False;
+    u := FDoc.TableAt(AIndex);
+    if (u = nil) or not u.Cut then Exit(False);
+    FDoc.TableParas(AIndex, AFrom, ATo);
+    if not PartSource(AFrom, ATo, s) then
+    begin
+      AUnknown := True;
+      Exit(False);
+    end;
+    Result := InTable(s);
+  end;
+
+var
+  unknown: Boolean;
+begin
+  AFirst := -1;
+  ALast := -1;
+  Result := False;
+  if not FDone or FCancelled then Exit;
+  t := FDoc.TableAt(AIndex);
+  if (t = nil) or not t.Cut then Exit;
+  FDoc.TableParas(AIndex, f, l);
+  if not PartSource(f, l, src) then Exit;
+  // the table whose bytes hold it (the extents lie in the order of their bytes)
+  lo := 0;
+  hi := FScan.TableExtentCount - 1;
+  xi := -1;
+  while lo <= hi do
+  begin
+    mid := (lo + hi) div 2;
+    if FScan.TableExtent(mid).Start <= src then
+    begin
+      xi := mid;
+      lo := mid + 1;
+    end
+    else
+      hi := mid - 1;
+  end;
+  if xi < 0 then Exit;
+  x := FScan.TableExtent(xi);
+  if (x.LastPara < 0) or not InTable(src) or IsBig(x) then Exit;
+  // the parts before it and after it that lie in the same bytes
+  unknown := False;
+  while (f > 0) and PartOfIt(f - 1, pf, pl, unknown) do f := pf;
+  if unknown then Exit;
+  while (l < FDoc.Text.ParaCount - 1) and PartOfIt(l + 1, pf, pl, unknown) do l := pl;
+  if unknown then Exit;
+  AFirst := f;
+  ALast := l;
+  Result := True;
 end;
 
 function TTyRtfLoad.LastParaOpen: Boolean;

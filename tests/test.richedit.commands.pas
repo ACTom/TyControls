@@ -311,18 +311,22 @@ begin
   Result := ADoc.Text.GetText(0, ADoc.Text.Length);
 end;
 
+{ Every paragraph: its text, formats, runs and objects, and in a table the identity of its
+  cell - the table object, the row's index in it and the cell's in the row. }
 function TTyRichCommandsTest.Dump(ADoc: TTyRichDocument): string;
 var
   i: Integer;
-  t: TTyRichTable;
+  c: TTyRichCell;
 begin
   Result := '';
   for i := 0 to ADoc.Text.ParaCount - 1 do
   begin
-    t := ADoc.TableAt(i);
+    c := ADoc.CellAt(i);
     Result := Result + Format('[%s] P%d {%s}', [ParaText(ADoc, i), ADoc.ParaFormatOf(i),
       RunsStr(ADoc, i)]);
-    if t <> nil then Result := Result + ' T' + IntToHex(PtrUInt(t), 1);
+    if c <> nil then
+      Result := Result + Format(' T%s R%d C%d', [IntToHex(PtrUInt(c.Table), 1), c.Row.Index,
+        c.Index]);
     Result := Result + LineEnding;
   end;
 end;
@@ -350,7 +354,10 @@ begin
 end;
 
 const
-  BuiltInCount = 9;
+  BuiltInCount = 14;
+  // the commands from here on change a table: the sample gets one before 'ggg' first
+  FirstTableEdit = 10;
+  SampleTablePos = 20;
 
 function TTyRichCommandsTest.BuiltIn(ADoc: TTyRichDocument; AIndex: Integer): TTyRichCommand;
 var
@@ -372,8 +379,14 @@ begin
     5: Result := TTyRichSetCharFormat.Create(TyRichRange(1, 12), [cffBold], f);
     6: Result := TTyRichSetParaFormat.Create(0, 2, [pffLeftIndent], p);
     7: Result := TTyRichInsertObject.Create(17, TCmdCountedOpaque.Create('{\object two}'));
+    8: Result := TTyRichInsertText.Create(23, 'tail', TyRichInheritFormat, False);
+    // in the middle of p1, over its object's paragraph
+    9: Result := TTyRichInsertTable.Create(12, 2, 3);
+    10: Result := TTyRichInsertRow.Create(SampleTablePos, 1);
+    11: Result := TTyRichDeleteRow.Create(SampleTablePos, 0);
+    12: Result := TTyRichInsertColumn.Create(SampleTablePos, 1);
   else
-    Result := TTyRichInsertText.Create(23, 'tail', TyRichInheritFormat, False);
+    Result := TTyRichDeleteColumn.Create(SampleTablePos, 0);
   end;
 end;
 
@@ -391,6 +404,13 @@ begin
   begin
     d := NewSample;
     try
+      if i >= FirstTableEdit then
+      begin
+        // a 2 x 2 table before 'ggg', not in the history
+        AssertTrue('the table for the table edits', d.Execute(TTyRichInsertTable.Create(
+          SampleTablePos, 2, 2)));
+        d.ClearUndo;
+      end;
       cmd := BuiltIn(d, i);
       live := TCmdCountedOpaque.Live;
       before := Dump(d);

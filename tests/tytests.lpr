@@ -299,6 +299,8 @@ uses
   test.richedit.api,
   test.richedit.find,
   test.richedit.findctl,
+  test.richedit.msftedit,
+  test.richedit.tables,
   test.richedit.perf;
 
 type

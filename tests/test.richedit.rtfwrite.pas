@@ -18,7 +18,7 @@ uses
   {$IFDEF WINDOWS}Windows,{$ENDIF}
   Classes, SysUtils, Graphics, LCLType, fpcunit, testregistry,
   tyControls.RichEdit.Text, tyControls.RichEdit.Model, tyControls.RichEdit.Commands,
-  tyControls.RichEdit.RtfRead, tyControls.RichEdit.RtfWrite;
+  tyControls.RichEdit.RtfRead, tyControls.RichEdit.RtfWrite, test.richedit.msftedit;
 
 type
   TEditKind = (ekInsert, ekCharFormat, ekParaFormat, ekDelete, ekSplit, ekJoin);
@@ -1163,200 +1163,6 @@ end;
 
 { ---- the system's RichEdit ---- }
 
-{$IFDEF WINDOWS}
-type
-  // richedit.h declares its structures under #pragma pack(4), on Win64 too
-  {$PUSH}{$PACKRECORDS 4}
-  TReEditStream = record
-    dwCookie: PtrUInt;
-    dwError: DWORD;
-    pfnCallback: Pointer;
-  end;
-  TReGetTextEx = record
-    cb: DWORD;
-    flags: DWORD;
-    codepage: UINT;
-    lpDefaultChar: PAnsiChar;
-    lpUsedDefChar: Pointer;
-  end;
-  TReGetTextLengthEx = record
-    flags: DWORD;
-    codepage: UINT;
-  end;
-  {$POP}
-
-  TReSource = record
-    Data: PByte;
-    Left: Int64;
-  end;
-  PReSource = ^TReSource;
-
-const
-  ReEmExLimitText = WM_USER + 53;
-  ReEmStreamIn = WM_USER + 73;
-  ReEmGetTextEx = WM_USER + 94;
-  ReEmGetTextLengthEx = WM_USER + 95;
-  ReSfRtf = 2;
-  ReGtRawText = 4;
-
-function ReStreamIn(dwCookie: PtrUInt; pbBuff: PByte; cb: LongInt; pcb: PLongInt): DWORD; stdcall;
-var
-  src: PReSource;
-  n: LongInt;
-begin
-  src := PReSource(dwCookie);
-  n := cb;
-  if n > src^.Left then n := src^.Left;
-  if n > 0 then Move(src^.Data^, pbBuff^, n);
-  Inc(src^.Data, n);
-  Dec(src^.Left, n);
-  pcb^ := n;
-  Result := 0;
-end;
-
-// The text the system's RichEdit holds after reading ARtf, as UTF-8 (objects U+FFFC, the
-// table marks as they are). False: msftedit.dll or its window class is not there.
-function RichEditText(const ARtf: TBytes; out AText: RawByteString): Boolean;
-var
-  h: HWND;
-  es: TReEditStream;
-  src: TReSource;
-  gl: TReGetTextLengthEx;
-  gt: TReGetTextEx;
-  n, got: PtrInt;
-  buf: UnicodeString;
-  u8: UTF8String;
-begin
-  AText := '';
-  if LoadLibraryW('msftedit.dll') = 0 then Exit(False);
-  // a message-only window: nothing is shown, the clipboard and the focus are not touched
-  h := CreateWindowExW(0, 'RICHEDIT50W', '', ES_MULTILINE, 0, 0, 800, 600, HWND(PtrInt(-3)), 0,
-    HInstance, nil);
-  if h = 0 then Exit(False);
-  try
-    SendMessageW(h, ReEmExLimitText, 0, $7FFFFFF);
-    src.Data := nil;
-    if Length(ARtf) > 0 then src.Data := @ARtf[0];
-    src.Left := Length(ARtf);
-    es.dwCookie := PtrUInt(@src);
-    es.dwError := 0;
-    es.pfnCallback := @ReStreamIn;
-    SendMessageW(h, ReEmStreamIn, ReSfRtf, LPARAM(@es));
-    gl.flags := 0;
-    gl.codepage := 1200;
-    n := SendMessageW(h, ReEmGetTextLengthEx, WPARAM(@gl), 0);
-    buf := '';
-    SetLength(buf, n + 1);
-    gt.cb := (n + 1) * 2;
-    gt.flags := ReGtRawText;
-    gt.codepage := 1200;
-    gt.lpDefaultChar := nil;
-    gt.lpUsedDefChar := nil;
-    got := SendMessageW(h, ReEmGetTextEx, WPARAM(@gt), LPARAM(PWideChar(buf)));
-    SetLength(buf, got);
-    u8 := UTF8Encode(buf);
-    AText := u8;
-    SetCodePage(AText, CP_NONE, False);
-    Result := True;
-  finally
-    DestroyWindow(h);
-  end;
-end;
-
-// The model's text as that control reports a document: CR after a paragraph (none after the
-// last), in a table U+FFF9 CR before a row, U+0007 after a cell, U+FFFB CR after a row; a
-// picture is U+FFFC, a block the control does not know is nothing.
-function ModelAsRichEditText(ADoc: TTyRichDocument): RawByteString;
-var
-  rowStart, rowEnd: RawByteString;
-  i, j, last: Integer;
-  runs: TTyRunArray;
-  text, part: RawByteString;
-  cell, next, prev: TTyRichCell;
-  from, upto: Integer;
-begin
-  Result := '';
-  rowStart := Raw(U($FFF9) + #13);
-  rowEnd := Raw(U($FFFB) + #13);
-  last := ADoc.Text.ParaCount - 1;
-  prev := nil;
-  for i := 0 to last do
-  begin
-    cell := ADoc.CellAt(i);
-    if i < last then next := ADoc.CellAt(i + 1) else next := nil;
-    if (cell <> nil) and ((prev = nil) or (prev.Row <> cell.Row)) then Cat(Result, rowStart);
-    text := ParaText(ADoc, i);
-    runs := ADoc.RunsOf(i);
-    for j := 0 to High(runs) do
-    begin
-      from := CharOffset(text, runs[j].Start);
-      if j < High(runs) then upto := CharOffset(text, runs[j + 1].Start) else upto := Length(text);
-      part := Copy(text, from + 1, upto - from);
-      if runs[j].Obj is TTyRichOpaque then part := '';
-      Cat(Result, part);
-    end;
-    if cell = nil then
-    begin
-      if i < last then Cat(Result, #13);
-    end
-    else if next = cell then
-      Cat(Result, #13)
-    else
-    begin
-      Cat(Result, #7);
-      if (next = nil) or (next.Row <> cell.Row) then Cat(Result, rowEnd);
-    end;
-    prev := cell;
-  end;
-end;
-
-// The control's text as paragraphs: a cell end ends a paragraph, the row marks and the
-// marks of swallowed cells are dropped.
-function AsParagraphs(const AText: RawByteString): RawByteString;
-var
-  i, n: Integer;
-begin
-  Result := '';
-  n := Length(AText);
-  i := 1;
-  while i <= n do
-  begin
-    // U+FFF9 CR and U+FFFB CR: EF BF B9 0D, EF BF BB 0D
-    if (i + 3 <= n) and (AText[i] = #$EF) and (AText[i + 1] = #$BF) and
-       (AText[i + 2] in [#$B9, #$BB]) and (AText[i + 3] = #13) then
-      Inc(i, 4)
-    // U+FFFF: what the control puts in a cell that a merged one swallowed
-    else if (i + 2 <= n) and (AText[i] = #$EF) and (AText[i + 1] = #$BF) and (AText[i + 2] = #$BF) then
-      Inc(i, 3)
-    else
-    begin
-      if AText[i] = #7 then Cat(Result, #13) else Cat(Result, AText[i]);
-      Inc(i);
-    end;
-  end;
-end;
-
-type
-  TRawArray = array of RawByteString;
-
-function SplitParas(const AText: RawByteString): TRawArray;
-var
-  i, from, n: Integer;
-begin
-  Result := nil;
-  n := 0;
-  from := 1;
-  for i := 1 to Length(AText) + 1 do
-    if (i > Length(AText)) or (AText[i] = #13) then
-    begin
-      SetLength(Result, n + 1);
-      Result[n] := Copy(AText, from, i - from);
-      Inc(n);
-      from := i + 1;
-    end;
-end;
-{$ENDIF}
-
 procedure TTyRtfWriteTest.CheckRichEditReads(const AMsg: string; ADoc: TTyRichDocument);
 {$IFDEF WINDOWS}
 var
@@ -1380,7 +1186,7 @@ var
   i, j, k, n, step: Integer;
   b, o: TBytes;
   original, got: RawByteString;
-  gotParas, origParas, modelParas: TRawArray;
+  gotParas, origParas, modelParas: TReRawArray;
   p: TTyParaFormat;
   info: TTyRtfWriteInfo;
   objects: Boolean;

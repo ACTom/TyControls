@@ -5,8 +5,8 @@ unit tyControls.RichEdit.Commands;
   becomes). Each is run by TTyRichDocument.Execute, and each changes the document only
   through the primitives TTyRichCommand hands on, so the inherited undo (the records
   reverted, newest first) and redo (run again) are exact - none of them keeps text or a
-  snapshot of its own. A program adds its own commands the same way. Table
-  commands come with the table editing. }
+  snapshot of its own. A program adds its own commands the same way. The table commands
+  insert a table and insert and delete its rows and columns (TTyRichDocument.EditTable). }
 
 {$mode objfpc}{$H+}
 
@@ -173,7 +173,68 @@ type
     property Items[AIndex: Integer]: TTyRichCommand read GetItem;
   end;
 
+  { A change of a table's structure (TTyRichDocument.EditTable says what each does). The
+    table is named by a position inside it, rows and cells by their index (rows counted over
+    those that have paragraphs: TTyRichDocument.TableInfoAt). CanExecute is False - Execute
+    changes nothing - when Refusal is not rtrNone (TTyRichDocument.TableEditRefusal: a table
+    with merged cells or a nested table, one a loader cannot give whole, irregular rows for a
+    column, an index out of range, a position in no table). One undo step; an undo gives
+    every paragraph its value and its cell in its very table back; a redo puts the table
+    object of the first run back in (the command holds it: MemSize counts it). Not
+    mergeable. }
+  TTyRichTableCommand = class(TTyRichCommand)
+  private
+    FEdit: TTyRichTableEdit;
+    FTables: TTyRichTables;
+  protected
+    procedure DoExecute(ADoc: TTyRichDocument); override;
+  public
+    destructor Destroy; override;
+    function CanExecute(ADoc: TTyRichDocument): Boolean; override;
+    function Refusal(ADoc: TTyRichDocument): TTyRichTableRefusal;
+    function MemSize: Int64; override;
+    property Edit: TTyRichTableEdit read FEdit;
+  end;
+
+  { An ARows x ACols table at APos, AWidth twips wide (0: the document's text width,
+    TTyRichDocument.TextWidthTwips), at most CRichMaxTableRows x CRichMaxTableCols. }
+  TTyRichInsertTable = class(TTyRichTableCommand)
+  public
+    constructor Create(APos: TTyRichPos; ARows, ACols: Integer; AWidth: Integer = 0);
+    function Description: string; override;
+  end;
+
+  { A row at AIndex (0 .. the row count) of the table ATablePos is in. }
+  TTyRichInsertRow = class(TTyRichTableCommand)
+  public
+    constructor Create(ATablePos: TTyRichPos; AIndex: Integer);
+    function Description: string; override;
+  end;
+
+  { Row AIndex of the table ATablePos is in. }
+  TTyRichDeleteRow = class(TTyRichTableCommand)
+  public
+    constructor Create(ATablePos: TTyRichPos; AIndex: Integer);
+    function Description: string; override;
+  end;
+
+  { A column at cell index AIndex (0 .. the cell count) of the table ATablePos is in. }
+  TTyRichInsertColumn = class(TTyRichTableCommand)
+  public
+    constructor Create(ATablePos: TTyRichPos; AIndex: Integer);
+    function Description: string; override;
+  end;
+
+  { The column at cell index AIndex of the table ATablePos is in. }
+  TTyRichDeleteColumn = class(TTyRichTableCommand)
+  public
+    constructor Create(ATablePos: TTyRichPos; AIndex: Integer);
+    function Description: string; override;
+  end;
+
 function TyRichRange(APos, ALen: TTyRichPos): TTyRichRange;
+function TyRichTableEdit(AKind: TTyRichTableEditKind; APos: TTyRichPos; AIndex: Integer;
+  ARows: Integer = 0; ACols: Integer = 0; AWidth: Integer = 0): TTyRichTableEdit;
 
 implementation
 
@@ -556,6 +617,116 @@ var
 begin
   inherited GatherObjects(AList, ACount);
   for i := 0 to FItems.Count - 1 do TTyRichCommand(FItems[i]).GatherObjects(AList, ACount);
+end;
+
+{ ---- the table commands ---- }
+
+function TyRichTableEdit(AKind: TTyRichTableEditKind; APos: TTyRichPos; AIndex: Integer;
+  ARows: Integer; ACols: Integer; AWidth: Integer): TTyRichTableEdit;
+begin
+  Result.Kind := AKind;
+  Result.Pos := APos;
+  Result.Index := AIndex;
+  Result.Rows := ARows;
+  Result.Cols := ACols;
+  Result.Width := AWidth;
+end;
+
+destructor TTyRichTableCommand.Destroy;
+var
+  i: Integer;
+begin
+  // the paragraph values that use them hold their own references
+  for i := 0 to High(FTables) do FTables[i].Release;
+  FTables := nil;
+  inherited Destroy;
+end;
+
+function TTyRichTableCommand.Refusal(ADoc: TTyRichDocument): TTyRichTableRefusal;
+begin
+  Result := ADoc.TableEditRefusal(FEdit);
+end;
+
+function TTyRichTableCommand.CanExecute(ADoc: TTyRichDocument): Boolean;
+begin
+  Result := Refusal(ADoc) = rtrNone;
+end;
+
+procedure TTyRichTableCommand.DoExecute(ADoc: TTyRichDocument);
+begin
+  EditTable(ADoc, FEdit, FTables);
+end;
+
+function TTyRichTableCommand.MemSize: Int64;
+var
+  i, r: Integer;
+  t: TTyRichTable;
+begin
+  Result := inherited MemSize + Length(FTables) * SizeOf(Pointer);
+  for i := 0 to High(FTables) do
+  begin
+    t := FTables[i];
+    Inc(Result, t.InstanceSize + t.ColBoundaryCount * SizeOf(Integer));
+    for r := 0 to t.RowCount - 1 do
+      Inc(Result, t.Rows[r].InstanceSize + Length(t.Rows[r].RawFormat) +
+        t.Rows[r].BoundaryCount * SizeOf(Integer) +
+        t.Rows[r].CellCount * (TTyRichCell.InstanceSize + SizeOf(Pointer)));
+  end;
+end;
+
+constructor TTyRichInsertTable.Create(APos: TTyRichPos; ARows, ACols: Integer; AWidth: Integer);
+begin
+  inherited Create;
+  FEdit := TyRichTableEdit(rtkInsertTable, APos, 0, ARows, ACols, AWidth);
+end;
+
+function TTyRichInsertTable.Description: string;
+begin
+  Result := rsRichUndoInsertTable;
+end;
+
+constructor TTyRichInsertRow.Create(ATablePos: TTyRichPos; AIndex: Integer);
+begin
+  inherited Create;
+  FEdit := TyRichTableEdit(rtkInsertRow, ATablePos, AIndex);
+end;
+
+function TTyRichInsertRow.Description: string;
+begin
+  Result := rsRichUndoInsertRow;
+end;
+
+constructor TTyRichDeleteRow.Create(ATablePos: TTyRichPos; AIndex: Integer);
+begin
+  inherited Create;
+  FEdit := TyRichTableEdit(rtkDeleteRow, ATablePos, AIndex);
+end;
+
+function TTyRichDeleteRow.Description: string;
+begin
+  Result := rsRichUndoDeleteRow;
+end;
+
+constructor TTyRichInsertColumn.Create(ATablePos: TTyRichPos; AIndex: Integer);
+begin
+  inherited Create;
+  FEdit := TyRichTableEdit(rtkInsertColumn, ATablePos, AIndex);
+end;
+
+function TTyRichInsertColumn.Description: string;
+begin
+  Result := rsRichUndoInsertColumn;
+end;
+
+constructor TTyRichDeleteColumn.Create(ATablePos: TTyRichPos; AIndex: Integer);
+begin
+  inherited Create;
+  FEdit := TyRichTableEdit(rtkDeleteColumn, ATablePos, AIndex);
+end;
+
+function TTyRichDeleteColumn.Description: string;
+begin
+  Result := rsRichUndoDeleteColumn;
 end;
 
 end.

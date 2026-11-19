@@ -379,6 +379,7 @@ type
     // the plan
     procedure AddItem(AStretch: Boolean; AFirst, ACount: Integer; AStart, AStop: Int64);
     function CleanAt(APos: Int64): Boolean;
+    function FileOwns(ASrcOffset: Int64; AData: Pointer): Boolean;
     function RowStartsAt(AIndex: Integer; AStretchSideFirst: Boolean): Boolean;
     procedure OpenStretch(AIndex: Integer; AGap: Boolean);
     procedure CloseStretch(AIndex: Integer; AStop: Int64);
@@ -1577,6 +1578,21 @@ begin
   Inc(FPlanN);
 end;
 
+// The unedited lazy paragraph from ASrcOffset, whose value is AData, still has the formats
+// and the cell the file gives it: the load's own value - or the value a table edit made of
+// that one when it only gave the paragraph a cell of a new table, in a row the file cannot
+// tell from its own (TTyRichDocument.ValueSource): the rows an edit of rows did not make or
+// remove are still the file's rows.
+function TRtfWriter.FileOwns(ASrcOffset: Int64; AData: Pointer): Boolean;
+var
+  s: Pointer;
+begin
+  Result := FLoad.OwnsValue(ASrcOffset, AData);
+  if Result or (AData = nil) then Exit;
+  s := FDoc.ValueSource(AData);
+  Result := (s <> nil) and FLoad.OwnsValue(ASrcOffset, s);
+end;
+
 // A place of the file where the output can leave the file's bytes or come back to them: a
 // paragraph's start with no table row open, where every open group is an ordinary one (it
 // can be closed and opened again with the properties it saved).
@@ -1666,7 +1682,7 @@ begin
   // the file's own: its text is the unedited lazy paragraph and its formats are the file's.
   // The file's last paragraph, when it has no terminator, can only be copied as the last.
   own := (ASrcOffset >= FHeaderStop) and (ASrcOffset + ASrcBytes <= FTrailer.Start) and
-    FLoad.OwnsValue(ASrcOffset, AData) and
+    FileOwns(ASrcOffset, AData) and
     not (FLastOpen and (ASrcOffset + ASrcBytes = FTrailer.Start) and (AIndex < FParaCount - 1));
   if not FInStretch then
   begin
@@ -2577,7 +2593,7 @@ begin
   // whole as its bytes - written so, the next one would join it)
   FRangeOwn[k] := (ASrcOffset >= FHeaderStop) and
     (not FLoad.Done or (ASrcOffset + ASrcBytes <= FTrailer.Start)) and
-    FLoad.OwnsValue(ASrcOffset, AData) and
+    FileOwns(ASrcOffset, AData) and
     not (FLastOpen and (ASrcOffset + ASrcBytes = FTrailer.Start) and (AIndex < FParaCount - 1));
 end;
 

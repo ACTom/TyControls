@@ -854,6 +854,26 @@ msgstr "粘贴"
 msgid "Replace"
 msgstr "替换"
 
+#: tycontrols.strconsts.rsrichundoinserttable
+msgid "Insert table"
+msgstr "插入表格"
+
+#: tycontrols.strconsts.rsrichundoinsertrow
+msgid "Insert row"
+msgstr "插入行"
+
+#: tycontrols.strconsts.rsrichundodeleterow
+msgid "Delete row"
+msgstr "删除行"
+
+#: tycontrols.strconsts.rsrichundoinsertcolumn
+msgid "Insert column"
+msgstr "插入列"
+
+#: tycontrols.strconsts.rsrichundodeletecolumn
+msgid "Delete column"
+msgstr "删除列"
+
 #: tycontrols.strconsts.rsricheditincomplete
 msgid "The document was not loaded completely, so it cannot be saved."
 msgstr "文档没有完整载入,不能保存。"

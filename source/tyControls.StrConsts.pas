@@ -296,6 +296,11 @@ resourcestring
   rsRichUndoInsertObject = 'Insert object';
   rsRichUndoPaste        = 'Paste';
   rsRichUndoReplace      = 'Replace';
+  rsRichUndoInsertTable  = 'Insert table';
+  rsRichUndoInsertRow    = 'Insert row';
+  rsRichUndoDeleteRow    = 'Delete row';
+  rsRichUndoInsertColumn = 'Insert column';
+  rsRichUndoDeleteColumn = 'Delete column';
 
   { --- TTyRichEdit loading and saving -----------------------------------------
     What a refused save or change says (ETyRichEdit). %s is the file. }

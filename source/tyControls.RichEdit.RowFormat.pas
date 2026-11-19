@@ -21,7 +21,11 @@ unit tyControls.RichEdit.RowFormat;
   as a solid line in phase 1; border colours (\brdrcf) and cell shading need the colour table
   and are not read; nor are row-level borders (\trbrdr*), which Word and WordPad write beside
   the cells' own, or diagonals. Words inside groups are passed over, and so are the bytes of
-  \binN. }
+  \binN.
+
+  The table edits of the model take a row's format apart here and put it together with
+  other cells (TyRtfSplitRowFormat, TyRtfJoinRowFormat), and give the rows they make a
+  format of their own (TyRtfGridRowFormat): bytes in, bytes out, nothing else read. }
 
 {$mode objfpc}{$H+}
 
@@ -63,7 +67,32 @@ function TyDefaultRowDisplay(ACellCount: Integer): TTyRowDisplay;
 { A cell the format says nothing about: no merge, at the top, no lines. }
 function TyPlainRowCell: TTyRowCellDisplay;
 
+type
+  TTyRtfCellWords = array of RawByteString;
+
+{ The format of a row made here (a table edit's new table): Word's plain grid -
+  \trowd\trgaph108, then for each cell a single line 10 twips wide on its four sides and its
+  right edge, AEdges[i] twips. What TyRtfRowDisplay reads of it is TyDefaultRowDisplay's
+  look, and Word, WordPad and RichEdit draw the same lines. }
+function TyRtfGridRowFormat(const AEdges: array of Integer): RawByteString;
+{ A row's format cut into the row's words and each cell's, so that cells can come and go
+  while every word stays with what it belongs to: ARowWords is \trowd with the row's own
+  words (\trgaph, \trleft, \trbrdr* and their line words, ...) in their order; ACells[i] the
+  words of cell i in their order (each word that starts with \cl, and the line words after a
+  \clbrdr*), without its \cellx. False - nothing to go by - when a word cannot be told whose
+  it is: a group, \bin, a control symbol, text, a second \trowd, a \cellx without a number,
+  words after the last \cellx, or another number of cells than ACellCount. }
+function TyRtfSplitRowFormat(const ARaw: RawByteString; ACellCount: Integer;
+  out ARowWords: RawByteString; out ACells: TTyRtfCellWords): Boolean;
+{ A row's format put together again: ARowWords, then each cell's words and its \cellx at
+  AEdges[i] (as many edges as cells). }
+function TyRtfJoinRowFormat(const ARowWords: RawByteString; const ACells: TTyRtfCellWords;
+  const AEdges: array of Integer): RawByteString;
+
 implementation
+
+uses
+  SysUtils;
 
 const
   CDefaultHalfGap = 108;
@@ -253,6 +282,130 @@ begin
     end;
   end;
   SetLength(Result.Cells, count);
+end;
+
+procedure AddRaw(var R: RawByteString; const S: RawByteString);
+var
+  n: Integer;
+begin
+  if S = '' then Exit;
+  n := Length(R);
+  SetLength(R, n + Length(S));
+  Move(S[1], R[n + 1], Length(S));
+end;
+
+function AsRaw(const S: string): RawByteString;
+begin
+  Result := '';
+  AddRaw(Result, RawByteString(S));
+  SetCodePage(Result, CP_NONE, False);
+end;
+
+function TyRtfGridRowFormat(const AEdges: array of Integer): RawByteString;
+var
+  i: Integer;
+begin
+  Result := AsRaw('\trowd\trgaph' + IntToStr(CDefaultHalfGap));
+  for i := 0 to High(AEdges) do
+    AddRaw(Result, AsRaw(Format('\clbrdrt\brdrs\brdrw%0:d \clbrdrl\brdrs\brdrw%0:d ' +
+      '\clbrdrb\brdrs\brdrw%0:d \clbrdrr\brdrs\brdrw%0:d \cellx%1:d', [CDefaultBorder, AEdges[i]])));
+end;
+
+function TyRtfSplitRowFormat(const ARaw: RawByteString; ACellCount: Integer;
+  out ARowWords: RawByteString; out ACells: TTyRtfCellWords): Boolean;
+var
+  i, n, start, wordStart, count: Integer;
+  word: string;
+  hasParam, cellLine, rowd: Boolean;
+  cur: RawByteString;
+begin
+  ARowWords := '';
+  ACells := nil;
+  Result := False;
+  n := Length(ARaw);
+  SetLength(ACells, ACellCount);
+  count := 0;
+  cur := '';
+  // the owner of the line words that follow a border word: a cell's or the row's
+  cellLine := False;
+  rowd := False;
+  i := 1;
+  while i <= n do
+  begin
+    if ARaw[i] in [#13, #10] then
+    begin
+      // line breaks between words mean nothing in RTF (any other byte would be text)
+      Inc(i);
+      Continue;
+    end;
+    if ARaw[i] <> '\' then Exit;
+    wordStart := i;
+    Inc(i);
+    start := i;
+    while (i <= n) and (ARaw[i] in ['a'..'z', 'A'..'Z']) do Inc(i);
+    // a control symbol (\*, \'xx, ...): not a row's or a cell's word that can be told
+    if i = start then Exit;
+    word := Copy(ARaw, start, i - start);
+    if (i <= n) and (ARaw[i] = '-') then Inc(i);
+    hasParam := (i <= n) and (ARaw[i] in ['0'..'9']);
+    while (i <= n) and (ARaw[i] in ['0'..'9']) do Inc(i);
+    // its delimiter is its own
+    if (i <= n) and (ARaw[i] = ' ') then Inc(i);
+    if word = 'bin' then Exit;
+    if word = 'trowd' then
+    begin
+      if rowd then Exit;
+      rowd := True;
+      AddRaw(ARowWords, Copy(ARaw, wordStart, i - wordStart));
+      Continue;
+    end;
+    if not rowd then Exit;
+    if word = 'cellx' then
+    begin
+      if not hasParam or (count >= ACellCount) then Exit;
+      ACells[count] := cur;
+      Inc(count);
+      cur := '';
+      cellLine := False;
+      Continue;
+    end;
+    if Copy(word, 1, 2) = 'cl' then
+    begin
+      // a cell's word; a border of the cell takes the line words after it
+      cellLine := Copy(word, 1, 6) = 'clbrdr';
+      AddRaw(cur, Copy(ARaw, wordStart, i - wordStart));
+    end
+    else if ((Copy(word, 1, 4) = 'brdr') or (word = 'brsp')) and cellLine then
+      AddRaw(cur, Copy(ARaw, wordStart, i - wordStart))
+    else
+    begin
+      // the row's (\trbrdr* takes its line words along with it)
+      cellLine := False;
+      AddRaw(ARowWords, Copy(ARaw, wordStart, i - wordStart));
+    end;
+  end;
+  // words of a cell that has no \cellx, or not as many cells
+  Result := rowd and (cur = '') and (count = ACellCount);
+  if not Result then
+  begin
+    ARowWords := '';
+    ACells := nil;
+  end;
+end;
+
+function TyRtfJoinRowFormat(const ARowWords: RawByteString; const ACells: TTyRtfCellWords;
+  const AEdges: array of Integer): RawByteString;
+var
+  i: Integer;
+begin
+  Result := '';
+  AddRaw(Result, ARowWords);
+  for i := 0 to High(ACells) do
+  begin
+    AddRaw(Result, ACells[i]);
+    if i <= High(AEdges) then AddRaw(Result, AsRaw('\cellx' + IntToStr(AEdges[i])));
+  end;
+  SetCodePage(Result, CP_NONE, False);
 end;
 
 end.

@@ -306,18 +306,26 @@ type
 
   { A table is a contiguous range of paragraphs. A paragraph's data points to its cell; the
     table knows no paragraph index, so paragraphs before it come and go without touching it.
-    Its rows and cells are fixed once a paragraph uses it (AddRow raises then). }
+    Its rows and cells are fixed once a paragraph uses it (AddRow raises then): a change of
+    its structure (TTyRichDocument's table edits) gives the paragraphs the cells of a new
+    table, and the old one stays with the values an undo can put back. }
   TTyRichTable = class(TTyRichRefCounted)
   private
     FRows: array of TTyRichRow;
     FColBoundaries: array of Integer;
     FStructureLocked: Boolean;
+    FContentLocked: Boolean;
+    FCut: Boolean;
     FFrozen: Boolean;
     FParaRefs: Integer;
     function GetRow(AIndex: Integer): TTyRichRow;
     function GetColBoundary(AIndex: Integer): Integer;
   public
-    constructor Create(const AColBoundaries: array of Integer; AStructureLocked: Boolean = False);
+    { AStructureLocked: what the table holds forbids a change of its structure (merged cells,
+      a nested table). ACut: the table is a part of a table of its file, as a reader that
+      parses on demand gives it (see Cut). }
+    constructor Create(const AColBoundaries: array of Integer; AStructureLocked: Boolean = False;
+      ACut: Boolean = False);
     destructor Destroy; override;
     function AddRow(ACellCount: Integer; const ARawFormat: RawByteString = ''): TTyRichRow;
       overload;
@@ -329,9 +337,71 @@ type
     function ColBoundaryCount: Integer;
     property Rows[AIndex: Integer]: TTyRichRow read GetRow;
     property ColBoundaries[AIndex: Integer]: Integer read GetColBoundary;  // twips
-    { Merged cells and the like: shown and kept, but its structure cannot be edited. }
+    { Merged cells and the like, or a part of a table: shown and kept, but its structure
+      cannot be edited as this object (ContentLocked or Cut). }
     property StructureLocked: Boolean read FStructureLocked;
+    { What it holds forbids a change of its structure: merged cells, a nested table. }
+    property ContentLocked: Boolean read FContentLocked;
+    { One of the parts a reader that parses on demand cut a table of its file into (one too
+      big to parse whole for a read, one still open where the load stood, one cut where a
+      parsing block ends). The paragraphs of the next part are another table object. A
+      table edit takes the parts together when the paragraph loader says the table is whole
+      (TTyRichParaLoader.WholeTable) and refuses it otherwise. }
+    property Cut: Boolean read FCut;
   end;
+
+  TTyRichTables = array of TTyRichTable;
+
+  { The structural table edits (TTyRichDocument.TableEditRefusal, and the commands of
+    tyControls.RichEdit.Commands that make them). A table is named by a position inside it
+    (a table object does not outlive a change of its structure); rows are counted over the
+    rows that have paragraphs, in text order, from 0; cells by their index in the row. }
+  TTyRichTableEditKind = (rtkInsertTable, rtkInsertRow, rtkDeleteRow, rtkInsertColumn,
+    rtkDeleteColumn);
+
+  TTyRichTableEdit = record
+    Kind: TTyRichTableEditKind;
+    { rtkInsertTable: where the table goes; the others: any position in the table. }
+    Pos: TTyRichPos;
+    { The row (rtkInsertRow 0 .. row count: the new row's index) or the cell index
+      (rtkInsertColumn 0 .. cell count; the delete kinds: an existing one). }
+    Index: Integer;
+    // rtkInsertTable: its size, and its width in twips (0: the document's text width)
+    Rows, Cols, Width: Integer;
+  end;
+
+  { Why a table edit cannot be made (rtrNone: it can):
+    rtrReadOnly      the document is loading, incomplete or being saved;
+    rtrNoTable       the position is in no table;
+    rtrInTable       an insert of a table into a table (nested tables are not edited);
+    rtrMergedCells   the table has merged cells;
+    rtrNestedTable   a row of it holds a nested table;
+    rtrNotWhole      a table a reader that parses on demand gives in parts, which it cannot
+                     give whole: one bigger than it parses at once, or one still loading;
+    rtrIrregularRows a column edit of a table whose rows do not all have as many cells;
+    rtrOutOfRange    a row or cell index, a size or a position out of range. }
+  TTyRichTableRefusal = (rtrNone, rtrReadOnly, rtrNoTable, rtrInTable, rtrMergedCells,
+    rtrNestedTable, rtrNotWhole, rtrIrregularRows, rtrOutOfRange);
+
+  { Where a paragraph is in its table (TTyRichDocument.TableInfoAt): the table's paragraphs,
+    its rows (those that have paragraphs), the paragraph's row and its paragraphs, its cell's
+    index, the row's cells, and the cell's paragraphs. }
+  TTyRichTableInfo = record
+    First, Last: Integer;
+    RowCount: Integer;
+    Row: Integer;
+    RowFirst, RowLast: Integer;
+    Cell: Integer;
+    CellCount: Integer;
+    CellFirst, CellLast: Integer;
+  end;
+
+const
+  // the size of a table made here: Word's limits, 63 columns and 32767 rows
+  CRichMaxTableCols = 63;
+  CRichMaxTableRows = 32767;
+
+type
 
   { A run starts at Start (characters from the paragraph's start) and reaches the next run's
     Start, the last one the paragraph's end. With Obj set, the run is that object's one U+FFFC
@@ -358,6 +428,9 @@ type
     FRuns: TTyRunArray;
     // the file's own marker text of a list item (TTyRichDocument.ListTextOf)
     FListText: UTF8String;
+    { A table edit gave the paragraph a cell of a new table whose row is the same as the
+      row of FSource's cell (TTyRichDocument.ValueSource): held, nil otherwise. }
+    FSource: TTyRichParaData;
     { The identity of its objects, in order (for the history, which counts each object
       once): 0 when its runs hold none; a value
       made from another one with the very same objects (typing in a paragraph that holds
@@ -429,6 +502,11 @@ type
     FSwapCount: Integer;
     FSwapPieces: TTyRichPieceArray;
     FSwapPieceCount: Integer;
+    { A table edit: the records of the edits it is made of, in the order they were made
+      (Revert reverts them newest first); a part whose change has no kinds told nobody of
+      itself (a paragraph given an equal cell of a new table). }
+    FParts: array of TTyRichUndoData;
+    procedure AddPart(APart: TTyRichUndoData);
     procedure AddOld(D: TTyRichParaData);
     procedure SealOld;
     procedure AddSwap(APara: Integer; AOld: TTyRichParaData; const APieces: TTyRichPieces);
@@ -526,6 +604,13 @@ type
     procedure ParagraphRead(ADoc: TTyRichDocument; AIndex: Integer); virtual;
     { The outermost read scope ended: nothing read inside it is held any longer. }
     procedure ReadsEnded(ADoc: TTyRichDocument); virtual;
+    { Paragraph AIndex is in a table this loader gave in parts (TTyRichTable.Cut): True when
+      that table of the file can be taken as one - the file is read to its end, the table is
+      closed and no bigger than the loader parses at once - with the paragraphs its parts
+      have together, AFirst .. ALast. Called inside a read scope; it may read (parse) the
+      parts. False by default: such a table's structure is not edited. }
+    function WholeTable(ADoc: TTyRichDocument; AIndex: Integer;
+      out AFirst, ALast: Integer): Boolean; virtual;
   end;
 
   TTyRichRange = record
@@ -704,6 +789,8 @@ type
     function ReplaceInParas(ADoc: TTyRichDocument; const APos: array of TTyRichPos;
       AFrom, ACount: Integer; ALen: TTyRichPos; const AText: UTF8String;
       out ASkipped: Integer): TTyRichChange;
+    function EditTable(ADoc: TTyRichDocument; const AEdit: TTyRichTableEdit;
+      var ATables: TTyRichTables): TTyRichChange;
     { One more part of this command's work, as part of the step it is
       (TTyRichDocument.ExecutePart): it changes the document through the primitives as DoExecute
       does; its records join the step's. The default raises: a command goes on only when it
@@ -881,6 +968,7 @@ type
     FIncomplete: Boolean;
     FSaving: Integer;
     FBaseFontName: string;
+    FTableParaVisits: Int64;
     function GetSaving: Boolean;
     function GetUpdating: Boolean;
     procedure Init;
@@ -992,6 +1080,45 @@ type
       changes. }
     function ReplaceInParas(const APos: array of TTyRichPos; AFrom, ACount: Integer;
       ALen: TTyRichPos; const AText: UTF8String; out ASkipped: Integer): TTyRichUndoData;
+    { Makes the table edit AEdit, which TableEditRefusal allows (raises ETyRichRefused before
+      anything changes otherwise). One record for the whole edit, made of the edits it is:
+      the new rows' and cells' paragraphs inserted, the deleted ones' deleted (whole
+      paragraphs: the paragraphs around them keep their text and values), and every
+      paragraph that stays in the table given its cell in a new table object - so the
+      table of the range has exactly the rows that have paragraphs, in order, and every
+      cell of it at least one paragraph (rows a plain delete left with no paragraph are
+      not taken along). An undo gives every paragraph its value back, and with it the cell
+      of the very table it was in.
+        rtkInsertTable: at a paragraph's start the table goes before the paragraph; in the
+      middle of one, or at the end of the text after text, the paragraph is split and the
+      table goes between its parts; directly after another table a paragraph in no table
+      comes first (two tables never touch). A paragraph in no table follows it always. Its
+      columns have equal widths, the last edge at the width exactly; each cell holds one
+      empty paragraph in the formats in effect at APos (its paragraph's format without a
+      list and with no indents; the character format typing there gets). Its rows are
+      given a format of their own: single lines of 10 twips on every side of every cell,
+      Word's half gap (TyRtfGridRowFormat), so it looks the same here, in a file and in
+      other programs.
+        rtkInsertRow: the new row is the row beside it (the one above; for index 0 the one
+      below) again: its cells, edges and format; each cell one empty paragraph in the
+      formats of the first paragraph of the matching cell there.
+        rtkDeleteRow: the row's paragraphs go; the last row takes the table with it (what
+      is left there, when the table ended the text, is one empty paragraph in no table).
+        rtkInsertColumn / rtkDeleteColumn: in every row (all have as many cells). A new
+      column is as wide as the cell it is put beside (the one left of it; for index 0 the
+      one right of it), and the edges after it move right by that; a deleted one's width is
+      taken out of the edges after it. A row's format keeps the words of each cell that
+      stays and of the row as they were, only the edges change; a new cell has the words of
+      the cell it is put beside (TyRtfSplitRowFormat; a format that cannot be split so is
+      replaced by TyRtfGridRowFormat). A new cell's paragraph is formatted like the first
+      paragraph of the cell beside it. Deleting the only column deletes the table.
+      ATables: the table objects the edit made, kept by the command for its redo: empty, it
+      gets them (one reference each, the caller's); given, they are used again when they
+      fit. The rows of an edit of rows are those of the file still (TTyRichDocument's
+      ValueSource), so a writer keeps the bytes of the rows the edit did not make. Costs:
+      the table's paragraphs are visited twice (read, and given their cells), the new ones
+      made; nothing outside the table is read. }
+    function EditTable(const AEdit: TTyRichTableEdit; var ATables: TTyRichTables): TTyRichUndoData;
     { Puts back what the primitive that returned AUndo changed, frees AUndo and sets it nil. }
     procedure Revert(var AUndo: TTyRichUndoData);
     { The paragraph's data value (an opaque identity, for tests and the history). }
@@ -1088,7 +1215,8 @@ type
       delete commands do. }
     function CanChange(APos, ALen: TTyRichPos): Boolean;
     { The one place of the rule that a user's edit never joins text across a cell's or a
-      row's edge (until table editing): may [AStart, AStart + ALen) be
+      row's edge (a change of a table's structure is a table edit's: EditTable): may
+      [AStart, AStart + ALen) be
       deleted or replaced as a user's edit - a key, the menu, a find's replace? The paragraph
       the deletion then joins with counts: the range INCLUDING the paragraph after it must not
       cross a cell's or a row's edge, unless it is whole rows (WholeRows). A range that begins
@@ -1100,6 +1228,34 @@ type
     { [AFrom, ATo) is whole rows of one table: from a row's first paragraph's start to the
       start of the paragraph after a row (never the text's end). Call it inside a read scope. }
     function WholeRows(AFrom, ATo: TTyRichPos): Boolean;
+
+    { Why AEdit cannot be made (TTyRichTableRefusal; rtrNone: it can) - what a table
+      command's CanExecute asks, and what a view greys its table actions by. Reads inside
+      a read scope of its own: the paragraph at the position and, for an edit of a table,
+      the table's paragraphs (a table a loader gives in parts, the parts). }
+    function TableEditRefusal(const AEdit: TTyRichTableEdit): TTyRichTableRefusal;
+    { Where paragraph APara is in its table, rows counted as the table edits count them
+      (those that have paragraphs; a table given in parts that its loader can give whole,
+      as one). False outside a table. Walks the table's paragraphs once, inside a read scope
+      of its own (TableParaVisits counts them): use it inside one when the answer is used
+      with other reads. }
+    function TableInfoAt(APara: Integer; out AInfo: TTyRichTableInfo): Boolean;
+    { The paragraphs of cell ACell of row ARow (counted as TableInfoAt counts them) of the
+      table paragraph ATablePara is in. False when there is no such cell, or the cell has no
+      paragraph. One walk of the table's paragraphs. }
+    function TableCellParas(ATablePara, ARow, ACell: Integer; out AFirst, ALast: Integer): Boolean;
+    { The width the text has on the page, in twips: the paper's width less the left and the
+      right margin (what a page-wide layout wraps at). A table made without a width of its
+      own is this wide. }
+    function TextWidthTwips: Integer;
+    { For a writer: AData (a paragraph's value) was made by a table edit that only gave the
+      paragraph a cell of a new table object, in a row that is the same as the row of the
+      value it was given in place of - the same format, cells, edges, the same cell. The
+      first such value: the paragraph is that value's paragraph, as far as its file is
+      concerned (the very row of the very table in the file). nil: none (also for nil). }
+    function ValueSource(AData: Pointer): Pointer;
+    { Table paragraphs the table edits and readers looked at, for the tests that count them. }
+    property TableParaVisits: Int64 read FTableParaVisits write FTableParaVisits;
 
     { Runs ACmd and keeps it for undo; the document owns ACmd from here on, also when this
       returns False or raises. False: ACmd.CanExecute said no, or the document is Loading,
@@ -1261,7 +1417,8 @@ function TyRichNoSpaceScript(C: Cardinal): Boolean;
 implementation
 
 uses
-  tyControls.StrConsts, tyControls.RichEdit.Commands, tyControls.RichEdit.Wmf;
+  tyControls.StrConsts, tyControls.RichEdit.Commands, tyControls.RichEdit.Wmf,
+  tyControls.RichEdit.RowFormat;
 
 const
   // RunStep
@@ -1934,14 +2091,16 @@ begin
 end;
 
 constructor TTyRichTable.Create(const AColBoundaries: array of Integer;
-  AStructureLocked: Boolean);
+  AStructureLocked: Boolean; ACut: Boolean);
 var
   i: Integer;
 begin
   inherited Create;
   SetLength(FColBoundaries, Length(AColBoundaries));
   for i := 0 to High(AColBoundaries) do FColBoundaries[i] := AColBoundaries[i];
-  FStructureLocked := AStructureLocked;
+  FContentLocked := AStructureLocked;
+  FCut := ACut;
+  FStructureLocked := AStructureLocked or ACut;
 end;
 
 destructor TTyRichTable.Destroy;
@@ -2024,6 +2183,7 @@ destructor TTyRichUndoData.Destroy;
 var
   i: Integer;
 begin
+  for i := High(FParts) downto 0 do FreeAndNil(FParts[i]);
   for i := 0 to FOldCount - 1 do FDoc.ReleaseData(FOldData[i].Data);
   for i := 0 to High(FRemoved.Pieces) do
     if (FRemoved.Pieces[i].Separator <> rsNone) and (FRemoved.Pieces[i].Data <> nil) then
@@ -2036,10 +2196,28 @@ begin
 end;
 
 function TTyRichUndoData.MemSize: Int64;
+var
+  i: Integer;
 begin
   Result := InstanceSize + (Length(FRemoved.Pieces) + Length(FSpan.Pieces.Pieces) +
     Length(FSpan2.Pieces.Pieces) + Length(FSwapPieces)) * SizeOf(TTyRichPiece) +
-    Length(FOldData) * SizeOf(TTyRichOldData) + Length(FSwaps) * SizeOf(TTyRichParaSwap);
+    Length(FOldData) * SizeOf(TTyRichOldData) + Length(FSwaps) * SizeOf(TTyRichParaSwap) +
+    Length(FParts) * SizeOf(Pointer);
+  for i := 0 to High(FParts) do Inc(Result, FParts[i].MemSize);
+end;
+
+procedure ComposeChange(var A: TTyRichChange; var AHas: Boolean; const B: TTyRichChange); forward;
+
+procedure TTyRichUndoData.AddPart(APart: TTyRichUndoData);
+var
+  has: Boolean;
+begin
+  SetLength(FParts, Length(FParts) + 1);
+  FParts[High(FParts)] := APart;
+  // what it reports is what its parts that told of themselves did, one after the other
+  if APart.FChange.Kinds = [] then Exit;
+  has := FChange.Kinds <> [];
+  ComposeChange(FChange, has, APart.FChange);
 end;
 
 procedure AddObject(var AList: TTyRichObjectList; var ACount: Integer; AObj: TTyRichObject);
@@ -2116,6 +2294,7 @@ begin
   for i := 0 to FSwapCount - 1 do Take(FSwaps[i].Old);
   for i := 0 to FSwapPieceCount - 1 do
     if FSwapPieces[i].Separator <> rsNone then Take(TTyRichParaData(FSwapPieces[i].Data));
+  for i := 0 to High(FParts) do FParts[i].GatherObjects(AList, ACount);
 end;
 
 procedure TTyRichUndoData.AddOld(D: TTyRichParaData);
@@ -2405,6 +2584,14 @@ procedure TTyRichParaLoader.ReadsEnded(ADoc: TTyRichDocument);
 begin
 end;
 
+function TTyRichParaLoader.WholeTable(ADoc: TTyRichDocument; AIndex: Integer;
+  out AFirst, ALast: Integer): Boolean;
+begin
+  AFirst := -1;
+  ALast := -1;
+  Result := False;
+end;
+
 { ---- TTyRichDocument: life ---- }
 
 constructor TTyRichDocument.Create;
@@ -2631,6 +2818,7 @@ procedure TTyRichDocument.DisposeData(D: TTyRichParaData);
 var
   i: Integer;
   t: TTyRichTable;
+  src: TTyRichParaData;
 begin
   if D.FPrev <> nil then D.FPrev.FNext := D.FNext else FFirstData := D.FNext;
   if D.FNext <> nil then D.FNext.FPrev := D.FPrev;
@@ -2644,13 +2832,18 @@ begin
     Dec(t.FParaRefs);
     t.Release;
   end;
+  src := D.FSource;
   // poison: a value used after it is gone shows up as garbage formats, not as the old ones
   D.FParaFormat := -1;
   D.FCell := nil;
   D.FRuns := nil;
   D.FListText := '';
+  D.FSource := nil;
   D.FRefCount := -1;
   D.Free;
+  // (never a chain: a source has no source of its own. When every value goes at once, the
+  // source goes by itself, maybe already gone)
+  if (src <> nil) and not FValuesGone then ReleaseData(src);
 end;
 
 procedure TTyRichDocument.AcquireData(D: TTyRichParaData);
@@ -2984,7 +3177,7 @@ begin
     range that ends there ends inside a table that ends the text (only code makes one: a
     file read from RTF ends after its last row), whose last paragraph has no separator to
     go with it - the engine would leave it in its cell and the row's other cells with no
-    paragraph. Refused, until table editing. }
+    paragraph. Refused: the row goes with a table edit (EditTable's rtkDeleteRow). }
   if ATo >= FText.Length then Exit;
   m := FText.ParaOfPos(ATo);
   if (m = 0) or (ATo <> FText.ParaStart(m)) then Exit;
@@ -4136,6 +4329,1011 @@ begin
   Notify(c);
 end;
 
+{ ---- table edits ---- }
+
+type
+  TTyIntArray = array of Integer;
+
+  // a cell's paragraphs in its row (First -1: none)
+  TTyRichShapeCell = record
+    First, Last: Integer;
+  end;
+
+  // a row of a table as its paragraphs have it
+  TTyRichShapeRow = record
+    Row: TTyRichRow;
+    First, Last: Integer;
+    Cells: array of TTyRichShapeCell;
+  end;
+
+  { The table a paragraph is in, as the table edits count it: its paragraphs, and its rows
+    as runs of paragraphs of one row object (a row a plain delete left with none is not
+    there). }
+  TTyRichShape = record
+    First, Last: Integer;
+    Rows: array of TTyRichShapeRow;
+    RowCount: Integer;
+    Cells: array of TTyRichCell;   // each paragraph's, from First on (good in the read scope)
+    Locked: TTyRichTableRefusal;   // rtrNone, rtrMergedCells or rtrNestedTable
+    Regular: Boolean;              // every row has as many cells
+    Ordered: Boolean;              // in every row each cell's paragraphs follow each other, in cell order
+  end;
+
+  // a paragraph a table edit puts in: empty, one run
+  TTyRichNewPara = record
+    Cell: TTyRichCell;
+    ParaFormat: TTyParaFormatId;
+    CharFormat: TTyCharFormatId;
+  end;
+  TTyRichNewParas = array of TTyRichNewPara;
+
+  // a row of the table an edit makes
+  TTyRichPlanRow = record
+    Shape: Integer;                // the row of the shape it is, -1 a new one
+    Raw: RawByteString;
+    Edges: array of Integer;
+    Nested: Boolean;
+    CellFrom: array of Integer;    // per cell: the shape row's cell it is, -1 a new one
+    NewFormat: array of TTyRichNewPara;   // the formats of a new cell's paragraph
+  end;
+
+  // what an edit does to the text, by the paragraphs as they were before it
+  TTyRichTableOp = record
+    Anchor: Integer;               // a delete's first paragraph; an insert goes before it
+    Last: Integer;                 // a delete's last paragraph
+    Insert: Boolean;
+    Paras: TTyRichNewParas;
+  end;
+
+  TTyRichTableEditor = class
+  private
+    Doc: TTyRichDocument;
+    Edit: TTyRichTableEdit;
+    Kept: ^TTyRichTables;
+    Own: TTyRichTables;            // the tables made in this run, held until it ends
+    Shape: TTyRichShape;
+    Plan: array of TTyRichPlanRow;
+    Ops: array of TTyRichTableOp;
+    OpCount: Integer;
+    Pending: TTyRichNewParas;
+    PendingCount: Integer;
+    function NewTable(const AColBoundaries: array of Integer): TTyRichTable;
+    function TableFor(const AColBoundaries: array of Integer): TTyRichTable;
+    function Repointed(D: TTyRichParaData; ACell: TTyRichCell): TTyRichParaData;
+    function SetCells(AFirst: Integer; const ACells: array of TTyRichCell;
+      AKinds: TTyRichChangeKinds): TTyRichUndoData;
+    function InsertParas(APara: Integer; const AParas: array of TTyRichNewPara): TTyRichUndoData;
+    function DeleteParas(AFirst, ALast: Integer): TTyRichUndoData;
+    function FormatOf(APara: Integer): TTyRichNewPara;
+    procedure AddOp(AAnchor, ALast: Integer; AInsert: Boolean; const AParas: TTyRichNewParas);
+    procedure Pend(const APara: TTyRichNewPara);
+    procedure Flush(AAnchor: Integer);
+    procedure PlanRows;
+    procedure PlanColumns;
+    procedure InsertTable(U: TTyRichUndoData);
+    procedure EditShape(U: TTyRichUndoData);
+  public
+    destructor Destroy; override;
+    function Run: TTyRichUndoData;
+  end;
+
+function RefusalName(R: TTyRichTableRefusal): string;
+const
+  Names: array[TTyRichTableRefusal] of string = ('none', 'read-only', 'no table', 'in a table',
+    'merged cells', 'nested table', 'not whole', 'irregular rows', 'out of range');
+begin
+  Result := Names[R];
+end;
+
+{ A row's cell edges as the writer writes a row with no format of its own: its own, else the
+  table's, else 1440 twips a cell. }
+function RowEdges(ARow: TTyRichRow): TTyIntArray;
+var
+  i, e: Integer;
+begin
+  Result := nil;
+  SetLength(Result, Length(ARow.FCells));
+  e := 0;
+  for i := 0 to High(Result) do
+  begin
+    if i < Length(ARow.FBoundaries) then e := ARow.FBoundaries[i]
+    else if (Length(ARow.FBoundaries) = 0) and (i < Length(ARow.FTable.FColBoundaries)) then
+      e := ARow.FTable.FColBoundaries[i]
+    else
+      Inc(e, 1440);
+    Result[i] := e;
+  end;
+end;
+
+{ Two rows a file cannot tell apart: the same format bytes, cells, edges, nested table. }
+function RowsAlike(A, B: TTyRichRow): Boolean;
+var
+  ea, eb: TTyIntArray;
+  i: Integer;
+begin
+  if A = B then Exit(True);
+  Result := (Length(A.FCells) = Length(B.FCells)) and
+    (A.FHoldsNestedTable = B.FHoldsNestedTable) and SameBytes(A.FRawFormat, B.FRawFormat);
+  if not Result then Exit;
+  ea := RowEdges(A);
+  eb := RowEdges(B);
+  for i := 0 to High(ea) do
+    if ea[i] <> eb[i] then Exit(False);
+end;
+
+{ Reads the table paragraph APara is in into S: rtrNoTable outside one; rtrNotWhole for a part
+  of a table its loader cannot give whole (S is then the part); else rtrNone (S.Locked says
+  what its content forbids). Call it inside a read scope. }
+function ReadTableShape(ADoc: TTyRichDocument; APara: Integer; out S: TTyRichShape): TTyRichTableRefusal;
+var
+  t: TTyRichTable;
+  f, l, k, r, ci, i: Integer;
+  c, c0: TTyRichCell;
+  row: TTyRichRow;
+  nested, merged: Boolean;
+begin
+  S := Default(TTyRichShape);
+  S.Locked := rtrNone;
+  S.First := -1;
+  S.Last := -1;
+  Inc(ADoc.FTableParaVisits);
+  c0 := ADoc.CellAt(APara);
+  c := c0;
+  if c = nil then Exit(rtrNoTable);
+  t := c.FRow.FTable;
+  Result := rtrNone;
+  f := -1;
+  if t.FCut then
+  begin
+    // (the loader's range starts and ends with the parts' own first and last paragraphs)
+    if (ADoc.FLoader <> nil) and ADoc.FLoader.WholeTable(ADoc, APara, f, l) then
+    begin
+      SetLength(S.Cells, l - f + 1);
+      for k := f to l do
+      begin
+        Inc(ADoc.FTableParaVisits);
+        S.Cells[k - f] := ADoc.CellAt(k);
+        if S.Cells[k - f] = nil then
+        begin
+          // a range with a paragraph in no table: not a table to go by
+          f := -1;
+          Break;
+        end;
+      end;
+    end;
+    if f < 0 then Result := rtrNotWhole;
+  end;
+  if f < 0 then
+  begin
+    // the object's paragraphs, each read once: back from APara, then on from it (and the
+    // paragraph on either side, which ends the walk)
+    l := APara;
+    f := APara;
+    SetLength(S.Cells, 16);
+    i := 0;
+    while f > 0 do
+    begin
+      Inc(ADoc.FTableParaVisits);
+      c := ADoc.CellAt(f - 1);
+      if (c = nil) or (c.FRow.FTable <> t) then Break;
+      if i = Length(S.Cells) then SetLength(S.Cells, i * 2);
+      S.Cells[i] := c;
+      Inc(i);
+      Dec(f);
+    end;
+    // (read backwards: turned round, then APara's and those after it)
+    for k := 0 to i div 2 - 1 do
+    begin
+      c := S.Cells[k];
+      S.Cells[k] := S.Cells[i - 1 - k];
+      S.Cells[i - 1 - k] := c;
+    end;
+    if i = Length(S.Cells) then SetLength(S.Cells, i * 2 + 1);
+    S.Cells[i] := c0;
+    Inc(i);
+    while l < ADoc.FText.ParaCount - 1 do
+    begin
+      Inc(ADoc.FTableParaVisits);
+      c := ADoc.CellAt(l + 1);
+      if (c = nil) or (c.FRow.FTable <> t) then Break;
+      if i = Length(S.Cells) then SetLength(S.Cells, i * 2);
+      S.Cells[i] := c;
+      Inc(i);
+      Inc(l);
+    end;
+    SetLength(S.Cells, i);
+  end;
+  S.First := f;
+  S.Last := l;
+  row := nil;
+  r := -1;
+  nested := False;
+  merged := False;
+  S.Ordered := True;
+  for k := f to l do
+  begin
+    c := S.Cells[k - f];
+    if c.FRow.FTable.FContentLocked then merged := True;
+    if c.FRow.FHoldsNestedTable then nested := True;
+    if c.FRow <> row then
+    begin
+      row := c.FRow;
+      Inc(r);
+      if r = Length(S.Rows) then SetLength(S.Rows, r * 2 + 4);
+      S.Rows[r].Row := row;
+      S.Rows[r].First := k;
+      S.Rows[r].Cells := nil;
+      SetLength(S.Rows[r].Cells, Length(row.FCells));
+      for i := 0 to High(S.Rows[r].Cells) do
+      begin
+        S.Rows[r].Cells[i].First := -1;
+        S.Rows[r].Cells[i].Last := -1;
+      end;
+    end;
+    S.Rows[r].Last := k;
+    ci := c.FIndex;
+    with S.Rows[r].Cells[ci] do
+    begin
+      if First < 0 then First := k
+      else if Last <> k - 1 then S.Ordered := False;
+      Last := k;
+    end;
+    // a later cell's paragraph met already: the cells are not in order
+    for i := ci + 1 to High(S.Rows[r].Cells) do
+      if S.Rows[r].Cells[i].First >= 0 then S.Ordered := False;
+  end;
+  S.RowCount := r + 1;
+  SetLength(S.Rows, S.RowCount);
+  if nested then S.Locked := rtrNestedTable
+  else if merged then S.Locked := rtrMergedCells;
+  S.Regular := True;
+  for r := 1 to S.RowCount - 1 do
+    if Length(S.Rows[r].Row.FCells) <> Length(S.Rows[0].Row.FCells) then S.Regular := False;
+end;
+
+destructor TTyRichTableEditor.Destroy;
+var
+  i: Integer;
+begin
+  // the paragraphs that use them hold their own references
+  for i := 0 to High(Own) do Own[i].Release;
+  inherited Destroy;
+end;
+
+function TTyRichTableEditor.NewTable(const AColBoundaries: array of Integer): TTyRichTable;
+begin
+  Result := TTyRichTable.Create(AColBoundaries);
+  Result.AddRef;
+  SetLength(Own, Length(Own) + 1);
+  Own[High(Own)] := Result;
+end;
+
+{ The table the plan's rows go into: the one the command kept from its first run when it has
+  those rows (a redo after an exact undo: the very same object again), else a new one, which
+  the command keeps when it keeps none yet. }
+function TTyRichTableEditor.TableFor(const AColBoundaries: array of Integer): TTyRichTable;
+var
+  t: TTyRichTable;
+  fits: Boolean;
+  r, i: Integer;
+begin
+  if Length(Kept^) > 0 then
+  begin
+    t := Kept^[0];
+    fits := Length(t.FRows) = Length(Plan);
+    if fits then
+      for r := 0 to High(Plan) do
+      begin
+        if (Length(t.FRows[r].FCells) <> Length(Plan[r].CellFrom)) or
+           not SameBytes(t.FRows[r].FRawFormat, Plan[r].Raw) or
+           (Length(t.FRows[r].FBoundaries) <> Length(Plan[r].Edges)) then
+        begin
+          fits := False;
+          Break;
+        end;
+        for i := 0 to High(Plan[r].Edges) do
+          if t.FRows[r].FBoundaries[i] <> Plan[r].Edges[i] then fits := False;
+      end;
+    if fits then Exit(t);
+  end;
+  Result := NewTable(AColBoundaries);
+  for r := 0 to High(Plan) do
+    Result.AddRow(Length(Plan[r].CellFrom), Plan[r].Raw, Plan[r].Edges, Plan[r].Nested);
+  if Length(Kept^) = 0 then
+  begin
+    Result.AddRef;
+    SetLength(Kept^, 1);
+    Kept^[0] := Result;
+  end;
+end;
+
+{ D's paragraph with ACell in place of its cell: its formats, runs and marker text. In a row
+  the file cannot tell from the row of the cell the first such value had (an edit of rows
+  makes the very rows of the file again), the new value names that first one as its source -
+  a writer then still has the file's bytes for the paragraph. }
+function TTyRichTableEditor.Repointed(D: TTyRichParaData; ACell: TTyRichCell): TTyRichParaData;
+var
+  root: TTyRichParaData;
+begin
+  Result := Doc.MakeDataLike(Doc.FormatOfData(D), Doc.RunsOfData(D), ACell, D);
+  if (ACell = nil) or (Result = nil) or (D = nil) then Exit;
+  root := D;
+  if D.FSource <> nil then root := D.FSource;
+  if (root.FCell <> nil) and (root.FCell.FIndex = ACell.FIndex) and
+     RowsAlike(root.FCell.FRow, ACell.FRow) then
+  begin
+    Doc.AcquireData(root);
+    Result.FSource := root;
+  end;
+end;
+
+{ Paragraphs AFirst .. get ACells[i] for their cells. AKinds []: the change is told nobody -
+  for paragraphs whose rows look as they did (only the table object is another), so that a
+  view keeps what it laid out of them. }
+function TTyRichTableEditor.SetCells(AFirst: Integer; const ACells: array of TTyRichCell;
+  AKinds: TTyRichChangeKinds): TTyRichUndoData;
+var
+  c: TTyRichChange;
+  i, last: Integer;
+  d: TTyRichParaData;
+begin
+  c := Default(TTyRichChange);
+  c.Pos := Doc.FText.ParaStart(AFirst);
+  Result := Doc.NewUndo(c);
+  try
+    Result.FFirstPara := AFirst;
+    for i := 0 to High(ACells) do
+    begin
+      Inc(Doc.FTableParaVisits);
+      d := Doc.DataOf(AFirst + i);
+      Result.AddOld(d);
+      if Doc.CellOfData(d) <> ACells[i] then
+        Doc.PutData(AFirst + i, d, Repointed(d, ACells[i]));
+    end;
+    Result.SealOld;
+  except
+    // (the values set so far go back; nothing was told)
+    Doc.Revert(Result);
+    raise;
+  end;
+  if AKinds = [] then Exit;
+  last := AFirst + High(ACells);
+  c.Kinds := AKinds;
+  c.OldLen := Doc.FText.ParaStart(last) + Doc.FText.ParaLength(last) - c.Pos;
+  c.NewLen := c.OldLen;
+  c.FirstPara := AFirst;
+  c.OldParaCount := Length(ACells);
+  c.NewParaCount := c.OldParaCount;
+  Result.FChange := c;
+  Doc.Notify(c);
+end;
+
+{ Empty paragraphs, AParas, before paragraph APara - which keeps its text and its value: a
+  paragraph of a file stays the file's own (the separators go in at its start, where no piece
+  of its text is split, and its value goes with its text). One insert's record; its revert
+  deletes the separators and gives the paragraph its value back. }
+function TTyRichTableEditor.InsertParas(APara: Integer;
+  const AParas: array of TTyRichNewPara): TTyRichUndoData;
+var
+  c: TTyRichChange;
+  n, i: Integer;
+  p, before: TTyRichPos;
+  d, v: TTyRichParaData;
+  seps: UTF8String;
+  one: TTyRunArray;
+begin
+  n := Length(AParas);
+  p := Doc.FText.ParaStart(APara);
+  d := Doc.DataOf(APara);
+  seps := '';
+  SetLength(seps, n);
+  for i := 1 to n do seps[i] := #10;
+  seps := WithBreaks(seps, Doc.FDominantLineBreak);
+  c := Default(TTyRichChange);
+  c.Pos := p;
+  Result := Doc.NewUndo(c);
+  try
+    Result.FFirstPara := APara;
+    Result.AddOld(d);
+    Result.SealOld;
+    Result.FSpan := Doc.FText.PieceSpan(p, p);
+    before := Doc.FText.Length;
+    Inc(Doc.FEditing);
+    try
+      Doc.FText.Insert(p, seps);
+    finally
+      Dec(Doc.FEditing);
+    end;
+    Result.FInserted := Doc.FText.Length - before;
+    // the storage left d with the first part, the first new paragraph: it goes with its text
+    Doc.PutData(APara + n, nil, d);
+    for i := 0 to n - 1 do
+    begin
+      one := nil;
+      SetLength(one, 1);
+      one[0].Start := 0;
+      one[0].Format := AParas[i].CharFormat;
+      one[0].Obj := nil;
+      v := Doc.MakeData(AParas[i].ParaFormat, one, AParas[i].Cell);
+      if i = 0 then Doc.PutData(APara, d, v) else Doc.PutData(APara + i, nil, v);
+    end;
+  except
+    Doc.Revert(Result);
+    raise;
+  end;
+  c.Kinds := [rckText, rckStructure];
+  c.NewLen := Result.FInserted;
+  c.FirstPara := APara;
+  c.OldParaCount := 1;
+  c.NewParaCount := 1 + n;
+  Result.FChange := c;
+  Doc.Notify(c);
+end;
+
+// Whole paragraphs AFirst .. ALast go; a paragraph follows them (the editor sees to that).
+function TTyRichTableEditor.DeleteParas(AFirst, ALast: Integer): TTyRichUndoData;
+var
+  s: TTyRichPos;
+begin
+  s := Doc.FText.ParaStart(AFirst);
+  Result := Doc.DeleteRange(s, Doc.FText.ParaStart(ALast + 1) - s);
+end;
+
+// The formats of paragraph APara, for an empty paragraph made like it.
+function TTyRichTableEditor.FormatOf(APara: Integer): TTyRichNewPara;
+begin
+  Result.Cell := nil;
+  Result.ParaFormat := Doc.ParaFormatOf(APara);
+  Result.CharFormat := Doc.TypingFormatAt(Doc.FText.ParaStart(APara));
+end;
+
+procedure TTyRichTableEditor.AddOp(AAnchor, ALast: Integer; AInsert: Boolean;
+  const AParas: TTyRichNewParas);
+begin
+  if OpCount = Length(Ops) then SetLength(Ops, OpCount * 2 + 8);
+  Ops[OpCount].Anchor := AAnchor;
+  Ops[OpCount].Last := ALast;
+  Ops[OpCount].Insert := AInsert;
+  Ops[OpCount].Paras := AParas;
+  Inc(OpCount);
+end;
+
+procedure TTyRichTableEditor.Pend(const APara: TTyRichNewPara);
+begin
+  if PendingCount = Length(Pending) then SetLength(Pending, PendingCount * 2 + 4);
+  Pending[PendingCount] := APara;
+  Inc(PendingCount);
+end;
+
+// The new paragraphs met since the last paragraph that stays go in before AAnchor.
+procedure TTyRichTableEditor.Flush(AAnchor: Integer);
+begin
+  if PendingCount = 0 then Exit;
+  AddOp(AAnchor, -1, True, Copy(Pending, 0, PendingCount));
+  PendingCount := 0;
+end;
+
+{ The rows of an edit of rows: the shape's rows, each again with its own format, cells and
+  edges, a new one put in (the row beside it again) or one left out. }
+procedure TTyRichTableEditor.PlanRows;
+var
+  n, r, k, b, ci: Integer;
+  src: TTyRichShapeRow;
+  para: Integer;
+begin
+  Plan := nil;
+  n := 0;
+  SetLength(Plan, Shape.RowCount + 1);
+  for r := 0 to Shape.RowCount do
+  begin
+    if (Edit.Kind = rtkInsertRow) and (r = Edit.Index) then
+    begin
+      // the row above, or for the first the row below
+      if r > 0 then b := r - 1 else b := 0;
+      src := Shape.Rows[b];
+      with Plan[n] do
+      begin
+        Shape := -1;
+        Raw := src.Row.FRawFormat;
+        Edges := Copy(src.Row.FBoundaries);
+        Nested := False;
+        SetLength(CellFrom, Length(src.Cells));
+        SetLength(NewFormat, Length(src.Cells));
+        for ci := 0 to High(src.Cells) do
+        begin
+          CellFrom[ci] := -1;
+          para := src.Cells[ci].First;
+          if para < 0 then para := src.First;
+          NewFormat[ci] := FormatOf(para);
+        end;
+      end;
+      Inc(n);
+    end;
+    if r = Shape.RowCount then Break;
+    if (Edit.Kind = rtkDeleteRow) and (r = Edit.Index) then Continue;
+    src := Shape.Rows[r];
+    with Plan[n] do
+    begin
+      Shape := r;
+      Raw := src.Row.FRawFormat;
+      Edges := Copy(src.Row.FBoundaries);
+      Nested := src.Row.FHoldsNestedTable;
+      SetLength(CellFrom, Length(src.Cells));
+      SetLength(NewFormat, Length(src.Cells));
+      for k := 0 to High(src.Cells) do
+      begin
+        CellFrom[k] := k;
+        NewFormat[k] := FormatOf(src.First);
+      end;
+    end;
+    Inc(n);
+  end;
+  SetLength(Plan, n);
+end;
+
+{ The rows of an edit of columns: every row with a cell more or less, the edges after it
+  moved by its width, the format's words kept with their cells. }
+procedure TTyRichTableEditor.PlanColumns;
+var
+  r, i, j, b, n, w, left, para: Integer;
+  src: TTyRichShapeRow;
+  oldEdges, newEdges: TTyIntArray;
+  rowWords: RawByteString;
+  cells, newCells: TTyRtfCellWords;
+  split: Boolean;
+begin
+  Plan := nil;
+  if (Edit.Kind = rtkDeleteColumn) and (Length(Shape.Rows[0].Cells) = 1) then
+    Exit;   // the only column: the table goes
+  SetLength(Plan, Shape.RowCount);
+  j := Edit.Index;
+  for r := 0 to Shape.RowCount - 1 do
+  begin
+    src := Shape.Rows[r];
+    n := Length(src.Cells);
+    oldEdges := RowEdges(src.Row);
+    // where the row's first cell starts
+    if src.Row.FRawFormat <> '' then left := TyRtfRowDisplay(src.Row.FRawFormat).Left
+    else left := 0;
+    newEdges := nil;
+    with Plan[r] do
+    begin
+      Shape := r;
+      Nested := src.Row.FHoldsNestedTable;
+      if Edit.Kind = rtkInsertColumn then
+      begin
+        // the cell beside it: the one left of it, for the first the one right of it
+        if j > 0 then b := j - 1 else b := 0;
+        if b > 0 then w := oldEdges[b] - oldEdges[b - 1] else w := oldEdges[0] - left;
+        SetLength(newEdges, n + 1);
+        SetLength(CellFrom, n + 1);
+        SetLength(NewFormat, n + 1);
+        for i := 0 to n do
+        begin
+          if i < j then
+          begin
+            newEdges[i] := oldEdges[i];
+            CellFrom[i] := i;
+          end
+          else if i = j then
+          begin
+            if j > 0 then newEdges[i] := oldEdges[j - 1] + w else newEdges[i] := left + w;
+            CellFrom[i] := -1;
+          end
+          else
+          begin
+            newEdges[i] := oldEdges[i - 1] + w;
+            CellFrom[i] := i - 1;
+          end;
+          para := src.First;
+          if CellFrom[i] < 0 then
+          begin
+            para := src.Cells[b].First;
+            if para < 0 then para := src.First;
+          end;
+          NewFormat[i] := FormatOf(para);
+        end;
+      end
+      else
+      begin
+        if j > 0 then w := oldEdges[j] - oldEdges[j - 1] else w := oldEdges[0] - left;
+        SetLength(newEdges, n - 1);
+        SetLength(CellFrom, n - 1);
+        SetLength(NewFormat, n - 1);
+        for i := 0 to n - 2 do
+        begin
+          if i < j then
+          begin
+            newEdges[i] := oldEdges[i];
+            CellFrom[i] := i;
+          end
+          else
+          begin
+            newEdges[i] := oldEdges[i + 1] - w;
+            CellFrom[i] := i + 1;
+          end;
+          NewFormat[i] := FormatOf(src.First);
+        end;
+      end;
+      Edges := newEdges;
+      // the format: each cell's words with the cell, the row's with the row
+      Raw := '';
+      if src.Row.FRawFormat <> '' then
+      begin
+        split := TyRtfSplitRowFormat(src.Row.FRawFormat, n, rowWords, cells);
+        if split then
+        begin
+          newCells := nil;
+          SetLength(newCells, Length(CellFrom));
+          for i := 0 to High(CellFrom) do
+            if CellFrom[i] >= 0 then newCells[i] := cells[CellFrom[i]]
+            else newCells[i] := cells[b];
+          Raw := TyRtfJoinRowFormat(rowWords, newCells, newEdges);
+        end
+        else
+          Raw := TyRtfGridRowFormat(newEdges);
+      end;
+    end;
+  end;
+end;
+
+procedure TTyRichTableEditor.InsertTable(U: TTyRichUndoData);
+var
+  pos: TTyRichPos;
+  k, anchor, r, ci, n, w, i: Integer;
+  pf: TTyParaFormat;
+  cellFormat: TTyRichNewPara;
+  edges: TTyIntArray;
+  raw: RawByteString;
+  t: TTyRichTable;
+  paras: TTyRichNewParas;
+  apart: Boolean;
+begin
+  pos := Edit.Pos;
+  k := Doc.FText.ParaOfPos(pos);
+  // the cells' formats: those in effect at the place, the paragraph's without a list or indents
+  pf := Doc.FFormats.ParaFormat(Doc.ParaFormatOf(k));
+  pf.List := TyDefaultParaFormat.List;
+  pf.LeftIndent := 0;
+  pf.RightIndent := 0;
+  pf.FirstIndent := 0;
+  cellFormat.ParaFormat := Doc.FFormats.InternPara(pf);
+  cellFormat.CharFormat := Doc.TypingFormatAt(pos);
+  cellFormat.Cell := nil;
+  if pos > Doc.FText.ParaStart(k) then
+  begin
+    // inside a paragraph, or after the text at its end: split, the table between the parts
+    U.AddPart(Doc.InsertText(pos, #13#10));
+    anchor := k + 1;
+  end
+  else
+    anchor := k;
+  // right after another table: a paragraph in no table first, so that the two stay apart
+  apart := (anchor > 0) and (Doc.CellAt(anchor - 1) <> nil);
+  w := Edit.Width;
+  if w <= 0 then w := Doc.TextWidthTwips;
+  edges := nil;
+  SetLength(edges, Edit.Cols);
+  for i := 0 to Edit.Cols - 1 do edges[i] := Integer(Int64(w) * (i + 1) div Edit.Cols);
+  raw := TyRtfGridRowFormat(edges);
+  Plan := nil;
+  SetLength(Plan, Edit.Rows);
+  for r := 0 to Edit.Rows - 1 do
+  begin
+    Plan[r].Shape := -1;
+    Plan[r].Raw := raw;
+    Plan[r].Edges := edges;
+    Plan[r].Nested := False;
+    SetLength(Plan[r].CellFrom, Edit.Cols);
+    for ci := 0 to Edit.Cols - 1 do Plan[r].CellFrom[ci] := -1;
+  end;
+  t := TableFor(edges);
+  n := Edit.Rows * Edit.Cols;
+  paras := nil;
+  SetLength(paras, n + Ord(apart));
+  i := 0;
+  if apart then
+  begin
+    paras[0] := FormatOf(anchor);
+    i := 1;
+  end;
+  for r := 0 to Edit.Rows - 1 do
+    for ci := 0 to Edit.Cols - 1 do
+    begin
+      paras[i] := cellFormat;
+      paras[i].Cell := t.FRows[r].FCells[ci];
+      Inc(i);
+    end;
+  U.AddPart(InsertParas(anchor, paras));
+end;
+
+procedure TTyRichTableEditor.EditShape(U: TTyRichUndoData);
+var
+  t: TTyRichTable;
+  cells: array of TTyRichCell;
+  rowOf: array of Integer;
+  r, pr, ci, j, k, i: Integer;
+  colBounds: TTyIntArray;
+  kinds: TTyRichChangeKinds;
+  op: TTyRichTableOp;
+  sorted: Boolean;
+begin
+  // (Shape: read by the refusal check, in this read scope)
+  // a paragraph in no table after the table, so that whole paragraphs can go and come
+  // before it (a table that ends the text is made only by code)
+  if Shape.Last = Doc.FText.ParaCount - 1 then
+  begin
+    U.AddPart(Doc.InsertText(Doc.FText.Length, #13#10));
+    U.AddPart(SetCells(Doc.FText.ParaCount - 1, [nil], [rckStructure]));
+  end;
+  if Edit.Kind in [rtkInsertRow, rtkDeleteRow] then PlanRows else PlanColumns;
+  // the shape row each plan row is
+  rowOf := nil;
+  SetLength(rowOf, Shape.RowCount);
+  for r := 0 to Shape.RowCount - 1 do rowOf[r] := -1;
+  for pr := 0 to High(Plan) do
+    if Plan[pr].Shape >= 0 then rowOf[Plan[pr].Shape] := pr;
+  t := nil;
+  if Length(Plan) > 0 then
+  begin
+    if Edit.Kind in [rtkInsertRow, rtkDeleteRow] then
+      colBounds := Copy(Shape.Rows[0].Row.FTable.FColBoundaries)
+    else
+      colBounds := Plan[0].Edges;
+    t := TableFor(colBounds);
+    // every paragraph that stays: its cell in the new table (an edit of rows changes nothing
+    // a view shows of them, and tells nobody)
+    cells := nil;
+    SetLength(cells, Shape.Last - Shape.First + 1);
+    for r := 0 to Shape.RowCount - 1 do
+      for k := Shape.Rows[r].First to Shape.Rows[r].Last do
+      begin
+        cells[k - Shape.First] := Shape.Cells[k - Shape.First];
+        pr := rowOf[r];
+        if pr < 0 then Continue;
+        ci := cells[k - Shape.First].FIndex;
+        for j := 0 to High(Plan[pr].CellFrom) do
+          if Plan[pr].CellFrom[j] = ci then
+          begin
+            cells[k - Shape.First] := t.FRows[pr].FCells[j];
+            Break;
+          end;
+      end;
+    if Edit.Kind in [rtkInsertRow, rtkDeleteRow] then kinds := [] else kinds := [rckStructure];
+    U.AddPart(SetCells(Shape.First, cells, kinds));
+  end;
+  // what goes
+  for r := 0 to Shape.RowCount - 1 do
+  begin
+    pr := rowOf[r];
+    if pr < 0 then
+    begin
+      AddOp(Shape.Rows[r].First, Shape.Rows[r].Last, False, nil);
+      Continue;
+    end;
+    for ci := 0 to High(Shape.Rows[r].Cells) do
+    begin
+      if Shape.Rows[r].Cells[ci].First < 0 then Continue;
+      j := 0;
+      while (j <= High(Plan[pr].CellFrom)) and (Plan[pr].CellFrom[j] <> ci) do Inc(j);
+      if j > High(Plan[pr].CellFrom) then
+        AddOp(Shape.Rows[r].Cells[ci].First, Shape.Rows[r].Cells[ci].Last, False, nil);
+    end;
+  end;
+  // what comes: each new cell's paragraph (and a cell's that had none) goes in before the
+  // next paragraph that stays, in the new table's order
+  PendingCount := 0;
+  for pr := 0 to High(Plan) do
+    for j := 0 to High(Plan[pr].CellFrom) do
+    begin
+      ci := Plan[pr].CellFrom[j];
+      if (ci >= 0) and (Shape.Rows[Plan[pr].Shape].Cells[ci].First >= 0) then
+        Flush(Shape.Rows[Plan[pr].Shape].Cells[ci].First)
+      else
+      begin
+        Pend(Plan[pr].NewFormat[j]);
+        Pending[PendingCount - 1].Cell := t.FRows[pr].FCells[j];
+      end;
+    end;
+  Flush(Shape.Last + 1);
+  // from the last place to the first, so that each op's paragraphs are where they were; at
+  // one place what goes goes before what comes comes
+  repeat
+    sorted := True;
+    for i := 1 to OpCount - 1 do
+      if (Ops[i].Anchor > Ops[i - 1].Anchor) or
+         ((Ops[i].Anchor = Ops[i - 1].Anchor) and not Ops[i].Insert and Ops[i - 1].Insert) then
+      begin
+        op := Ops[i];
+        Ops[i] := Ops[i - 1];
+        Ops[i - 1] := op;
+        sorted := False;
+      end;
+  until sorted;
+  for i := 0 to OpCount - 1 do
+    if Ops[i].Insert then
+      U.AddPart(InsertParas(Ops[i].Anchor, Ops[i].Paras))
+    else
+      U.AddPart(DeleteParas(Ops[i].Anchor, Ops[i].Last));
+end;
+
+function TTyRichTableEditor.Run: TTyRichUndoData;
+begin
+  Result := Doc.NewUndo(Default(TTyRichChange));
+  Doc.BeginRead;
+  try
+    try
+      if Edit.Kind = rtkInsertTable then InsertTable(Result) else EditShape(Result);
+    except
+      // what was done goes back before the error travels on
+      Doc.Revert(Result);
+      raise;
+    end;
+  finally
+    Doc.EndRead;
+  end;
+end;
+
+function TTyRichDocument.TextWidthTwips: Integer;
+var
+  w: Int64;
+begin
+  w := Int64(FPaperWidth) - FMarginLeft - FMarginRight;
+  if w > High(Integer) then w := High(Integer);
+  if w < 0 then w := 0;
+  Result := Integer(w);
+end;
+
+function TTyRichDocument.ValueSource(AData: Pointer): Pointer;
+begin
+  if AData = nil then Exit(nil);
+  Result := TTyRichParaData(AData).FSource;
+end;
+
+{ TTyRichDocument.TableEditRefusal, and for an edit of a table its shape in S (read once: the
+  edit goes by it). Call it inside a read scope. }
+function TableRefusal(ADoc: TTyRichDocument; const AEdit: TTyRichTableEdit;
+  out S: TTyRichShape): TTyRichTableRefusal;
+var
+  k, n, w: Integer;
+begin
+  S := Default(TTyRichShape);
+  if ADoc.FLoadingContent or ADoc.FIncomplete or (ADoc.FSaving > 0) then Exit(rtrReadOnly);
+  if (AEdit.Pos < 0) or (AEdit.Pos > ADoc.FText.Length) then Exit(rtrOutOfRange);
+  k := ADoc.FText.ParaOfPos(AEdit.Pos);
+  if AEdit.Kind = rtkInsertTable then
+  begin
+    if (AEdit.Rows < 1) or (AEdit.Cols < 1) or (AEdit.Rows > CRichMaxTableRows) or
+       (AEdit.Cols > CRichMaxTableCols) or (AEdit.Width < 0) then
+      Exit(rtrOutOfRange);
+    w := AEdit.Width;
+    if w = 0 then w := ADoc.TextWidthTwips;
+    // every column at least a twip wide
+    if w < AEdit.Cols then Exit(rtrOutOfRange);
+    if ADoc.CellAt(k) <> nil then Exit(rtrInTable);
+    Exit(rtrNone);
+  end;
+  Result := ReadTableShape(ADoc, k, S);
+  if Result <> rtrNone then Exit;
+  if S.Locked <> rtrNone then Exit(S.Locked);
+  case AEdit.Kind of
+    rtkInsertRow:
+      if (AEdit.Index < 0) or (AEdit.Index > S.RowCount) then Exit(rtrOutOfRange);
+    rtkDeleteRow:
+      if (AEdit.Index < 0) or (AEdit.Index >= S.RowCount) then Exit(rtrOutOfRange);
+  else
+    begin
+      if not S.Regular or not S.Ordered then Exit(rtrIrregularRows);
+      n := Length(S.Rows[0].Cells);
+      if (AEdit.Index < 0) or (AEdit.Index > n) or
+         ((AEdit.Kind = rtkDeleteColumn) and (AEdit.Index = n)) then
+        Exit(rtrOutOfRange);
+      // a new column beyond what a table may have
+      if (AEdit.Kind = rtkInsertColumn) and (n >= CRichMaxTableCols) then Exit(rtrOutOfRange);
+    end;
+  end;
+  // (a row edit needs the rows' cells in order too: a cell's paragraphs are found by it)
+  if not S.Ordered then Exit(rtrIrregularRows);
+  Result := rtrNone;
+end;
+
+function TTyRichDocument.TableEditRefusal(const AEdit: TTyRichTableEdit): TTyRichTableRefusal;
+var
+  s: TTyRichShape;
+begin
+  BeginRead;
+  try
+    Result := TableRefusal(Self, AEdit, s);
+  finally
+    EndRead;
+  end;
+end;
+
+function TTyRichDocument.TableInfoAt(APara: Integer; out AInfo: TTyRichTableInfo): Boolean;
+var
+  s: TTyRichShape;
+  r: Integer;
+  c: TTyRichCell;
+begin
+  AInfo := Default(TTyRichTableInfo);
+  AInfo.First := -1;
+  AInfo.Last := -1;
+  AInfo.Row := -1;
+  AInfo.Cell := -1;
+  if (APara < 0) or (APara >= FText.ParaCount) then Exit(False);
+  BeginRead;
+  try
+    if ReadTableShape(Self, APara, s) = rtrNoTable then Exit(False);
+    AInfo.First := s.First;
+    AInfo.Last := s.Last;
+    AInfo.RowCount := s.RowCount;
+    for r := 0 to s.RowCount - 1 do
+      if (APara >= s.Rows[r].First) and (APara <= s.Rows[r].Last) then
+      begin
+        c := CellAt(APara);
+        AInfo.Row := r;
+        AInfo.RowFirst := s.Rows[r].First;
+        AInfo.RowLast := s.Rows[r].Last;
+        AInfo.Cell := c.FIndex;
+        AInfo.CellCount := Length(s.Rows[r].Cells);
+        AInfo.CellFirst := s.Rows[r].Cells[c.FIndex].First;
+        AInfo.CellLast := s.Rows[r].Cells[c.FIndex].Last;
+        Exit(True);
+      end;
+    Result := False;
+  finally
+    EndRead;
+  end;
+end;
+
+function TTyRichDocument.TableCellParas(ATablePara, ARow, ACell: Integer;
+  out AFirst, ALast: Integer): Boolean;
+var
+  s: TTyRichShape;
+begin
+  AFirst := -1;
+  ALast := -1;
+  if (ATablePara < 0) or (ATablePara >= FText.ParaCount) then Exit(False);
+  BeginRead;
+  try
+    if ReadTableShape(Self, ATablePara, s) = rtrNoTable then Exit(False);
+    if (ARow < 0) or (ARow >= s.RowCount) or (ACell < 0) or
+       (ACell > High(s.Rows[ARow].Cells)) then
+      Exit(False);
+    AFirst := s.Rows[ARow].Cells[ACell].First;
+    ALast := s.Rows[ARow].Cells[ACell].Last;
+    Result := AFirst >= 0;
+  finally
+    EndRead;
+  end;
+end;
+
+function TTyRichDocument.EditTable(const AEdit: TTyRichTableEdit;
+  var ATables: TTyRichTables): TTyRichUndoData;
+var
+  r: TTyRichTableRefusal;
+  ed: TTyRichTableEditor;
+begin
+  // (the table read for the check is the one the edit goes by: one read scope for both)
+  BeginRead;
+  try
+    ed := TTyRichTableEditor.Create;
+    try
+      r := TableRefusal(Self, AEdit, ed.Shape);
+      if r <> rtrNone then
+        raise ETyRichRefused.CreateFmt('The table edit is refused (%s)', [RefusalName(r)]);
+      ed.Doc := Self;
+      ed.Edit := AEdit;
+      ed.Kept := @ATables;
+      Result := ed.Run;
+    finally
+      ed.Free;
+    end;
+  finally
+    EndRead;
+  end;
+end;
+
 { ---- a fragment of another document ---- }
 
 constructor TTyRichFragment.Create(ATarget: TTyRichDocument; APos: TTyRichPos;
@@ -4405,7 +5603,8 @@ begin
     end;
     if (nt <> nil) and (FFilter <> nil) then
     begin
-      nt := TTyRichTable.Create(src.FColBoundaries, src.FStructureLocked);
+      // (a part of a table cut by a loader is a table of its own in the target)
+      nt := TTyRichTable.Create(src.FColBoundaries, src.FContentLocked);
       { held while the fragment is made (Create lets go of it at its end) - entered first, so
         that a failure while its rows are made (out of memory, the filter's) lets go of it too }
       nt.AddRef;
@@ -4757,6 +5956,16 @@ begin
   if u.FDoc <> Self then
     raise ETyRichModel.Create('Undo data of another document');
   AUndo := nil;
+  if Length(u.FParts) > 0 then
+  begin
+    // the edits it is made of, newest first; each reports what it puts back
+    try
+      for i := High(u.FParts) downto 0 do Revert(u.FParts[i]);
+    finally
+      u.Free;
+    end;
+    Exit;
+  end;
   try
     Inc(FEditing);
     try
@@ -4946,6 +6155,13 @@ function TTyRichCommand.ReplaceInParas(ADoc: TTyRichDocument; const APos: array 
 begin
   CheckRunning(ADoc);
   Result := Keep(ADoc.ReplaceInParas(APos, AFrom, ACount, ALen, AText, ASkipped));
+end;
+
+function TTyRichCommand.EditTable(ADoc: TTyRichDocument; const AEdit: TTyRichTableEdit;
+  var ATables: TTyRichTables): TTyRichChange;
+begin
+  CheckRunning(ADoc);
+  Result := Keep(ADoc.EditTable(AEdit, ATables));
 end;
 
 procedure TTyRichCommand.DoContinue(ADoc: TTyRichDocument);
