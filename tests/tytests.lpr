@@ -302,6 +302,7 @@ uses
   test.richedit.msftedit,
   test.richedit.tables,
   test.richedit.tableedit,
+  test.richedit.objects,
   test.richedit.perf;
 
 type

@@ -183,6 +183,15 @@ uses
 - **两个表格挨在一起时**(删掉了它们中间的段落),显示成一个表格,Tab 也从一个走进另一个;但行和列的方法只改光标所在的那一个，直到文档保存后再打开。
 - **`CanInsertRow` 这些函数回答得很省**:什么都没变时再问，直接给出上次的答案。按需读取的大 RTF 文件分段给出的表格，除非已经读到的部分就不允许修改，否则回答 `True`;真正执行时再读整个表格，不能修改就说明原因。
 
+### 图片
+
+- **从代码插入**:`InsertPictureFromFile(AFileName)`、`InsertPictureFromStream(AStream)` 和 `InsertPicture(AGraphic)`,以及给动作的 `Update` 用的 `CanInsertPicture`。Delphi 的 `TRichEdit` 和 RichMemo 都没有这些方法(RichMemo 的 `InDelInline` 也没有)。不弹对话框：文件由应用程序自己问用户。PNG 和 JPEG 文件按文件本身的字节放进去，一个字节不改，照片用这种方式更好;BMP、GIF、TIFF、图标等其他 LCL 能读的图片，解码后存成 PNG。`InsertPicture` 把 `TPortableNetworkGraphic` 存成 PNG,`TJPEGImage` 存成 JPEG(就是它们的 `SaveToStream` 给出的字节),其他的都存成 PNG。图片替换选区，和粘贴一样(一步撤销，名字是"插入图片");大小按图片自己的分辨率(没有就按 96 dpi)算出的像素，比光标处的可用宽度(页面的文字宽度，或者单元格的宽度)宽时，保持比例缩小。
+- **它们是用户的操作**:`ReadOnly`、禁用或者在文档的更新块里时，什么也不做，返回 `False`;纯文本文档、正在载入或保存的文档、粘贴也放不进去的地方、读不了的文件(附上系统的说明)、图元文件(`.wmf`、`.emf`:只能显示成一个空框)、不是图片的字节，以及超过 128 MB 或约 3355 万像素的图片，都会被拒绝，原因通过 `OnEditRefused` 告诉(不抛异常)。
+- **手柄**:用户可以编辑时，选中的图片显示边框和八个手柄(四个角和四条边的中点);只读或禁用的控件，以及不能调整大小的对象(控件按读到的原样保留的 RTF 块),只显示边框。颜色来自主题的 `TyRichEditObject`(`border-color` 是边框和手柄的轮廓,`background` 是手柄的填充;`StyleOverride` 里的 `--accent` 和 `--surface` 也作用于它们);手柄大小跟着屏幕的 DPI 变，不跟着 `Zoom` 变。应用程序自己的对象类通过 `TTyRichObject.CanResize` 和 `Resized` 参与。
+- **拖手柄调整大小**:拖动时有一个轮廓跟着指针，松手之前文档什么都不变。拖角上的手柄保持图片显示出来的宽高比(按住 Shift 时不保持),拖边中点的手柄只改那一边，和拖动的手柄相对的那一边留在原处。每条边至少 300 缇，最多 22 英寸(31680 缇，Word 的上限);文字折行时，宽度最多到图片所在处的可用宽度。松手是一条命令(`TTyRichResizeObject`,一步撤销，名字是"调整对象大小"),图片保持选中。执行前先问 `OnObjectResize`,它可以改大小，也可以不让改。拖动中按 Esc、失去鼠标捕获、在原来的大小松手、滚动或者文档有了改动，都什么也不改。
+- **调整大小保留什么**:图片的字节和格式(写字板的 `\wmetafile8` 还是那个图元文件,JPEG 还是那个 JPEG,逐字节一致);撤销调整会放回原来那个图片对象，所以打开文件、调整大小、撤销再保存，得到的还是原文件的字节。**不保留什么**:调整过大小的图片按新的大小从模型写出，所以文件里图片组除图片本身以外的内容——缩放字(`\picscalex`)、裁剪、同一张图片的其他表示(`\nonshppict`)和属性(`\picprop`)——不再保留。
+- **图元文件**(WMF 或 EMF)显示成一个框;它和其他图片一样可以选中、调整大小，字节按读到的原样保存。
+
 ### 没有的东西
 
 - **Delphi 的类型名**:属性类是 `TTyRichTextAttributes` 和 `TTyRichParaAttributes`,集合类型是 `TTyRichConsistentAttributes`、`TTyRichConsistentParaAttributes` 和 `TTySubscriptType`。成员名和 Delphi 一样(`caBold`、`cpaAlignment`、`sstSuperscript` ……),所以用到这些值的代码能编译，用 Delphi 类型名声明变量的代码不能。序号也不同。
@@ -232,6 +241,7 @@ uses
 - **段落**:`ParaAlign`(含两端对齐)、`NumberingStart`、`SpaceBefore`、`SpaceAfter`、`LineSpacingRule`、`LineSpacing`(单位是磅);每次写入只改每个段落里自己那一项。
 - **选区和编辑**:`CaretIndex`(光标所在的那一端)、`CollapseSelection`、`BeginEdit` / `EndEdit`(多次写入合成一步撤销)、`RangeText`。
 - **表格**:`InsertTable`、`InsertRow`、`InsertColumn`、`DeleteRow`、`DeleteColumn`、`DeleteTable`、`InTable` 和各个 `Can…` 函数;Tab 在单元格之间移动(见上面的"表格")。
+- **图片**:`InsertPictureFromFile`、`InsertPictureFromStream`、`InsertPicture`、`CanInsertPicture`;选中图片的手柄和拖手柄调整大小,`OnObjectResize`(见上面的"图片")。
 - **查找和替换**:`FindNext`、`FindNextAsync`、`ReplaceAll`(三种形式)、`ReplaceAllAsync`、`CancelFind`、`FindRunning`、`OnFindProgress`、`OnFindDone`、`OnReplaceDone`。一次替换算一步撤销，不受 `ReadOnly` 限制。
 - **`Action` 是发布的**,和 `TTyMemo` 一样(Delphi 的 `TRichEdit` 和 LCL 的 `TMemo` 不发布它):关联了动作时，点击编辑区会执行它;它的 `Caption` 不会进入文字。
 - **大文件**:RTF 文件在后台读入(`Loading`、`FinishLoading`、`CancelLoad`、`OnLoadProgress`);`OnSaveProgress` 报告保存进度。

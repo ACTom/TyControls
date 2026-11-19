@@ -5216,7 +5216,8 @@ begin
   Click(Point((r1.Left + r2.Left) div 2, (r1.Top + r1.Bottom) div 2));
   AssertEquals('the picture: start', Int64(1), FRich.SelStart);
   AssertEquals('the picture: its character', Int64(1), FRich.SelLength);
-  Click(At(0));
+  // (the letter after it: the one before lies under the selected picture's left handles)
+  Click(At(3));
   AssertFalse('a letter: the caret only', FRich.HasSelection);
 end;
 
@@ -6269,8 +6270,9 @@ begin
   r2 := FRich.PositionRect(2);
   AssertTrue('the picture is wide', r2.Left - r1.Left > 10);
   y := (r1.Top + r1.Bottom) div 2;
-  left := r1.Left + 3;
-  right := r2.Left - 3;
+  // (off the selected picture's handles, which a press would drag)
+  left := r1.Left + 6;
+  right := r2.Left - 6;
   FRich.PressAt(left, y);
   AssertEquals('pressed: the picture', Int64(1), FRich.SelStart);
   AssertEquals('pressed: its character', Int64(1), FRich.SelLength);

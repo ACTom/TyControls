@@ -878,6 +878,14 @@ msgstr "删除列"
 msgid "Delete table"
 msgstr "删除表格"
 
+#: tycontrols.strconsts.rsrichundoinsertpicture
+msgid "Insert picture"
+msgstr "插入图片"
+
+#: tycontrols.strconsts.rsrichundoresizeobject
+msgid "Resize object"
+msgstr "调整对象大小"
+
 #: tycontrols.strconsts.rsricheditincomplete
 msgid "The document was not loaded completely, so it cannot be saved."
 msgstr "文档没有完整载入,不能保存。"
@@ -927,8 +935,8 @@ msgid "A selection across table cells cannot be deleted or typed over (whole row
 msgstr "跨越表格单元格的选区不能删除或改写（整行可以）。"
 
 #: tycontrols.strconsts.rsricheditrefusedpicture
-msgid "The picture on the clipboard is too large to paste."
-msgstr "剪贴板上的图片太大，不能粘贴。"
+msgid "The picture is too large to go into the document."
+msgstr "图片太大，不能放进文档。"
 
 #: tycontrols.strconsts.rsricheditrefusedplainpaste
 msgid "A plain text document takes only text: a picture or formatted text cannot be pasted into it."
@@ -941,6 +949,23 @@ msgstr "内存不足，无法粘贴。"
 #: tycontrols.strconsts.rsricheditrefusedpasterows
 msgid "Table rows cannot be pasted over rows of a table: paste them outside the table, or into a cell as its text."
 msgstr "复制的表格行不能粘贴到表格的行上：请粘贴到表格外面，或者粘贴到一个单元格里作为它的文字。"
+
+#: tycontrols.strconsts.rsricheditrefusedplainpicture
+msgid "A plain text document cannot hold a picture."
+msgstr "纯文本文档里不能有图片。"
+
+#: tycontrols.strconsts.rsricheditrefusedmetafile
+msgid "A metafile (WMF or EMF) cannot be inserted: it could only be shown as an empty frame."
+msgstr "图元文件（WMF 或 EMF）不能插入：它只能显示成一个空框。"
+
+#: tycontrols.strconsts.rsricheditrefusednopicture
+msgid "This is not a picture that can be read."
+msgstr "这不是能读取的图片。"
+
+#: tycontrols.strconsts.rsricheditrefusedpicturefile
+#, object-pascal-format
+msgid "The picture file cannot be read: %s"
+msgstr "图片文件读不了：%s"
 
 #: tycontrols.strconsts.rsricheditrefusedplaintable
 msgid "A plain text document cannot hold a table."

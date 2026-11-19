@@ -207,6 +207,19 @@ type
     { The bytes its data takes (an image, kept RTF): what a history step that keeps it alive
       counts toward the history's memory limit (TTyRichDocument.MaxUndoBytes). }
     function DataBytes: Int64; virtual;
+    { The part of DataBytes that other objects may share with it - a resized picture shares
+      its image's bytes with the picture it was made from: the block's identity (nil: none)
+      and its size. The history counts a block once however many objects it holds share it. }
+    function SharedData(out ABytes: Int64): Pointer; virtual;
+    { Its display size in twips, when it has one of its own (a picture); False by default. }
+    function DisplaySize(out AWidthTwips, AHeightTwips: Integer): Boolean; virtual;
+    { It can be shown at another size: Resized makes the object that is. False by default (a
+      block of RTF kept as it was read). A class of an application's answers for itself. }
+    function CanResize: Boolean; virtual;
+    { A new object of the same class (one no reference was taken of) like this one but shown
+      AWidthTwips x AHeightTwips; nil when it cannot be resized. This one stays as it is -
+      objects are immutable, an undo puts it back. }
+    function Resized(AWidthTwips, AHeightTwips: Integer): TTyRichObject; virtual;
     { For an object that keeps RTF bytes as they were read (TTyRichOpaque.Bytes,
       TTyRichPicture.RawRtf): the \ucN in effect where they were read - how many fallback
       bytes follow each \uN in them, which the bytes themselves do not say. A writer puts
@@ -232,6 +245,18 @@ type
       ARawUc: Integer = 1);
     function Clone: TTyRichObject; override;
     function DataBytes: Int64; override;
+    // its Data: a resized picture shares it
+    function SharedData(out ABytes: Int64): Pointer; override;
+    function DisplaySize(out AWidthTwips, AHeightTwips: Integer): Boolean; override;
+    { True: a picture can be shown at any size - also one shown as a placeholder (a metafile
+      nothing here draws). }
+    function CanResize: Boolean; override;
+    { The same format and the very same Data (shared, not copied), the new display size, and no
+      RawRtf: a writer writes it from the model at its new size - what the file's group said
+      besides the picture (scaling words, cropping, other representations of it) is not kept.
+      Made by the class reference, so a subclass's object is of its class; a subclass with
+      fields of its own overrides this to copy them. }
+    function Resized(AWidthTwips, AHeightTwips: Integer): TTyRichObject; override;
     { What an image decoder can show of this picture: the format to decode as and the part of
       Data to hand it, [AStart, AStart + ACount). PNG, JPEG, BMP and DIB pictures are their
       data; a metafile whose whole drawing is one bitmap is that bitmap (rpfDib, the
@@ -758,7 +783,7 @@ type
 
   { A change to a document, and the one way to make one: TTyRichDocument.Execute runs it and
     keeps it for undo. A subclass changes the document in DoExecute through the protected
-    InsertText .. MarkTable below - they work only while the document runs this command, and
+    InsertText .. ReplaceObject below - they work only while the document runs this command, and
     each keeps what its primitive returned. So the inherited DoUndo (revert those records,
     newest first) and DoRedo (DoExecute again: after an exact undo the same arguments give
     the same result) are already right for a command that only calls them. }
@@ -807,6 +832,8 @@ type
       out ASkipped: Integer): TTyRichChange;
     function EditTable(ADoc: TTyRichDocument; const AEdit: TTyRichTableEdit;
       var ATables: TTyRichTables): TTyRichChange;
+    function ReplaceObject(ADoc: TTyRichDocument; APos: TTyRichPos;
+      AObject: TTyRichObject): TTyRichChange;
     { One more part of this command's work, as part of the step it is
       (TTyRichDocument.ExecutePart): it changes the document through the primitives as DoExecute
       does; its records join the step's. The default raises: a command goes on only when it
@@ -902,6 +929,10 @@ type
     FHistoryBytes: Int64;
     FHistoryObjectVisits: Int64;
     FObjHolds: TTyRichObjHolds;
+    { How many of the objects the history holds share each block of data
+      (TTyRichObject.SharedData): a block counts toward the history's bytes once, while one
+      of them is held. }
+    FDataHolds: TTyRichObjHolds;
     { A gathering of a step's objects (BeginGather .. EndGather): the keys met or skipped -
       a value whose key is here adds nothing -, the ones met first, and the next key. }
     FGathering: Boolean;
@@ -939,6 +970,9 @@ type
     procedure PushUndo(ACmd: TTyRichCommand);
     procedure HoldObjects(var AEntry: TTyRichHistoryEntry);
     procedure LetGoObjects(var AEntry: TTyRichHistoryEntry);
+    { The history holds AObj from now on (AHold) or no longer: its bytes, its shared block's
+      once (FDataHolds). }
+    procedure CountHeld(AObj: TTyRichObject; AHold: Boolean);
     { A gathering that passes over the values whose key is in ASkip or met before in it;
       EndGather gives the keys it met. MeetKey: True the first time a key is met. }
     procedure BeginGather(const ASkip: array of Int64);
@@ -1136,6 +1170,13 @@ type
       the table's paragraphs are visited twice (read, and given their cells), the new ones
       made; nothing outside the table is read. }
     function EditTable(const AEdit: TTyRichTableEdit; var ATables: TTyRichTables): TTyRichUndoData;
+    { The object whose character is at APos is replaced by AObject (the document takes a
+      reference to it): the text, the run's character format and everything else of the
+      paragraph stay. One record of the paragraph's old value (a revert puts the very object
+      back); reported as a format change of that one character. AObject the object already
+      there: no change. Raises ETyRichModel, before anything changes, when there is no object
+      at APos or the paragraph is one of a row that holds a nested table (CanChange). }
+    function ReplaceObject(APos: TTyRichPos; AObject: TTyRichObject): TTyRichUndoData;
     { Puts back what the primitive that returned AUndo changed, frees AUndo and sets it nil. }
     procedure Revert(var AUndo: TTyRichUndoData);
     { The paragraph's data value (an opaque identity, for tests and the history). }
@@ -1183,6 +1224,9 @@ type
     function TypingFormatAt(APos: TTyRichPos): TTyCharFormatId;
     function TableAt(AIndex: Integer): TTyRichTable;
     function CellAt(AIndex: Integer): TTyRichCell;
+    { The object whose character is at APos; nil when there is none (or APos is outside the
+      text). Parses that paragraph; good until the next read (see BeginRead). }
+    function ObjectAt(APos: TTyRichPos): TTyRichObject;
     { The paragraph range of the table AIndex is in; False outside a table. Walks the table's
       paragraphs. }
     function TableParas(AIndex: Integer; out AFirst, ALast: Integer): Boolean;
@@ -2026,6 +2070,63 @@ begin
   Result := InstanceSize + Length(FBytes) + Length(FDisplayText);
 end;
 
+function TTyRichObject.SharedData(out ABytes: Int64): Pointer;
+begin
+  ABytes := 0;
+  Result := nil;
+end;
+
+function TTyRichObject.DisplaySize(out AWidthTwips, AHeightTwips: Integer): Boolean;
+begin
+  AWidthTwips := 0;
+  AHeightTwips := 0;
+  Result := False;
+end;
+
+function TTyRichObject.CanResize: Boolean;
+begin
+  Result := False;
+end;
+
+function TTyRichObject.Resized(AWidthTwips, AHeightTwips: Integer): TTyRichObject;
+begin
+  Result := nil;
+end;
+
+function TTyRichPicture.SharedData(out ABytes: Int64): Pointer;
+begin
+  ABytes := Length(FData);
+  if ABytes > 0 then Result := Pointer(FData) else Result := nil;
+end;
+
+function TTyRichPicture.DisplaySize(out AWidthTwips, AHeightTwips: Integer): Boolean;
+begin
+  AWidthTwips := FWidthTwips;
+  AHeightTwips := FHeightTwips;
+  Result := True;
+end;
+
+function TTyRichPicture.CanResize: Boolean;
+begin
+  Result := True;
+end;
+
+type
+  TTyRichPictureClass = class of TTyRichPicture;
+
+function TTyRichPicture.Resized(AWidthTwips, AHeightTwips: Integer): TTyRichObject;
+var
+  p: TTyRichPicture;
+begin
+  p := TTyRichPictureClass(ClassType).Create(FFormat, FData, AWidthTwips, AHeightTwips, '', 1);
+  // the same bytes show the same: what DisplayData found of them is not looked for again
+  p.FShown := FShown;
+  p.FShowFormat := FShowFormat;
+  p.FShowStart := FShowStart;
+  p.FShowCount := FShowCount;
+  Result := p;
+end;
+
 function TTyRichPicture.Clone: TTyRichObject;
 begin
   Result := TTyRichPicture.Create(FFormat, FData, FWidthTwips, FHeightTwips, FRawRtf, FRawUc);
@@ -2783,6 +2884,7 @@ begin
   // the history first: its records hold references to the values disposed below
   ClearHistory;
   FreeAndNil(FObjHolds);
+  FreeAndNil(FDataHolds);
   FreeAndNil(FKeyMet);
   if FText <> nil then
   begin
@@ -3143,6 +3245,32 @@ end;
 function TTyRichDocument.CellAt(AIndex: Integer): TTyRichCell;
 begin
   Result := CellOfData(DataOf(AIndex));
+end;
+
+{ The run of the object character at offset AOffset of a paragraph's runs; -1: none. }
+function ObjectRunAt(const ARuns: TTyRunArray; AOffset: Integer): Integer;
+var
+  i: Integer;
+begin
+  for i := 0 to High(ARuns) do
+  begin
+    if ARuns[i].Start > AOffset then Break;
+    if (ARuns[i].Start = AOffset) and (ARuns[i].Obj <> nil) then Exit(i);
+  end;
+  Result := -1;
+end;
+
+function TTyRichDocument.ObjectAt(APos: TTyRichPos): TTyRichObject;
+var
+  k, i: Integer;
+  runs: TTyRunArray;
+begin
+  Result := nil;
+  if (APos < 0) or (APos >= FText.Length) then Exit;
+  k := FText.ParaOfPos(APos);
+  runs := RunsOfData(DataOf(k));
+  i := ObjectRunAt(runs, APos - FText.ParaStart(k));
+  if i >= 0 then Result := runs[i].Obj;
 end;
 
 function TTyRichDocument.ReadValue(AData: Pointer; out AFormat: TTyParaFormatId;
@@ -3826,6 +3954,50 @@ begin
   if AObject = nil then
     raise ETyRichModel.Create('InsertObject needs an object');
   Result := InsertCore(APos, TyRichObjectChar, AFormat, AObject);
+end;
+
+function TTyRichDocument.ReplaceObject(APos: TTyRichPos;
+  AObject: TTyRichObject): TTyRichUndoData;
+var
+  c: TTyRichChange;
+  k, i: Integer;
+  d: TTyRichParaData;
+  runs: TTyRunArray;
+begin
+  if AObject = nil then
+    raise ETyRichModel.Create('ReplaceObject needs an object');
+  if (APos < 0) or (APos >= FText.Length) then
+    raise ETyRichModel.CreateFmt('Position %d out of 0..%d', [APos, FText.Length - 1]);
+  if ChangeRefused(APos, 0) then raise NestedRowRefused;
+  c := Default(TTyRichChange);
+  c.Pos := APos;
+  k := FText.ParaOfPos(APos);
+  d := DataOf(k);
+  i := ObjectRunAt(RunsOfData(d), APos - FText.ParaStart(k));
+  if i < 0 then
+    raise ETyRichModel.CreateFmt('No object at %d', [APos]);
+  if RunsOfData(d)[i].Obj = AObject then Exit(NewUndo(c));
+  // a value is immutable: a copy of its runs with the one object put in
+  runs := Copy(RunsOfData(d));
+  runs[i].Obj := AObject;
+  Result := NewUndo(c);
+  try
+    Result.FFirstPara := k;
+    Result.AddOld(d);
+    PutData(k, d, MakeDataLike(FormatOfData(d), runs, CellOfData(d), d));
+    Result.SealOld;
+  except
+    Result.Free;
+    raise;
+  end;
+  c.Kinds := [rckFormat];
+  c.OldLen := 1;
+  c.NewLen := 1;
+  c.FirstPara := k;
+  c.OldParaCount := 1;
+  c.NewParaCount := 1;
+  Result.FChange := c;
+  Notify(c);
 end;
 
 function TTyRichDocument.DeleteRange(APos, ALen: TTyRichPos): TTyRichUndoData;
@@ -6277,6 +6449,13 @@ begin
   Result := Keep(ADoc.EditTable(AEdit, ATables));
 end;
 
+function TTyRichCommand.ReplaceObject(ADoc: TTyRichDocument; APos: TTyRichPos;
+  AObject: TTyRichObject): TTyRichChange;
+begin
+  CheckRunning(ADoc);
+  Result := Keep(ADoc.ReplaceObject(APos, AObject));
+end;
+
 procedure TTyRichCommand.DoContinue(ADoc: TTyRichDocument);
 begin
   raise ETyRichModel.CreateFmt('%s does not go on in parts', [ClassName]);
@@ -6501,9 +6680,43 @@ begin
     else
     begin
       FObjHolds.Add(list[i], 1);
-      Inc(FHistoryBytes, list[i].DataBytes);
+      CountHeld(list[i], True);
     end;
   end;
+end;
+
+procedure TTyRichDocument.CountHeld(AObj: TTyRichObject; AHold: Boolean);
+var
+  b, sb: Int64;
+  p: Pointer;
+  c: Integer;
+begin
+  b := AObj.DataBytes;
+  p := AObj.SharedData(sb);
+  if p <> nil then
+  begin
+    // its own part always; the block only for the first object that shares it, or the last
+    Dec(b, sb);
+    if FDataHolds = nil then FDataHolds := TTyRichObjHolds.Create;
+    if FDataHolds.TryGetValue(p, c) then
+    begin
+      if AHold then
+        FDataHolds[p] := c + 1
+      else if c > 1 then
+        FDataHolds[p] := c - 1
+      else
+      begin
+        FDataHolds.Remove(p);
+        Inc(b, sb);
+      end;
+    end
+    else if AHold then
+    begin
+      FDataHolds.Add(p, 1);
+      Inc(b, sb);
+    end;
+  end;
+  if AHold then Inc(FHistoryBytes, b) else Dec(FHistoryBytes, b);
 end;
 
 procedure TTyRichDocument.HoldMore(var AEntry: TTyRichHistoryEntry;
@@ -6546,7 +6759,7 @@ begin
       else
       begin
         FObjHolds.Add(AList[j], 1);
-        Inc(FHistoryBytes, AList[j].DataBytes);
+        CountHeld(AList[j], True);
       end;
       Inc(j);
     end;
@@ -6567,7 +6780,7 @@ begin
       else
       begin
         FObjHolds.Remove(AEntry.Objs[i]);
-        Dec(FHistoryBytes, AEntry.Objs[i].DataBytes);
+        CountHeld(AEntry.Objs[i], False);
       end;
   AEntry.Objs := nil;
   AEntry.Keys := nil;
@@ -6734,6 +6947,7 @@ begin
   FBlock := nil;
   FHistoryBytes := 0;
   if FObjHolds <> nil then FObjHolds.Clear;
+  if FDataHolds <> nil then FDataHolds.Clear;
 end;
 
 procedure TTyRichDocument.TrimHistory;

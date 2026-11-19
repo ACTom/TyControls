@@ -1,7 +1,7 @@
 unit tyControls.RichEdit.Commands;
 
 { The built-in commands of TTyRichEdit's document: insert text, delete, set character and
-  paragraph formats, insert an object, and a command made of commands (what an update block
+  paragraph formats, insert an object, resize one, and a command made of commands (what an update block
   becomes). Each is run by TTyRichDocument.Execute, and each changes the document only
   through the primitives TTyRichCommand hands on, so the inherited undo (the records
   reverted, newest first) and redo (run again) are exact - none of them keeps text or a
@@ -105,6 +105,37 @@ type
       once). }
     procedure GatherObjects(var AList: TTyRichObjectList; var ACount: Integer); override;
     property RichObject: TTyRichObject read FObject;
+  end;
+
+  { The object at APos shown AWidthTwips x AHeightTwips: objects are immutable, so the object
+    there is replaced by a new one of its class (TTyRichObject.Resized - a picture shares its
+    image's bytes with the old one, so a step costs the history the objects' own small parts,
+    not the image again), made at the first run and held here, so a redo puts that very one
+    back; an undo puts the very object back that was there (a file's picture: the file's
+    bytes again). The character, its run's format and everything around it stay. Refused
+    (CanExecute) when there is no object at APos, it cannot be resized (CanResize), a size is
+    not positive, or the paragraph cannot change there (TTyRichDocument.CanChange: a row that
+    holds a nested table). The size it has already: nothing changes and no step is kept. }
+  TTyRichResizeObject = class(TTyRichCommand)
+  private
+    FPos: TTyRichPos;
+    FWidth, FHeight: Integer;
+    FNew: TTyRichObject;
+  protected
+    procedure DoExecute(ADoc: TTyRichDocument); override;
+  public
+    constructor Create(APos: TTyRichPos; AWidthTwips, AHeightTwips: Integer);
+    destructor Destroy; override;
+    function CanExecute(ADoc: TTyRichDocument): Boolean; override;
+    function Description: string; override;
+    { The new object is kept alive by the step (the history counts its own part once; the
+      data it shares, once for all). }
+    procedure GatherObjects(var AList: TTyRichObjectList; var ACount: Integer); override;
+    property Pos: TTyRichPos read FPos;
+    property WidthTwips: Integer read FWidth;
+    property HeightTwips: Integer read FHeight;
+    { After the first run that changed something: the object it put in (nil before). }
+    property NewObject: TTyRichObject read FNew;
   end;
 
   { Inserts the content of ASource - a document of its own, what a reader made of a
@@ -432,6 +463,73 @@ begin
   inherited GatherObjects(AList, ACount);
   if ACount = Length(AList) then SetLength(AList, ACount * 2 + 4);
   AList[ACount] := FObject;
+  Inc(ACount);
+end;
+
+{ ---- TTyRichResizeObject ---- }
+
+constructor TTyRichResizeObject.Create(APos: TTyRichPos; AWidthTwips, AHeightTwips: Integer);
+begin
+  inherited Create;
+  FPos := APos;
+  FWidth := AWidthTwips;
+  FHeight := AHeightTwips;
+end;
+
+destructor TTyRichResizeObject.Destroy;
+begin
+  // the paragraph values that use it hold their own references
+  if FNew <> nil then FNew.Release;
+  inherited Destroy;
+end;
+
+function TTyRichResizeObject.CanExecute(ADoc: TTyRichDocument): Boolean;
+var
+  o: TTyRichObject;
+begin
+  Result := False;
+  if (FWidth <= 0) or (FHeight <= 0) then Exit;
+  // (asked outside a command's run: the object is read and used in one scope)
+  ADoc.BeginRead;
+  try
+    o := ADoc.ObjectAt(FPos);
+    Result := (o <> nil) and o.CanResize and ADoc.CanChange(FPos, 0);
+  finally
+    ADoc.EndRead;
+  end;
+end;
+
+procedure TTyRichResizeObject.DoExecute(ADoc: TTyRichDocument);
+var
+  o: TTyRichObject;
+  w, h: Integer;
+begin
+  if FNew = nil then
+  begin
+    o := ADoc.ObjectAt(FPos);
+    if (o = nil) or not o.CanResize then
+      raise ETyRichModel.CreateFmt('No object that can be resized at %d', [FPos]);
+    // already that size: nothing to do, and no step
+    if o.DisplaySize(w, h) and (w = FWidth) and (h = FHeight) then Exit;
+    FNew := o.Resized(FWidth, FHeight);
+    if FNew = nil then
+      raise ETyRichModel.CreateFmt('%s made no resized object', [o.ClassName]);
+    FNew.AddRef;
+  end;
+  ReplaceObject(ADoc, FPos, FNew);
+end;
+
+function TTyRichResizeObject.Description: string;
+begin
+  Result := rsRichUndoResizeObject;
+end;
+
+procedure TTyRichResizeObject.GatherObjects(var AList: TTyRichObjectList; var ACount: Integer);
+begin
+  inherited GatherObjects(AList, ACount);
+  if FNew = nil then Exit;
+  if ACount = Length(AList) then SetLength(AList, ACount * 2 + 4);
+  AList[ACount] := FNew;
   Inc(ACount);
 end;
 

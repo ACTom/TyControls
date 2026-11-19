@@ -354,10 +354,13 @@ begin
 end;
 
 const
-  BuiltInCount = 14;
+  BuiltInCount = 15;
   // the commands from here on change a table: the sample gets one before 'ggg' first
   FirstTableEdit = 10;
   SampleTablePos = 20;
+  // the resize: the sample gets a picture in 'fff' first
+  ResizeEdit = 14;
+  SamplePicturePos = 17;
 
 function TTyRichCommandsTest.BuiltIn(ADoc: TTyRichDocument; AIndex: Integer): TTyRichCommand;
 var
@@ -385,8 +388,9 @@ begin
     10: Result := TTyRichInsertRow.Create(SampleTablePos, 1);
     11: Result := TTyRichDeleteRow.Create(SampleTablePos, 0);
     12: Result := TTyRichInsertColumn.Create(SampleTablePos, 1);
+    13: Result := TTyRichDeleteColumn.Create(SampleTablePos, 0);
   else
-    Result := TTyRichDeleteColumn.Create(SampleTablePos, 0);
+    Result := TTyRichResizeObject.Create(SamplePicturePos, 900, 450);
   end;
 end;
 
@@ -404,7 +408,14 @@ begin
   begin
     d := NewSample;
     try
-      if i >= FirstTableEdit then
+      if i = ResizeEdit then
+      begin
+        // a picture in 'fff', not in the history
+        AssertTrue('the picture for the resize', d.Execute(TTyRichInsertObject.Create(
+          SamplePicturePos, TTyRichPicture.Create(rpfPng, nil, 300, 150))));
+        d.ClearUndo;
+      end
+      else if i >= FirstTableEdit then
       begin
         // a 2 x 2 table before 'ggg', not in the history
         AssertTrue('the table for the table edits', d.Execute(TTyRichInsertTable.Create(

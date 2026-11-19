@@ -302,6 +302,8 @@ resourcestring
   rsRichUndoInsertColumn = 'Insert column';
   rsRichUndoDeleteColumn = 'Delete column';
   rsRichUndoDeleteTable  = 'Delete table';
+  rsRichUndoInsertPicture = 'Insert picture';
+  rsRichUndoResizeObject = 'Resize object';
 
   { --- TTyRichEdit loading and saving -----------------------------------------
     What a refused save or change says (ETyRichEdit). %s is the file. }
@@ -321,10 +323,16 @@ resourcestring
   rsRichEditRefusedRange      = 'This part of the document cannot be edited.';
   rsRichEditRefusedCells      = 'A selection across table cells cannot be deleted or typed over (whole rows can).';
   rsRichEditRefusedLongPara   = 'This paragraph is too long to edit here: what is typed past the part shown would not be seen.';
-  rsRichEditRefusedPicture    = 'The picture on the clipboard is too large to paste.';
+  rsRichEditRefusedPicture    = 'The picture is too large to go into the document.';
   rsRichEditRefusedPlainPaste = 'A plain text document takes only text: a picture or formatted text cannot be pasted into it.';
   rsRichEditRefusedMemory     = 'There is not enough memory to paste this.';
   rsRichEditRefusedPasteRows  = 'Table rows cannot be pasted over rows of a table: paste them outside the table, or into a cell as its text.';
+  { A picture inserted from code (TTyCustomRichEdit.InsertPictureFromFile and the other
+    insert methods) that cannot go in. %s is the system's message. }
+  rsRichEditRefusedPlainPicture = 'A plain text document cannot hold a picture.';
+  rsRichEditRefusedMetafile   = 'A metafile (WMF or EMF) cannot be inserted: it could only be shown as an empty frame.';
+  rsRichEditRefusedNoPicture  = 'This is not a picture that can be read.';
+  rsRichEditRefusedPictureFile = 'The picture file cannot be read: %s';
   { A table action (TTyCustomRichEdit.InsertTable, InsertRow, DeleteColumn and the like, and
     Tab in a table's last cell) that the table or the place does not allow. The first %d
     is the most rows a table can have, the second (and the one of ...TableColumns) the most

@@ -8589,6 +8589,7 @@ type
     property OnModifiedChange;
     property OnZoomChange;
     property OnEditRefused;
+    property OnObjectResize;
     property OnLoadProgress;
     property OnSaveProgress;
     property OnFindProgress;

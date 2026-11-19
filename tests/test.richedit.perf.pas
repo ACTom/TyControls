@@ -46,13 +46,14 @@ type
     procedure TestA100MBTextFileFirstScreenAndMiddle;
     procedure TestA100MBRtfFileFirstScreenAndMiddle;
     procedure TestTabAndTheTableAnswersInALongTable;
+    procedure TestAPictureResizedInALargeDocument;
   end;
 
 implementation
 
 uses
-  Math, LCLType, tyControls.RichEdit.Text, tyControls.RichEdit.RtfRead,
-  tyControls.RichEdit.Model, tyControls.RichEdit.Commands;
+  Math, LCLType, Controls, BGRABitmap, BGRABitmapTypes, tyControls.RichEdit.Text,
+  tyControls.RichEdit.RtfRead, tyControls.RichEdit.Model, tyControls.RichEdit.Commands;
 
 {$IFDEF MSWINDOWS}
 type
@@ -92,6 +93,11 @@ type
     { A character typed, as LCL delivers it; a key pressed. }
     procedure TypeChar(AChar: Char);
     procedure Key(AKey: Word; AShift: TShiftState);
+    function HandleCentre(AHandle: TTyRichHandle; out APoint: TPoint): Boolean;
+    procedure Press(X, Y: Integer);
+    procedure MoveTo(X, Y: Integer);
+    procedure Release(X, Y: Integer);
+    function Step: Boolean;
   end;
 
 procedure TPerfRich.PaintInto(ABitmap: TBitmap);
@@ -110,6 +116,70 @@ end;
 procedure TPerfRich.Key(AKey: Word; AShift: TShiftState);
 begin
   KeyDown(AKey, AShift);
+end;
+
+function TPerfRich.HandleCentre(AHandle: TTyRichHandle; out APoint: TPoint): Boolean;
+var
+  rs: TTyRichHandleRects;
+begin
+  Result := ObjectHandleRects(rs);
+  APoint := Point((rs[AHandle].Left + rs[AHandle].Right) div 2,
+    (rs[AHandle].Top + rs[AHandle].Bottom) div 2);
+end;
+
+procedure TPerfRich.Press(X, Y: Integer);
+begin
+  MouseDown(mbLeft, [ssLeft], X, Y);
+end;
+
+procedure TPerfRich.MoveTo(X, Y: Integer);
+begin
+  MouseMove([ssLeft], X, Y);
+end;
+
+procedure TPerfRich.Release(X, Y: Integer);
+begin
+  MouseUp(mbLeft, [], X, Y);
+end;
+
+function TPerfRich.Step: Boolean;
+begin
+  Result := StepBackground;
+end;
+
+{ A PNG whose pixels do not compress: about AW x AH x 4 bytes. }
+function NoisePng(AW, AH: Integer): TBytes;
+var
+  b: TBGRABitmap;
+  st: TBytesStream;
+  p: PBGRAPixel;
+  i: Integer;
+  seed: Cardinal;
+begin
+  b := TBGRABitmap.Create(AW, AH);
+  st := TBytesStream.Create;
+  try
+    seed := 2463534242;
+    p := b.Data;
+    for i := 0 to AW * AH - 1 do
+    begin
+      // xorshift: no pattern a deflate could take away
+      seed := seed xor (seed shl 13);
+      seed := seed xor (seed shr 17);
+      seed := seed xor (seed shl 5);
+      p^.red := seed and $FF;
+      p^.green := (seed shr 8) and $FF;
+      p^.blue := (seed shr 16) and $FF;
+      p^.alpha := 255;
+      Inc(p);
+    end;
+    b.InvalidateBitmap;
+    b.SaveToStreamAs(st, ifPng);
+    Result := Copy(st.Bytes, 0, st.Size);
+  finally
+    st.Free;
+    b.Free;
+  end;
 end;
 
 function Clock: Double;
@@ -478,6 +548,70 @@ end;
   a second one (from what the first found); Down and the six answers, twenty times (a move
   inside the table reads it no more), each within 90 ms. Printed: those, and a row added by
   Tab in the table's last cell (the engine's row edit reads the table: not asserted). }
+{ A picture of 20 MB in the middle of a 100 MB document, shown reduced, selected and resized
+  by a drag of a handle: from the release to the end of its paint within 90 ms, the picture not
+  decoded again - not for the release's paint, nor by the background work after it - and one
+  undo step more. }
+procedure TTyRichEditPerfTest.TestAPictureResizedInALargeDocument;
+var
+  path: string;
+  bmp: TBitmap;
+  data: TBytes;
+  pic: TTyRichPicture;
+  at: TTyRichPos;
+  c: TPoint;
+  t0, release: Double;
+  decodes: Int64;
+  depth, steps: Integer;
+begin
+  CheckRoom;
+  path := NewFile('.txt');
+  MakeText(path, CFileBytes);
+  data := NoisePng(2800, 2500);
+  AssertTrue(Format('a picture of 20 MB (%d bytes)', [Length(data)]), Length(data) >= 20 * 1000 * 1000);
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf32bit;
+    bmp.SetSize(FRich.Width, FRich.Height);
+    FRich.LoadFromFile(path);
+    FRich.PlainText := False;
+    FRich.ScrollY := FRich.Document.Text.TotalHeight div 2;
+    TPerfRich(FRich).PaintInto(bmp);
+    // in the paragraph at the view's top, shown at 480 x 429 pixels (reduced)
+    at := FRich.Document.Text.ParaStart(FRich.TopParagraph + 1);
+    pic := TTyRichPicture.Create(rpfPng, data, 7200, 6430);
+    AssertTrue('the picture goes in', FRich.Document.Execute(TTyRichInsertObject.Create(at, pic)));
+    TPerfRich(FRich).PaintInto(bmp);
+    steps := 0;
+    while TPerfRich(FRich).Step and (steps < 20) do Inc(steps);
+    FRich.SelStart := at;
+    FRich.SelLength := 1;
+    TPerfRich(FRich).PaintInto(bmp);
+    AssertTrue('the picture shows its handles', TPerfRich(FRich).HandleCentre(rhBottomRight, c));
+    decodes := FRich.Layouter.PictureDecodes;
+    AssertTrue('decoded before the resize', decodes >= 1);
+    depth := FRich.Document.UndoDepth;
+    TPerfRich(FRich).Press(c.X, c.Y);
+    TPerfRich(FRich).MoveTo(c.X - 60, c.Y - 40);
+    TPerfRich(FRich).PaintInto(bmp);
+    t0 := Clock;
+    TPerfRich(FRich).Release(c.X - 60, c.Y - 40);
+    TPerfRich(FRich).PaintInto(bmp);
+    release := Clock - t0;
+    Report(Format('a %d MB picture in a 100 MB document resized: the release to the end of its ' +
+      'paint', [Length(data) div (1024 * 1024)]), release);
+    AssertEquals('one undo step more', depth + 1, FRich.Document.UndoDepth);
+    AssertEquals('not decoded for the release', decodes, FRich.Layouter.PictureDecodes);
+    steps := 0;
+    while TPerfRich(FRich).Step and (steps < 20) do Inc(steps);
+    TPerfRich(FRich).PaintInto(bmp);
+    AssertEquals('not decoded by the work after it', decodes, FRich.Layouter.PictureDecodes);
+    AssertTrue(Format('the release in %.1f ms', [release]), release <= CKeystrokeMs);
+  finally
+    bmp.Free;
+  end;
+end;
+
 procedure TTyRichEditPerfTest.TestTabAndTheTableAnswersInALongTable;
 const
   Rows = 10000;

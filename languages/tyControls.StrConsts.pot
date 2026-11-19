@@ -717,6 +717,14 @@ msgstr ""
 msgid "Delete table"
 msgstr ""
 
+#: tycontrols.strconsts.rsrichundoinsertpicture
+msgid "Insert picture"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichundoresizeobject
+msgid "Resize object"
+msgstr ""
+
 #: tycontrols.strconsts.rsricheditincomplete
 msgid "The document was not loaded completely, so it cannot be saved."
 msgstr ""
@@ -770,7 +778,7 @@ msgid "This paragraph is too long to edit here: what is typed past the part show
 msgstr ""
 
 #: tycontrols.strconsts.rsricheditrefusedpicture
-msgid "The picture on the clipboard is too large to paste."
+msgid "The picture is too large to go into the document."
 msgstr ""
 
 #: tycontrols.strconsts.rsricheditrefusedplainpaste
@@ -783,6 +791,23 @@ msgstr ""
 
 #: tycontrols.strconsts.rsricheditrefusedpasterows
 msgid "Table rows cannot be pasted over rows of a table: paste them outside the table, or into a cell as its text."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditrefusedplainpicture
+msgid "A plain text document cannot hold a picture."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditrefusedmetafile
+msgid "A metafile (WMF or EMF) cannot be inserted: it could only be shown as an empty frame."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditrefusednopicture
+msgid "This is not a picture that can be read."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditrefusedpicturefile
+#, object-pascal-format
+msgid "The picture file cannot be read: %s"
 msgstr ""
 
 #: tycontrols.strconsts.rsricheditrefusedplaintable

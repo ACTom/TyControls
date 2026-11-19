@@ -379,7 +379,8 @@ type
     SelectionText: TBGRAPixel;
     PlaceholderFill: TBGRAPixel;    // a picture that cannot be shown
     PlaceholderFrame: TBGRAPixel;
-    ObjectFrame: TBGRAPixel;        // around a selected picture
+    ObjectFrame: TBGRAPixel;        // around a selected picture, and its handles' outline
+    ObjectHandleFill: TBGRAPixel;   // inside the handles of a picture that can be resized
     TableBorder: TBGRAPixel;
     { An input method's composition (TTyRichLayouter.SetComposition) is underlined in this
       colour - the clause the input method works on twice as thick; alpha 0: in the colour of
@@ -476,6 +477,10 @@ type
       takes in the block's last separator (ATo > its last position) gets a mark past the
       end of its last line. }
     function SelectionRects(AFrom, ATo: TTyRichPos): TRectArray; virtual; abstract;
+    { The box of the object whose character is at APos (block-relative), as it is drawn -
+      what a selected picture's frame goes around: False when there is no object there or it
+      is not shown (past a cut, in a cell merged away). }
+    function ObjectBox(APos: TTyRichPos; out ABox: TRect): Boolean; virtual;
     { Draws the block with its top-left at (AX, AY) of ATarget. Only what meets AClip (the
       target's pixels; the target's own ClipRect is kept to as well) is drawn: lines,
       fragments, cells and pictures outside it cost nothing - a partial repaint is cheap.
@@ -606,6 +611,7 @@ type
     function PosAtPoint(AX, AY: Integer; out AAtLineEnd: Boolean): TTyRichPos; overload; override;
     function CaretRect(APos: TTyRichPos; AAtLineEnd: Boolean = False): TRect; override;
     function SelectionRects(AFrom, ATo: TTyRichPos): TRectArray; override;
+    function ObjectBox(APos: TTyRichPos; out ABox: TRect): Boolean; override;
     procedure Paint(ATarget: TBGRABitmap; AX, AY: Integer; const AClip: TRect;
       const AStyle: TTyRichPaintStyle; ASelFrom, ASelTo: TTyRichPos); override;
     function MemSize: Int64; override;
@@ -729,6 +735,7 @@ type
     function PosAtPoint(AX, AY: Integer; out AAtLineEnd: Boolean): TTyRichPos; overload; override;
     function CaretRect(APos: TTyRichPos; AAtLineEnd: Boolean = False): TRect; override;
     function SelectionRects(AFrom, ATo: TTyRichPos): TRectArray; override;
+    function ObjectBox(APos: TTyRichPos; out ABox: TRect): Boolean; override;
     procedure Paint(ATarget: TBGRABitmap; AX, AY: Integer; const AClip: TRect;
       const AStyle: TTyRichPaintStyle; ASelFrom, ASelTo: TTyRichPos); override;
     function MemSize: Int64; override;
@@ -805,8 +812,11 @@ type
     FTrustFrom: Integer;
     FWalkData: array of Pointer;
     FWalkFirst, FWalkLast: Integer;
-    // decoded pictures: by picture, LRU order (most recent first), bounded by bytes
+    { decoded pictures: by their bytes (PictureKey: pictures that share their data - a resized
+      one and the one it was made from - share what was decoded of it), LRU order (most
+      recent first), bounded by bytes }
     FPictures: specialize TDictionary<Pointer, TObject>;
+    FPictureStandIns: Int64;
     FPicFirst, FPicLast: TObject;
     FPictureBytes: Int64;
     FPictureLimit: Int64;
@@ -1041,6 +1051,16 @@ type
       reduced, or found that it cannot be (remembered) - without drawing it. Afterwards
       PictureReady(APicture, AWidth, AHeight) is True. }
     procedure PreparePicture(APicture: TTyRichPicture; AWidth, AHeight: Integer);
+    { What a paint that defers pictures draws for a picture not ready at the box's size: the
+      pixels already decoded of its bytes (the full image, else a reduced copy), stretched to
+      the box for the part inside the clip - a resized picture, which shares its bytes and so
+      its decoded pixels with the one it was made from, shows at once at its new size, with
+      no decode and no empty box. False when nothing of it is decoded (the paint fills the box
+      then). Nothing is decoded or kept here. }
+    function DrawPictureKept(ATarget: TBGRABitmap; APicture: TTyRichPicture;
+      const ABox: TRect): Boolean;
+    { DrawPictureKept's draws (for the tests that check no empty box was shown). }
+    property PictureStandIns: Int64 read FPictureStandIns;
     { The pictures paints with DeferPictures passed over since the last call, in the order they
       were met (each with a reference the caller releases); the list starts empty again. }
     function TakeSkippedPictures: TTyRichSkippedPictures;
@@ -2054,6 +2074,12 @@ begin
   Result := PosAtPoint(AX, AY, atEnd);
 end;
 
+function TTyBlockLayout.ObjectBox(APos: TTyRichPos; out ABox: TRect): Boolean;
+begin
+  ABox := Rect(0, 0, 0, 0);
+  Result := False;
+end;
+
 destructor TTyParaLayout.Destroy;
 var
   i: Integer;
@@ -2494,6 +2520,26 @@ begin
   Result := Rect(x, FLines[ln].Top, x + 1, FLines[ln].Top + FLines[ln].Height);
 end;
 
+function TTyParaLayout.ObjectBox(APos: TTyRichPos; out ABox: TRect): Boolean;
+var
+  p, ln, i: Integer;
+begin
+  ABox := Rect(0, 0, 0, 0);
+  Result := False;
+  if (APos < 0) or (APos >= Length) then Exit;
+  // the object's character comes after a composition shown at its place
+  p := InPos(APos, True);
+  if p >= FShown then Exit;
+  ln := LineOfPos(p);
+  for i := FLines[ln].FirstFrag to FLines[ln].FirstFrag + FLines[ln].FragCount - 1 do
+    if (FFrags[i].Kind = rfkObject) and (FFrags[i].First = p) then
+    begin
+      ABox := Rect(FFrags[i].X, FLines[ln].Baseline - FFrags[i].Ascent,
+        FFrags[i].X + FFrags[i].Width, FLines[ln].Baseline + FFrags[i].Descent);
+      Exit(True);
+    end;
+end;
+
 function TTyParaLayout.SelectionRects(AFrom, ATo: TTyRichPos): TRectArray;
 var
   n, ln, xa, xb: Integer;
@@ -2761,6 +2807,19 @@ begin
   if Result.Left > FCells[o].Right - 1 then Result.Left := FCells[o].Right - 1;
   if Result.Left < FCells[o].Left then Result.Left := FCells[o].Left;
   Result.Right := Result.Left + 1;
+end;
+
+function TTyRowLayout.ObjectBox(APos: TTyRichPos; out ABox: TRect): Boolean;
+var
+  k: Integer;
+begin
+  ABox := Rect(0, 0, 0, 0);
+  Result := False;
+  if (System.Length(FItems) = 0) or (APos < 0) or (APos >= FCharCount) then Exit;
+  k := ItemAt(APos);
+  if FCells[FItems[k].Cell].Hidden then Exit;
+  Result := FItems[k].Layout.ObjectBox(APos - FItems[k].Pos, ABox);
+  if Result then Types.OffsetRect(ABox, FItems[k].X, FItems[k].Y);
 end;
 
 function TTyRowLayout.SelectionRects(AFrom, ATo: TTyRichPos): TRectArray;
@@ -3283,9 +3342,12 @@ begin
     if AStyle.DeferPictures and not FLayouter.PictureReady(TTyRichPicture(f^.Obj),
       box.Right - box.Left, box.Bottom - box.Top) then
     begin
-      // not decoded here: an empty box now, the picture when its owner has prepared it
-      ATarget.FillRect(box.Left, box.Top, box.Right, box.Bottom, AStyle.PlaceholderFill,
-        dmDrawWithTransparency);
+      { Not decoded here: what is decoded of its bytes already, stretched (a resized picture
+        keeps showing its pixels), else an empty box now - the picture when its owner has
+        prepared it. }
+      if not FLayouter.DrawPictureKept(ATarget, TTyRichPicture(f^.Obj), box) then
+        ATarget.FillRect(box.Left, box.Top, box.Right, box.Bottom, AStyle.PlaceholderFill,
+          dmDrawWithTransparency);
       FLayouter.NoteSkippedPicture(TTyRichPicture(f^.Obj), box);
     end
     else
@@ -4618,7 +4680,10 @@ type
   TTyPictureEntry = class
   public
     Pic: TTyRichPicture;
+    Key: Pointer;
     Tried, Failed: Boolean;
+    // another picture of these bytes took the entry over (a resize): see PictureMakeReady
+    Handed: Boolean;
     ImgW, ImgH: Integer;
     Image: TBGRABitmap;
     Scaled: TBGRABitmap;
@@ -4852,12 +4917,22 @@ begin
   Result.PlaceholderFill := BGRA(240, 240, 240, 255);
   Result.PlaceholderFrame := BGRA(160, 160, 160, 255);
   Result.ObjectFrame := BGRA(51, 153, 255, 255);
+  Result.ObjectHandleFill := BGRAWhite;
   Result.TableBorder := BGRA(128, 128, 128, 255);
   Result.CompositionLine := BGRAPixelTransparent;
   Result.DeferPictures := False;
 end;
 
 { ---- layouter: pictures ---- }
+
+{ What a picture's decoded pixels are kept under: its bytes and the format they are read as
+  (two pictures that share both show the same pixels); a picture with no bytes, itself. The
+  format is added to the block's address: blocks lie further apart than the formats count. }
+function PictureKey(APicture: TTyRichPicture): Pointer; inline;
+begin
+  if Length(APicture.Data) = 0 then Result := APicture
+  else Result := Pointer(PtrUInt(Pointer(APicture.Data)) + PtrUInt(Ord(APicture.PictureFormat)));
+end;
 
 procedure TTyRichLayouter.PictureUnlink(AEntry: TObject);
 var
@@ -4888,7 +4963,7 @@ var
 begin
   e := TTyPictureEntry(AEntry);
   PictureUnlink(e);
-  FPictures.Remove(e.Pic);
+  FPictures.Remove(e.Key);
   Dec(FPictureBytes, e.Bytes);
   e.Free;
 end;
@@ -5095,20 +5170,30 @@ var
   o: TObject;
   e: TTyPictureEntry;
 begin
-  if FPictures.TryGetValue(APicture, o) then
+  if FPictures.TryGetValue(PictureKey(APicture), o) then
   begin
     e := TTyPictureEntry(o);
     PictureUnlink(e);
     PicturePushFront(e);
+    { Another picture of the same bytes (a resized one): the entry holds the newest one, so
+      an old picture the document let go of is not kept alive by the cache. }
+    if e.Pic <> APicture then
+    begin
+      APicture.AddRef;
+      e.Pic.Release;
+      e.Pic := APicture;
+      e.Handed := True;
+    end;
   end
   else
   begin
     e := TTyPictureEntry.Create;
     e.Pic := APicture;
     APicture.AddRef;
+    e.Key := PictureKey(APicture);
     e.BadW := -1;
     e.BadH := -1;
-    FPictures.Add(APicture, e);
+    FPictures.Add(e.Key, e);
     PicturePushFront(e);
     PictureRecount(e);
   end;
@@ -5124,7 +5209,7 @@ procedure TTyRichLayouter.PictureMakeReady(AEntry: TObject; AWidth, AHeight: Int
 var
   e: TTyPictureEntry;
   how: TPictureDraw;
-  s: TBGRABitmap;
+  s, src: TBGRABitmap;
 begin
   e := TTyPictureEntry(AEntry);
   try
@@ -5136,14 +5221,25 @@ begin
       pdScaled:
         if (e.Scaled = nil) or (e.Scaled.Width <> AWidth) or (e.Scaled.Height <> AHeight) then
         begin
-          FreeAndNil(e.Scaled);
-          if e.Image = nil then PictureDecode(e);
-          if e.Image <> nil then
+          { A resized picture (it took this entry over from the one it was made from) whose
+            full image was let go: its new size is made from the reduced copy kept, with no
+            decode of the bytes again - larger than that copy it is a little softer. (A zoom
+            decodes again: its sizes come back exact.) }
+          src := nil;
+          if e.Handed and (e.Image = nil) and (e.Scaled <> nil) then
+            src := e.Scaled
+          else
+          begin
+            FreeAndNil(e.Scaled);
+            if e.Image = nil then PictureDecode(e);
+            src := e.Image;
+          end;
+          if src <> nil then
           begin
             Inc(FPictureScales);
             s := nil;
             try
-              s := ScaleImage(e.Image, AWidth, AHeight);
+              s := ScaleImage(src, AWidth, AHeight);
             except
               on E: Exception do
               begin
@@ -5159,6 +5255,9 @@ begin
             end
             else
             begin
+              // (the copy it was reduced from goes when it is replaced)
+              e.Handed := False;
+              e.Scaled.Free;
               e.Scaled := s;
               // shown reduced: the full image goes (decoded again for a size that needs it)
               FreeAndNil(e.Image);
@@ -5226,7 +5325,7 @@ var
 begin
   if (APicture = nil) or (AWidth <= 0) or (AHeight <= 0) then Exit(True);
   // never drawn: there is something to decode, unless nothing of it can be shown
-  if not FPictures.TryGetValue(APicture, o) then
+  if not FPictures.TryGetValue(PictureKey(APicture), o) then
     Exit(not APicture.DisplayData(fmt, start, count));
   e := TTyPictureEntry(o);
   if not e.Tried then Exit(False);
@@ -5253,6 +5352,32 @@ begin
   finally
     PaintLeave;
   end;
+end;
+
+function TTyRichLayouter.DrawPictureKept(ATarget: TBGRABitmap; APicture: TTyRichPicture;
+  const ABox: TRect): Boolean;
+var
+  o: TObject;
+  e: TTyPictureEntry;
+  src: TBGRABitmap;
+begin
+  Result := False;
+  if (ATarget = nil) or (APicture = nil) or (ABox.Right <= ABox.Left) or
+    (ABox.Bottom <= ABox.Top) then Exit;
+  if not FPictures.TryGetValue(PictureKey(APicture), o) then Exit;
+  e := TTyPictureEntry(o);
+  // the most pixels there are: the full image, else the reduced copy
+  if e.Image <> nil then src := e.Image else src := e.Scaled;
+  if src = nil then Exit;
+  PaintEnter;
+  try
+    // the clip's part only, as an enlargement is drawn
+    ATarget.StretchPutImage(ABox, src, dmDrawWithTransparency);
+  finally
+    PaintLeave;
+  end;
+  Inc(FPictureStandIns);
+  Result := True;
 end;
 
 procedure TTyRichLayouter.NoteSkippedPicture(APicture: TTyRichPicture; const ABox: TRect);
