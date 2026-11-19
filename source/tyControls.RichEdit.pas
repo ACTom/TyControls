@@ -742,9 +742,9 @@ type
       (FDropPos, FDropAtEnd, FDropEffect), the pointer and the keys last known, and
       whether the selection dragged can be moved at all (FDropCuttable). FDropRect: the
       drop mark on the surface (raster pixels of the view, as FHandleRect). FEatMenu: a right
-      press ended a drag - its menu is not shown; that press's only: the popup it would
-      bring, the next key, a move without the right button or another button's release clear
-      it. }
+      press ended a drag of the control's own (the selection's or a handle's, OwnDragRunning)
+      - its menu is not shown; that press's only: the popup it would bring, the next key, a
+      move without the right button or another button's release clear it. }
     FDragDropEditing: Boolean;
     FDragPending: Boolean;
     FPressPoint: TPoint;
@@ -787,7 +787,8 @@ type
       and is not the document's: the layouter shows FCompText there (SetComposition), in
       FCompFormat (the typing format then), the input method's caret and clause in it
       (characters of FCompText). FImeRefused: the input method's session was refused (the
-      document took no edit when it began): what it sends goes nowhere until it ends. }
+      document took no edit when it began, or a drag of the control's own ran): what it sends
+      goes nowhere until it ends. }
     FComposing: Boolean;
     FCompPos: TTyRichPos;
     FCompText: UTF8String;
@@ -1259,6 +1260,15 @@ type
     procedure DropFollowPointer;
     procedure CancelSelectionDrag;
     function OwnDragging: Boolean;
+    { A drag of the control's own runs: a handle's (FResizing), the selection's (OwnDragging)
+      or a press inside the selection waiting for one (FDragPending). EndOwnDrag ends it with
+      nothing changed (and a press's owed click). OwnDragKey: a key down during it is the
+      drag's (True) - Esc ends it, taken; Ctrl makes the drop a copy at once; Shift, Alt and
+      the Windows keys do nothing; any other key is taken and does nothing, the drag going on
+      as it was - as the system's drag and drop, which delivers no other key while it runs. }
+    function OwnDragRunning: Boolean;
+    procedure EndOwnDrag;
+    function OwnDragKey(var Key: Word): Boolean;
     procedure DropScrollTick;
     function DropPlaceAt(X, Y: Integer; out AAtEnd: Boolean): TTyRichPos;
     function DropMarkRaster(out ARect: TRect): Boolean;
@@ -1912,13 +1922,18 @@ type
       ReadOnly too. Tab in the last cell of the table a person sees (the run of table
       paragraphs, whatever objects the document holds them in) adds a row below it - a
       user's edit, one undo step, refused (told) as InsertRow is, nothing with ReadOnly -
-      and goes into its first cell. Ctrl+Tab inserts a tab character there. }
+      and goes into its first cell. Ctrl+Tab inserts a tab character there.
+      During a drag of the control's own (a handle's, the selection's, or a press inside the
+      selection waiting for one) none of this: Esc ends the drag, the modifiers keep their
+      meaning, any other key is taken and does nothing (OwnDragKey) - after OnKeyDown, which
+      comes first as always. }
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     { A printable character typed (any Unicode): it replaces the selection, else goes in at
       the caret, in TypingFormat; consecutive typing is one undo step (the engine merges it)
       until the caret is moved by the user, another command runs, Enter is pressed or the
       focus leaves - a space does not end it (as the memo's). OnUTF8KeyPress and OnKeyPress
-      come first and may stop it (TyAskKeyPress), also with ReadOnly. }
+      come first and may stop it (TyAskKeyPress), also with ReadOnly. During a drag of the
+      control's own it goes nowhere. }
     procedure UTF8KeyPress(var UTF8Key: TUTF8Char); override;
     { The character format the next typed text gets: with a selection, its first
       character's (it is typed over); else the character's before the caret in its paragraph,
@@ -2394,7 +2409,9 @@ type
       for a key), where typing would be refused (the document taking no edit, a row that holds
       a nested table, a selection across cells, a cut paragraph's cut: EditRefused once; what
       the input method sends then goes nowhere until its session ends), inside the
-      document's update.
+      document's update, during a drag of the control's own (a handle's, the selection's, or
+      a press inside the selection waiting for one: nothing told, the session's text goes
+      nowhere).
       UpdateComposition: the composition's text now (begun when it was not), ACaret its caret
       (characters of AText; -1: at its end), the clause the input method works on.
       CommitComposition: the text goes in as typing does (TypeText: one command, the selection
@@ -2402,7 +2419,8 @@ type
       behind it, one OnChange and one OnSelectionChange) - where the composition was shown,
       over the selection there was when it began, in the format it was shown in; also with no
       composition (a commit straight from the input method: at the caret, in the typing
-      format); '' commits nothing. A refused one: EditRefused once.
+      format); '' commits nothing; one with no composition during a drag of the control's own
+      goes nowhere, as a character typed then. A refused one: EditRefused once.
       CancelComposition: nothing of it is left.
       A user's edit or action (a key that edits, Ctrl+A, a press, the menu) commits an open
       composition first; disabling the control or setting ReadOnly cancels it. }
@@ -5002,15 +5020,14 @@ var
 begin
   // (in the form designer a press selects the control, not text: no caret, no drag)
   if not IsEnabled or (csDesigning in ComponentState) then Exit;
-  // another press during a drag of a handle (another button): the drag ends, nothing done
-  CancelResize;
-  { Another press during a drag of the selection (the right button): the drag ends and the
-    press does nothing else - the selection stays, and its menu does not come. }
+  { Another press during a drag of the control's own (another button: the right one, the
+    middle one) - a handle's, the selection's or the press waiting for one: the drag ends with
+    nothing changed and the press does nothing else - the selection stays, and the right
+    press's menu does not come. }
   FEatMenu := False;
-  if FDragPending or FPressClickOwed or OwnDragging then
+  if OwnDragRunning or FPressClickOwed then
   begin
-    FPressClickOwed := False;
-    CancelSelectionDrag;
+    EndOwnDrag;
     FEatMenu := Button = mbRight;
     inherited MouseDown(Button, Shift, X, Y);
     Exit;
@@ -5752,6 +5769,49 @@ begin
   if OwnDragging then DropLeave;
 end;
 
+function TTyCustomRichEdit.OwnDragRunning: Boolean;
+begin
+  Result := FResizing or FDragPending or OwnDragging;
+end;
+
+procedure TTyCustomRichEdit.EndOwnDrag;
+begin
+  FPressClickOwed := False;
+  CancelResize;
+  CancelSelectionDrag;
+end;
+
+function IsDragModifier(AKey: Word): Boolean;
+begin
+  case AKey of
+    VK_SHIFT, VK_LSHIFT, VK_RSHIFT, VK_CONTROL, VK_LCONTROL, VK_RCONTROL, VK_MENU, VK_LMENU,
+    VK_RMENU, VK_LWIN, VK_RWIN: Result := True;
+  else
+    Result := False;
+  end;
+end;
+
+function TTyCustomRichEdit.OwnDragKey(var Key: Word): Boolean;
+begin
+  Result := OwnDragRunning;
+  if not Result then Exit;
+  case Key of
+    VK_ESCAPE:
+      begin
+        EndOwnDrag;
+        Key := 0;
+      end;
+    // (KeyUp: a move again)
+    VK_CONTROL, VK_LCONTROL, VK_RCONTROL:
+      if OwnDragging then DropOver(FDropPoint.X, FDropPoint.Y, FDropShift + [ssCtrl]);
+  else
+    { Not ended and nothing done: no text, no caret move, no shortcut, no edit, and taken, so
+      that LCL hands it to nothing after the control (the form's shortcuts and action lists,
+      the default and cancel buttons, the application's handlers). }
+    if not IsDragModifier(Key) then Key := 0;
+  end;
+end;
+
 function TTyCustomRichEdit.DragThreshold: Integer;
 begin
   // LCL's distance is for 96 PPI: the same distance on every screen
@@ -6221,9 +6281,13 @@ end;
 procedure TTyCustomRichEdit.KeyUp(var Key: Word; Shift: TShiftState);
 begin
   inherited KeyUp(Key, Shift);
+  if (Key = 0) or not OwnDragRunning then Exit;
   // Ctrl let go during the control's own drag: a move again, without a move of the pointer
   if OwnDragging and ((Key = VK_CONTROL) or (Key = VK_LCONTROL) or (Key = VK_RCONTROL)) then
-    DropOver(FDropPoint.X, FDropPoint.Y, FDropShift - [ssCtrl]);
+    DropOver(FDropPoint.X, FDropPoint.Y, FDropShift - [ssCtrl])
+  // another key's release is the drag's as its press is (OwnDragKey): nothing for the form
+  else if not IsDragModifier(Key) then
+    Key := 0;
 end;
 
 { ---- a drag into another rich edit of the application, drops from other programs ---- }
@@ -11634,6 +11698,13 @@ begin
   // OnUTF8KeyPress, then OnKeyPress, before the character goes in - ReadOnly too (the memo's #150)
   inherited UTF8KeyPress(UTF8Key);
   if not TyAskKeyPress(Self, UTF8Key) then Exit;
+  { During a drag of the control's own the character goes nowhere, as its key does
+    (OwnDragKey) - also one that comes with no key-down before it (a posted WM_CHAR). }
+  if OwnDragRunning then
+  begin
+    UTF8Key := '';
+    Exit;
+  end;
   try
     TypeKey(UTF8Key);
   finally
@@ -11835,10 +11906,16 @@ end;
 
 procedure TTyCustomRichEdit.DoContextPopup(MousePos: TPoint; var Handled: Boolean);
 begin
-  // a right press that ended a drag of the selection: no menu
+  // a right press that ended a drag of the control's own: no menu
   if FEatMenu then
   begin
     FEatMenu := False;
+    Handled := True;
+    Exit;
+  end;
+  // nor while one runs (the menu key, Shift+F10: a key that does nothing then, OwnDragKey)
+  if OwnDragRunning then
+  begin
     Handled := True;
     Exit;
   end;
@@ -12102,6 +12179,14 @@ begin
   FCompBefore := False;
   // as a key: ReadOnly or disabled takes it and says nothing; inside the update it is dropped
   if (csDestroying in ComponentState) or ImeIsReadOnly or ViewBehind then Exit;
+  { Never under a drag of the control's own, whose keys do nothing (OwnDragKey): refused, told
+    nothing - win32's input method is told to drop what it began (WMImeStartComposition);
+    Cocoa's session goes on, and what it sends goes nowhere until it ends. }
+  if OwnDragRunning then
+  begin
+    FImeRefused := True;
+    Exit;
+  end;
   EndOwedLoad;
   Settle;
   { Only where a character typed may go in, asked as typing asks it (TypingAllowed: the
@@ -12280,6 +12365,10 @@ begin
     if was then RefreshComposed(p);
     Exit;
   end;
+  { A commit with no composition (the Qt and GTK hooks', Cocoa's dead key) during a drag of
+    the control's own goes nowhere, as a character typed then does. A result owed for a
+    composition a press ended goes in: it is what the user saw before the press. }
+  if not was and not late and OwnDragRunning then Exit;
   s := ImeText(AText);
   FEditHeard := False;
   if (s <> '') and not ImeIsReadOnly and not ViewBehind then
@@ -17534,43 +17623,10 @@ begin
   // a user action is an entry point of the loop (see SchedulingFailed)
   EndOwedLoad;
   if (Key = 0) or not IsEnabled then Exit;
-  { A drag of a handle: Esc ends it with nothing changed (the key taken); any other key that
-    is not a modifier (Shift and Ctrl change what the drag does) ends it too, and does what it
-    does. }
-  if FResizing and (Key = VK_ESCAPE) then
-  begin
-    CancelResize;
-    Key := 0;
-    Exit;
-  end;
-  if FResizing and not (Key in [VK_SHIFT, VK_CONTROL, VK_MENU, VK_LSHIFT, VK_RSHIFT, VK_LCONTROL,
-    VK_RCONTROL, VK_LMENU, VK_RMENU, VK_LWIN, VK_RWIN]) then
-    CancelResize;
-  { A drag of the selection (or a press inside it waiting for one): Esc ends it with nothing
-    changed (the key taken); Ctrl going down makes the drop a copy at once, without a move
-    of the pointer (KeyUp: a move again); any other key that is not a modifier ends it too,
-    and does what it does. }
-  if FDragPending or OwnDragging then
-  begin
-    if Key = VK_ESCAPE then
-    begin
-      FPressClickOwed := False;
-      CancelSelectionDrag;
-      Key := 0;
-      Exit;
-    end;
-    if Key in [VK_CONTROL, VK_LCONTROL, VK_RCONTROL] then
-    begin
-      if OwnDragging then DropOver(FDropPoint.X, FDropPoint.Y, FDropShift + [ssCtrl]);
-      Exit;
-    end;
-    if not (Key in [VK_SHIFT, VK_MENU, VK_LSHIFT, VK_RSHIFT, VK_LMENU, VK_RMENU, VK_LWIN,
-      VK_RWIN]) then
-    begin
-      FPressClickOwed := False;
-      CancelSelectionDrag;
-    end;
-  end;
+  { A drag of the control's own (a handle's, the selection's, or a press inside the selection
+    waiting for one) has the keys (OwnDragKey): Esc ends it, the modifiers keep their meaning,
+    every other key is taken and does nothing - the drag goes on. }
+  if OwnDragKey(Key) then Exit;
   { Inside the document's update a key that moves or copies does nothing: the view does not
     know the text yet. The viewer's keys are still taken - they never go on to the form. }
   if ViewBehind then
