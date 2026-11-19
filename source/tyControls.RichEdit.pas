@@ -64,6 +64,7 @@ unit tyControls.RichEdit;
   scroll bar on the left and keeps the text left to right. }
 
 {$mode objfpc}{$H+}
+{$modeswitch nestedprocvars}
 
 interface
 
@@ -261,8 +262,14 @@ type
   TTyRichLife = record
     Gone: Boolean;
     Handler: Boolean;
+    { How many of the application's handlers (any control's) were running when the frame
+      began: frames of two depths have the application's code between them. }
+    Depth: Integer;
     Next: PTyRichLife;
   end;
+  { (internal) The work a frame of the control's runs (TTyCustomRichEdit.Guard), or the
+    application's handler it calls (CallHandler). }
+  TTyRichGuarded = procedure is nested;
   { (internal) The command of a synchronous ReplaceAll, on that call's stack: the reference is
     taken away when the command is freed under the call (ReplaceCommandFreed). }
   PTyRichSyncReplace = ^TTyRichSyncReplace;
@@ -989,6 +996,20 @@ type
     FOnFindDone: TTyRichFindDoneEvent;
     FOnReplaceDone: TTyRichReplaceDoneEvent;
     procedure LifeEnter(var ALife: TTyRichLife; AHandler: Boolean = False);
+    { The one bracket of the control's frames: AWork runs inside ALife; when a handler under it
+      freed the control, ETyRichGone stops here (or goes on to the frame below, when that is
+      the control's own with none of the application's code between) and nothing of the
+      control is touched. ALife.Gone says so afterwards. }
+    procedure Guard(var ALife: TTyRichLife; AWork: TTyRichGuarded);
+    { An application's handler (AFire) inside a handler frame; see HandlerReturned. }
+    procedure CallHandler(AFire: TTyRichGuarded);
+    procedure RunHistoryIn(ARedo, AUser: Boolean);
+    function EditWithIn(AMake: TTyRichEditMaker; AUser, AEnded: Boolean): Boolean;
+    procedure TypeTextIn(const AText: UTF8String; AMergeable, AUser: Boolean;
+      AFormat: TTyCharFormatId; ACaretChars: Int64);
+    procedure EndEditIn(var ALife: TTyRichLife);
+    procedure CommitCompositionIn(const AText: string; var ALife: TTyRichLife);
+    procedure RunApiEditIn(ACmd: TTyRichCommand; AChars: TTyRichPos; var ALife: TTyRichLife);
     procedure LifeLeave(var ALife: TTyRichLife);
     procedure TurnBody(var ALife: TTyRichLife);
     // the run of typing ends (TTyRichDocument.BreakMerge)
@@ -1332,9 +1353,6 @@ type
       what a user's edit (RunUserEdit, AUser True) and an edit from code (AUser False: refusals
       raised, ReadOnly not asked) share. AEnded: TTyRichEditPlace.CompositionEnded. }
     function EditWith(AMake: TTyRichEditMaker; AUser, AEnded: Boolean): Boolean;
-    { ACmd, made by the control before, through the door of a user's edit (AUser) - or, from
-      code, EditWith - leaving the selection at APlace. }
-    function RunMade(ACmd: TTyRichCommand; const APlace: TTyRichEditPlace; AUser: Boolean): Boolean;
     { RunMade's maker: the command made before - dropped (freed, nil) when the door ended a
       composition first, for it was made on the text before that commit. }
     function TakeMade(var APlace: TTyRichEditPlace): TTyRichCommand;
@@ -1567,6 +1585,10 @@ type
       every user's edit (call inherited). Undo and Redo are not commands and do not come here
       (RunHistory); an edit from code (SelText :=, Lines, the document's API) does not either. }
     function RunUserEdit(AMake: TTyRichEditMaker): Boolean; virtual;
+    { ACmd, made by the control before, through the door of a user's edit (AUser) - or, from
+      code, EditWith - leaving the selection at APlace. ACmd is the door's: freed when it is
+      not run, also when a handler the door runs frees the control. }
+    function RunMade(ACmd: TTyRichCommand; const APlace: TTyRichEditPlace; AUser: Boolean): Boolean;
     { Why ACmd's CanExecute would refuse it: the engine's own text commands (an insert, a
       deletion, an object, a fragment) refuse only where a row holds a nested table; a table
       command for its table's reason (TTyRichTableCommand.Refusal, in the words of the
@@ -3866,19 +3888,16 @@ begin
 end;
 
 procedure TTyCustomRichEdit.DoChange;
-var
-  life: TTyRichLife;
+
+  procedure Fire;
+  begin
+    FOnChange(Self);
+  end;
+
 begin
   // a form file's Lines while streaming, the document going with the control: no event
   if [csLoading, csDestroying] * ComponentState <> [] then Exit;
-  if not Assigned(FOnChange) then Exit;
-  LifeEnter(life, True);
-  try
-    FOnChange(Self);
-  finally
-    if not life.Gone then LifeLeave(life);
-  end;
-  HandlerReturned(life);
+  if Assigned(FOnChange) then CallHandler(@Fire);
 end;
 
 { A handler of the application's (OnChange, OnSelectionChange, OnEditRefused,
@@ -3888,8 +3907,49 @@ end;
   be gone.) }
 procedure HandlerReturned(const ALife: TTyRichLife);
 begin
-  if ALife.Gone and (ALife.Next <> nil) then
+  { An application's handler (OnChange, OnSelectionChange, OnEditRefused, OnModifiedChange)
+    returned. If it freed the control and the frame below it is one of the control's own with
+    none of the application's code between (its depth), ETyRichGone unwinds to that frame,
+    which stops there - so it never passes the application's code. Otherwise the call returns:
+    a public method of the control the application called inside a handler stops in its own
+    frame, and the control's frames further down find the control gone when that call returns.
+    (No method: the control may be gone.) }
+  if ALife.Gone and (ALife.Next <> nil) and not ALife.Next^.Handler and
+    (ALife.Next^.Depth = ALife.Depth) then
     raise ETyRichGone.Create('The control was freed by its handler');
+end;
+
+threadvar
+  // how many application handlers run now, of any rich edit (CallHandler)
+  GRichAppDepth: Integer;
+
+procedure TTyCustomRichEdit.Guard(var ALife: TTyRichLife; AWork: TTyRichGuarded);
+begin
+  LifeEnter(ALife);
+  try
+    try
+      AWork();
+    except
+      on ETyRichGone do if TyRichGonePasses(ALife) then raise;
+    end;
+  finally
+    if not ALife.Gone then LifeLeave(ALife);
+  end;
+end;
+
+procedure TTyCustomRichEdit.CallHandler(AFire: TTyRichGuarded);
+var
+  life: TTyRichLife;
+begin
+  LifeEnter(life, True);
+  Inc(GRichAppDepth);
+  try
+    AFire();
+  finally
+    Dec(GRichAppDepth);
+    if not life.Gone then LifeLeave(life);
+  end;
+  HandlerReturned(life);
 end;
 
 procedure TTyCustomRichEdit.DoZoomChange;
@@ -4123,8 +4183,12 @@ begin
 end;
 
 procedure TTyCustomRichEdit.DoSelectionChange;
-var
-  life: TTyRichLife;
+
+  procedure Fire;
+  begin
+    FOnSelectionChange(Self);
+  end;
+
 begin
   // inside BeginEdit .. EndEdit: reported once, at EndEdit
   if FEditBlock > 0 then Exit;
@@ -4132,14 +4196,7 @@ begin
   FReportedCaret := FCaret;
   FReportedAnchor := FSelAnchor;
   if [csLoading, csDestroying] * ComponentState <> [] then Exit;
-  if not Assigned(FOnSelectionChange) then Exit;
-  LifeEnter(life, True);
-  try
-    FOnSelectionChange(Self);
-  finally
-    if not life.Gone then LifeLeave(life);
-  end;
-  HandlerReturned(life);
+  if Assigned(FOnSelectionChange) then CallHandler(@Fire);
 end;
 
 procedure TTyCustomRichEdit.EnsureParams;
@@ -5300,36 +5357,40 @@ end;
 procedure TTyCustomRichEdit.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 var
   life: TTyRichLife;
+
+  procedure Work;
+  begin
+    if FResizing then
+      FinishResize(X, Y, Shift)
+    else
+    begin
+      // a press inside the selection let go without a drag: the click it was
+      if FDragPending or FPressClickOwed then ReleasePending
+      else if OwnDragging then DropOn(X, Y, Shift);
+      if life.Gone then Exit;
+      StopDrag;
+    end;
+  end;
+
 begin
   inherited MouseUp(Button, Shift, X, Y);
   // (another button's release lets the menu come again; the right one's is its press's)
   if Button <> mbRight then FEatMenu := False;
   if Button <> mbLeft then Exit;
   // (a handler the release runs - a drop's, a click's report - may free the control)
-  LifeEnter(life);
-  try
-    try
-      if FResizing then
-        FinishResize(X, Y, Shift)
-      else
-      begin
-        // a press inside the selection let go without a drag: the click it was
-        if FDragPending or FPressClickOwed then ReleasePending
-        else if OwnDragging then DropOn(X, Y, Shift);
-        if life.Gone then Exit;
-        StopDrag;
-      end;
-    except
-      on ETyRichGone do if TyRichGonePasses(life) then raise;
-    end;
-  finally
-    if not life.Gone then LifeLeave(life);
-  end;
+  Guard(life, @Work);
 end;
 
 procedure TTyCustomRichEdit.CaptureChanged;
 var
   life: TTyRichLife;
+
+  procedure Work;
+  begin
+    if FDragPending or FPressClickOwed then ReleasePending
+    else DropOn(FDropPoint.X, FDropPoint.Y, FDropShift);
+  end;
+
 begin
   inherited CaptureChanged;
   { The capture went elsewhere (a menu, another window): the drag is over. A drag of a handle:
@@ -5353,17 +5414,7 @@ begin
     else
     begin
       // (a handler the release runs may free the control: nothing of it is touched after)
-      LifeEnter(life);
-      try
-        try
-          if FDragPending or FPressClickOwed then ReleasePending
-          else DropOn(FDropPoint.X, FDropPoint.Y, FDropShift);
-        except
-          on ETyRichGone do if TyRichGonePasses(life) then raise;
-        end;
-      finally
-        if not life.Gone then LifeLeave(life);
-      end;
+      Guard(life, @Work);
       if life.Gone then Exit;
     end;
   if FDragging and not MouseCapture then StopDrag;
@@ -5924,6 +5975,43 @@ var
   q, f, n: TTyRichPos;
   peer: TTyCustomRichEdit;
   life: TTyRichLife;
+
+  procedure Focus;
+  begin
+    FocusAfterDrop;
+  end;
+
+  procedure Work;
+  begin
+    if peer <> nil then
+    begin
+      if peer.FDropOffer = o then
+      begin
+        FPeerFeeding := True;
+        try
+          r := peer.DropOn(peer.FDropPoint.X, peer.FDropPoint.Y, AShift);
+        finally
+          if not life.Gone then FPeerFeeding := False;
+        end;
+      end;
+      { A move there: the content leaves this document - one step of its own, after the
+        target's went in (a refused or failed drop there leaves it here), and only while this
+        document is the content the drag began with: changed meanwhile (by a handler, a load,
+        code), nothing is removed - the content is then in both, never lost. }
+      if not life.Gone and (r = rdeMove) and (o is TTyRichSelectionOffer) and
+        (TTyRichSelectionOffer(o).TakenAs = rdeMove) and
+        (TTyRichSelectionOffer(o).FState = FDoc.ContentState) and o.SourceRange(f, n) then
+        RemoveMovedAway(f, n);
+    end
+    else if q >= 0 then
+    begin
+      r := DropInto(o, q, e, AShift, wentIn);
+      { What came from elsewhere went in: the control takes the focus - the application's
+        handlers the focus's move runs (OnEnter, OnExit, a form's OnActivate) may free it. }
+      if wentIn and not life.Gone and (o.Source <> Self) then CallHandler(@Focus);
+    end;
+  end;
+
 begin
   Result := rdeNone;
   if FDropOffer = nil then Exit;
@@ -5944,48 +6032,11 @@ begin
   { A handler the drop runs - this control's, the other control's, one the focus's move runs -
     may free this control: nothing of it is touched after that, and the frame below (MouseUp's,
     the capture's end, the system's drop target) hears of it. }
-  LifeEnter(life);
   try
-    try
-      if peer <> nil then
-      begin
-        if peer.FDropOffer = o then
-        begin
-          FPeerFeeding := True;
-          try
-            r := peer.DropOn(peer.FDropPoint.X, peer.FDropPoint.Y, AShift);
-          finally
-            if not life.Gone then FPeerFeeding := False;
-          end;
-        end;
-        { A move there: the content leaves this document - one step of its own, after the
-          target's went in (a refused or failed drop there leaves it here), and only while this
-          document is the content the drag began with: changed meanwhile (by a handler, a load,
-          code), nothing is removed - the content is then in both, never lost. }
-        if not life.Gone and (r = rdeMove) and (o is TTyRichSelectionOffer) and
-          (TTyRichSelectionOffer(o).TakenAs = rdeMove) and
-          (TTyRichSelectionOffer(o).FState = FDoc.ContentState) and o.SourceRange(f, n) then
-          RemoveMovedAway(f, n);
-      end
-      else if q >= 0 then
-      begin
-        r := DropInto(o, q, e, AShift, wentIn);
-        // what came from elsewhere went in: the control takes the focus (its handlers may run)
-        if wentIn and not life.Gone and (o.Source <> Self) then FocusAfterDrop;
-        // (the control gone with what went in: nothing of the drop is kept)
-        if wentIn and life.Gone then r := rdeNone;
-      end;
-    except
-      on ETyRichGone do
-      begin
-        r := rdeNone;
-        if TyRichGonePasses(life) then raise;
-      end;
-    end;
+    Guard(life, @Work);
   finally
     if not life.Gone then
     begin
-      LifeLeave(life);
       // (a target that raised: its session over the offer ends before the offer goes)
       if peer <> nil then
       begin
@@ -6002,6 +6053,8 @@ begin
     // (the control's own offer: no session holds it any more)
     if own then o.Free;
   end;
+  // (the control gone with what went in: nothing of the drop is kept)
+  if wentIn and life.Gone then r := rdeNone;
   Result := r;
 end;
 
@@ -6400,6 +6453,18 @@ function TTyCustomRichEdit.DropFileList(AOffer: TTyRichDropOffer; const AFiles: 
 var
   handled: Boolean;
   life: TTyRichLife;
+
+  procedure Fire;
+  begin
+    // (the application's code: a call of this control it makes stops in its own frame)
+    Inc(GRichAppDepth);
+    try
+      DoDropFiles(AFiles, handled);
+    finally
+      Dec(GRichAppDepth);
+    end;
+  end;
+
 begin
   Result := rdeNone;
   AWentIn := False;
@@ -6412,16 +6477,7 @@ begin
   end;
   // the application first (a handler may load a file into the control, or free it)
   handled := False;
-  LifeEnter(life);
-  try
-    try
-      DoDropFiles(AFiles, handled);
-    except
-      on ETyRichGone do if TyRichGonePasses(life) then raise;
-    end;
-  finally
-    if not life.Gone then LifeLeave(life);
-  end;
+  Guard(life, @Fire);
   // (a handler that freed the control: what it said is what happened)
   if handled then
   begin
@@ -8196,17 +8252,14 @@ begin
 end;
 
 procedure TTyCustomRichEdit.EditRefused(const AReason: string);
-var
-  life: TTyRichLife;
-begin
-  if not Assigned(FOnEditRefused) then Exit;
-  LifeEnter(life, True);
-  try
+
+  procedure Fire;
+  begin
     FOnEditRefused(Self, AReason);
-  finally
-    if not life.Gone then LifeLeave(life);
   end;
-  HandlerReturned(life);
+
+begin
+  if Assigned(FOnEditRefused) then CallHandler(@Fire);
 end;
 
 function TTyCustomRichEdit.EditAllowed(APos, ALen: TTyRichPos; AInsert, AUser: Boolean): Boolean;
@@ -8473,6 +8526,24 @@ end;
 
 function TTyCustomRichEdit.EditWith(AMake: TTyRichEditMaker; AUser, AEnded: Boolean): Boolean;
 var
+  life: TTyRichLife;
+  r: Boolean;
+
+  procedure Work;
+  begin
+    r := EditWithIn(AMake, AUser, AEnded);
+  end;
+
+begin
+  { Every edit through the door (keys, the menu, the table actions, pictures, a drop): a
+    handler its report runs may free the control - the call ends there. }
+  r := False;
+  Guard(life, @Work);
+  Result := r and not life.Gone;
+end;
+
+function TTyCustomRichEdit.EditWithIn(AMake: TTyRichEditMaker; AUser, AEnded: Boolean): Boolean;
+var
   place: TTyRichEditPlace;
   cmd: TTyRichCommand;
   len0, grow, a, q: TTyRichPos;
@@ -8536,10 +8607,18 @@ var
   keep: TTyRichCommand;
   keepPlace: TTyRichEditPlace;
   keepTaken: PBoolean;
-  taken: Boolean;
+  taken, r: Boolean;
   life: TTyRichLife;
+
+  procedure Work;
+  begin
+    if AUser then r := RunUserEdit(@TakeMade)
+    else r := EditWith(@TakeMade, False, False);
+  end;
+
 begin
   Result := False;
+  r := False;
   // (kept: an edit inside this one - the commit the door may cause - makes its own)
   keep := FMade;
   keepPlace := FMadePlace;
@@ -8548,25 +8627,17 @@ begin
   FMade := ACmd;
   FMadePlace := APlace;
   FMadeTaken := @taken;
-  { A handler the edit runs (OnChange, OnSelectionChange, OnEditRefused) may free the control:
-    nothing of it is touched after that; a command the door had not taken yet goes with it. }
-  LifeEnter(life);
+  { A handler the edit runs may free the control: nothing of it is touched after that; a
+    command the door had not taken yet goes with it. }
   try
-    try
-      if AUser then Result := RunUserEdit(@TakeMade)
-      else Result := EditWith(@TakeMade, False, False);
-    except
-      on ETyRichGone do if TyRichGonePasses(life) then raise;
-    end;
+    Guard(life, @Work);
   finally
     if life.Gone then
     begin
       if not taken then ACmd.Free;
-      Result := False;
     end
     else
     begin
-      LifeLeave(life);
       // not taken (the door said no before it asked): it never reached the document
       FreeAndNil(FMade);
       FMade := keep;
@@ -8574,6 +8645,7 @@ begin
       FMadeTaken := keepTaken;
     end;
   end;
+  if not life.Gone then Result := r;
 end;
 
 function TTyCustomRichEdit.TakeMade(var APlace: TTyRichEditPlace): TTyRichCommand;
@@ -8620,6 +8692,21 @@ begin
 end;
 
 procedure TTyCustomRichEdit.TypeText(const AText: UTF8String; AMergeable, AUser: Boolean;
+  AFormat: TTyCharFormatId; ACaretChars: Int64);
+var
+  life: TTyRichLife;
+
+  procedure Work;
+  begin
+    TypeTextIn(AText, AMergeable, AUser, AFormat, ACaretChars);
+  end;
+
+begin
+  // (SelText, typing: a handler that frees the control ends the call there)
+  Guard(life, @Work);
+end;
+
+procedure TTyCustomRichEdit.TypeTextIn(const AText: UTF8String; AMergeable, AUser: Boolean;
   AFormat: TTyCharFormatId; ACaretChars: Int64);
 var
   s, n: TTyRichPos;
@@ -10153,6 +10240,9 @@ begin
     if got <> AObj then got.Free;
     Exit;
   end;
+  { None near: this one is the source's next, changed by the round trip - the next picture
+    read back is held against the source's next (the order is the same on both sides). }
+  if FNext <= High(FPics) then Inc(FNext);
 end;
 
 function TTyCustomRichEdit.DropFragmentFilter(AOffer: TTyRichDropOffer;
@@ -10206,19 +10296,18 @@ function TTyCustomRichEdit.InsertOffer(AOffer: TTyRichDropOffer; AHave: TTyRichC
   ASelect: Boolean): Boolean;
 var
   life: TTyRichLife;
-begin
-  Result := False;
-  // (a handler that frees the control: nothing of it is touched any more - the wait cursor too)
-  LifeEnter(life);
-  try
-    try
-      Result := InsertOfferIn(AOffer, AHave, AStart, ALen, AAs, AName, ASelect, life);
-    except
-      on ETyRichGone do if TyRichGonePasses(life) then raise;
-    end;
-  finally
-    if life.Gone then Result := False else LifeLeave(life);
+  r: Boolean;
+
+  procedure Work;
+  begin
+    r := InsertOfferIn(AOffer, AHave, AStart, ALen, AAs, AName, ASelect, life);
   end;
+
+begin
+  r := False;
+  // (a handler that frees the control: nothing of it is touched any more - the wait cursor too)
+  Guard(life, @Work);
+  Result := r and not life.Gone;
 end;
 
 function TTyCustomRichEdit.InsertOfferIn(AOffer: TTyRichDropOffer; AHave: TTyRichClipFlavours;
@@ -10428,6 +10517,20 @@ end;
 
 procedure TTyCustomRichEdit.RunHistory(ARedo, AUser: Boolean);
 var
+  life: TTyRichLife;
+
+  procedure Work;
+  begin
+    RunHistoryIn(ARedo, AUser);
+  end;
+
+begin
+  // (Undo, Redo and their keys: a handler that frees the control ends the call there)
+  Guard(life, @Work);
+end;
+
+procedure TTyCustomRichEdit.RunHistoryIn(ARedo, AUser: Boolean);
+var
   reason: string;
   c: TTyRichChange;
   marks: TTyRichStepMarks;
@@ -10577,20 +10680,17 @@ begin
 end;
 
 procedure TTyCustomRichEdit.PayModifiedOwed;
-var
-  life: TTyRichLife;
+
+  procedure Fire;
+  begin
+    FOnModifiedChange(Self);
+  end;
+
 begin
   if not FModifiedOwed or (FEditing > 0) then Exit;
   FModifiedOwed := False;
   if [csLoading, csDestroying] * ComponentState <> [] then Exit;
-  if not Assigned(FOnModifiedChange) then Exit;
-  LifeEnter(life, True);
-  try
-    FOnModifiedChange(Self);
-  finally
-    if not life.Gone then LifeLeave(life);
-  end;
-  HandlerReturned(life);
+  if Assigned(FOnModifiedChange) then CallHandler(@Fire);
 end;
 
 procedure TTyCustomRichEdit.RunApiCommand(ACmd: TTyRichCommand; AChars: TTyRichPos);
@@ -10614,6 +10714,20 @@ begin
 end;
 
 procedure TTyCustomRichEdit.EndEdit;
+var
+  life: TTyRichLife;
+
+  procedure Work;
+  begin
+    EndEditIn(life);
+  end;
+
+begin
+  // (the block's one report: a handler that frees the control ends the call there)
+  Guard(life, @Work);
+end;
+
+procedure TTyCustomRichEdit.EndEditIn(var ALife: TTyRichLife);
 var
   wasTop, step: TTyRichCommand;
   marks: TTyRichStepMarks;
@@ -10651,7 +10765,8 @@ begin
   try
     FinishEdit(FSelAnchor, FCaret, FCaretAtEnd, True);
   finally
-    Dec(FApiWrite);
+    // (a handler that freed the control: nothing of it is touched)
+    if not ALife.Gone then Dec(FApiWrite);
   end;
 end;
 
@@ -11042,6 +11157,21 @@ end;
   (the wait cursor's threshold). }
 procedure TTyCustomRichEdit.RunApiEdit(ACmd: TTyRichCommand; AChars: TTyRichPos);
 var
+  life: TTyRichLife;
+
+  procedure Work;
+  begin
+    RunApiEditIn(ACmd, AChars, life);
+  end;
+
+begin
+  // (the format API, InDelText: a handler that frees the control ends the call there)
+  Guard(life, @Work);
+end;
+
+procedure TTyCustomRichEdit.RunApiEditIn(ACmd: TTyRichCommand; AChars: TTyRichPos;
+  var ALife: TTyRichLife);
+var
   state: Int64;
   reason: string;
   cmd: TTyRichCommand;
@@ -11084,8 +11214,12 @@ begin
   try
     RunMade(ACmd, place, False);
   finally
-    Dec(FApiWrite);
-    if wait then EndWait;
+    // (a handler that freed the control: nothing of it is touched)
+    if not ALife.Gone then
+    begin
+      Dec(FApiWrite);
+      if wait then EndWait;
+    end;
   end;
 end;
 
@@ -12078,6 +12212,20 @@ end;
 
 procedure TTyCustomRichEdit.CommitComposition(const AText: string);
 var
+  life: TTyRichLife;
+
+  procedure Work;
+  begin
+    CommitCompositionIn(AText, life);
+  end;
+
+begin
+  // (a commit's report: a handler that frees the control ends the call there)
+  Guard(life, @Work);
+end;
+
+procedure TTyCustomRichEdit.CommitCompositionIn(const AText: string; var ALife: TTyRichLife);
+var
   s: UTF8String;
   was, late, before: Boolean;
   p: Integer;
@@ -12165,7 +12313,7 @@ begin
     try
       TypeText(s, (Pos(#10, s) = 0) and (Pos(#11, s) = 0), True, fmt, n);
     finally
-      FEditQuiet := False;
+      if not ALife.Gone then FEditQuiet := False;
     end;
     if late and FEditHeard then
     begin
@@ -14603,6 +14751,7 @@ procedure TTyCustomRichEdit.LifeEnter(var ALife: TTyRichLife; AHandler: Boolean)
 begin
   ALife.Gone := False;
   ALife.Handler := AHandler;
+  ALife.Depth := GRichAppDepth;
   ALife.Next := FLife;
   FLife := @ALife;
 end;
@@ -14611,12 +14760,14 @@ end;
   unwinding go on past this frame? Only into the control's own code: when the frame below is
   another public call's (LoadFromFile around LoadFromStream), which called this one itself and
   must not go on either. With a handler's frame below - the application's handler made this
-  call - or none, it ends here: the call returns its "nothing", no exception reaches the
-  application's code; the handler's frame unwinds further once the handler has returned. (No
-  method: the control is gone.) }
+  call -, a frame of another depth below (another control's handler, the application's code,
+  lies between them) or none, it ends here: the call returns its "nothing", no exception
+  reaches the application's code; the frames below find the control gone when the call
+  returns to them. (No method: the control is gone.) }
 function TyRichGonePasses(const ALife: TTyRichLife): Boolean;
 begin
-  Result := not ALife.Gone or ((ALife.Next <> nil) and not ALife.Next^.Handler);
+  Result := not ALife.Gone or ((ALife.Next <> nil) and not ALife.Next^.Handler and
+    (ALife.Next^.Depth = ALife.Depth));
 end;
 
 procedure TTyCustomRichEdit.LifeLeave(var ALife: TTyRichLife);

@@ -36,6 +36,7 @@ type
     function DropEffectAt(AOffer: TTyRichDropOffer; APos: TTyRichPos;
       AShift: TShiftState): TTyRichDropEffect; override;
     function DropModalForm: TCustomForm; override;
+    function RunUserEdit(AMake: TTyRichEditMaker): Boolean; override;
     function DropFilesArePictures(const AFiles: TStringArray): Boolean; override;
     function MakeFragmentFilter(ASource: TTyRichDocument): TTyRichFragmentFilter; override;
     function DropFragmentFilter(AOffer: TTyRichDropOffer;
@@ -49,6 +50,7 @@ type
     { the reader's filter counted alive (CountInner), its pictures read back with other bytes
       (ChangePictures); the drop's own filter failing to be made (FailFilter) }
     CountInner, ChangePictures, FailFilter: Boolean;
+    ChangeCount: Integer;
     Other: TAcrossProbe;
     OtherAt: TPoint;
     FocusCalls, TargetAsks: Integer;
@@ -57,6 +59,9 @@ type
     OnFocusAfter: TNotifyEvent;
     { reading a dropped RTF runs out of memory; the verdict raises }
     FailRead, RaiseInVerdict: Boolean;
+    // the door refuses once (OnEditRefused runs before it takes the command)
+    RefuseInDoor: Boolean;
+    function RunMadeOf(ACmd: TTyRichCommand): Boolean;
     {$IFDEF LCLWin32}
     function Target: IDropTarget;
     {$ENDIF}
@@ -153,11 +158,21 @@ type
   public
     Inner: TTyRichFragmentFilter;
     Change: Boolean;
+    // only so many pictures from the first on are changed (-1: every one)
+    ChangeLeft: Integer;
     constructor Create(AInner: TTyRichFragmentFilter);
     destructor Destroy; override;
     function KeepFragment(const AFragment: RawByteString; APara: Boolean): Boolean; override;
     function RowFormat(const ARaw: RawByteString): RawByteString; override;
     function MapObject(AObj: TTyRichObject; out AText: UTF8String): TTyRichObject; override;
+  end;
+
+  // a command counted alive
+  TCountedCmd = class(TTyRichInsertText)
+  public
+    class var Live: Integer;
+    constructor Create(APos: TTyRichPos; const AText: UTF8String);
+    destructor Destroy; override;
   end;
 
   TTyRichDropAcrossTest = class(TTestCase)
@@ -180,6 +195,11 @@ type
     // the source's document changed from the target's OnChange (FSrcEdit: 1 an edit, 2 a new text)
     procedure EditTheSource(Sender: TObject);
     function CursorOf(AEffect: TTyRichDropEffect): TCursor;
+  private
+    // the application's handlers that call the control again, whose nested handler frees it
+    FRaisedInHandler, FHandlerEnded: Boolean;
+    procedure NestedTable(Sender: TObject);
+    procedure NestedLines(Sender: TObject);
     function NewProbe: TAcrossProbe;
     procedure Load(ARich: TAcrossProbe; const S: string);
     procedure LoadRtf(ARich: TAcrossProbe; const S: RawByteString);
@@ -221,6 +241,10 @@ type
     procedure TestTheTargetsTickChangesTheCursorHere;
     procedure TestTheDropsFilterLeaksNothingAndStaysLinear;
     procedure TestAFormThatTakesNoInputIsNoTarget;
+    procedure TestUndoRedoAndTablesStopWhenAHandlerFreesTheControl;
+    procedure TestNothingOfTheControlsReachesTheApplication;
+    procedure TestACommandTheDoorDidNotTakeGoesWithTheControl;
+    procedure TestPicturesAfterChangedOnesStillShareTheirBytes;
     {$IFDEF LCLWin32}
     procedure TestEveryPictureFileIsSizedForTheDropPlace;
     procedure TestAControlFreedDuringAnOleDropStopsThere;
@@ -344,6 +368,39 @@ begin
   ATargetY := Y - OtherAt.Y;
 end;
 
+function TAcrossProbe.RunUserEdit(AMake: TTyRichEditMaker): Boolean;
+begin
+  if RefuseInDoor then
+  begin
+    RefuseInDoor := False;
+    EditRefused('the test''s door says no');
+    Exit(False);
+  end;
+  Result := inherited RunUserEdit(AMake);
+end;
+
+function TAcrossProbe.RunMadeOf(ACmd: TTyRichCommand): Boolean;
+var
+  place: TTyRichEditPlace;
+begin
+  place := Default(TTyRichEditPlace);
+  place.Anchor := CRichPlaceChangeEnd;
+  place.Caret := CRichPlaceChangeEnd;
+  Result := RunMade(ACmd, place, True);
+end;
+
+constructor TCountedCmd.Create(APos: TTyRichPos; const AText: UTF8String);
+begin
+  inherited Create(APos, AText);
+  Inc(Live);
+end;
+
+destructor TCountedCmd.Destroy;
+begin
+  Dec(Live);
+  inherited Destroy;
+end;
+
 function TAcrossProbe.DropModalForm: TCustomForm;
 begin
   if UseModal then Result := ModalForm else Result := inherited DropModalForm;
@@ -363,6 +420,7 @@ begin
   if not (CountInner or ChangePictures) then Exit;
   c := TCountedFilter.Create(Result);
   c.Change := ChangePictures;
+  if ChangeCount > 0 then c.ChangeLeft := ChangeCount else c.ChangeLeft := -1;
   Result := c;
 end;
 
@@ -403,7 +461,8 @@ var
   b: TBytes;
 begin
   Result := Inner.MapObject(AObj, AText);
-  if not Change or not (Result is TTyRichPicture) then Exit;
+  if not Change or not (Result is TTyRichPicture) or (ChangeLeft = 0) then Exit;
+  if ChangeLeft > 0 then Dec(ChangeLeft);
   p := TTyRichPicture(Result);
   b := Copy(p.Data, 0, Length(p.Data));
   if Length(b) > 0 then b[High(b)] := b[High(b)] xor $FF;
@@ -1905,6 +1964,233 @@ begin
     formB.Free;
     formA.Free;
   end;
+end;
+
+{ ---- a control freed by its own handlers, outside drops too ---- }
+
+procedure TTyRichDropAcrossTest.NestedTable(Sender: TObject);
+begin
+  // once: the nested action's own OnChange frees the control
+  FA.OnChange := @DoomOnNotify;
+  FDoomed := FA;
+  try
+    FA.InsertTable(2, 2);
+  except
+    on Exception do FRaisedInHandler := True;
+  end;
+  FHandlerEnded := True;
+end;
+
+procedure TTyRichDropAcrossTest.NestedLines(Sender: TObject);
+begin
+  FB.OnChange := nil;
+  FA.OnChange := @DoomOnNotify;
+  FDoomed := FA;
+  try
+    FA.Lines.Text := 'replaced text';
+  except
+    on Exception do FRaisedInHandler := True;
+  end;
+  FHandlerEnded := True;
+end;
+
+{ Undo, Redo and a table action, the control freed by its own OnChange: each returns, raises
+  nothing, and touches nothing of the freed control (freed memory poisoned). }
+procedure TTyRichDropAcrossTest.TestUndoRedoAndTablesStopWhenAHandlerFreesTheControl;
+var
+  i: Integer;
+  raised: Boolean;
+  what: string;
+begin
+  for i := 0 to 2 do
+  begin
+    what := Format('case %d', [i]);
+    if FA = nil then
+    begin
+      FA := NewProbe;
+      FA.Other := FB;
+      FA.OtherAt := Point(500, 0);
+    end;
+    Load(FA, 'one two three');
+    FA.SelStart := 3;
+    FA.SelLength := 0;
+    FA.SelText := 'X';
+    if i = 1 then FA.Undo;
+    FA.OnChange := @DoomOnNotify;
+    FDoomed := FA;
+    raised := False;
+    PoisonFreedMemory(True);
+    try
+      try
+        case i of
+          0: FA.Undo;
+          1: FA.Redo;
+          2: FA.InsertTable(2, 2);
+        end;
+      except
+        on Exception do raised := True;
+      end;
+    finally
+      PoisonFreedMemory(False);
+    end;
+    AssertTrue(what + ': freed by its handler', FA = nil);
+    AssertFalse(what + ': nothing raised', raised);
+  end;
+end;
+
+{ The control's way of stopping when a handler frees it never reaches the application: Undo
+  whose OnChange runs InsertTable, whose own OnChange frees the control - the nested call
+  returns into the handler, which runs to its end, and Undo returns; during a drop between two
+  controls the target's OnChange sets the source's Lines.Text, whose OnChange frees the
+  source - the target's handler runs to its end, the drop finishes. }
+procedure TTyRichDropAcrossTest.TestNothingOfTheControlsReachesTheApplication;
+var
+  raised: Boolean;
+  p: TPoint;
+begin
+  Load(FA, 'one two three');
+  FA.SelStart := 3;
+  FA.SelLength := 0;
+  FA.SelText := 'X';
+  FA.OnChange := @NestedTable;
+  FRaisedInHandler := False;
+  FHandlerEnded := False;
+  raised := False;
+  PoisonFreedMemory(True);
+  try
+    try
+      FA.Undo;
+    except
+      on Exception do raised := True;
+    end;
+  finally
+    PoisonFreedMemory(False);
+  end;
+  AssertTrue('Undo: freed by the nested handler', FA = nil);
+  AssertFalse('Undo: nothing raised to its caller', raised);
+  AssertFalse('nothing raised into the application''s handler', FRaisedInHandler);
+  AssertTrue('the application''s handler ran to its end', FHandlerEnded);
+  // two controls
+  FA := NewProbe;
+  FA.Other := FB;
+  FA.OtherAt := Point(500, 0);
+  Load(FA, 'one two three');
+  Load(FB, 'alpha beta');
+  FA.SelStart := 4;
+  FA.SelLength := 3;
+  p := InB(Pt(FB, 6));
+  StartDrag(Mid(FA, 5), p);
+  FB.OnChange := @NestedLines;
+  FRaisedInHandler := False;
+  FHandlerEnded := False;
+  raised := False;
+  PoisonFreedMemory(True);
+  try
+    try
+      FA.ReleaseWith(p.X, p.Y, []);
+    except
+      on Exception do raised := True;
+    end;
+  finally
+    PoisonFreedMemory(False);
+  end;
+  AssertTrue('the source freed', FA = nil);
+  AssertFalse('the release raised nothing', raised);
+  AssertFalse('nothing raised into the target''s handler', FRaisedInHandler);
+  AssertTrue('the target''s handler ran to its end', FHandlerEnded);
+  AssertEquals('the target has what it took', 'alpha twobeta', TextOf(FB));
+end;
+
+{ A command the door had not taken yet when a handler there freed the control goes with it. }
+procedure TTyRichDropAcrossTest.TestACommandTheDoorDidNotTakeGoesWithTheControl;
+var
+  raised: Boolean;
+begin
+  Load(FA, 'one two three');
+  TCountedCmd.Live := 0;
+  FA.RefuseInDoor := True;
+  FA.OnEditRefused := @DoomOnRefused;
+  FDoomed := FA;
+  raised := False;
+  PoisonFreedMemory(True);
+  try
+    try
+      FA.RunMadeOf(TCountedCmd.Create(0, 'x'));
+    except
+      on Exception do raised := True;
+    end;
+  finally
+    PoisonFreedMemory(False);
+  end;
+  AssertTrue('freed in the door', FA = nil);
+  AssertFalse('nothing raised', raised);
+  AssertEquals('the command went too', 0, TCountedCmd.Live);
+end;
+
+{ 20 pictures the round trip changed, then 20 it did not: the last 20 still share the source's
+  bytes, and the source's pictures looked at stay a few for each. }
+procedure TTyRichDropAcrossTest.TestPicturesAfterChangedOnesStillShareTheirBytes;
+var
+  offer: TTyRichSelectionOffer;
+  p: TPoint;
+  i, k, shared, own: Integer;
+  pic, got: TTyRichPicture;
+  b: TBGRABitmap;
+  st: TBytesStream;
+  src: array of TTyRichPicture;
+  c0: Int64;
+begin
+  Load(FA, 'x');
+  SetLength(src, 40);
+  for i := 0 to 39 do
+  begin
+    b := TBGRABitmap.Create(2 + i, 3, BGRA(i * 5, 40, 90, 255));
+    st := TBytesStream.Create;
+    try
+      b.SaveToStreamAs(st, ifPng);
+      pic := TTyRichPicture.Create(rpfPng, Copy(st.Bytes, 0, st.Size), 300, 300);
+    finally
+      st.Free;
+      b.Free;
+    end;
+    src[i] := pic;
+    AssertTrue('a picture', FA.Document.Execute(TTyRichInsertObject.Create(1 + i, pic)));
+  end;
+  FA.Document.ClearUndo;
+  Load(FB, 'alpha beta');
+  FB.ChangePictures := True;
+  FB.ChangeCount := 20;
+  c0 := TyRichDropPictureCompares;
+  offer := TTyRichSelectionOffer.Create(FA, 0, FA.Document.Text.Length);
+  try
+    p := Pt(FB, 6);
+    AssertTrue('a copy there', FB.DropEnter(offer, p.X, p.Y, [ssCtrl]) = rdeCopy);
+    AssertTrue('copied', FB.DropOn(p.X, p.Y, [ssCtrl]) = rdeCopy);
+  finally
+    offer.Free;
+  end;
+  FB.ChangePictures := False;
+  FB.ChangeCount := 0;
+  shared := 0;
+  own := 0;
+  k := 0;
+  for i := 0 to FB.Document.Text.Length - 1 do
+    if FB.Document.ObjectAt(i) is TTyRichPicture then
+    begin
+      got := TTyRichPicture(FB.Document.ObjectAt(i));
+      if Pointer(got.Data) = Pointer(src[k].Data) then
+      begin
+        if k >= 20 then Inc(shared);
+      end
+      else if k < 20 then
+        Inc(own);
+      Inc(k);
+    end;
+  AssertEquals('all 40 went in', 40, k);
+  AssertEquals('the changed ones have bytes of their own', 20, own);
+  AssertEquals('the 20 after them share the source''s bytes', 20, shared);
+  AssertTrue(Format('a few comparisons for each (%d for 40)', [TyRichDropPictureCompares - c0]),
+    TyRichDropPictureCompares - c0 <= 8 * 40);
 end;
 
 {$IFDEF LCLWin32}
