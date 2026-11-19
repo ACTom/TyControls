@@ -363,6 +363,7 @@ type
     procedure Lit(B: Byte);
     procedure Raw(const S: RawByteString);
     procedure RawUnder(const S: RawByteString; AUc: Integer);
+    procedure RawMark(AMark: TTyRichFieldMark);
     procedure Fragment(const S: RawByteString);
     procedure RawText(const S: RawByteString);
     procedure NewLine;
@@ -886,6 +887,25 @@ begin
   WordN('uc', AUc);
   Raw(S);
   Word('uc1');
+end;
+
+// A field's group, as its open mark keeps it - read where it is (a file's bytes are not
+// copied) - under the \uc it was read under, as RawUnder.
+procedure TRtfWriter.RawMark(AMark: TTyRichFieldMark);
+var
+  p: PByte;
+  n: Int64;
+  uc: Boolean;
+begin
+  p := AMark.BytesData;
+  n := AMark.BytesLength;
+  if n <= 0 then Exit;
+  uc := (AMark.RawUc <> 1) and (p^ = Ord('{'));
+  if uc then WordN('uc', AMark.RawUc);
+  Put(p, n);
+  FNeedDelim := False;
+  FRawOpen := False;
+  if uc then Word('uc1');
 end;
 
 // A fragment of a format's Extra. The format does not say under which \uc a group among
@@ -1984,7 +2004,7 @@ begin
       begin
         // its field as the file has it: the bytes, then nothing up to its close mark
         if ARuns[r].Format <> FCurChar then WriteCharFormat(ARuns[r].Format);
-        RawUnder(m.Bytes, m.RawUc);
+        RawMark(m);
         FSkip := 1;
         FSkipPara := AIndex;
       end;

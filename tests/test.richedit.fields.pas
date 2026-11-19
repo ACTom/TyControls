@@ -41,6 +41,7 @@ type
     procedure TestCharacterWordsOfTheFieldReachItsResult;
     procedure TestAResultThatShowsNothingStaysOneObject;
     procedure TestALargeFieldIsDecidedAlikeWhereverAParseBegins;
+    procedure TestAFieldsGroupIsReadOnceToDecideIt;
     // writing
     procedure TestTheSlotFontsAroundAFieldHoldAfterAnEdit;
     procedure TestAnEditOutsideAFieldKeepsItsBytes;
@@ -249,15 +250,20 @@ begin
   Result := (O <> nil) and (O.ClassName = 'TTyRichFieldMark');
 end;
 
-// the open mark keeps the field's bytes; the close mark keeps none
 function IsOpenMark(O: TTyRichObject): Boolean;
 begin
-  Result := IsMark(O) and (O.DataBytes > O.InstanceSize);
+  Result := IsMark(O) and (TTyRichFieldMark(O).Kind = rfmOpen);
 end;
 
 function IsCloseMark(O: TTyRichObject): Boolean;
 begin
-  Result := IsMark(O) and (O.DataBytes = O.InstanceSize);
+  Result := IsMark(O) and (TTyRichFieldMark(O).Kind = rfmClose);
+end;
+
+// the bytes an open mark keeps: the field's group
+function MarkBytes(O: TTyRichObject): Int64;
+begin
+  Result := (O as TTyRichFieldMark).BytesLength;
 end;
 
 { The objects of paragraph AIndex in order: [ an open mark, ] a close mark, O an object of
@@ -334,6 +340,9 @@ begin
   if A is TTyRichPicture then
     Exit((TTyRichPicture(A).PictureFormat = TTyRichPicture(B).PictureFormat) and
       (Length(TTyRichPicture(A).Data) = Length(TTyRichPicture(B).Data)));
+  if A is TTyRichFieldMark then
+    Exit((TTyRichFieldMark(A).Kind = TTyRichFieldMark(B).Kind) and
+      SameRaw(TTyRichFieldMark(A).Bytes, TTyRichFieldMark(B).Bytes));
   Result := A.DataBytes = B.DataBytes;
 end;
 
@@ -599,7 +608,7 @@ begin
     AssertTrue('the open one', IsOpenMark(ObjectAt(d, 0, LinkOpen)));
     AssertTrue('the close one', IsCloseMark(ObjectAt(d, 0, LinkClose)));
     AssertEquals('the open mark keeps the field''s group',
-      Length(FieldGroup(LinkRtf, 1)), ObjectAt(d, 0, LinkOpen).DataBytes - ObjectAt(d, 0, LinkOpen).InstanceSize);
+      Length(FieldGroup(LinkRtf, 1)), MarkBytes(ObjectAt(d, 0, LinkOpen)));
     f := CharFmt(d, LinkOpen + 1);
     AssertTrue('the link underlined', fsUnderline in f.Style);
     AssertEquals('the link blue', $FF0000, f.Color);
@@ -838,7 +847,7 @@ begin
     AssertEquals('nested', '[[[]]]', ObjectsOf(d, 0));
     for i := 1 to 3 do
       AssertEquals(Format('field %d keeps its group', [i]), Length(FieldGroup(s, i)),
-        ObjectAt(d, 0, 2 * i - 1).DataBytes - ObjectAt(d, 0, 2 * i - 1).InstanceSize);
+        MarkBytes(ObjectAt(d, 0, 2 * i - 1)));
   finally
     d.Free;
   end;
@@ -1761,6 +1770,7 @@ var
   d: TTyRichDocument;
   o, c, k: TTyRichFieldMark;
   n1, n2: Int64;
+  g: RawByteString;
 begin
   d := LoadDoc(BytesOf(LinkRtf), False);
   try
@@ -1773,15 +1783,32 @@ begin
     AssertEquals('one field', o.Id, c.Id);
     AssertEquals('where its group is in the file', Pos(Rtf('{|field'), LinkRtf) - 1, o.Id);
     AssertEquals('read under \uc1', 1, o.RawUc);
+    // read from the file the document keeps: a range of it, not a copy, and not counted again
+    AssertTrue('its bytes are the file''s', o.InFile);
+    AssertEquals('its bytes where they are', Length(FieldGroup(LinkRtf, 1)), o.BytesLength);
+    g := FieldGroup(LinkRtf, 1);
+    AssertTrue('in place', CompareMem(o.BytesData, @g[1], o.BytesLength));
+    AssertEquals('not counted as its own', o.InstanceSize, o.DataBytes);
+    AssertTrue('nothing of its own to share', o.SharedData(n1) = nil);
     k := o.Clone as TTyRichFieldMark;
     try
       AssertTrue('a clone: the same kind', k.Kind = rfmOpen);
       AssertEquals('the same field', o.Id, k.Id);
-      AssertTrue('the same bytes, shared', o.SharedData(n1) = k.SharedData(n2));
-      AssertEquals('counted as its bytes', Length(o.Bytes), n1);
+      AssertFalse('bytes of its own', k.InFile);
+      AssertRaw(Self, 'the same bytes', o.Bytes, k.Bytes);
+      AssertTrue('counted as its bytes', k.SharedData(n1) <> nil);
+      AssertEquals('all of them', Length(o.Bytes), n1);
+      AssertEquals('its data', k.InstanceSize + n1, k.DataBytes);
+      c := k.Clone as TTyRichFieldMark;
+      try
+        AssertTrue('a clone of it shares them', k.SharedData(n1) = c.SharedData(n2));
+      finally
+        c.Free;
+      end;
     finally
       k.Free;
     end;
+    c := d.ObjectAt(LinkClose) as TTyRichFieldMark;
     n1 := TTyRichFieldMark.NewId;
     n2 := TTyRichFieldMark.NewId;
     AssertTrue('an identity of its own for a mark made here', (n1 < 0) and (n2 < n1));
@@ -1790,8 +1817,15 @@ begin
     AssertFalse('a mark alone: refused', d.Execute(TTyRichInsertObject.Create(0, k)));
     AssertEquals('nothing kept', 0, d.UndoDepth);
     AssertTrue('the file', SameBytes(BytesOf(LinkRtf), SaveOut(d)));
+    // the file's bytes live as long as a mark of it does
+    o.AddRef;
   finally
     d.Free;
+  end;
+  try
+    AssertRaw(Self, 'the document gone, its mark''s bytes still there', FieldGroup(LinkRtf, 1), o.Bytes);
+  finally
+    o.Release;
   end;
 end;
 
@@ -1949,6 +1983,90 @@ begin
   end;
   CheckLazyIsWhole(Self, 'two large fields', b, 1, False);
   CheckRoundTrip(Self, 'two large fields', b);
+end;
+
+{ What deciding fields reads (TTyRtfLoad.PreScannedBytes): fields nested eight deep around a
+  file of many intervals - the index scan reads their group once, not once a level; parsing
+  any interval of it, first or again after it went, reads nothing more (the scan kept the
+  verdicts); and the same nest small (below CRtfKeptVerdictBytes), parsed again, is read once
+  more - once, not once a level. }
+procedure TTyRichFieldsTest.TestAFieldsGroupIsReadOnceToDecideIt;
+var
+  s, head, tail: RawByteString;
+  b: TBytes;
+  d: TTyRichDocument;
+  load: TTyRtfLoad;
+  i, n: Integer;
+  scanned, group: Int64;
+begin
+  head := '';
+  tail := '';
+  for i := 1 to 8 do
+  begin
+    head := head + '{|field{|*|fldinst INCLUDETEXT "part' + IntToStr(i) + '.rtf"}{|fldrslt ';
+    tail := tail + '}}';
+  end;
+  s := H936 + '|pard intro|par ' + head;
+  for i := 1 to 6000 do
+    s := s + '|pard line ' + IntToStr(i) + ' of the included text, to give it length|par ';
+  s := Rtf(s + tail + '|pard tail|par}');
+  b := BytesOf(s);
+  group := Length(FieldGroup(s, 1));
+  d := LoadDoc(b, False);
+  try
+    load := TyRichRtfLoadOf(d);
+    load.MaxResidentIntervals := 1;
+    AssertTrue('many intervals', load.IntervalCount > 4);
+    scanned := load.PreScannedBytes;
+    AssertTrue(Format('the scan read the group once: %d of %d', [scanned, group]),
+      (scanned >= group) and (scanned < group + 1024));
+    AssertEquals('eight open on the first screen', 8, d.ParaFieldDepth(2));
+    n := d.Text.ParaCount;
+    d.RunsOf(n div 2);
+    d.RunsOf(n - 1);
+    d.RunsOf(1);
+    AssertEquals('parses read none of it again', scanned, load.PreScannedBytes);
+    AssertTrue('the large ones kept', load.KeptVerdictCount >= 8);
+  finally
+    d.Free;
+  end;
+  // small: read again by a parse that meets it - once
+  s := H936 + '|pard intro|par ' + head;
+  for i := 1 to 50 do
+    s := s + '|pard line ' + IntToStr(i) + ' of the included text, to give it length|par ';
+  s := s + tail;
+  for i := 1 to 8000 do
+    s := s + '|pard after ' + IntToStr(i) + ', plain paragraphs to give the file length|par ';
+  s := Rtf(s + '}');
+  b := BytesOf(s);
+  group := Length(FieldGroup(s, 1));
+  AssertTrue('a small nest', group < CRtfKeptVerdictBytes);
+  d := LoadDoc(b, False);
+  try
+    load := TyRichRtfLoadOf(d);
+    load.MaxResidentIntervals := 1;
+    AssertTrue('many intervals', load.IntervalCount > 4);
+    scanned := load.PreScannedBytes;
+    AssertTrue(Format('the scan: once, %d of %d', [scanned, group]), scanned < group + 1024);
+    d.RunsOf(1);
+    AssertTrue(Format('its interval parsed: once more, %d', [load.PreScannedBytes - scanned]),
+      load.PreScannedBytes - scanned < group + 1024);
+    scanned := load.PreScannedBytes;
+    d.RunsOf(d.Text.ParaCount - 1);
+    d.RunsOf(1);
+    AssertTrue(Format('again after it went: once more, %d', [load.PreScannedBytes - scanned]),
+      load.PreScannedBytes - scanned < group + 1024);
+  finally
+    d.Free;
+  end;
+  // whole: one pass
+  d := LoadDoc(b, True);
+  try
+    load := TyRichRtfLoadOf(d);
+    AssertTrue(Format('a whole parse: %d', [load.PreScannedBytes]), load.PreScannedBytes < 2 * group + 2048);
+  finally
+    d.Free;
+  end;
 end;
 
 { Word's way with its three fonts: \hich\af0\dbch\af1\loch\f0 before a field, \dbch in its

@@ -1260,13 +1260,14 @@ begin
 end;
 
 { Fields nested eight deep around 30 MB: LoadFromFile to the end of the first paint within
-  1 s, and what reading the first screen adds to the working set after the load's first slice
-  is a few MB (16 at most) - not a copy of each field's group. }
+  1 s, and what reading the first screen's paragraphs adds to the working set after the load's
+  first slice is a few MB (16 at most) - not a copy of each field's group. }
 procedure TTyRichEditPerfTest.TestFieldsEightDeepAround30MB;
 var
   path: string;
   bmp: TBitmap;
   t0, first, before, after: Double;
+  k: Integer;
 begin
   CheckRoom;
   path := NewFile('.rtf');
@@ -1277,17 +1278,21 @@ begin
     bmp.SetSize(FRich.Width, FRich.Height);
     t0 := Clock;
     FRich.LoadFromFile(path);
+    // (what the first screen's paragraphs take, apart from what a paint takes whatever the
+    // file: they are read first)
     before := WorkingSetMB;
+    for k := 0 to 59 do FRich.Document.RunsOf(k);
+    after := WorkingSetMB;
     TPerfRich(FRich).PaintInto(bmp);
     first := Clock - t0;
-    after := WorkingSetMB;
     Report(Format('eight fields deep around %d MB: load (first slice) and first paint',
       [SizeOfFile(path) div (1024 * 1024)]), first);
     WriteLn(Format('TTyRichEditPerfTest: eight deep: working set %.0f MB after the first slice, ' +
-      '%.0f MB after the first screen', [before, after]));
+      '%.0f MB after the first screen''s paragraphs were read', [before, after]));
     AssertEquals('eight fields open on the first screen', 8, FRich.Document.ParaFieldDepth(2));
     AssertTrue(Format('the first screen in %.0f ms', [first]), first <= 1000);
-    AssertTrue(Format('the first screen added %.0f MB', [after - before]), after - before <= 16);
+    AssertTrue(Format('the first screen''s paragraphs added %.0f MB', [after - before]),
+      after - before <= 16);
   finally
     bmp.Free;
   end;

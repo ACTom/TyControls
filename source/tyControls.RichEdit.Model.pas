@@ -309,26 +309,48 @@ type
     Not a TTyRichOpaque: no code that treats a kept block takes a mark for one. It has no
     width and is never drawn. Id pairs the two marks of a field: the byte offset of the
     field's group in its file, or a number below zero for marks made elsewhere (NewId); the
-    pairs themselves go by nesting order, as the marks stand in the text. }
+    pairs themselves go by nesting order, as the marks stand in the text.
+    An open mark read from a file the document keeps (its load holds the file's bytes for the
+    paragraphs nobody changed) does not copy its group: it holds a reference to that buffer
+    and where its group is in it - a field around most of a large file, and the fields nested
+    in it, cost nothing more for their bytes, and the buffer lives as long as one of them
+    does. A mark made otherwise, and a clone (what a copy, the clipboard and another document
+    get), owns its bytes. }
   TTyRichFieldMark = class(TTyRichObject)
   private
     FKind: TTyRichFieldMarkKind;
     FId: Int64;
     FBytes: RawByteString;
+    FFile: TBytes;
+    FFileStart, FFileLen: Int64;
+    function GetBytes: RawByteString;
   public
     { ABytes and ARawUc: the open mark's (a close mark keeps none). }
     constructor Create(AKind: TTyRichFieldMarkKind; AId: Int64;
       const ABytes: RawByteString = ''; ARawUc: Integer = 1);
+    { An open mark whose group is ALen bytes of AFile from AStart: a reference to AFile is
+      kept, nothing copied. }
+    constructor CreateInFile(AId: Int64; const AFile: TBytes; AStart, ALen: Int64;
+      ARawUc: Integer = 1);
+    { The same kind, field and bytes - its own copy of them when this one's are a file's. }
     function Clone: TTyRichObject; override;
+    { Its bytes when it owns them; nothing of a file's buffer, which the document keeps for
+      its paragraphs anyway (and which is counted once, as the load's, not per mark). }
     function DataBytes: Int64; override;
-    // its bytes: a clone shares them, and the history counts them once
+    // the bytes it owns: a clone of it shares them, and the history counts them once
     function SharedData(out ABytes: Int64): Pointer; override;
     { A fresh identity for marks not read from a file: below zero, never given twice. }
     class function NewId: Int64;
     property Kind: TTyRichFieldMarkKind read FKind;
     property Id: Int64 read FId;
-    { The open mark: the field's whole group, as read (RawUc: the \uc it was read under). }
-    property Bytes: RawByteString read FBytes;
+    { The open mark: the field's whole group, as read (RawUc: the \uc it was read under) - a
+      copy, for a mark whose bytes are its file's; a writer reads them in place (BytesData). }
+    property Bytes: RawByteString read GetBytes;
+    { Its bytes where they are: BytesLength of them from BytesData, valid while it lives. }
+    function BytesData: PByte;
+    function BytesLength: Int64;
+    // its bytes are a range of its file's (CreateInFile), not its own
+    function InFile: Boolean;
   end;
 
   TTyRichTable = class;
@@ -707,6 +729,12 @@ type
       parts. False by default: such a table's structure is not edited. }
     function WholeTable(ADoc: TTyRichDocument; AIndex: Integer;
       out AFirst, ALast: Integer): Boolean; virtual;
+    { Paragraph AIndex, not parsed (no value yet): how many fields are open at its start, and
+      the fewest open anywhere in it (its start and its end included), as the loader's index
+      knows them - without parsing it. Cheap: a field query asks it of every paragraph of a
+      field. False by default: not known (the paragraph is parsed to tell). }
+    function ParaFieldDepths(ADoc: TTyRichDocument; AIndex: Integer;
+      out AStart, ALow: Integer): Boolean; virtual;
   end;
 
   TTyRichRange = record
@@ -1195,6 +1223,10 @@ type
     { The fields open at position APos (the paragraph's start depth and the marks before APos
       in it), with the paragraph's value; parses that paragraph. }
     function DepthAt(APos: TTyRichPos): Integer;
+    { Paragraph AIndex's fields: how many are open at its start, and the fewest open anywhere
+      in it (start and end included) - from its value when it has one, else from the
+      loader's index (TTyRichParaLoader.ParaFieldDepths) without parsing it. }
+    procedure ParaDepths(AIndex: Integer; out AStart, ALow: Integer);
     function MakeDataLike(AParaFormat: TTyParaFormatId; const ARuns: TTyRunArray;
       ACell: TTyRichCell; AFrom: TTyRichParaData): TTyRichParaData;
     procedure PutData(AIndex: Integer; AOld, ANew: TTyRichParaData);
@@ -1468,14 +1500,15 @@ type
     { The fields open at paragraph AIndex's start (its value's; parses it). }
     function ParaFieldDepth(AIndex: Integer): Integer;
     { The innermost field whose result APos is inside: the positions of its open mark and its
-      close mark. False outside every field. Reads APos's paragraph, then back to the open
-      mark's and on to the close mark's paragraph - for a field whose result is one paragraph
-      (a link) that one paragraph, for one of many (a table of contents) a value read per
-      paragraph of it on either side of APos: never more than the field's own paragraphs. }
+      close mark. False outside every field. The cost: APos's paragraph and the two marks'
+      paragraphs are read (parsed when the document is read on demand); the paragraphs between
+      are passed over by their depths (ParaDepths: a look-up each, in the loader's index for
+      one not parsed) - a field of N paragraphs is N look-ups and at most three paragraphs
+      read. A caller that asks per key keeps the answer until the document changes. }
     function FieldRangeAt(APos: TTyRichPos; out AOpen, AClose: TTyRichPos): Boolean;
     { The position of the other mark of the field whose mark stands at AMarkPos; -1 when no
-      field mark stands there. Reads the paragraphs from the mark's to its partner's (as
-      FieldRangeAt). }
+      field mark stands there. The mark's paragraph and its partner's are read, the paragraphs
+      between looked up by their depths (as FieldRangeAt). }
     function FieldPartner(AMarkPos: TTyRichPos): TTyRichPos;
     { Every character of [APos, APos + ALen) is a field's - a mark, or a character of a
       result: a character format change there changes nothing (ApplyCharFormat passes them
@@ -2406,9 +2439,49 @@ begin
   if ARawUc >= 0 then FRawUc := ARawUc;
 end;
 
+constructor TTyRichFieldMark.CreateInFile(AId: Int64; const AFile: TBytes; AStart, ALen: Int64;
+  ARawUc: Integer);
+begin
+  inherited Create;
+  if (AStart < 0) or (ALen <= 0) or (AStart + ALen > Length(AFile)) then
+    raise ETyRichModel.Create('A field mark''s bytes must lie in its file');
+  FKind := rfmOpen;
+  FId := AId;
+  FFile := AFile;
+  FFileStart := AStart;
+  FFileLen := ALen;
+  if ARawUc >= 0 then FRawUc := ARawUc;
+end;
+
+function TTyRichFieldMark.InFile: Boolean;
+begin
+  Result := FFile <> nil;
+end;
+
+function TTyRichFieldMark.BytesData: PByte;
+begin
+  if FFile <> nil then Result := @FFile[FFileStart]
+  else if FBytes <> '' then Result := PByte(PAnsiChar(FBytes))
+  else Result := nil;
+end;
+
+function TTyRichFieldMark.BytesLength: Int64;
+begin
+  if FFile <> nil then Result := FFileLen else Result := Length(FBytes);
+end;
+
+function TTyRichFieldMark.GetBytes: RawByteString;
+begin
+  if FFile = nil then Exit(FBytes);
+  Result := '';
+  SetLength(Result, FFileLen);
+  Move(FFile[FFileStart], Result[1], FFileLen);
+  SetCodePage(Result, CP_NONE, False);
+end;
+
 function TTyRichFieldMark.Clone: TTyRichObject;
 begin
-  Result := TTyRichFieldMark.Create(FKind, FId, FBytes, FRawUc);
+  Result := TTyRichFieldMark.Create(FKind, FId, GetBytes, FRawUc);
 end;
 
 function TTyRichFieldMark.DataBytes: Int64;
@@ -3030,6 +3103,14 @@ begin
   Result := False;
 end;
 
+function TTyRichParaLoader.ParaFieldDepths(ADoc: TTyRichDocument; AIndex: Integer;
+  out AStart, ALow: Integer): Boolean;
+begin
+  AStart := 0;
+  ALow := 0;
+  Result := False;
+end;
+
 { ---- TTyRichDocument: life ---- }
 
 constructor TTyRichDocument.Create;
@@ -3366,6 +3447,31 @@ begin
     if nd <> d then PutData(i, d, nd);
     depth := EndDepthOfData(nd);
   end;
+end;
+
+procedure TTyRichDocument.ParaDepths(AIndex: Integer; out AStart, ALow: Integer);
+var
+  d: TTyRichParaData;
+  i, depth: Integer;
+begin
+  d := SlotData(AIndex);
+  if (d = nil) and (FLoader <> nil) then
+  begin
+    if FLoader.ParaFieldDepths(Self, AIndex, AStart, ALow) then Exit;
+    d := DataOf(AIndex);
+  end;
+  AStart := DepthOfData(d);
+  ALow := AStart;
+  if d = nil then Exit;
+  depth := AStart;
+  for i := 0 to High(d.FRuns) do
+    if d.FRuns[i].Obj is TTyRichFieldMark then
+      if TTyRichFieldMark(d.FRuns[i].Obj).Kind = rfmOpen then Inc(depth)
+      else
+      begin
+        Dec(depth);
+        if depth < ALow then ALow := depth;
+      end;
 end;
 
 function TTyRichDocument.DepthAt(APos: TTyRichPos): Integer;
@@ -3761,48 +3867,74 @@ begin
   Result := DepthOfData(DataOf(AIndex));
 end;
 
-{ From position APos, APos's depth ADepth (> 0): the open mark of the innermost field there
-  (the last open mark before APos that brings the depth to ADepth), back through the
-  paragraphs - a paragraph whose start is as deep holds none of it. }
+{ From position APos, APos's depth ADepth (> 0): the open mark of the innermost field there -
+  the last open mark before APos that brings the depth to ADepth with no fall below it after
+  it. In APos's paragraph up to APos; else in the last paragraph before it where the depth
+  falls below ADepth (ParaDepths, without reading the ones between): the last such open mark
+  in it. }
 function FindOpenBefore(ADoc: TTyRichDocument; APos: TTyRichPos; ADepth: Integer): TTyRichPos;
 var
-  k, i, depth: Integer;
+  k, depth, s, low: Integer;
   d: TTyRichParaData;
-  o: Int64;
+  o, ps: Int64;
+  found: TTyRichPos;
+
+  procedure Walk(AUpTo: Int64);
+  var
+    i: Integer;
+  begin
+    found := -1;
+    if d <> nil then
+      for i := 0 to High(d.FRuns) do
+      begin
+        if d.FRuns[i].Start >= AUpTo then Break;
+        if d.FRuns[i].Obj is TTyRichFieldMark then
+          if TTyRichFieldMark(d.FRuns[i].Obj).Kind = rfmOpen then
+          begin
+            Inc(depth);
+            if depth = ADepth then found := ps + d.FRuns[i].Start;
+          end
+          else
+          begin
+            Dec(depth);
+            if depth < ADepth then found := -1;
+          end;
+      end;
+  end;
+
 begin
   Result := -1;
   k := ADoc.FText.ParaOfPos(APos);
-  o := APos - ADoc.FText.ParaStart(k);
-  // backwards: ADepth fields are open after each mark passed until the one that opened
-  // the innermost of them (a close mark passed is a field nested in it, closed since)
-  depth := ADepth;
+  ps := ADoc.FText.ParaStart(k);
+  o := APos - ps;
+  d := ADoc.DataOf(k);
+  depth := ADoc.DepthOfData(d);
+  Walk(o);
+  if found >= 0 then Exit(found);
+  // (a paragraph that starts outside the field cannot follow its open mark)
+  if ADoc.DepthOfData(d) < ADepth then Exit;
+  Dec(k);
   while k >= 0 do
   begin
-    d := ADoc.DataOf(k);
-    if d <> nil then
-      for i := High(d.FRuns) downto 0 do
-      begin
-        if d.FRuns[i].Start >= o then Continue;
-        if d.FRuns[i].Obj is TTyRichFieldMark then
-          if TTyRichFieldMark(d.FRuns[i].Obj).Kind = rfmClose then
-            Inc(depth)
-          else if depth = ADepth then
-            Exit(ADoc.FText.ParaStart(k) + d.FRuns[i].Start)
-          else
-            Dec(depth);
-      end;
-    // (a paragraph that starts outside the field cannot follow its open mark)
-    if ADoc.DepthOfData(d) < ADepth then Exit;
+    ADoc.ParaDepths(k, s, low);
+    if low < ADepth then
+    begin
+      d := ADoc.DataOf(k);
+      ps := ADoc.FText.ParaStart(k);
+      depth := ADoc.DepthOfData(d);
+      Walk(High(Int64));
+      Exit(found);
+    end;
     Dec(k);
-    o := High(Int64);
   end;
 end;
 
 { From position APos (inside ADepth fields): the close mark that brings the depth below
-  ADepth, on through the paragraphs. }
+  ADepth - in APos's paragraph after APos, else in the first paragraph after it where the
+  depth falls below ADepth (ParaDepths, without reading the ones between). }
 function FindCloseAfter(ADoc: TTyRichDocument; APos: TTyRichPos; ADepth: Integer): TTyRichPos;
 var
-  k, i, depth, last: Integer;
+  k, i, depth, last, s, low: Integer;
   d: TTyRichParaData;
   ps, o: Int64;
 begin
@@ -3813,12 +3945,21 @@ begin
   o := APos - ADoc.FText.ParaStart(k);
   while k <= last do
   begin
+    if o = 0 then
+    begin
+      // (a paragraph walked whole: only the one where the depth falls is read)
+      ADoc.ParaDepths(k, s, low);
+      if low >= ADepth then
+      begin
+        Inc(k);
+        Continue;
+      end;
+      depth := s;
+    end;
     d := ADoc.DataOf(k);
     ps := ADoc.FText.ParaStart(k);
+    if o = 0 then depth := ADoc.DepthOfData(d);
     if d <> nil then
-    begin
-      // (a paragraph walked whole starts as deep as the one before it left)
-      if o = 0 then depth := ADoc.DepthOfData(d);
       for i := 0 to High(d.FRuns) do
       begin
         if d.FRuns[i].Start < o then Continue;
@@ -3831,7 +3972,8 @@ begin
             if depth < ADepth then Exit(ps + d.FRuns[i].Start);
           end;
       end;
-    end;
+    // (the place's own paragraph ends as deep: the paragraphs after it)
+    if o = 0 then Exit;
     Inc(k);
     o := 0;
   end;
@@ -4836,8 +4978,10 @@ var
   seg: UTF8String;
   buf: TReplaceBuf;
   p, stop, gapFrom: PByte;
-  k, nk, nf: Integer;
+  k, nk, nf, fp: Integer;
   kept: array of TTyRichPos;
+  fh: Boolean;
+  fe: TTyRichPos;
 begin
   ASkipped := 0;
   c := Default(TTyRichChange);
@@ -4855,19 +4999,40 @@ begin
       raise ETyRichModel.Create('ReplaceInParas: matches out of range or out of order');
   { A match inside a field's result (or one that would take a mark of a field and not the
     other) stays as it is, as one in a row that holds a nested table does: the others are
-    replaced. }
+    replaced. Asked only where there can be one: in a paragraph that starts inside a field or
+    holds a mark (the find, which asks the same of the matches it gives, passes over the
+    others; this is the primitive's own guard). }
   kept := nil;
   SetLength(kept, ACount);
   nk := 0;
+  fp := -1;
+  fh := False;
+  fe := 0;
   BeginRead;
   try
     for i := AFrom to AFrom + ACount - 1 do
-      if FieldRefused(APos[i], ALen) then Inc(ASkipped)
+    begin
+      if (fp < 0) or (APos[i] >= fe) then
+      begin
+        fp := FText.ParaOfPos(APos[i]);
+        fe := FText.ParaStart(fp) + FText.ParaLength(fp);
+        d := DataOf(fp);
+        fh := DepthOfData(d) <> 0;
+        if (d <> nil) and not fh then
+          for j := 0 to High(d.FRuns) do
+            if d.FRuns[j].Obj is TTyRichFieldMark then
+            begin
+              fh := True;
+              Break;
+            end;
+      end;
+      if (fh or (APos[i] + ALen > fe)) and FieldRefused(APos[i], ALen) then Inc(ASkipped)
       else
       begin
         kept[nk] := APos[i];
         Inc(nk);
       end;
+    end;
   finally
     EndRead;
   end;

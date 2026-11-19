@@ -76,6 +76,30 @@ type
 
   TTyRtfTokenKind = (rtkGroupStart, rtkGroupEnd, rtkWord, rtkSymbol, rtkHex, rtkText, rtkBin);
 
+  // What the reader decided of a field's group (TTyRtfParser's pre-scan): where the group
+  // begins (its brace), whether its result is shown, and where it ends (after its closing
+  // brace; -1 for one not shown - the decision did not need its end).
+  TTyRtfFieldVerdict = record
+    Start: Int64;
+    Stop: Int64;
+    Shown: Boolean;
+  end;
+
+  // Verdicts in the order of their groups' starts (internal).
+  TTyRtfFieldVerdicts = class
+  private
+    FItems: array of TTyRtfFieldVerdict;
+    FCount: Integer;
+  public
+    // after the last one only (an earlier start is not added: it was decided before)
+    procedure Add(AStart, AStop: Int64; AShown: Boolean);
+    function Find(AStart: Int64; out AStop: Int64; out AShown: Boolean): Boolean;
+    procedure Clear;
+    function LastStart: Int64;
+    function MemSize: Int64;
+    property Count: Integer read FCount;
+  end;
+
   // One token, as offsets into the buffer: [Start, Stop) are all its bytes (a control word's
   // delimiting space and \bin's data included). rtkWord and rtkBin: the name is [NameStart,
   // NameStart + NameLen), with Param when HasParam. rtkSymbol: Value is the character (-1: a
@@ -219,6 +243,7 @@ type
     RowNested: Boolean;          // the row being read holds a nested table
     Fields: Integer;             // fields whose result is being read as content (open marks)
     ParaFields: Integer;         // ... open where the current paragraph began
+    ParaLow: Integer;            // ... the fewest open anywhere in it so far
   end;
 
   // A snapshot: everything the parse depends on at a point between two tokens (with the
@@ -272,6 +297,7 @@ type
     TextLen: Integer;
     ListText: UTF8String;        // building: its {\listtext} / {\pntext}, '' none
     FieldDepth: Integer;         // fields open at its start (TTyRichFieldMark pairs)
+    FieldLow: Integer;           // the fewest open anywhere in it, its start and end included
   end;
 
   TTyRtfRowRec = record
@@ -392,6 +418,13 @@ type
     FNextSnapshotAt: Int64;
     FSnapshots: array of TTyRtfState;
     FSnapshotN: Integer;
+    // field verdicts: decided by this parser's own pre-scans (of fields in a field it decided),
+    // and the ones the index scan kept (a load's, shared; the scan adds to them)
+    FVerdicts: TTyRtfFieldVerdicts;
+    FKeptVerdicts: TTyRtfFieldVerdicts;
+    FKeepVerdicts: Boolean;
+    FPreScanned: Int64;
+    FMarksInFile: Boolean;
     function Counting: Boolean; inline;
     procedure InitState;
     // the node pool
@@ -445,6 +478,7 @@ type
     procedure EmitObject(AObj: TTyRichObject);
     procedure EmitOpaque(AStart, AStop: PtrInt; const ADisplay: UTF8String);
     function FieldShown(AStart: PtrInt; out AStop: PtrInt): Boolean;
+    function DecideFields(AStart: PtrInt; out AStop: PtrInt): Boolean;
     procedure EmitFieldMark(AKind: TTyRichFieldMarkKind; AStart, AStop: PtrInt);
     procedure PutOut(ACode: Cardinal);
     procedure PutField(ACode: Cardinal);
@@ -509,6 +543,9 @@ type
     function ParaRec(AIndex: Integer): TTyRtfParaRec;
     // A paragraph's bytes and characters (no record with a managed field copied).
     procedure ParaSpan(AIndex: Integer; out ASrc: TTyRtfRange; out AChars: Int64);
+    // A paragraph's fields: how many are open at its start, and the fewest open anywhere in
+    // it (its start and its end included) - also when counting.
+    procedure ParaDepths(AIndex: Integer; out AStart, ALow: Integer);
     // The first paragraph ParaRec still has.
     property FirstParaRec: Integer read FParaBase;
     // Forgets the records of the paragraphs before AIndex (an index scan keeps no record of
@@ -575,6 +612,18 @@ type
     // Keep the state at the first paragraph end (outside a table row) at least this many
     // bytes after the one before: an index scan's resume points. 0: none.
     property SnapshotEvery: Int64 read FSnapshotEvery write SetSnapshotEvery;
+    { Verdicts on fields decided before (by an index scan of the same bytes): the pre-scan
+      looks a field up there before it reads the field's group. Not owned. With KeepVerdicts
+      (the index scan itself) the pre-scan adds to them what it decided of a group of
+      CRtfKeptVerdictBytes or more - a field shown or not, and each field shown in it -, so
+      that no parse reads such a group again to decide it. }
+    property KeptVerdicts: TTyRtfFieldVerdicts read FKeptVerdicts write FKeptVerdicts;
+    property KeepVerdicts: Boolean read FKeepVerdicts write FKeepVerdicts;
+    // The bytes the pre-scan read to decide fields (tests and probes).
+    property PreScannedBytes: Int64 read FPreScanned;
+    { Open field marks hold their group as a range of Bytes, which the document keeps
+      (TTyRichFieldMark.CreateInFile), instead of a copy. }
+    property MarksInFile: Boolean read FMarksInFile write FMarksInFile;
   end;
 
 const
@@ -595,6 +644,10 @@ const
   CRtfResidentIntervals = 16;
   // What TyRichBeginLoadRtf indexes before it returns (then Step goes on).
   CRtfFirstSliceBytes = 4 shl 20;
+  { A field group of at least this many bytes has the index scan's verdict kept (24 bytes);
+    a smaller one is read again by the pre-scan of a parse that meets it - once per parse,
+    however deep its fields nest, so at most this many bytes more for each interval parsed. }
+  CRtfKeptVerdictBytes = CRtfSnapshotBytes;
 
 type
   TTyRtfProgressEvent = procedure(Sender: TObject; ADone, ATotal: Int64) of object;
@@ -654,10 +707,20 @@ type
     FCheck: TTyRtfGroup;             // ParseWhole: the group being compared with the index
     FCheckBad: Integer;
     FWalk: TTyRtfParser;             // StateAt's own scan, kept to go on from
+    FVerdicts: TTyRtfFieldVerdicts;  // what the scan decided of large fields
+    FPreScanned: Int64;              // what parses' pre-scans read (the scan's own aside)
+    { The paragraphs' fields, as the scan found them, by where they begin in the file: an
+      entry where they change - how many fields are open at a paragraph's start, the fewest
+      anywhere in it -, the paragraphs after it the same until the next one (none: 0, 0). }
+    FDepthSrc: array of Int64;
+    FDepthStart, FDepthLow: array of Integer;
+    FDepthN: Integer;
     FOnLoadProgress: TTyRtfProgressEvent;
     procedure Index(ABudget: Int64; AMinParas: Integer);
     procedure Collect;
     procedure Append(AFrom, ATo: Integer);
+    // what the scan found of paragraph AIndex's fields, for ParaFieldDepths
+    procedure NoteDepths(AIndex: Integer; ASrcStart: Int64);
     procedure AddMapRange(const R: TTyRtfRange);
     procedure Finish;
     function IntervalOf(ASrc: Int64): Integer;
@@ -747,6 +810,15 @@ type
     property Scan: TTyRtfParser read FScan;
     // The file's last paragraph has no terminator: what follows it in the file is the trailer.
     function LastParaOpen: Boolean;
+    { The fields of the file's paragraph that begins at ASrcOffset, as the index scan found
+      them, without parsing it: how many are open at its start, and the fewest open anywhere
+      in it. A binary search of the places they change. }
+    procedure ParaFieldDepths(ASrcOffset: Int64; out AStart, ALow: Integer);
+    // What the pre-scan read to decide fields: the index scan's, and every parse's since.
+    function PreScannedBytes: Int64;
+    // The verdicts the scan kept on large fields, and their bytes.
+    function KeptVerdictCount: Integer;
+    function KeptVerdictBytes: Int64;
     property Bytes: TBytes read FBytes;
     // Before the first paragraph: the tables, the document's properties.
     function Header: TTyRtfRange;
@@ -1574,6 +1646,7 @@ begin
   if FLen > 0 then FBuf := @FBytes[0] else FBuf := nil;
   FPool := APool;
   FObjects := TFPList.Create;
+  FVerdicts := TTyRtfFieldVerdicts.Create;
   FCompactAt := 4096;
   FVersionGen := -1;
   FFontTblClose := -1;
@@ -1602,6 +1675,7 @@ begin
   for i := 0 to FObjects.Count - 1 do
     if TTyRichObject(FObjects[i]).RefCount = 0 then TTyRichObject(FObjects[i]).Free;
   FObjects.Free;
+  FVerdicts.Free;
   if FVersions <> nil then
     for i := 0 to FVersions.Count - 1 do TTyRtfParser(FVersions[i]).Free;
   FVersions.Free;
@@ -2878,6 +2952,7 @@ begin
       begin
         // after its result: the close mark (its partner is known by where the group began)
         Dec(FS.Fields);
+        if FS.Fields < FS.ParaLow then FS.ParaLow := FS.Fields;
         EmitFieldMark(rfmClose, AOld.DestStart, FTokStop);
       end;
   end;
@@ -4276,8 +4351,7 @@ end;
   (TTyRichFieldMark) - or kept as one object of its bytes, as before. Both the index scan and
   every parse decide here, from the same state, so a lazy load and a whole one read the same
   paragraphs; no other code decides it. AStop: where the group ends (after its closing brace),
-  -1 when the file ends first. One lexer pass over the group's bytes (nested fields' bytes
-  included: a field shown in a shown field decides again, over its own bytes only).
+  -1 when it is not shown.
   Shown when all of these hold:
   - the group closes before the file ends, and its groups stay within the depth the reader
     keeps (MaxDepth);
@@ -4286,26 +4360,79 @@ end;
   - nothing in the group is of a table (\trowd \cell \row \nestcell \nestrow \intbl, \itap
     above 0), a section's (\sect, \sectd), or a header, footer, footnote or annotation group;
   - no paragraph end in it (\par) when the field stands in a table cell;
-  - it nests, with the fields shown around it, no deeper than CRtfMaxShownFields. }
+  - it nests, with the fields shown around it, no deeper than CRtfMaxShownFields.
+  A field's group is read once to decide it - by the index scan, and once more by a parse
+  that meets it, unless the scan kept its verdict (KeptVerdicts: a group of
+  CRtfKeptVerdictBytes or more) -, and that one pass decides every field shown inside it too
+  (DecideFields): no group is read again for a field nested in it, however deep. }
 function TTyRtfParser.FieldShown(AStart: PtrInt; out AStop: PtrInt): Boolean;
+var
+  stop: Int64;
+begin
+  if (FKeptVerdicts <> nil) and FKeptVerdicts.Find(AStart, stop, Result) then
+  begin
+    AStop := stop;
+    Exit;
+  end;
+  // decided by the pass over a field around it; those before it are done with
+  if (FVerdicts.Count > 0) and (FVerdicts.LastStart < AStart) then FVerdicts.Clear;
+  if FVerdicts.Find(AStart, stop, Result) then
+  begin
+    AStop := stop;
+    Exit;
+  end;
+  Result := DecideFields(AStart, AStop);
+end;
+
+{ FieldShown's pass over the group at AStart. The fields in it are followed as they open and
+  close; what shows in a result shows in the results around it too. A field inside the group
+  is shown, once the group is, when its own result has something to show: the rest of the
+  rules hold for it since they hold for the whole group (and a field in an instruction is
+  never read as content). The verdicts on the fields inside go to FVerdicts, for when the
+  parse meets them; with KeepVerdicts the large ones to KeptVerdicts too. }
+function TTyRtfParser.DecideFields(AStart: PtrInt; out AStop: PtrInt): Boolean;
+type
+  TOpenField = record
+    Depth: Integer;          // the depth of its group
+    ResultAt: Integer;       // the depth of its result's group while inside it, 0 otherwise
+    Slot: Integer;           // its entry in found, -1: none (a field in an instruction)
+    Content: Boolean;
+  end;
 var
   lex: TTyRtfLexer;
   t: TTyRtfToken;
-  depth, top, resultDepth, skipDepth, kw, p: Integer;
-  fieldAt: array[0..CRtfMaxShownFields + 1] of Integer;
-  first, inCell, content: Boolean;
+  depth, top, skipDepth, kw, p, pending, n, i: Integer;
+  open: array[0..CRtfMaxShownFields + 1] of TOpenField;
+  found: array of TTyRtfFieldVerdict;
+  first, inCell, closed, big: Boolean;
+  braceAt: PtrInt;
+
+  procedure Shows;
+  var
+    j: Integer;
+  begin
+    for j := 0 to top - 1 do
+      if (open[j].ResultAt > 0) and not open[j].Content then
+      begin
+        open[j].Content := True;
+        Dec(pending);
+      end;
+  end;
+
 begin
   Result := False;
   AStop := -1;
-  FillChar(fieldAt, SizeOf(fieldAt), 0);
   inCell := FS.Props.InTable or (FS.Props.Itap > 0) or (FS.CellIdx > 0);
   lex.Init(FBuf, AStart, FLen);
   depth := 0;
-  top := 0;               // fields open in the group (fieldAt: the depth each began at)
-  resultDepth := 0;       // inside the field's own result: the depth that result began at
-  skipDepth := 0;         // inside an instruction or data group: its depth
-  content := False;
+  top := 0;               // fields open in the group
+  skipDepth := 0;         // inside an instruction, data or {\*\...} group: its depth
+  pending := 0;           // fields inside their result with nothing shown in it yet
+  n := 0;
+  found := nil;
   first := False;
+  closed := False;
+  braceAt := AStart;
   while lex.Next(t) do
   begin
     case t.Kind of
@@ -4313,67 +4440,117 @@ begin
         begin
           Inc(depth);
           // (the group the reader would only count: it could not read the field's end)
-          if FS.Depth - 1 + depth >= MaxDepth then Exit;
+          if FS.Depth - 1 + depth >= MaxDepth then Break;
           first := True;
+          braceAt := t.Start;
           Continue;
         end;
       rtkGroupEnd:
         begin
-          if (top > 0) and (fieldAt[top - 1] = depth) then Dec(top);
-          if depth = resultDepth then resultDepth := 0;
+          if (top > 0) and (open[top - 1].ResultAt = depth) then
+          begin
+            open[top - 1].ResultAt := 0;
+            if not open[top - 1].Content then Dec(pending);
+          end;
+          if (top > 0) and (open[top - 1].Depth = depth) then
+          begin
+            Dec(top);
+            if open[top].Slot >= 0 then
+            begin
+              found[open[top].Slot].Stop := t.Stop;
+              found[open[top].Slot].Shown := open[top].Content;
+            end;
+          end;
           if depth = skipDepth then skipDepth := 0;
           Dec(depth);
           if depth = 0 then
           begin
-            AStop := t.Stop;
-            Exit(content);
+            closed := True;
+            Break;
           end;
         end;
       rtkWord:
         begin
           kw := LookupWord(@FBuf[t.NameStart], t.NameLen);
           case kw of
-            kwTrowd, kwCell, kwRow, kwNestCell, kwNestRow, kwIntbl, kwDHeaderFooter: Exit;
-            kwItap: if t.HasParam and (t.Param > 0) then Exit;
-            kwPar: if inCell then Exit;
+            kwTrowd, kwCell, kwRow, kwNestCell, kwNestRow, kwIntbl, kwDHeaderFooter: Break;
+            kwItap: if t.HasParam and (t.Param > 0) then Break;
+            kwPar: if inCell then Break;
           end;
           if NameIs(FBuf, t, 'sect') or NameIs(FBuf, t, 'sectd') or
              (first and (NameIs(FBuf, t, 'footnote') or NameIs(FBuf, t, 'annotation'))) then
-            Exit;
+            Break;
           if first then
           begin
             if kw = kwDField then
             begin
-              if FS.Fields + top + 1 > CRtfMaxShownFields then Exit;
-              fieldAt[top] := depth;
+              if FS.Fields + top + 1 > CRtfMaxShownFields then Break;
+              open[top].Depth := depth;
+              open[top].ResultAt := 0;
+              open[top].Content := False;
+              open[top].Slot := -1;
+              if skipDepth = 0 then
+              begin
+                if n = Length(found) then SetLength(found, n * 2 + 4);
+                found[n].Start := braceAt;
+                found[n].Stop := -1;
+                found[n].Shown := False;
+                open[top].Slot := n;
+                Inc(n);
+              end;
               Inc(top);
             end
-            else if (kw = kwDFldRslt) and (depth = 2) and (resultDepth = 0) then
-              // the field's own result (a nested field's is inside it)
-              resultDepth := depth
-            else if ((kw = kwDFldInst) or NameIs(FBuf, t, 'datafield')) and (skipDepth = 0) then
+            else if (kw = kwDFldRslt) and (top > 0) and (open[top - 1].Depth = depth - 1) and
+              (open[top - 1].ResultAt = 0) then
+            begin
+              // the result of the field this group belongs to (not one inside its result)
+              open[top - 1].ResultAt := depth;
+              if not open[top - 1].Content then Inc(pending);
+            end
+            else if (skipDepth = 0) and ((kw = kwDFldInst) or NameIs(FBuf, t, 'datafield')) then
               skipDepth := depth;
           end;
-          if (resultDepth > 0) and (skipDepth = 0) and not content then
+          if (pending > 0) and (skipDepth = 0) then
             case kw of
-              kwU, kwPar, kwLine..kwZwnbo, kwObjWord, kwDPict, kwDShpPict: content := True;
+              kwU, kwPar, kwLine..kwZwnbo, kwObjWord, kwDPict, kwDShpPict: Shows;
             end;
         end;
       rtkText:
-        if (resultDepth > 0) and (skipDepth = 0) and not content then
+        if (pending > 0) and (skipDepth = 0) then
           for p := t.Start to t.Stop - 1 do
             if not (FBuf[p] in [0, 10, 13]) then
             begin
-              content := True;
+              Shows;
               Break;
             end;
       rtkHex, rtkBin:
-        if (resultDepth > 0) and (skipDepth = 0) then content := True;
+        if (pending > 0) and (skipDepth = 0) then Shows;
       rtkSymbol:
-        if (resultDepth > 0) and (skipDepth = 0) and (t.Value <> Ord('*')) then content := True;
+        if (pending > 0) and (skipDepth = 0) and (t.Value <> Ord('*')) then Shows;
     end;
     // (\* keeps a group's first word coming)
     if not ((t.Kind = rtkSymbol) and (t.Value = Ord('*'))) then first := False;
+  end;
+  Inc(FPreScanned, lex.Position - AStart);
+  if closed then
+  begin
+    Result := found[0].Shown;
+    if Result then AStop := found[0].Stop;
+  end;
+  if not Result then
+  begin
+    // (no field in it is read as content)
+    if FKeepVerdicts and (FKeptVerdicts <> nil) and (lex.Position - AStart >= CRtfKeptVerdictBytes) then
+      FKeptVerdicts.Add(AStart, -1, False);
+    Exit;
+  end;
+  for i := 0 to n - 1 do
+  begin
+    big := found[i].Stop - found[i].Start >= CRtfKeptVerdictBytes;
+    if not found[i].Shown then found[i].Stop := -1;
+    FVerdicts.Add(found[i].Start, found[i].Stop, found[i].Shown);
+    if FKeepVerdicts and (FKeptVerdicts <> nil) and big then
+      FKeptVerdicts.Add(found[i].Start, found[i].Stop, found[i].Shown);
   end;
 end;
 
@@ -4389,7 +4566,9 @@ begin
     EmitObject(nil);
     Exit;
   end;
-  if AKind = rfmOpen then
+  if (AKind = rfmOpen) and FMarksInFile then
+    m := TTyRichFieldMark.CreateInFile(AStart, FBytes, AStart, AStop - AStart, FS.Props.Uc)
+  else if AKind = rfmOpen then
     m := TTyRichFieldMark.Create(rfmOpen, AStart, Fragment(Range(AStart, AStop)), FS.Props.Uc)
   else
     m := TTyRichFieldMark.Create(rfmClose, AStart);
@@ -4419,8 +4598,10 @@ begin
   rec^.Chars := FCurChars;
   rec^.Src := Range(FS.Boundary, FTok.Stop);
   rec^.FieldDepth := FS.ParaFields;
+  rec^.FieldLow := FS.ParaLow;
   // (the paragraph that begins next: as deep as the field marks so far leave it)
   FS.ParaFields := FS.Fields;
+  FS.ParaLow := FS.Fields;
   if not Counting then
   begin
     if FRunN = 0 then AddRun(CharFormatFor(rccLoch), nil);
@@ -4879,6 +5060,62 @@ begin
   AChars := FParas[AIndex - FParaBase].Chars;
 end;
 
+procedure TTyRtfParser.ParaDepths(AIndex: Integer; out AStart, ALow: Integer);
+begin
+  AStart := FParas[AIndex - FParaBase].FieldDepth;
+  ALow := FParas[AIndex - FParaBase].FieldLow;
+end;
+
+{ TTyRtfFieldVerdicts }
+
+procedure TTyRtfFieldVerdicts.Add(AStart, AStop: Int64; AShown: Boolean);
+begin
+  if (FCount > 0) and (FItems[FCount - 1].Start >= AStart) then Exit;
+  if FCount = Length(FItems) then SetLength(FItems, FCount * 2 + 8);
+  FItems[FCount].Start := AStart;
+  FItems[FCount].Stop := AStop;
+  FItems[FCount].Shown := AShown;
+  Inc(FCount);
+end;
+
+function TTyRtfFieldVerdicts.Find(AStart: Int64; out AStop: Int64; out AShown: Boolean): Boolean;
+var
+  lo, hi, m: Integer;
+begin
+  lo := 0;
+  hi := FCount - 1;
+  while lo <= hi do
+  begin
+    m := (lo + hi) shr 1;
+    if FItems[m].Start < AStart then lo := m + 1
+    else if FItems[m].Start > AStart then hi := m - 1
+    else
+    begin
+      AStop := FItems[m].Stop;
+      AShown := FItems[m].Shown;
+      Exit(True);
+    end;
+  end;
+  AStop := -1;
+  AShown := False;
+  Result := False;
+end;
+
+procedure TTyRtfFieldVerdicts.Clear;
+begin
+  FCount := 0;
+end;
+
+function TTyRtfFieldVerdicts.LastStart: Int64;
+begin
+  if FCount = 0 then Result := -1 else Result := FItems[FCount - 1].Start;
+end;
+
+function TTyRtfFieldVerdicts.MemSize: Int64;
+begin
+  Result := InstanceSize + Int64(Length(FItems)) * SizeOf(TTyRtfFieldVerdict);
+end;
+
 procedure TTyRtfParser.DropParas(AIndex: Integer);
 var
   n, i: Integer;
@@ -5002,6 +5239,8 @@ type
     procedure ReadsEnded(ADoc: TTyRichDocument); override;
     function WholeTable(ADoc: TTyRichDocument; AIndex: Integer;
       out AFirst, ALast: Integer): Boolean; override;
+    function ParaFieldDepths(ADoc: TTyRichDocument; AIndex: Integer;
+      out AStart, ALow: Integer): Boolean; override;
   end;
 
   TRtfBuild = class(TTyRichDocBuilder)
@@ -5056,6 +5295,17 @@ begin
   Result := Load.WholeTableOf(AIndex, AFirst, ALast);
 end;
 
+function TRtfLoader.ParaFieldDepths(ADoc: TTyRichDocument; AIndex: Integer;
+  out AStart, ALow: Integer): Boolean;
+var
+  src, nbytes: Int64;
+begin
+  AStart := 0;
+  ALow := 0;
+  Result := ADoc.Text.ParaLazySource(AIndex, src, nbytes);
+  if Result then Load.ParaFieldDepths(src, AStart, ALow);
+end;
+
 function TyRichRtfLoadOf(ADoc: TTyRichDocument): TTyRtfLoad;
 begin
   if (ADoc <> nil) and (ADoc.Loader is TRtfLoader) then
@@ -5099,6 +5349,9 @@ begin
   FBytes := ABytes;
   FScan := TTyRtfParser.Create(ABytes, nil);
   FScan.SnapshotEvery := CRtfSnapshotBytes;
+  FVerdicts := TTyRtfFieldVerdicts.Create;
+  FScan.KeptVerdicts := FVerdicts;
+  FScan.KeepVerdicts := True;
   FGroups := TFPList.Create;
   FMaxResident := CRtfResidentIntervals;
   FTrailer := Range(-1, -1);
@@ -5122,6 +5375,7 @@ begin
   FGroups.Free;
   FWalk.Free;
   FScan.Free;
+  FVerdicts.Free;
   inherited Destroy;
 end;
 
@@ -5207,6 +5461,29 @@ end;
 
 // Puts paragraphs AFrom..ATo-1 of the scan into the document's text after the ones there
 // (the last of them without a separator).
+procedure TTyRtfLoad.NoteDepths(AIndex: Integer; ASrcStart: Int64);
+var
+  ds, dl: Integer;
+  same: Boolean;
+begin
+  FScan.ParaDepths(AIndex, ds, dl);
+  if FDepthN > 0 then
+    same := (FDepthStart[FDepthN - 1] = ds) and (FDepthLow[FDepthN - 1] = dl)
+  else
+    same := (ds = 0) and (dl = 0);
+  if same then Exit;
+  if FDepthN = Length(FDepthSrc) then
+  begin
+    SetLength(FDepthSrc, FDepthN * 2 + 16);
+    SetLength(FDepthStart, FDepthN * 2 + 16);
+    SetLength(FDepthLow, FDepthN * 2 + 16);
+  end;
+  FDepthSrc[FDepthN] := ASrcStart;
+  FDepthStart[FDepthN] := ds;
+  FDepthLow[FDepthN] := dl;
+  Inc(FDepthN);
+end;
+
 procedure TTyRtfLoad.Append(AFrom, ATo: Integer);
 var
   text: TTyRichText;
@@ -5224,6 +5501,7 @@ begin
     for i := AFrom to ATo - 1 do
     begin
       FScan.ParaSpan(i, src, chars);
+      NoteDepths(i, src.Start);
       if i < ATo - 1 then sep := FSep else sep := rsNone;
       text.AppendLazyParagraph(chars, src.Start, src.Stop - src.Start, sep);
       if FMap <> nil then AddMapRange(src);
@@ -5480,6 +5758,8 @@ begin
       if (FirstSnap <= e) and (LastSnap >= s) then Drop(TTyRtfGroup(FGroups[i]), True);
   p := TTyRtfParser.Create(FBytes, FDoc.Formats);
   try
+    p.KeptVerdicts := FVerdicts;
+    p.MarksInFile := True;
     if s > 0 then
     begin
       p.CopyTablesFrom(FScan.TablesOf(FSnaps[s].TablesGen));
@@ -5489,6 +5769,7 @@ begin
     p.ParseUntil(High(PtrInt), IntervalParaStop(e));
     Inc(FParsedBytes, p.Position - start);
     Inc(FParseCount);
+    Inc(FPreScanned, p.PreScannedBytes);
     Result := GroupFrom(p, s, e);
   finally
     p.Free;
@@ -5592,9 +5873,12 @@ begin
   for i := FGroups.Count - 1 downto 0 do Drop(TTyRtfGroup(FGroups[i]), True);
   p := TTyRtfParser.Create(FBytes, FDoc.Formats);
   try
+    p.KeptVerdicts := FVerdicts;
+    p.MarksInFile := True;
     p.Parse;
     Inc(FParsedBytes, p.Position);
     Inc(FParseCount);
+    Inc(FPreScanned, p.PreScannedBytes);
     n := p.ParaCount;
     if (n <> FDoc.Text.ParaCount) or (p.HeaderEnd <> FHeaderEnd) or
        (p.TrailerStart <> FTrailer.Start) then
@@ -6091,6 +6375,46 @@ begin
   Trim;
 end;
 
+procedure TTyRtfLoad.ParaFieldDepths(ASrcOffset: Int64; out AStart, ALow: Integer);
+var
+  lo, hi, m: Integer;
+begin
+  // the last place of change at or before ASrcOffset
+  lo := 0;
+  hi := FDepthN - 1;
+  while lo <= hi do
+  begin
+    m := (lo + hi) shr 1;
+    if FDepthSrc[m] <= ASrcOffset then lo := m + 1 else hi := m - 1;
+  end;
+  if hi < 0 then
+  begin
+    AStart := 0;
+    ALow := 0;
+  end
+  else
+  begin
+    AStart := FDepthStart[hi];
+    ALow := FDepthLow[hi];
+  end;
+end;
+
+function TTyRtfLoad.PreScannedBytes: Int64;
+begin
+  Result := FScan.PreScannedBytes + FPreScanned;
+  if FWalk <> nil then Inc(Result, FWalk.PreScannedBytes);
+end;
+
+function TTyRtfLoad.KeptVerdictCount: Integer;
+begin
+  Result := FVerdicts.Count;
+end;
+
+function TTyRtfLoad.KeptVerdictBytes: Int64;
+begin
+  Result := FVerdicts.MemSize;
+end;
+
 function TTyRtfLoad.ParaSource(AIndex: Integer; out ARange: TTyRtfRange): Boolean;
 var
   src, nbytes: Int64;
@@ -6247,6 +6571,7 @@ begin
   begin
     FreeAndNil(FWalk);
     FWalk := TTyRtfParser.Create(FBytes, nil);
+    FWalk.KeptVerdicts := FVerdicts;
     if k > 0 then
     begin
       FWalk.CopyTablesFrom(FScan.TablesOf(FSnaps[k].TablesGen));
@@ -6310,6 +6635,7 @@ begin
       for i := 0 to n - 1 do
       begin
         load.FScan.ParaSpan(i, src, chars);
+        load.NoteDepths(i, src.Start);
         if i < n - 1 then
           text.AppendLazyParagraph(chars, src.Start, src.Stop - src.Start, load.FSep)
         else
@@ -7101,7 +7427,9 @@ begin
     begin
       if FMarkN = Length(FMarks) then SetLength(FMarks, FMarkN * 2 + 4);
       FMarks[FMarkN] := FLight and not Foreign(TTyRichFieldMark(AObj).Bytes, True);
-      if not FMarks[FMarkN] then Result := nil;
+      if not FMarks[FMarkN] then Result := nil
+      // (it leaves the document it was read into: its bytes go with it, not that file's)
+      else if TTyRichFieldMark(AObj).InFile then Result := AObj.Clone;
       Inc(FMarkN);
     end
     else if FMarkN = 0 then
