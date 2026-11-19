@@ -8580,6 +8580,7 @@ type
     property Zoom;
     property ReadOnly;
     property DragDropEditing;
+    property AcceptDrops;
     property WantTabs;
     property TextEncoding;
     property TextCodePage;
@@ -8591,6 +8592,7 @@ type
     property OnZoomChange;
     property OnEditRefused;
     property OnObjectResize;
+    property OnDropFiles;
     property OnLoadProgress;
     property OnSaveProgress;
     property OnFindProgress;

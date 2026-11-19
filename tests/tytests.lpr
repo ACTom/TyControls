@@ -304,6 +304,7 @@ uses
   test.richedit.tableedit,
   test.richedit.objects,
   test.richedit.drag,
+  test.richedit.dropacross,
   test.richedit.perf;
 
 type

@@ -48,13 +48,15 @@ type
     procedure TestTabAndTheTableAnswersInALongTable;
     procedure TestAPictureResizedInALargeDocument;
     procedure TestDraggingTheSelectionInALargeDocument;
+    procedure TestDroppingALargeRtfFromAnotherProgram;
   end;
 
 implementation
 
 uses
   Math, LCLType, Controls, BGRABitmap, BGRABitmapTypes, tyControls.RichEdit.Text,
-  tyControls.RichEdit.RtfRead, tyControls.RichEdit.Model, tyControls.RichEdit.Commands;
+  tyControls.RichEdit.RtfRead, tyControls.RichEdit.Model, tyControls.RichEdit.Commands
+  {$IFDEF LCLWin32}, test.richedit.dropacross{$ENDIF};
 
 {$IFDEF MSWINDOWS}
 type
@@ -100,6 +102,13 @@ type
     procedure Release(X, Y: Integer);
     function Step: Boolean;
     procedure DragTick;
+  protected
+    function DropPointOf(const AScreen: TPoint): TPoint; override;
+    procedure FocusAfterDrop; override;
+  public
+    {$IFDEF LCLWin32}
+    function DropTarget: IUnknown;
+    {$ENDIF}
   end;
 
 procedure TPerfRich.PaintInto(ABitmap: TBitmap);
@@ -153,6 +162,24 @@ procedure TPerfRich.DragTick;
 begin
   DragScrollTick(nil);
 end;
+
+function TPerfRich.DropPointOf(const AScreen: TPoint): TPoint;
+begin
+  // (no window: the screen is the client's pixels)
+  Result := AScreen;
+end;
+
+procedure TPerfRich.FocusAfterDrop;
+begin
+  // (never the focus or the foreground in a test)
+end;
+
+{$IFDEF LCLWin32}
+function TPerfRich.DropTarget: IUnknown;
+begin
+  Result := OleDropTarget;
+end;
+{$ENDIF}
 
 { A PNG whose pixels do not compress: about AW x AH x 4 bytes. }
 function NoisePng(AW, AH: Integer): TBytes;
@@ -825,6 +852,82 @@ begin
     bmp.Free;
   end;
 end;
+
+{ Another program's drop of a large RTF (the Windows widgetset's drop target, fed a data object
+  of the test's in this process): 10 MB and 100 MB, from the drop to the end of its paint - a
+  paste of it, read the paste's way (the data object's block copied once into a string, as
+  the clipboard's is). Printed, not asserted: a paste of that much has no line of its own. The
+  peak working set includes the data object's own copies (its string and the block it hands
+  over: what the other program holds). }
+procedure TTyRichEditPerfTest.TestDroppingALargeRtfFromAnotherProgram;
+{$IFDEF LCLWin32}
+const
+  Sizes: array[0..1] of Int64 = (10 * 1024 * 1024, 100 * 1024 * 1024);
+var
+  bmp: TBitmap;
+  data: TTestData;
+  keep: IUnknown;
+  rtf: RawByteString;
+  ms: TMemoryStream;
+  s: RawByteString;
+  k, n: Integer;
+  len0: Int64;
+  t0: Double;
+begin
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf32bit;
+    bmp.SetSize(FRich.Width, FRich.Height);
+    for k := 0 to High(Sizes) do
+    begin
+      FRich.Lines.Text := 'start';
+      TPerfRich(FRich).PaintInto(bmp);
+      ms := TMemoryStream.Create;
+      try
+        s := '{\rtf1\ansi\ansicpg1252\deff0{\fonttbl{\f0\fswiss Arial;}}' + #13#10 + '\pard\f0\fs20 ';
+        ms.WriteBuffer(s[1], Length(s));
+        n := 0;
+        while ms.Size < Sizes[k] do
+        begin
+          s := 'Paragraph ' + IntToStr(n) + ' of the dropped text, with \b some\b0  words.\par' + #13#10;
+          ms.WriteBuffer(s[1], Length(s));
+          Inc(n);
+        end;
+        s := '}';
+        ms.WriteBuffer(s[1], 1);
+        SetLength(rtf, ms.Size);
+        Move(ms.Memory^, rtf[1], ms.Size);
+      finally
+        ms.Free;
+      end;
+      data := NewRtfData(rtf);
+      keep := data as IUnknown;
+      rtf := '';
+      len0 := FRich.Document.Text.Length;
+      AssertEquals('a copy', 1, OleEnterWith(TPerfRich(FRich).DropTarget, data, Point(10, 10)));
+      t0 := Clock;
+      AssertEquals('dropped: a copy', 1, OleDropWith(TPerfRich(FRich).DropTarget, data,
+        Point(10, 10)));
+      TPerfRich(FRich).PaintInto(bmp);
+      Report(Format('a drop of %d MB of RTF from another program (%d paragraphs), to the end ' +
+        'of its paint (not asserted)', [Sizes[k] div (1024 * 1024), n]), Clock - t0);
+      WriteLn('TTyRichEditPerfTest: drop: peak working set after ' + IntToStr(Sizes[k] div
+        (1024 * 1024)) + ' MB: ' + PeakWorkingSet);
+      AssertTrue('it went in', FRich.Document.Text.Length > len0 + n);
+      AssertEquals('one step', 1, FRich.Document.UndoDepth);
+      AssertEquals('read once', 1, data.RtfGets);
+      keep := nil;
+      FRich.Document.ClearUndo;
+    end;
+  finally
+    bmp.Free;
+  end;
+end;
+{$ELSE}
+begin
+  Ignore('drops from other programs are the Windows widgetset''s');
+end;
+{$ENDIF}
 
 initialization
   RegisterTest(TTyRichEditPerfTest);

@@ -749,9 +749,10 @@ begin
   AssertEquals('the picture: its character', Int64(1), FRich.SelLength);
 end;
 
-{ Read-only, DragDropEditing False, DragMode dmAutomatic, a document that takes no edit: a
-  press inside the selection is a click at once, as it always was; no drop is taken. A plain
-  text document drags its text. }
+{ DragDropEditing False, DragMode dmAutomatic, a document that takes no edit: a press inside
+  the selection is a click at once; no drop is taken. Read-only: the selection can be dragged
+  (out of the control, as a copy), but nothing is a place inside it - the release changes
+  nothing, and no drop from elsewhere is taken. A plain text document drags its text. }
 procedure TTyRichDragTest.TestNoDragWhereNoEditCanBeMade;
 var
   p: TPoint;
@@ -770,11 +771,23 @@ begin
     Sel(4, 9);
     p := Mid(6);
     FRich.PressAt(p.X, p.Y);
-    AssertFalse(Format('case %d: no drag', [i]), FRich.Pending);
-    AssertEquals(Format('case %d: a click at once', [i]), Int64(0), FRich.SelLength);
-    FRich.MoveWith(Mid(15).X, Mid(15).Y, []);
-    AssertFalse(Format('case %d: no drag after a move', [i]), FRich.OwnDrag);
-    FRich.ReleaseAt(Mid(15).X, Mid(15).Y);
+    if i = 0 then
+    begin
+      AssertTrue('read-only: the press waits', FRich.Pending);
+      FRich.MoveWith(Mid(15).X, Mid(15).Y, []);
+      AssertTrue('read-only: a drag', FRich.OwnDrag);
+      AssertTrue('read-only: not here', FRich.Effect = rdeNone);
+      FRich.ReleaseAt(Mid(15).X, Mid(15).Y);
+      AssertEquals('read-only: the selection stays', Int64(9), FRich.SelLength);
+    end
+    else
+    begin
+      AssertFalse(Format('case %d: no drag', [i]), FRich.Pending);
+      AssertEquals(Format('case %d: a click at once', [i]), Int64(0), FRich.SelLength);
+      FRich.MoveWith(Mid(15).X, Mid(15).Y, []);
+      AssertFalse(Format('case %d: no drag after a move', [i]), FRich.OwnDrag);
+      FRich.ReleaseAt(Mid(15).X, Mid(15).Y);
+    end;
     AssertEquals(Format('case %d: the text', [i]), 'one two three four', AllText);
     AssertEquals(Format('case %d: no step', [i]), 0, FRich.Document.UndoDepth);
     offer := TTestOffer.Create;
