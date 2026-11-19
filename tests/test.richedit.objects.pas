@@ -37,6 +37,9 @@ type
     procedure ReleaseWith(X, Y: Integer; AShift: TShiftState);
     procedure LoseCapture;
     procedure RightPressAt(X, Y: Integer);
+    procedure MiddlePressAt(X, Y: Integer);
+    { KeyUp's answer: the key left for the form, 0 when the control took it. }
+    function KeyUpResult(AKey: Word; AShift: TShiftState): Word;
   protected
     function LeftButtonHeld: Boolean; override;
     procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
@@ -165,6 +168,8 @@ type
     procedure TestAHandleCutByTheViewIsNotPressedThere;
     procedure TestTheReleaseFinishesInEveryCaptureOrder;
     procedure TestAZoomAndAScrollDuringOrAroundTheHandles;
+    procedure TestAKeyDuringAResizeIsTakenAndDoesNothing;
+    procedure TestARightPressThatEndsAResizeShowsNoMenu;
   end;
 
 implementation
@@ -410,6 +415,18 @@ procedure TObjProbe.RightPressAt(X, Y: Integer);
 begin
   MouseDown(mbRight, [ssRight], X, Y);
   MouseUp(mbRight, [], X, Y);
+end;
+
+procedure TObjProbe.MiddlePressAt(X, Y: Integer);
+begin
+  MouseDown(mbMiddle, [ssMiddle], X, Y);
+  MouseUp(mbMiddle, [], X, Y);
+end;
+
+function TObjProbe.KeyUpResult(AKey: Word; AShift: TShiftState): Word;
+begin
+  Result := AKey;
+  KeyUp(Result, AShift);
 end;
 
 function TObjProbe.LeftButtonHeld: Boolean;
@@ -2305,8 +2322,10 @@ begin
   FResizeForce := False;
 end;
 
-{ A press of another button, a key that is not a modifier, a selection set by code during the
-  drag end it with nothing done; Shift does not. }
+{ A press of another button and a selection set by code during the drag end it with nothing
+  done - a right press keeps the picture selected, wherever it is; Shift does not end it, nor
+  does a key that moves nothing or End: they are taken
+  (TestAKeyDuringAResizeIsTakenAndDoesNothing). }
 procedure TTyRichObjectsTest.TestASelectionChangeEndsTheDrag;
 var
   p: TTyRichPos;
@@ -2324,24 +2343,30 @@ begin
     FRich.PressAt(c.X, c.Y);
     FRich.MoveWith(c.X + 20, c.Y + 10, []);
     case kind of
+      // a right press away from the picture, and on it: the selection kept either way
       0: FRich.RightPressAt(10, 10);
-      1: FRich.Press(VK_END, []);
+      1: AssertEquals('End is taken', 0, FRich.KeyResult(VK_END, []));
       2: FRich.SelStart := 0;
-      // a right press on the picture keeps the selection; a key that moves nothing
       3: FRich.RightPressAt(Centre(rs[rhLeft]).X + 20, Centre(rs[rhLeft]).Y);
-      4: FRich.Press(VK_F5, []);
+      // a key that moves nothing
+      4: AssertEquals('F5 is taken', 0, FRich.KeyResult(VK_F5, []));
     else
       FRich.Press(VK_SHIFT, [ssShift]);
     end;
-    if kind = 3 then AssertEquals('the right press kept the selection', 1, FRich.SelLength);
+    if kind in [0, 3] then
+    begin
+      AssertFalse(IntToStr(kind) + ': the right press ended it', FRich.InResize);
+      AssertEquals(IntToStr(kind) + ': the right press kept the selection', 1, FRich.SelLength);
+      AssertEquals(IntToStr(kind) + ': on the picture', p, FRich.SelStart);
+    end;
     FRich.ReleaseWith(c.X + 20, c.Y + 10, []);
-    if kind < 5 then
+    if kind in [0, 2, 3] then
     begin
       AssertEquals(IntToStr(kind) + ': no step', 0, FRich.Document.UndoDepth);
       AssertEquals(IntToStr(kind) + ': as it was', 1500, PictureAt(p).WidthTwips);
     end
     else
-      AssertEquals('Shift: the drag went on', 1, FRich.Document.UndoDepth);
+      AssertEquals(IntToStr(kind) + ': the drag went on', 1, FRich.Document.UndoDepth);
   end;
 end;
 
@@ -2475,6 +2500,142 @@ begin
     finally
       kept.Free;
     end;
+  end;
+end;
+
+{ A key during a drag of a handle is taken and does nothing: nothing typed over the picture
+  (by its key or by a character that comes alone), no caret move, no paste, no undo, Tab
+  neither typed nor left to the form (WantTabs either way), no menu, no composition - the
+  document's bytes, the history, the selection and the outline are as they were, and the
+  release after it is the resize it would have been, one step. Its release is taken too. Esc
+  and Shift keep their meaning (TestEscALostCaptureAndAChangeEndADragWithNothingDone,
+  TestASelectionChangeEndsTheDrag). }
+procedure TTyRichObjectsTest.TestAKeyDuringAResizeIsTakenAndDoesNothing;
+const
+  // 0: a character alone (UTF8KeyPress with no key-down before it, as a posted WM_CHAR)
+  Keys: array[0..9] of Word = (VK_X, VK_DELETE, VK_RETURN, VK_TAB, VK_TAB, VK_V, VK_Z, VK_LEFT,
+    VK_PROCESSKEY, 0);
+var
+  k, w0, h0, w, h, menus, refused: Integer;
+  p: TTyRichPos;
+  rs: TTyRichHandleRects;
+  c: TPoint;
+  r0, r: TRect;
+  bytes: TBytes;
+  sh: TShiftState;
+  what: string;
+begin
+  for k := 0 to High(Keys) do
+  begin
+    what := Format('key %d', [k]);
+    FreeAndNil(FRich);
+    FRich := NewProbe;
+    p := PictureDoc(100, 50);
+    // a step to undo, behind the picture
+    AssertTrue(what + ': a step', FRich.Document.Execute(TTyRichInsertText.Create(
+      FRich.Document.Text.Length, 'e')));
+    FRich.UpdateView;
+    SelectAt(p);
+    PaintAll;
+    FRich.WantTabs := k = 4;
+    FRich.ClipText := 'PASTED';
+    FRich.ClipReset;
+    AssertTrue(what + ': handles', FRich.Handles(rs));
+    c := Centre(rs[rhBottomRight]);
+    FRich.PressAt(c.X, c.Y);
+    FRich.MoveWith(c.X + 30, c.Y + 20, []);
+    AssertTrue(what + ': an outline', FRich.Outline(r0, w0, h0));
+    bytes := SaveRtf;
+    sh := [];
+    if (Keys[k] = VK_V) or (Keys[k] = VK_Z) then sh := [ssCtrl];
+    menus := FRich.MenuShows;
+    refused := FRich.Refused;
+    if Keys[k] = 0 then
+      FRich.Key8('x')
+    else
+    begin
+      AssertEquals(what + ': the key taken', 0, FRich.KeyResult(Keys[k], sh));
+      // the character a letter's key brings after it
+      if Keys[k] = VK_X then FRich.Key8('x');
+      AssertEquals(what + ': its release taken', 0, FRich.KeyUpResult(Keys[k], sh));
+    end;
+    // what an input method sends then
+    if Keys[k] = VK_PROCESSKEY then
+    begin
+      AssertFalse(what + ': no composition begins', FRich.BeginComposition);
+      FRich.UpdateComposition('zh');
+      AssertFalse(what + ': none shown', FRich.Composing);
+      FRich.CommitComposition('zhong');
+      FRich.CommitComposition('y');
+      AssertEquals(what + ': nothing told', refused, FRich.Refused);
+    end;
+    // the menu a key brings (the menu key, Shift+F10)
+    AssertTrue(what + ': the popup handled', FRich.PopupAt(c.X, c.Y));
+    AssertEquals(what + ': no menu', menus, FRich.MenuShows);
+    AssertTrue(what + ': the bytes', SameBytes(bytes, SaveRtf));
+    AssertEquals(what + ': the history', 1, FRich.Document.UndoDepth);
+    AssertEquals(what + ': the picture selected', p, FRich.SelStart);
+    AssertEquals(what + ': only it', Int64(1), FRich.SelLength);
+    AssertTrue(what + ': still resizing', FRich.InResize);
+    AssertTrue(what + ': the outline', FRich.Outline(r, w, h));
+    AssertTrue(what + ': the outline''s place', EqualRect(r0, r));
+    AssertEquals(what + ': its width', w0, w);
+    AssertEquals(what + ': its height', h0, h);
+    AssertEquals(what + ': the clipboard never asked', 0, FRich.FlavourAsks);
+    // the release after it
+    FRich.ReleaseWith(c.X + 30, c.Y + 20, []);
+    AssertEquals(what + ': one step', 2, FRich.Document.UndoDepth);
+    AssertEquals(what + ': the width', w0, PictureAt(p).WidthTwips);
+    AssertEquals(what + ': the height', h0, PictureAt(p).HeightTwips);
+  end;
+end;
+
+{ A right press during a drag of a handle ends it with nothing done and does nothing else -
+  the picture stays selected, nothing in the history - and the menu does not come for that
+  press: a second right press shows it. As after a drag of the selection, a key, a move
+  without the right button or another button's release lets the menu come again. A middle
+  press ends the drag the same way and eats no menu. }
+procedure TTyRichObjectsTest.TestARightPressThatEndsAResizeShowsNoMenu;
+var
+  kind, menus: Integer;
+  p: TTyRichPos;
+  rs: TTyRichHandleRects;
+  c: TPoint;
+  what: string;
+begin
+  for kind := 0 to 4 do
+  begin
+    what := Format('case %d', [kind]);
+    FreeAndNil(FRich);
+    FRich := NewProbe;
+    p := PictureDoc(100, 50);
+    AssertTrue(what + ': handles', FRich.Handles(rs));
+    c := Centre(rs[rhBottomRight]);
+    FRich.PressAt(c.X, c.Y);
+    FRich.MoveWith(c.X + 20, c.Y + 10, []);
+    AssertTrue(what + ': resizing', FRich.InResize);
+    menus := FRich.MenuShows;
+    if kind = 4 then FRich.MiddlePressAt(10, 10) else FRich.RightPressAt(10, 10);
+    AssertFalse(what + ': ended', FRich.InResize);
+    AssertEquals(what + ': the picture selected', p, FRich.SelStart);
+    AssertEquals(what + ': only it', Int64(1), FRich.SelLength);
+    AssertEquals(what + ': nothing in the history', 0, FRich.Document.UndoDepth);
+    case kind of
+      0:
+        begin
+          AssertTrue(what + ': that press''s popup handled', FRich.PopupAt(10, 10));
+          AssertEquals(what + ': no menu', menus, FRich.MenuShows);
+          FRich.RightPressAt(10, 10);
+        end;
+      1: FRich.Press(VK_APPS, []);
+      2: FRich.MoveWith(12, 12, []);
+      3: FRich.ReleaseWith(c.X + 20, c.Y + 10, []);
+    end;
+    FRich.PopupAt(10, 10);
+    AssertEquals(what + ': the menu', menus + 1, FRich.MenuShows);
+    FRich.ReleaseWith(c.X + 20, c.Y + 10, []);
+    AssertEquals(what + ': no step', 0, FRich.Document.UndoDepth);
+    AssertEquals(what + ': as it was', 1500, PictureAt(p).WidthTwips);
   end;
 end;
 

@@ -18,7 +18,7 @@ interface
 
 uses
   Classes, SysUtils, Types, Math, fpcunit, testregistry, Controls, Graphics, LCLType, Forms,
-  BGRABitmap, BGRABitmapTypes,
+  LMessages, BGRABitmap, BGRABitmapTypes,
   tyControls.Controller, tyControls.StrConsts,
   tyControls.RichEdit.Text, tyControls.RichEdit.Model, tyControls.RichEdit.Commands,
   tyControls.RichEdit.RtfRead, tyControls.RichEdit.RtfWrite, tyControls.RichEdit.TextIO,
@@ -42,6 +42,9 @@ type
     procedure LoseCapture;
     procedure RightPressAt(X, Y: Integer);
     procedure KeyUpOf(AKey: Word; AShift: TShiftState);
+    { KeyUp's answer: the key left for the form, 0 when the control took it. }
+    function KeyUpResult(AKey: Word; AShift: TShiftState): Word;
+    procedure MiddlePressAt(X, Y: Integer);
     function Mark(out ARect: TRect): Boolean;
     function Effect: TTyRichDropEffect;
     function Pending: Boolean;
@@ -111,6 +114,17 @@ type
     procedure FindDone(Sender: TObject; AEnd: TTyRichFindEnd; APos, ALen: TTyRichPos);
     procedure ReplaceDone(Sender: TObject; const AResult: TTyRichReplaceResult);
     procedure TurnSome(AMost: Integer);
+  private
+    // the key's way through LCL: who heard it (TestATakenKeyGoesNoFurtherThanTheControl)
+    FPreviews, FOwnKeys, FShortcuts, FAfterKeys: Integer;
+    FPreviewTakes, FOwnTakes: Boolean;
+    procedure PreviewKey(Sender: TObject; var Key: Word; Shift: TShiftState);
+    procedure OwnKey(Sender: TObject; var Key: Word; Shift: TShiftState);
+    procedure FormShortcut(var Msg: TLMKey; var Handled: Boolean);
+    procedure AfterKey(Sender: TObject; var Key: Word; Shift: TShiftState);
+    { The key AKey through LCL's way as a widgetset delivers it (CN_KEYDOWN, then LM_KEYDOWN
+      unless it was taken): 0 when something on the way took it. }
+    function KeyThroughLcl(AKey: Word): PtrInt;
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -141,6 +155,10 @@ type
     procedure TestWhatHadNoTest;
     procedure TestAPressOnTheSelectionEndsBackgroundWork;
     procedure TestTheMarkLeavesNoDotWhenTheSurfaceScrolls;
+    procedure TestAKeyDuringADragIsTakenAndDoesNothing;
+    procedure TestATakenKeyGoesNoFurtherThanTheControl;
+    procedure TestNoCompositionUnderADrag;
+    procedure TestAMiddlePressEndsADragAndDoesNothingElse;
   end;
 
 implementation
@@ -324,6 +342,18 @@ end;
 procedure TDragProbe.KeyUpOf(AKey: Word; AShift: TShiftState);
 begin
   KeyUp(AKey, AShift);
+end;
+
+function TDragProbe.KeyUpResult(AKey: Word; AShift: TShiftState): Word;
+begin
+  Result := AKey;
+  KeyUp(Result, AShift);
+end;
+
+procedure TDragProbe.MiddlePressAt(X, Y: Integer);
+begin
+  MouseDown(mbMiddle, [ssMiddle, ssLeft], X, Y);
+  MouseUp(mbMiddle, [ssLeft], X, Y);
 end;
 
 function TDragProbe.Mark(out ARect: TRect): Boolean;
@@ -949,10 +979,11 @@ begin
   FRich.Press(VK_ESCAPE, [ssLeft]);
 end;
 
-{ Esc, a right press (its menu not shown), the capture taken with the button down, a key that
-  is not a modifier (it does what it does), the selection or the content set by code, a change
-  of the document, DragDropEditing off, ReadOnly, disabled: the drag ends, nothing changes,
-  the release after it does nothing. Shift and Alt leave it going. }
+{ Esc, a right press (its menu not shown), the capture taken with the button down, the
+  selection or the content set by code, a change of the document, DragDropEditing off,
+  ReadOnly, disabled: the drag ends, nothing changes, the release after it does nothing.
+  Shift and Alt leave it going; another key is taken, does nothing and leaves it going too
+  (TestAKeyDuringADragIsTakenAndDoesNothing). }
 procedure TTyRichDragTest.TestWhatEndsADragChangesNothing;
 var
   i, menus: Integer;
@@ -978,11 +1009,12 @@ begin
       2: FRich.LoseCapture;
       3:
         begin
-          // a key that moves nothing ends it too; then End does what it does
-          FRich.Press(VK_F5, [ssLeft]);
-          AssertFalse('F5: the drag ended', FRich.OwnDrag);
-          AssertEquals('F5: the selection as it was', Int64(3), FRich.SelLength);
-          FRich.Press(VK_END, [ssLeft]);
+          // a key that moves nothing, and End: taken, nothing done, the drag goes on to Esc
+          AssertEquals('F5 is taken', 0, FRich.KeyResult(VK_F5, [ssLeft]));
+          AssertEquals('End is taken', 0, FRich.KeyResult(VK_END, [ssLeft]));
+          AssertTrue('F5 and End: the drag goes on', FRich.OwnDrag);
+          AssertEquals('F5 and End: the selection as it was', Int64(3), FRich.SelLength);
+          FRich.Press(VK_ESCAPE, [ssLeft]);
         end;
       4: FRich.SelStart := 1;
       5: FRich.Lines.Text := 'new text';
@@ -1010,12 +1042,11 @@ begin
     end;
     AssertEquals(Format('case %d: no step of the drag', [i]), Ord(i = 6), FRich.Document.UndoDepth);
     case i of
-      0, 1, 2, 7, 8, 9, 10:
+      0, 1, 2, 3, 7, 8, 9, 10:
         begin
           AssertEquals(Format('case %d: the selection as it was', [i]), Int64(4), FRich.SelStart);
           AssertEquals(Format('case %d: its length', [i]), Int64(3), FRich.SelLength);
         end;
-      3: AssertEquals('End did what it does', Int64(18), FRich.SelStart);
       4: AssertEquals('the selection set by code', Int64(1), FRich.SelStart);
     end;
     FRich.ReadOnly := False;
@@ -2463,6 +2494,277 @@ begin
     FRich.Press(VK_ESCAPE, [ssLeft]);
   finally
     bmp.Free;
+  end;
+end;
+
+{ A key during a drag of the selection, or during the press inside it that waits for one, is
+  taken and does nothing: no text typed (by its key or by a character that comes alone), no
+  caret move, no paste, no undo, Tab neither typed nor left to the form (WantTabs either way),
+  no menu - the document's bytes, the history, the selection, the drag and its mark are as
+  they were, and the release after it is the drop it would have been, one step. Its release
+  is taken too. Esc and the modifiers keep their meaning (TestWhatEndsADragChangesNothing,
+  TestTheCursorSaysWhatAReleaseWouldDo). }
+procedure TTyRichDragTest.TestAKeyDuringADragIsTakenAndDoesNothing;
+const
+  // 0: a character alone (UTF8KeyPress with no key-down before it, as a posted WM_CHAR)
+  Keys: array[0..9] of Word = (VK_X, VK_DELETE, VK_RETURN, VK_TAB, VK_TAB, VK_V, VK_Z, VK_LEFT,
+    VK_PROCESSKEY, 0);
+var
+  mode, k, menus: Integer;
+  from, p: TPoint;
+  m0, m: TRect;
+  had: Boolean;
+  e0: TTyRichDropEffect;
+  rtf: RawByteString;
+  sh: TShiftState;
+  what: string;
+begin
+  for mode := 0 to 1 do
+    for k := 0 to High(Keys) do
+    begin
+      if mode = 0 then what := 'waiting' else what := 'dragging';
+      what := Format('%s, key %d', [what, k]);
+      LoadText('one two three fou');
+      // a step to undo
+      FRich.Document.Execute(TTyRichInsertText.Create(17, 'r'));
+      FRich.UpdateView;
+      PaintAll;
+      AssertEquals(what + ': the text', 'one two three four', AllText);
+      FRich.WantTabs := k = 4;
+      FRich.ClipText := 'PASTED';
+      FRich.ClipReset;
+      Sel(4, 3);
+      from := Mid(5);
+      p := Pt(18);
+      if mode = 0 then
+      begin
+        FRich.PressAt(from.X, from.Y);
+        AssertTrue(what + ': waiting', FRich.Pending);
+      end
+      else
+        StartDrag(from, p);
+      rtf := SaveRtf(FRich);
+      had := FRich.Mark(m0);
+      e0 := FRich.Effect;
+      sh := [ssLeft];
+      if (Keys[k] = VK_V) or (Keys[k] = VK_Z) then Include(sh, ssCtrl);
+      menus := FRich.MenuShows;
+      if Keys[k] = 0 then
+        FRich.Key8('x')
+      else
+      begin
+        AssertEquals(what + ': the key taken', 0, FRich.KeyResult(Keys[k], sh));
+        // the character a letter's key brings after it
+        if Keys[k] = VK_X then FRich.Key8('x');
+        AssertEquals(what + ': its release taken', 0, FRich.KeyUpResult(Keys[k], sh));
+      end;
+      // the menu a key brings (the menu key, Shift+F10)
+      AssertTrue(what + ': the popup handled', FRich.PopupAt(p.X, p.Y));
+      AssertEquals(what + ': no menu', menus, FRich.MenuShows);
+      AssertEquals(what + ': the bytes', rtf, SaveRtf(FRich));
+      AssertEquals(what + ': the history', 1, FRich.Document.UndoDepth);
+      AssertEquals(what + ': the selection''s start', Int64(4), FRich.SelStart);
+      AssertEquals(what + ': its length', Int64(3), FRich.SelLength);
+      AssertEquals(what + ': still waiting', mode = 0, FRich.Pending);
+      AssertEquals(what + ': still dragging', mode = 1, FRich.OwnDrag);
+      AssertEquals(what + ': the mark', had, FRich.Mark(m));
+      if had then AssertTrue(what + ': the mark''s place', EqualRect(m0, m));
+      AssertTrue(what + ': the verdict', e0 = FRich.Effect);
+      AssertEquals(what + ': the clipboard never asked', 0, FRich.FlavourAsks);
+      // the drop after it
+      if mode = 0 then
+      begin
+        FRich.MoveWith(from.X, from.Y + FRich.Threshold + 1, []);
+        AssertTrue(what + ': the drag began', FRich.OwnDrag);
+        FRich.MoveWith(p.X, p.Y, []);
+      end;
+      FRich.ReleaseWith(p.X, p.Y, []);
+      AssertEquals(what + ': moved', 'one  three fourtwo', AllText);
+      AssertEquals(what + ': one step', 2, FRich.Document.UndoDepth);
+    end;
+  FRich.WantTabs := False;
+end;
+
+procedure TTyRichDragTest.PreviewKey(Sender: TObject; var Key: Word; Shift: TShiftState);
+begin
+  Inc(FPreviews);
+  if FPreviewTakes then Key := 0;
+end;
+
+procedure TTyRichDragTest.OwnKey(Sender: TObject; var Key: Word; Shift: TShiftState);
+begin
+  Inc(FOwnKeys);
+  if FOwnTakes then Key := 0;
+end;
+
+procedure TTyRichDragTest.FormShortcut(var Msg: TLMKey; var Handled: Boolean);
+begin
+  Inc(FShortcuts);
+end;
+
+procedure TTyRichDragTest.AfterKey(Sender: TObject; var Key: Word; Shift: TShiftState);
+begin
+  Inc(FAfterKeys);
+end;
+
+function TTyRichDragTest.KeyThroughLcl(AKey: Word): PtrInt;
+begin
+  FPreviews := 0;
+  FOwnKeys := 0;
+  FShortcuts := 0;
+  FAfterKeys := 0;
+  if FRich.Perform(CN_KEYDOWN, AKey, 0) <> 0 then Exit(0);
+  if FRich.Perform(LM_KEYDOWN, AKey, 0) <> 0 then Exit(0);
+  Result := AKey;
+end;
+
+{ A key's way through LCL (CN_KEYDOWN, then LM_KEYDOWN, as a widgetset sends them): the
+  application's handlers before and a form's KeyPreview handler come before the control (LCL's
+  order), the control's OnKeyDown first inside its KeyDown. A key the control takes during a
+  drag goes no further: not to the form's shortcuts (OnShortCut, then its menu and action
+  lists), not to TApplication.ControlKeyDown (which would remember it for the default and
+  cancel buttons' release), not to the application's handlers after. Without a drag the same
+  key goes on. A key taken before the control (by the form's handler, by OnKeyDown) never
+  reaches the drag: Esc taken there does not end it. }
+procedure TTyRichDragTest.TestATakenKeyGoesNoFurtherThanTheControl;
+var
+  form: TForm;
+  p: TPoint;
+  k: Integer;
+const
+  Keys: array[0..1] of Word = (VK_F5, VK_RETURN);
+begin
+  NeedWidgetSet;
+  FPreviewTakes := False;
+  FOwnTakes := False;
+  form := TForm.CreateNew(nil);
+  try
+    form.KeyPreview := True;
+    form.OnKeyDown := @PreviewKey;
+    form.OnShortCut := @FormShortcut;
+    FRich.Parent := form;
+    FRich.OnKeyDown := @OwnKey;
+    Application.AddOnKeyDownHandler(@AfterKey);
+    try
+      LoadText('one two three four');
+      AssertEquals('no drag: F5 goes on', VK_F5, KeyThroughLcl(VK_F5));
+      AssertEquals('no drag: the form''s preview', 1, FPreviews);
+      AssertEquals('no drag: OnKeyDown', 1, FOwnKeys);
+      AssertEquals('no drag: the form''s shortcuts', 1, FShortcuts);
+      AssertEquals('no drag: the application''s handler after', 1, FAfterKeys);
+      Sel(4, 3);
+      p := Pt(18);
+      StartDrag(Mid(5), p);
+      for k := 0 to High(Keys) do
+      begin
+        AssertEquals(Format('a drag, key %d: taken', [k]), 0, KeyThroughLcl(Keys[k]));
+        AssertEquals(Format('a drag, key %d: the form''s preview', [k]), 1, FPreviews);
+        AssertEquals(Format('a drag, key %d: OnKeyDown', [k]), 1, FOwnKeys);
+        AssertEquals(Format('a drag, key %d: no shortcut', [k]), 0, FShortcuts);
+        AssertEquals(Format('a drag, key %d: nothing after', [k]), 0, FAfterKeys);
+        AssertTrue(Format('a drag, key %d: it goes on', [k]), FRich.OwnDrag);
+      end;
+      FPreviewTakes := True;
+      AssertEquals('the form''s handler takes Esc', 0, KeyThroughLcl(VK_ESCAPE));
+      AssertEquals('the control never heard it', 0, FOwnKeys);
+      AssertTrue('the form''s handler took Esc: the drag goes on', FRich.OwnDrag);
+      FPreviewTakes := False;
+      FOwnTakes := True;
+      AssertEquals('OnKeyDown takes Esc', 0, KeyThroughLcl(VK_ESCAPE));
+      AssertEquals('OnKeyDown heard it', 1, FOwnKeys);
+      AssertTrue('OnKeyDown took Esc: the drag goes on', FRich.OwnDrag);
+      FOwnTakes := False;
+      FRich.ReleaseWith(p.X, p.Y, []);
+      AssertEquals('the drop', 'one  three fourtwo', AllText);
+      AssertEquals('one step', 1, FRich.Document.UndoDepth);
+    finally
+      Application.RemoveOnKeyDownHandler(@AfterKey);
+    end;
+  finally
+    FRich.OnKeyDown := nil;
+    FRich.Parent := nil;
+    form.Free;
+  end;
+end;
+
+{ No composition runs under a drag of the control's own: one beginning then does not begin
+  (nothing told, nothing shown), what the input method sends in that session goes nowhere,
+  and a commit with no composition (the Qt and GTK hooks', Cocoa's dead key) is dropped as a
+  character is - for the drag and for the press waiting for one. The drag goes on, and the
+  drop after it is one step. After the drag a composition begins again. }
+procedure TTyRichDragTest.TestNoCompositionUnderADrag;
+var
+  mode, refused: Integer;
+  from, p: TPoint;
+  rtf: RawByteString;
+  what: string;
+begin
+  for mode := 0 to 1 do
+  begin
+    if mode = 0 then what := 'waiting' else what := 'dragging';
+    LoadText('one two three four');
+    Sel(4, 3);
+    from := Mid(5);
+    p := Pt(18);
+    if mode = 0 then FRich.PressAt(from.X, from.Y) else StartDrag(from, p);
+    rtf := SaveRtf(FRich);
+    refused := FRich.Refused;
+    AssertFalse(what + ': no composition begins', FRich.BeginComposition);
+    FRich.UpdateComposition('zh');
+    AssertFalse(what + ': none shown', FRich.Composing);
+    FRich.CommitComposition('zhong');
+    FRich.CommitComposition('y');
+    AssertEquals(what + ': nothing told', refused, FRich.Refused);
+    AssertEquals(what + ': the bytes', rtf, SaveRtf(FRich));
+    AssertEquals(what + ': no step', 0, FRich.Document.UndoDepth);
+    AssertEquals(what + ': the selection''s start', Int64(4), FRich.SelStart);
+    AssertEquals(what + ': its length', Int64(3), FRich.SelLength);
+    AssertEquals(what + ': still waiting', mode = 0, FRich.Pending);
+    AssertEquals(what + ': still dragging', mode = 1, FRich.OwnDrag);
+    if mode = 0 then
+    begin
+      FRich.MoveWith(from.X, from.Y + FRich.Threshold + 1, []);
+      FRich.MoveWith(p.X, p.Y, []);
+    end;
+    FRich.ReleaseWith(p.X, p.Y, []);
+    AssertEquals(what + ': moved', 'one  three fourtwo', AllText);
+    AssertEquals(what + ': one step', 1, FRich.Document.UndoDepth);
+    // after it: a composition begins and goes in
+    FRich.CancelComposition;
+    AssertTrue(what + ': a composition after the drag', FRich.BeginComposition);
+    FRich.UpdateComposition('q');
+    FRich.CommitComposition('q');
+    AssertEquals(what + ': it went in', 'one  three fourq', AllText);
+  end;
+end;
+
+{ A middle press during a drag of the selection (or the press waiting for one) ends it with
+  nothing changed and does nothing else: the selection stays, no step; the release after it
+  does nothing, and a right press after it shows its menu. }
+procedure TTyRichDragTest.TestAMiddlePressEndsADragAndDoesNothingElse;
+var
+  mode, menus: Integer;
+  from, p: TPoint;
+begin
+  for mode := 0 to 1 do
+  begin
+    LoadText('one two three four');
+    Sel(4, 3);
+    from := Mid(5);
+    p := Pt(18);
+    if mode = 0 then FRich.PressAt(from.X, from.Y) else StartDrag(from, p);
+    FRich.MiddlePressAt(p.X, p.Y);
+    AssertFalse(Format('%d: not waiting', [mode]), FRich.Pending);
+    AssertFalse(Format('%d: no drag', [mode]), FRich.OwnDrag);
+    FRich.ReleaseWith(p.X, p.Y, []);
+    AssertEquals(Format('%d: the text', [mode]), 'one two three four', AllText);
+    AssertEquals(Format('%d: no step', [mode]), 0, FRich.Document.UndoDepth);
+    AssertEquals(Format('%d: the selection''s start', [mode]), Int64(4), FRich.SelStart);
+    AssertEquals(Format('%d: its length', [mode]), Int64(3), FRich.SelLength);
+    menus := FRich.MenuShows;
+    FRich.RightPressAt(p.X, p.Y);
+    FRich.PopupAt(p.X, p.Y);
+    AssertEquals(Format('%d: a right press after it: the menu', [mode]), menus + 1, FRich.MenuShows);
   end;
 end;
 
