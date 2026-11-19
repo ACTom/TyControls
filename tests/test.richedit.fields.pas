@@ -2164,6 +2164,26 @@ begin
   finally
     d.Free;
   end;
+  // a paragraph of a result that holds no mark itself (x[a / b / c]y): its matches stay too
+  b := BytesOf(Rtf(H936 + '|pard x{|field{|*|fldinst A}{|fldrslt a|par b|par c}}y|par after|par}'));
+  d := LoadDoc(b, False);
+  try
+    AssertEquals('the middle paragraph holds no mark', '[//]/', AllObjects(d));
+    cmd := TReplaceAtCommand.Create;
+    SetLength(cmd.At, 2);
+    cmd.At[0] := d.Text.ParaStart(1);
+    cmd.At[1] := d.Text.ParaStart(3);
+    cmd.Len := 1;
+    cmd.Text := 'X';
+    AssertTrue('one replaced', d.Execute(cmd));
+    AssertEquals('one passed over', 1, cmd.Skipped);
+    AssertRaw(Self, 'the result''s paragraph as it was', 'b', ParaText(d, 1));
+    AssertRaw(Self, 'the paragraph after it replaced', 'Xfter', ParaText(d, 3));
+    d.Undo;
+    AssertTrue('undone: the file', SameBytes(b, SaveOut(d)));
+  finally
+    d.Free;
+  end;
 end;
 
 { The field around a place and a mark's partner, found by the paragraphs' depths: only the
