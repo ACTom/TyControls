@@ -364,6 +364,7 @@ type
     procedure Raw(const S: RawByteString);
     procedure RawUnder(const S: RawByteString; AUc: Integer);
     procedure RawMark(AMark: TTyRichFieldMark);
+    procedure WriteMarkSlots(AMark: TTyRichFieldMark);
     procedure Fragment(const S: RawByteString);
     procedure RawText(const S: RawByteString);
     procedure NewLine;
@@ -906,6 +907,33 @@ begin
   FNeedDelim := False;
   FRawOpen := False;
   if uc then Word('uc1');
+end;
+
+// Word's three slot fonts in force where a field's group was read (TTyRichFieldMark.SlotName),
+// by this writer's numbers - a font the table here does not have is not named -, then the slot
+// named last: what the group's own \loch \hich \dbch fall back on.
+procedure TRtfWriter.WriteMarkSlots(AMark: TTyRichFieldMark);
+const
+  Names: array[0..2] of string = ('loch', 'hich', 'dbch');
+var
+  i, k, j: Integer;
+begin
+  for i := 0 to 2 do
+  begin
+    if AMark.SlotName(i) = '' then Continue;
+    k := FindFont(AMark.SlotName(i), AMark.SlotCharset(i));
+    if k < 0 then
+      for j := 0 to FFontN - 1 do
+        if SameName(FFonts[j].Name, AMark.SlotName(i)) then
+        begin
+          k := j;
+          Break;
+        end;
+    if k < 0 then Continue;
+    Word(Names[i]);
+    WordN('af', FFonts[k].Num);
+  end;
+  if AMark.Slot in [1..3] then Word(Names[AMark.Slot - 1]);
 end;
 
 // A fragment of a format's Extra. The format does not say under which \uc a group among
@@ -2004,6 +2032,10 @@ begin
       begin
         // its field as the file has it: the bytes, then nothing up to its close mark
         if ARuns[r].Format <> FCurChar then WriteCharFormat(ARuns[r].Format);
+        { the slot fonts in force where it was read, which its own \loch \hich \dbch fall back
+          on (a format of ours names none); the text after it is written in its format again,
+          whose \plain clears them (FCurChar, at the skip's end) }
+        if m.HasSlots then WriteMarkSlots(m);
         RawMark(m);
         FSkip := 1;
         FSkipPara := AIndex;

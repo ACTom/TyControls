@@ -323,6 +323,9 @@ type
     FBytes: RawByteString;
     FFile: TBytes;
     FFileStart, FFileLen: Int64;
+    FSlotNames: array[0..2] of UTF8String;
+    FSlotCharsets: array[0..2] of Integer;
+    FSlot: Byte;
     function GetBytes: RawByteString;
   public
     { ABytes and ARawUc: the open mark's (a close mark keeps none). }
@@ -351,6 +354,17 @@ type
     function BytesLength: Int64;
     // its bytes are a range of its file's (CreateInFile), not its own
     function InFile: Boolean;
+    { Read from RTF: the fonts of Word's three slots in force where its group began - AIndex 0
+      \loch\afN, 1 \hich\afN, 2 \dbch\afN: the font's name and charset ('' none named) -
+      and the slot named last (SetSlot: 0 none, 1 \loch, 2 \hich, 3 \dbch, 4 another, \rtlch
+      or \ltrch). The group's own \loch \hich \dbch words fall back on them: a writer that
+      writes the bytes after text of its own puts them in force first, by its own numbers. }
+    procedure SetSlotFont(AIndex: Integer; const AName: UTF8String; ACharset: Integer);
+    procedure SetSlot(ASlot: Byte);
+    function HasSlots: Boolean;
+    function SlotName(AIndex: Integer): UTF8String;
+    function SlotCharset(AIndex: Integer): Integer;
+    property Slot: Byte read FSlot;
   end;
 
   TTyRichTable = class;
@@ -2453,6 +2467,32 @@ begin
   if ARawUc >= 0 then FRawUc := ARawUc;
 end;
 
+procedure TTyRichFieldMark.SetSlotFont(AIndex: Integer; const AName: UTF8String; ACharset: Integer);
+begin
+  FSlotNames[AIndex] := AName;
+  FSlotCharsets[AIndex] := ACharset;
+end;
+
+procedure TTyRichFieldMark.SetSlot(ASlot: Byte);
+begin
+  FSlot := ASlot;
+end;
+
+function TTyRichFieldMark.HasSlots: Boolean;
+begin
+  Result := (FSlotNames[0] <> '') or (FSlotNames[1] <> '') or (FSlotNames[2] <> '');
+end;
+
+function TTyRichFieldMark.SlotName(AIndex: Integer): UTF8String;
+begin
+  Result := FSlotNames[AIndex];
+end;
+
+function TTyRichFieldMark.SlotCharset(AIndex: Integer): Integer;
+begin
+  Result := FSlotCharsets[AIndex];
+end;
+
 function TTyRichFieldMark.InFile: Boolean;
 begin
   Result := FFile <> nil;
@@ -2480,8 +2520,12 @@ begin
 end;
 
 function TTyRichFieldMark.Clone: TTyRichObject;
+var
+  i: Integer;
 begin
   Result := TTyRichFieldMark.Create(FKind, FId, GetBytes, FRawUc);
+  for i := 0 to 2 do TTyRichFieldMark(Result).SetSlotFont(i, FSlotNames[i], FSlotCharsets[i]);
+  TTyRichFieldMark(Result).FSlot := FSlot;
 end;
 
 function TTyRichFieldMark.DataBytes: Int64;

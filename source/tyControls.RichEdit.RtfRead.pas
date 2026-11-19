@@ -4578,6 +4578,8 @@ end;
 procedure TTyRtfParser.EmitFieldMark(AKind: TTyRichFieldMarkKind; AStart, AStop: PtrInt);
 var
   m: TTyRichFieldMark;
+  nums: array[0..2] of Integer;
+  i, f: Integer;
 begin
   if Counting then
   begin
@@ -4590,6 +4592,22 @@ begin
     m := TTyRichFieldMark.Create(rfmOpen, AStart, Fragment(Range(AStart, AStop)), FS.Props.Uc)
   else
     m := TTyRichFieldMark.Create(rfmClose, AStart);
+  if AKind = rfmOpen then
+  begin
+    // (the fonts by name: a writer numbers them as its own table does)
+    nums[0] := FS.Props.LochNum;
+    nums[1] := FS.Props.HichNum;
+    nums[2] := FS.Props.DbchNum;
+    for i := 0 to 2 do
+      if nums[i] >= 0 then
+      begin
+        f := FontOfNum(nums[i]);
+        if (f >= 0) and (FFonts[f].Name <> '') then
+          if FFonts[f].Charset >= 0 then m.SetSlotFont(i, FFonts[f].Name, FFonts[f].Charset)
+          else m.SetSlotFont(i, FFonts[f].Name, DEFAULT_CHARSET);
+      end;
+    m.SetSlot(Ord(FS.Props.Slot));
+  end;
   FObjects.Add(m);
   EmitObject(m);
 end;
