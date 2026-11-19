@@ -200,6 +200,7 @@ type
     FRaisedInHandler, FHandlerEnded: Boolean;
     procedure NestedTable(Sender: TObject);
     procedure NestedLines(Sender: TObject);
+    procedure NestedSelectAll(Sender: TObject);
     function NewProbe: TAcrossProbe;
     procedure Load(ARich: TAcrossProbe; const S: string);
     procedure LoadRtf(ARich: TAcrossProbe; const S: RawByteString);
@@ -1981,6 +1982,20 @@ begin
   FHandlerEnded := True;
 end;
 
+procedure TTyRichDropAcrossTest.NestedSelectAll(Sender: TObject);
+begin
+  // a call with no frame of its own, whose report frees the source
+  FB.OnChange := nil;
+  FA.OnSelectionChange := @DoomOnNotify;
+  FDoomed := FA;
+  try
+    FA.SelectAll;
+  except
+    on Exception do FRaisedInHandler := True;
+  end;
+  FHandlerEnded := True;
+end;
+
 procedure TTyRichDropAcrossTest.NestedLines(Sender: TObject);
 begin
   FB.OnChange := nil;
@@ -2099,6 +2114,34 @@ begin
   AssertFalse('nothing raised into the target''s handler', FRaisedInHandler);
   AssertTrue('the target''s handler ran to its end', FHandlerEnded);
   AssertEquals('the target has what it took', 'alpha twobeta', TextOf(FB));
+  // the same with a call that reports at its end (SelectAll): its OnSelectionChange frees
+  FA := NewProbe;
+  FA.Other := FB;
+  FA.OtherAt := Point(500, 0);
+  Load(FA, 'one two three');
+  Load(FB, 'alpha beta');
+  FA.SelStart := 4;
+  FA.SelLength := 3;
+  p := InB(Pt(FB, 6));
+  StartDrag(Mid(FA, 5), p);
+  FB.OnChange := @NestedSelectAll;
+  FRaisedInHandler := False;
+  FHandlerEnded := False;
+  raised := False;
+  PoisonFreedMemory(True);
+  try
+    try
+      FA.ReleaseWith(p.X, p.Y, []);
+    except
+      on Exception do raised := True;
+    end;
+  finally
+    PoisonFreedMemory(False);
+  end;
+  AssertTrue('SelectAll: the source freed', FA = nil);
+  AssertFalse('SelectAll: the release raised nothing', raised);
+  AssertFalse('SelectAll: nothing raised into the target''s handler', FRaisedInHandler);
+  AssertTrue('SelectAll: the target''s handler ran to its end', FHandlerEnded);
 end;
 
 { A command the door had not taken yet when a handler there freed the control goes with it. }
