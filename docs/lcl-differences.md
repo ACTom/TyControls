@@ -174,6 +174,15 @@ uses
 - **遇到 `rreLimit` 或 `rreCancelled` 后要接着替换，就从它报告的位置再调用一次**:`ReplaceAll(AFind, AReplace, AOptions, R.ResumeAt, R.ResumeLength, R)`,只要 `R.Ending` 是 `rreLimit` 就再重复(`rreCancelled` 或 `rreFailed` 的调用不会自己接下去)。`ResumeAt` 紧跟在它处理的最后一个匹配后面，按报告时的文字计算(后台替换停下以后做的编辑也算进去);不会有地方被替换两次，替换文字里含有要找的文字时也一样。没有剩下的或者内容已经换掉时,`ResumeAt` 是 -1。后台替换被撤销它自己那一步而停下时,`Replaced` 报 0,`ResumeAt` 报范围的起点：它做的已经一点不剩(如果在它察觉之前又重做了，报的就是重做放回去的个数和那之后的位置)。带 `rfoWholeWord` 时，文字没有变动、又恰好从 `ResumeAt` 开始的再次调用，会把紧挨着上一个已替换匹配的那个匹配也替换掉，和一次做完的结果一样;中间有过编辑，或者从别的位置开始，这样的匹配就按当时的文字来判断。停下的那一次已经计入的被拒绝的匹配，再调用时可能又计入一次 `Skipped`。
 - **`OnFindDone` 给出 `AEnd`(`rfeFound`、`rfeNotFound`、`rfeCancelled`)和匹配的 `APos`、`ALen`**(没找到时是 -1 和 0);`OnReplaceDone` 给出 `TTyRichReplaceResult`。每次开始的后台查找或替换都恰好触发一次，控件被销毁时除外。`OnFindProgress` 用 `ATask` 说明在跑的是查找(`rftFind`)还是替换(`rftReplace`),并给出所查范围里已经完成的字符数;`ACancel` 让它停下。这些事件的处理方法可以释放控件：触发事件的那个调用照常返回，就像什么都没找到、没替换一样(`FindNext` 返回 False,`ReplaceAll` 返回 0 和 `rreCancelled`),不会有异常传出来;这个调用本身是在这类处理方法里发出的，也一样。只有一个例外：不要在给 `Text` 赋值期间运行的处理方法里释放控件(`Text` 的写方法是 LCL 自己的，控件的代码返回以后它还要读这个控件);等赋值返回以后再释放，比如用 `Application.ReleaseComponent`。
 
+### 表格
+
+- **只有 `WantTabs` 为 `True` 时，Tab 才在单元格之间移动。** 在单元格里按 Tab 到下一个单元格(一行的最后一格之后是下一行的第一格，合并掉的单元格跳过),并选中它的内容;Shift+Tab 到前一个单元格，在第一个单元格里什么也不做。在表格的最后一个单元格里按 Tab,会在下面加一行(一步撤销),光标进入新行的第一格。Ctrl+Tab 插入制表符。`WantTabs` 为 `False` 时，在表格里 Tab 也是移动焦点，和 Delphi 的 `TRichEdit` 一样。`ReadOnly` 时 Tab 和 Shift+Tab 照样在单元格之间移动，只是在最后一格按 Tab 不加行。
+- **表格方法**:`InsertTable(ARows, ACols)`、`InsertRow` 和 `InsertColumn`(`AAfter` 默认为 `True`:插在下面、右边)、`DeleteRow` 和 `DeleteColumn`(删除选区碰到的每一行、每一列)、`DeleteTable`、`InTable`,以及给动作的 `Update` 用的 `CanInsertTable` …… `CanDeleteTable`。Delphi 的 `TRichEdit` 和 RichMemo 都没有这些方法。它们是用户的操作:`ReadOnly`、纯文本文档(`PlainText`)、文件还在载入或正在保存，以及表格不允许时，返回 `False`,什么也不改，并通过 `OnEditRefused` 说明原因(不抛异常)。要在只读控件上改表格，代码执行文档的命令:`Document.Execute` 加上 `tyControls.RichEdit.Commands` 里的 `TTyRichInsertTable`、`TTyRichInsertRow` 等。
+- **不能修改的**:有合并单元格、或者单元格里套着表格的表格，它的行和列(按文件原样显示和保存，但不能编辑);各行单元格数不一样的表格，它的列;超过 63 列或 32767 行(Word 的上限)。按需读取的大 RTF 文件里，还有太大而不能整个读入的表格(在文件里超过约 1 MB),以及文件里没有写完整的表格。`DeleteTable` 也能删除有合并单元格的表格。
+- **表格行不能粘贴进表格**:光标在单元格里时，粘贴的行作为这个单元格的文字放进去;选中整行再粘贴行会被拒绝。
+- **两个表格挨在一起时**(删掉了它们中间的段落),显示成一个表格,Tab 也从一个走进另一个;但行和列的方法只改光标所在的那一个，直到文档保存后再打开。
+- **`CanInsertRow` 这些函数回答得很省**:什么都没变时再问，直接给出上次的答案。按需读取的大 RTF 文件分段给出的表格，除非已经读到的部分就不允许修改，否则回答 `True`;真正执行时再读整个表格，不能修改就说明原因。
+
 ### 没有的东西
 
 - **Delphi 的类型名**:属性类是 `TTyRichTextAttributes` 和 `TTyRichParaAttributes`,集合类型是 `TTyRichConsistentAttributes`、`TTyRichConsistentParaAttributes` 和 `TTySubscriptType`。成员名和 Delphi 一样(`caBold`、`cpaAlignment`、`sstSuperscript` ……),所以用到这些值的代码能编译，用 Delphi 类型名声明变量的代码不能。序号也不同。
@@ -222,6 +231,7 @@ uses
 
 - **段落**:`ParaAlign`(含两端对齐)、`NumberingStart`、`SpaceBefore`、`SpaceAfter`、`LineSpacingRule`、`LineSpacing`(单位是磅);每次写入只改每个段落里自己那一项。
 - **选区和编辑**:`CaretIndex`(光标所在的那一端)、`CollapseSelection`、`BeginEdit` / `EndEdit`(多次写入合成一步撤销)、`RangeText`。
+- **表格**:`InsertTable`、`InsertRow`、`InsertColumn`、`DeleteRow`、`DeleteColumn`、`DeleteTable`、`InTable` 和各个 `Can…` 函数;Tab 在单元格之间移动(见上面的"表格")。
 - **查找和替换**:`FindNext`、`FindNextAsync`、`ReplaceAll`(三种形式)、`ReplaceAllAsync`、`CancelFind`、`FindRunning`、`OnFindProgress`、`OnFindDone`、`OnReplaceDone`。一次替换算一步撤销，不受 `ReadOnly` 限制。
 - **`Action` 是发布的**,和 `TTyMemo` 一样(Delphi 的 `TRichEdit` 和 LCL 的 `TMemo` 不发布它):关联了动作时，点击编辑区会执行它;它的 `Caption` 不会进入文字。
 - **大文件**:RTF 文件在后台读入(`Loading`、`FinishLoading`、`CancelLoad`、`OnLoadProgress`);`OnSaveProgress` 报告保存进度。

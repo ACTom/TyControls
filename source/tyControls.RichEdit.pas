@@ -3,7 +3,8 @@ unit tyControls.RichEdit;
 { TTyRichEdit: a rich text editor, drawn by the package itself on every platform. It shows a
   document - txt or RTF, of any size - scrolls, zooms and wraps it, and edits it by keyboard:
   typing, Backspace, Delete, Enter, Tab, undo and redo, cut, an input method's
-  composition shown in the text and committed as typing, paste. Every
+  composition shown in the text and committed as typing, paste, tables (a new table, rows
+  and columns inserted and deleted, Tab from cell to cell). Every
   edit is a command of the document (Document.Execute),
   so all of it can be undone; ReadOnly turns the user's editing off and leaves a viewer, while
   code still changes the document through its commands, Lines and the editing methods.
@@ -568,6 +569,26 @@ type
       selection - what TakeMade hands the door; nil once taken. }
     FMade: TTyRichCommand;
     FMadePlace: TTyRichEditPlace;
+    { A table action (InsertTable .. DeleteTable, Tab's new row): which one MakeTableEdit makes
+      (FTableKind, a CTableXxx of the implementation), with its size or side; and where it
+      leaves the caret, worked out after it ran (TableEditCaret) from what it knew before:
+      FAimPara a paragraph as the text numbers them after the edit (the new row's first,
+      the place of the rows that went, the table's first), FAimRow / FAimCell the caret's row
+      and cell index, FAimFollows a row came up into the place of the rows that went,
+      FAimBefore a row is left above them. }
+    FTableKind: Integer;
+    FTableRows, FTableCols: Integer;
+    FTableAfter: Boolean;
+    FAimPara, FAimRow, FAimCell: Integer;
+    FAimFollows, FAimBefore: Boolean;
+    { What the Can... functions and InTable found, and for which content, selection and
+      state of the document (AskTables): asked again with none of them changed, they answer
+      from here. }
+    FAskValid: Boolean;
+    FAskState: Int64;
+    FAskCaret, FAskAnchor: TTyRichPos;
+    FAskBusy: Boolean;
+    FAskIn, FAskInsTable, FAskRows, FAskColIns, FAskColDel, FAskTable: Boolean;
     FOnEditRefused: TTyRichEditRefusedEvent;
     { The input method. A composition goes in at FCompPos (the caret when it began)
       and is not the document's: the layouter shows FCompText there (SetComposition), in
@@ -1084,6 +1105,40 @@ type
     { RunMade's maker: the command made before - dropped (freed, nil) when the door ended a
       composition first, for it was made on the text before that commit. }
     function TakeMade(var APlace: TTyRichEditPlace): TTyRichCommand;
+    // tables
+    { What the user is told when table edit AEdit is refused for AReason. }
+    function TableRefusalText(AReason: TTyRichTableRefusal; const AEdit: TTyRichTableEdit): string;
+    { A table action (FTableKind) through the door of a user's edit, after what the door does
+      not tell: disabled or inside the document's update, nothing; ReadOnly and a plain text
+      document, refused (told). True: it ran. }
+    function RunTableAction(AKind: Integer): Boolean;
+    { The door's maker of a table action: the command for the caret's (the selection's) table
+      as it is now, FAim... set for TableEditCaret; nil and told when the table or the place
+      refuses it. }
+    function MakeTableEdit(var APlace: TTyRichEditPlace): TTyRichCommand;
+    { Where the table action that just ran leaves the caret (FAim...), in the text as it is
+      now. }
+    function TableEditCaret: TTyRichPos;
+    { The start of the paragraph of cell ACell of the row paragraph AFirst begins (its first
+      paragraph; a row with fewer cells: its last cell's). Inside a read scope. }
+    function CellStartInRow(AFirst, ACell: Integer): TTyRichPos;
+    { The first paragraph of row ARow (counted as TableInfoAt counts them) of the table whose
+      first paragraph is AFirst. Inside a read scope. }
+    function RowFirstPara(AFirst, ARow: Integer): Integer;
+    { What the Can... functions answer, found once for the content, the selection and the
+      document's state as they are (FAsk...). }
+    procedure AskTables;
+    { Can a table action be asked of the control now at all: not ReadOnly, enabled, not inside
+      the document's update, the document taking edits, not a plain text document. }
+    function TableActionsOpen: Boolean;
+    { The paragraph whose table the actions take: the caret's - but a caret at the start of a
+      paragraph that ends a selection (whole rows selected down to the next row's start)
+      stands for the paragraph before it, the last one selected. }
+    function CaretTablePara: Integer;
+    { Tab (AForward) or Shift+Tab with the caret in a table: to the next (previous) cell shown,
+      its content selected; at the last cell of the table a person sees, a new row (through
+      the door). False when the caret is in no table: the key is not the table's. }
+    function TableTab(AForward: Boolean): Boolean;
     { What typing AText over [AStart, AStart + ALen) asks before anything is made (EditAllowed,
       and for a user UserRangeAllowed - which may shrink ALen - and LongParaRefused): refused
       (told), False. A composition begins only where this says yes (one character for it). }
@@ -1208,8 +1263,10 @@ type
       (RunHistory); an edit from code (SelText :=, Lines, the document's API) does not either. }
     function RunUserEdit(AMake: TTyRichEditMaker): Boolean; virtual;
     { Why ACmd's CanExecute would refuse it: the engine's own text commands (an insert, a
-      deletion, an object, a fragment) refuse only where a row holds a nested table; any
-      other command's reasons are its own - told as a range that cannot be edited. }
+      deletion, an object, a fragment) refuse only where a row holds a nested table; a table
+      command for its table's reason (TTyRichTableCommand.Refusal, in the words of the
+      control's table actions); any other command's reasons are its own - told as a range
+      that cannot be edited. }
     function CommandRefusal(ACmd: TTyRichCommand): string; virtual;
     { The parts a descendant may make its own: the document (called once, from the
       constructor), the device the layout measures and draws with, the layouter. }
@@ -1425,7 +1482,15 @@ type
       Enter (a paragraph) and Shift+Enter (a line break, U+000B), Tab when WantTabs, Ctrl+X
       and Shift+Delete cut, Ctrl+V and Shift+Insert paste, Ctrl+Z undoes, Ctrl+Y and Ctrl+Shift+Z redo (Cmd on a Mac); with
       ReadOnly they are taken and do nothing, Enter is left to the form. Esc, Enter with Ctrl
-      or Alt, and Tab without WantTabs are left to the form. }
+      or Alt, and Tab without WantTabs are left to the form.
+      In a table, with WantTabs: Tab goes to the next cell shown (the row's next, else the
+      next row's first; a cell merged away is passed over) and selects its content - from its
+      first paragraph's start to its last paragraph's end, an empty cell the caret alone -,
+      Shift+Tab to the one before (nothing in the first cell); this moves only, with
+      ReadOnly too. Tab in the last cell of the table a person sees (the run of table
+      paragraphs, whatever objects the document holds them in) adds a row below it - a
+      user's edit, one undo step, refused (told) as InsertRow is, nothing with ReadOnly -
+      and goes into its first cell. Ctrl+Tab inserts a tab character there. }
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     { A printable character typed (any Unicode): it replaces the selection, else goes in at
       the caret, in TypingFormat; consecutive typing is one undo step (the engine merges it)
@@ -1657,7 +1722,8 @@ type
       copied, never raised.
 
       Two kinds of public methods change the document. The USER's actions - CutToClipboard,
-      PasteFromClipboard, ClearSelection, Undo, Redo, what an application wires to its
+      PasteFromClipboard, ClearSelection, Undo, Redo, the table actions (InsertTable ..
+      DeleteTable, which also tell ReadOnly as a refusal), what an application wires to its
       toolbar and menu - behave as their keys: they respect ReadOnly (and do nothing on a
       disabled control) and never raise for a refusal, which is told through EditRefused.
       CopyToClipboard and SelectAll always work. The document API - SelText :=, Lines, the
@@ -1691,7 +1757,8 @@ type
       What is pasted is read before the document changes: a reader's failure is that
       flavour's (the next one is tried); a lack of memory is refused (rsRichEditRefusedMemory),
       the document untouched. A paste of rows over a selection of whole rows is refused
-      (it would join text across cells; until table editing pastes cells). RTF from another
+      (rsRichEditRefusedPasteRows: rows put into a table would need its columns and theirs
+      made one; not done). RTF from another
       document leaves behind what names that document's header tables by number
       (TyRichFragmentFilterFor): style
       names, shading, border and underline colours, the font of right-to-left text,
@@ -1740,6 +1807,59 @@ type
     procedure EndEdit;
     { The history goes (TTyRichDocument.ClearUndo); the text stays. }
     procedure ClearUndo;
+    { Tables: the user's actions for a toolbar, a menu or an action, each one undo step whose
+      undo puts the selection back as it was before it and whose redo leaves the caret where
+      the action left it. As the user's other actions: an open composition ends first; a
+      disabled control, or one inside the document's update, does nothing; a refusal is
+      told once through EditRefused (OnEditRefused) with its reason, never raised, and
+      nothing changes - ReadOnly, a plain text document, the document loading, incomplete
+      or being saved, the caret in no table, and a table whose rows and columns cannot change
+      (merged cells, a table inside a cell, rows of different numbers of cells for a column
+      edit, a table too large or not complete in a file read on demand). True: done.
+      Code that edits the tables of a read-only control uses the document's commands
+      (Document.Execute with TTyRichInsertTable and the others of tyControls.RichEdit.Commands),
+      as for every other edit.
+
+      InsertTable: an ARows x ACols table (Word's limits: 32767 rows, 63 columns) as wide as
+      the page's text, at the caret - with a selection at its start; the selected text stays.
+      The caret goes into its first cell. Not inside a table. }
+    function InsertTable(ARows, ACols: Integer): Boolean;
+    { A row above (AAfter False) or below the caret's row - with a selection, the row of its
+      caret end; the caret goes into the new row's first cell. }
+    function InsertRow(AAfter: Boolean = True): Boolean;
+    { A column left (AAfter False) or right of the caret's cell; the caret goes into the new
+      column's cell of its row. }
+    function InsertColumn(AAfter: Boolean = True): Boolean;
+    { Every row the selection touches in the caret end's table (the caret's row when nothing
+      is selected), as one step. The caret goes into the cell of the same index of the row
+      that took their place, else of the row above them, else - the table is gone - to the
+      start of the paragraph after it. }
+    function DeleteRow: Boolean;
+    { Every column the selection touches in the caret end's table - the cells between its two
+      ends' cells; all of them when an end is outside the table - (the caret's column when
+      nothing is selected), as one step: all of the table's columns are the table. The caret
+      goes into the cell of its row that took their place, else the one left of them. }
+    function DeleteColumn: Boolean;
+    { The whole table the caret is in, as one step; merged cells or a table inside a cell do
+      not keep it. The caret goes to the start of the paragraph after it. }
+    function DeleteTable: Boolean;
+    { The caret (the selection's caret end) is in a table. }
+    function InTable: Boolean;
+    { Would the action do something now (what an action's Update greys it by): the same
+      reasons as the action's, but never told, never raised. Asked again with nothing changed
+      - no edit, no move of the selection, no change of the document's loading or saving -
+      they answer from what they found the first time; the first answer reads the caret's
+      table once or twice (for a table of 10,000 rows within the time of a keystroke). They
+      never read a part of a file read on demand that is not read yet: for a table such a
+      file gives in parts they answer True unless what is read of it already refuses (the
+      action then reads it, and tells the reason when it is too large), and with the caret
+      in a paragraph not read yet, as for a paragraph outside a table. }
+    function CanInsertTable: Boolean;
+    function CanInsertRow: Boolean;
+    function CanInsertColumn: Boolean;
+    function CanDeleteRow: Boolean;
+    function CanDeleteColumn: Boolean;
+    function CanDeleteTable: Boolean;
     { ITyTextEditActions: Undo, Redo, Cut, Copy, Paste (PasteFromClipboard; offered when
       CanPaste) and Select All. With ReadOnly the menu shows the editing items unavailable and
       they do nothing. }
@@ -2111,8 +2231,10 @@ type
       the document with ReadOnly True. The user's actions called by code (CutToClipboard,
       PasteFromClipboard, ClearSelection, Undo, Redo) do nothing, as Delphi's. }
     property ReadOnly: Boolean read FReadOnly write SetReadOnly default False;
-    { True: Tab inserts a tab character (Shift+Tab and Ctrl+Tab too, as the memo). False (the
-      default, as the memo): Tab is left to the form, which moves the focus. }
+    { True: Tab inserts a tab character (Shift+Tab and Ctrl+Tab too, as the memo) - in a table
+      Tab goes to the next cell and Shift+Tab to the one before (Word's keys: see KeyDown),
+      and Ctrl+Tab inserts the tab character. False (the default, as the memo): Tab is left
+      to the form, which moves the focus, in a table too. }
     property WantTabs: Boolean read FWantTabs write FWantTabs default False;
     { Not published by TTyRichEdit: a rich document cannot live in a form file as lines
       without its formats, so a form stores no content; an application sets the text or
@@ -2277,6 +2399,20 @@ uses
   {$IFDEF LCLCocoa}, tyControls.CocoaWS{$ENDIF};
 
 function TyRichGonePasses(const ALife: TTyRichLife): Boolean; forward;
+
+const
+  { A table action's place for the caret (TTyRichEditPlace.Caret): worked out once it ran
+    (TTyCustomRichEdit.TableEditCaret). }
+  CRichPlaceTable = -3;
+  { The table actions (TTyCustomRichEdit.FTableKind). }
+  CTableInsertTable = 0;
+  CTableInsertRow = 1;
+  CTableInsertColumn = 2;
+  CTableDeleteRow = 3;
+  CTableDeleteColumn = 4;
+  CTableDeleteTable = 5;
+  // Tab in the table's last cell: a row below its last
+  CTableTabRow = 6;
 
 { WM_IME_SETCONTEXT's flags: what the input context asks to show (ImeSetContextDefault, a
   seam on every widgetset; only win32's does something with them). }
@@ -5260,6 +5396,8 @@ end;
 
 function TTyCustomRichEdit.CommandRefusal(ACmd: TTyRichCommand): string;
 begin
+  if ACmd is TTyRichTableCommand then
+    Exit(TableRefusalText(TTyRichTableCommand(ACmd).Refusal(FDoc), TTyRichTableCommand(ACmd).Edit));
   // (the engine's composite says FixedRow for the same parts: tyControls.RichEdit.Commands)
   if (ACmd is TTyRichInsertText) or (ACmd is TTyRichDelete) or (ACmd is TTyRichInsertObject) or
     (ACmd is TTyRichInsertFragment) then
@@ -5354,6 +5492,8 @@ begin
   case place.Caret of
     CRichPlaceChangeEnd: q := FEditChange.Pos + FEditChange.NewLen;
     CRichPlaceStays: q := FCaret;
+    // a table action's: worked out from the table as the edit left it
+    CRichPlaceTable: q := TableEditCaret;
   else
     q := place.Caret + grow;
   end;
@@ -5691,6 +5831,716 @@ begin
   // the list's own rule, the one Paragraph.Numbering := nsNone follows (CTyListMask)
   RunMade(TTyRichSetParaFormat.Create(AIndex, AIndex, CTyListMask,
     TyRichListValue(TyDefaultParaFormat.List)), place, True);
+end;
+
+{ ---- tables: the user's actions, Tab, and what an action's Update asks ----
+
+  The actions are user's edits through the one door (RunUserEdit); the engine's commands do
+  the work (TTyRichInsertTable and the row and column commands), and its reasons are told in
+  the control's words (TableRefusalText). Where an action leaves the caret depends on the
+  table as the edit left it, so the door is handed CRichPlaceTable and TableEditCaret works
+  it out from paragraphs whose numbers the action knew before (FAim...). The row and column
+  actions act on the table object the caret is in - the engine's rule; a table a file read
+  on demand gives in parts is one table to them when its loader can give it whole, and
+  refused otherwise. Tab goes by what a person sees instead: the laid-out row blocks and
+  the cells of the paragraphs next to them, never a walk of the table. }
+
+function TTyCustomRichEdit.TableRefusalText(AReason: TTyRichTableRefusal;
+  const AEdit: TTyRichTableEdit): string;
+begin
+  case AReason of
+    rtrReadOnly:
+      begin
+        // the document's state: loading, incomplete, being saved
+        Result := RefusalReason;
+        if Result = '' then Result := rsRichEditRefusedRange;
+      end;
+    rtrNoTable: Result := rsRichEditRefusedNoTable;
+    rtrInTable: Result := rsRichEditRefusedTableInTable;
+    rtrMergedCells: Result := rsRichEditRefusedMergedCells;
+    rtrNestedTable: Result := rsRichEditRefusedNestedTable;
+    rtrNotWhole: Result := rsRichEditRefusedTableNotWhole;
+    rtrIrregularRows: Result := rsRichEditRefusedIrregularRows;
+    rtrOutOfRange:
+      // (a row or cell index out of range is no person's doing: the actions name existing ones)
+      if AEdit.Kind = rtkInsertTable then
+        Result := Format(rsRichEditRefusedTableSize, [CRichMaxTableRows, CRichMaxTableCols])
+      else if AEdit.Kind = rtkInsertColumn then
+        Result := Format(rsRichEditRefusedTableColumns, [CRichMaxTableCols])
+      else
+        Result := rsRichEditRefusedRange;
+  else
+    Result := rsRichEditRefusedRange;
+  end;
+end;
+
+function TTyCustomRichEdit.TableActionsOpen: Boolean;
+begin
+  Result := not FReadOnly and IsEnabled and not ViewBehind and (RefusalReason = '') and
+    not PlainTextDocument;
+end;
+
+function TTyCustomRichEdit.CaretTablePara: Integer;
+var
+  t: TTyRichText;
+  q: TTyRichPos;
+begin
+  t := FDoc.Text;
+  q := Math.Min(FCaret, t.Length);
+  Result := t.ParaOfPos(q);
+  if (FSelAnchor < q) and (Result > 0) and (q = t.ParaStart(Result)) and
+     (FSelAnchor < t.ParaStart(Result)) then
+    Dec(Result);
+end;
+
+function TTyCustomRichEdit.RunTableAction(AKind: Integer): Boolean;
+begin
+  Result := False;
+  // a user action is an entry point of the loop (see SchedulingFailed)
+  EndOwedLoad;
+  { The door's own first step, taken here: what the input method shows goes in before the
+    action is set up (its commit's handlers may ask an action of their own). }
+  EndCompositionForUser;
+  if not IsEnabled or ViewBehind then Exit;
+  { The door tells nothing for ReadOnly (a viewer takes a key and does nothing, as the memo);
+    an action asked for by name is told why it did nothing. }
+  if FReadOnly then
+  begin
+    EditRefused(rsRichEditRefusedReadOnly);
+    Exit;
+  end;
+  // a table cannot be saved into a text file
+  if PlainTextDocument then
+  begin
+    EditRefused(rsRichEditRefusedPlainTable);
+    Exit;
+  end;
+  FTableKind := AKind;
+  Result := RunUserEdit(@MakeTableEdit);
+end;
+
+function TTyCustomRichEdit.MakeTableEdit(var APlace: TTyRichEditPlace): TTyRichCommand;
+var
+  t: TTyRichText;
+  s, e, pos, from, stop: TTyRichPos;
+  k, ks, ke, p1, p2, r1, r2, c1, c2, m, f, lastFirst: Integer;
+  info: TTyRichTableInfo;
+  why: TTyRichTableRefusal;
+  reason: string;
+  comp: TTyRichCompositeCommand;
+  row: TTyRichRow;
+
+  // the row of table paragraph AP, counted from the caret's row (rows never cross objects)
+  function RowOf(AP: Integer): Integer;
+  var
+    i: Integer;
+    r: TTyRichRow;
+  begin
+    Result := info.Row;
+    r := FDoc.CellAt(k).Row;
+    if AP > k then
+      for i := k + 1 to AP do
+      begin
+        if FDoc.CellAt(i).Row <> r then Inc(Result);
+        r := FDoc.CellAt(i).Row;
+      end
+    else
+      for i := k - 1 downto AP do
+      begin
+        if FDoc.CellAt(i).Row <> r then Dec(Result);
+        r := FDoc.CellAt(i).Row;
+      end;
+  end;
+
+  // the first paragraph of the table's last row
+  function LastRowFirst: Integer;
+  var
+    r: TTyRichRow;
+  begin
+    Result := info.Last;
+    r := FDoc.CellAt(info.Last).Row;
+    while (Result > info.First) and (FDoc.CellAt(Result - 1).Row = r) do Dec(Result);
+  end;
+
+  { Rows AFrom (a row's first paragraph) to the table's last, of a table that ends the text,
+    as one step (ADescription): a deletion would join what is left with the text's last
+    paragraph, which is a cell - the engine's command for the last row leaves a paragraph in
+    no table after the table, and the rows before it go as text up to that paragraph. }
+  function RowsToTheEnd(AFrom: Integer; const ADescription: string): TTyRichCommand;
+  begin
+    lastFirst := LastRowFirst;
+    if lastFirst <= AFrom then Exit(TTyRichDeleteRow.Create(pos, info.RowCount - 1));
+    comp := TTyRichCompositeCommand.Create(ADescription);
+    comp.Add(TTyRichDeleteRow.Create(pos, info.RowCount - 1));
+    // (the paragraph the engine leaves stands where the last row began)
+    comp.Add(TTyRichDelete.Create(t.ParaStart(AFrom), t.ParaStart(lastFirst) - t.ParaStart(AFrom)));
+    Result := comp;
+  end;
+
+  // the whole table (info) goes, one step; the caret to what followed it
+  function WholeTable(ARowWhy: TTyRichTableRefusal): TTyRichCommand;
+  begin
+    Result := nil;
+    FTableKind := CTableDeleteTable;
+    FAimPara := info.First;
+    if info.Last < t.ParaCount - 1 then
+    begin
+      // whole rows, up to the paragraph after them
+      from := t.ParaStart(info.First);
+      comp := TTyRichCompositeCommand.Create(rsRichUndoDeleteTable);
+      comp.Add(TTyRichDelete.Create(from, t.ParaStart(info.Last + 1) - from));
+      Result := comp;
+    end
+    else if ARowWhy <> rtrNone then
+      // (a table that ends the text and whose rows cannot change: made so by code only)
+      reason := TableRefusalText(ARowWhy, TyRichTableEdit(rtkDeleteRow, pos, 0))
+    else
+      Result := RowsToTheEnd(info.First, rsRichUndoDeleteTable);
+  end;
+
+begin
+  Result := nil;
+  reason := '';
+  t := FDoc.Text;
+  APlace.Anchor := CRichPlaceChangeEnd;
+  APlace.Caret := CRichPlaceTable;
+  FAimPara := 0;
+  FAimRow := 0;
+  FAimCell := 0;
+  FAimFollows := False;
+  FAimBefore := False;
+  if FTableKind = CTableInsertTable then
+  begin
+    // at the selection's start; the selected text stays (the engine says why it refuses)
+    s := GetSelStart;
+    FAimPara := t.ParaOfPos(s);
+    Exit(TTyRichInsertTable.Create(s, FTableRows, FTableCols));
+  end;
+  k := CaretTablePara;
+  pos := t.ParaStart(k);
+  if not FDoc.TableInfoAt(k, info) then
+  begin
+    EditRefused(rsRichEditRefusedNoTable);
+    Exit;
+  end;
+  FDoc.BeginRead;
+  try
+    case FTableKind of
+      CTableInsertRow:
+        begin
+          if FTableAfter then FAimPara := info.RowLast + 1 else FAimPara := info.RowFirst;
+          Result := TTyRichInsertRow.Create(pos, info.Row + Ord(FTableAfter));
+        end;
+      CTableTabRow:
+        begin
+          // below the last row: its paragraphs go before the paragraph after the table
+          FAimPara := info.Last + 1;
+          Result := TTyRichInsertRow.Create(pos, info.RowCount);
+        end;
+      CTableInsertColumn:
+        begin
+          FAimPara := info.First;
+          FAimRow := info.Row;
+          FAimCell := info.Cell + Ord(FTableAfter);
+          Result := TTyRichInsertColumn.Create(pos, FAimCell);
+        end;
+      CTableDeleteTable:
+        begin
+          why := FDoc.TableEditRefusal(TyRichTableEdit(rtkDeleteRow, pos, 0));
+          // what keeps the rows and columns from changing does not keep the table
+          if why in [rtrNone, rtrMergedCells, rtrNestedTable, rtrIrregularRows] then
+            Result := WholeTable(why)
+          else
+            reason := TableRefusalText(why, TyRichTableEdit(rtkDeleteRow, pos, 0));
+        end;
+    else
+      begin
+        // the paragraphs the selection touches, in the caret's table
+        s := GetSelStart;
+        e := s + GetSelLength;
+        ks := t.ParaOfPos(s);
+        ke := t.ParaOfPos(e);
+        if (e > s) and (ke > ks) and (e = t.ParaStart(ke)) then Dec(ke);
+        p1 := Math.Max(ks, info.First);
+        p2 := Math.Min(ke, info.Last);
+        if p1 > k then p1 := k;
+        if p2 < k then p2 := k;
+        if FTableKind = CTableDeleteRow then
+        begin
+          r1 := RowOf(p1);
+          r2 := RowOf(p2);
+          // the first paragraph of row r1, and the last of row r2
+          row := FDoc.CellAt(p1).Row;
+          while (p1 > info.First) and (FDoc.CellAt(p1 - 1).Row = row) do Dec(p1);
+          row := FDoc.CellAt(p2).Row;
+          while (p2 < info.Last) and (FDoc.CellAt(p2 + 1).Row = row) do Inc(p2);
+          FAimPara := p1;
+          FAimCell := FDoc.CellAt(k).Index;
+          FAimFollows := r2 < info.RowCount - 1;
+          FAimBefore := r1 > 0;
+          if r1 = r2 then
+            Result := TTyRichDeleteRow.Create(pos, r1)
+          else
+          begin
+            why := FDoc.TableEditRefusal(TyRichTableEdit(rtkDeleteRow, pos, r1));
+            if why <> rtrNone then
+              reason := TableRefusalText(why, TyRichTableEdit(rtkDeleteRow, pos, r1))
+            else if (r1 = 0) and (r2 = info.RowCount - 1) then
+              Result := WholeTable(why)
+            else
+            begin
+              { Several rows: whole rows go as text (one deletion, not a table edit per row);
+                the rows the table object keeps without paragraphs count for nothing. }
+              from := t.ParaStart(p1);
+              if p2 < info.Last then stop := t.ParaStart(p2 + 1)
+              else if info.Last < t.ParaCount - 1 then stop := t.ParaStart(info.Last + 1)
+              else
+                stop := -1;
+              if stop >= 0 then
+              begin
+                comp := TTyRichCompositeCommand.Create(rsRichUndoDeleteRow);
+                comp.Add(TTyRichDelete.Create(from, stop - from));
+                Result := comp;
+              end
+              else
+                Result := RowsToTheEnd(p1, rsRichUndoDeleteRow);
+            end;
+          end;
+        end
+        else
+        begin
+          // columns: between the two ends' cells; an end outside the table takes the row's edge
+          if (ks >= info.First) and (ks <= info.Last) then c1 := FDoc.CellAt(ks).Index
+          else c1 := 0;
+          if (ke >= info.First) and (ke <= info.Last) then c2 := FDoc.CellAt(ke).Index
+          else c2 := info.CellCount - 1;
+          if GetSelLength = 0 then
+          begin
+            c1 := FDoc.CellAt(k).Index;
+            c2 := c1;
+          end;
+          if c1 > c2 then
+          begin
+            m := c1;
+            c1 := c2;
+            c2 := m;
+          end;
+          FAimPara := info.First;
+          FAimRow := info.Row;
+          FAimCell := c1;
+          if c1 = c2 then
+            Result := TTyRichDeleteColumn.Create(pos, c1)
+          else
+          begin
+            why := FDoc.TableEditRefusal(TyRichTableEdit(rtkDeleteColumn, pos, c1));
+            if why <> rtrNone then
+              reason := TableRefusalText(why, TyRichTableEdit(rtkDeleteColumn, pos, c1))
+            else if (c1 = 0) and (c2 >= info.CellCount - 1) then
+              Result := WholeTable(why)
+            else
+            begin
+              // right to left: the cell indexes of those still to go stay as they were
+              comp := TTyRichCompositeCommand.Create(rsRichUndoDeleteColumn);
+              for f := Math.Min(c2, info.CellCount - 1) downto c1 do
+                comp.Add(TTyRichDeleteColumn.Create(pos, f));
+              Result := comp;
+            end;
+          end;
+        end;
+      end;
+    end;
+  finally
+    FDoc.EndRead;
+  end;
+  // told once the read scope is closed (a handler may load a document)
+  if reason <> '' then
+  begin
+    FreeAndNil(Result);
+    EditRefused(reason);
+  end;
+end;
+
+function TTyCustomRichEdit.CellStartInRow(AFirst, ACell: Integer): TTyRichPos;
+var
+  t: TTyRichText;
+  m, best, bi: Integer;
+  c: TTyRichCell;
+  row: TTyRichRow;
+begin
+  t := FDoc.Text;
+  Result := t.ParaStart(AFirst);
+  c := FDoc.CellAt(AFirst);
+  if c = nil then Exit;
+  row := c.Row;
+  best := AFirst;
+  bi := -1;
+  m := AFirst;
+  while m < t.ParaCount do
+  begin
+    c := FDoc.CellAt(m);
+    if (c = nil) or (c.Row <> row) then Break;
+    // the cell's first paragraph, else the last cell before it
+    if (c.Index <= ACell) and (c.Index > bi) then
+    begin
+      bi := c.Index;
+      best := m;
+      if bi = ACell then Break;
+    end;
+    Inc(m);
+  end;
+  Result := t.ParaStart(best);
+end;
+
+function TTyCustomRichEdit.RowFirstPara(AFirst, ARow: Integer): Integer;
+var
+  t: TTyRichText;
+  r, m: Integer;
+  c: TTyRichCell;
+  row: TTyRichRow;
+begin
+  t := FDoc.Text;
+  Result := AFirst;
+  c := FDoc.CellAt(AFirst);
+  if c = nil then Exit;
+  row := c.Row;
+  r := 0;
+  m := AFirst;
+  while (r < ARow) and (m < t.ParaCount - 1) do
+  begin
+    Inc(m);
+    c := FDoc.CellAt(m);
+    if c = nil then Break;
+    if c.Row <> row then
+    begin
+      Inc(r);
+      row := c.Row;
+      Result := m;
+    end;
+  end;
+end;
+
+function TTyCustomRichEdit.TableEditCaret: TTyRichPos;
+var
+  t: TTyRichText;
+  m, f: Integer;
+  c: TTyRichCell;
+begin
+  t := FDoc.Text;
+  if FAimPara >= t.ParaCount then Exit(t.Length);
+  FDoc.BeginRead;
+  try
+    case FTableKind of
+      CTableInsertTable:
+        begin
+          // the first cell: at the paragraph, or past what a split or a paragraph that keeps
+          // two tables apart put before it
+          m := FAimPara;
+          while (m < t.ParaCount - 1) and (m < FAimPara + 2) and (FDoc.CellAt(m) = nil) do Inc(m);
+          Result := t.ParaStart(m);
+        end;
+      CTableInsertRow, CTableTabRow:
+        Result := t.ParaStart(FAimPara);
+      CTableDeleteRow:
+        if FAimFollows then
+          Result := CellStartInRow(FAimPara, FAimCell)
+        else if FAimBefore and (FAimPara > 0) and (FDoc.CellAt(FAimPara - 1) <> nil) then
+        begin
+          // the row above the ones that went: from its first paragraph
+          f := FAimPara - 1;
+          c := FDoc.CellAt(f);
+          while (f > 0) and (FDoc.CellAt(f - 1) <> nil) and (FDoc.CellAt(f - 1).Row = c.Row) do
+            Dec(f);
+          Result := CellStartInRow(f, FAimCell);
+        end
+        else
+          Result := t.ParaStart(FAimPara);
+      CTableInsertColumn, CTableDeleteColumn:
+        // (the table's only column went: the table with it)
+        if FDoc.CellAt(FAimPara) = nil then Result := t.ParaStart(FAimPara)
+        else Result := CellStartInRow(RowFirstPara(FAimPara, FAimRow), FAimCell);
+    else
+      Result := t.ParaStart(FAimPara);
+    end;
+  finally
+    FDoc.EndRead;
+  end;
+end;
+
+function TTyCustomRichEdit.InsertTable(ARows, ACols: Integer): Boolean;
+begin
+  FTableRows := ARows;
+  FTableCols := ACols;
+  Result := RunTableAction(CTableInsertTable);
+end;
+
+function TTyCustomRichEdit.InsertRow(AAfter: Boolean): Boolean;
+begin
+  FTableAfter := AAfter;
+  Result := RunTableAction(CTableInsertRow);
+end;
+
+function TTyCustomRichEdit.InsertColumn(AAfter: Boolean): Boolean;
+begin
+  FTableAfter := AAfter;
+  Result := RunTableAction(CTableInsertColumn);
+end;
+
+function TTyCustomRichEdit.DeleteRow: Boolean;
+begin
+  Result := RunTableAction(CTableDeleteRow);
+end;
+
+function TTyCustomRichEdit.DeleteColumn: Boolean;
+begin
+  Result := RunTableAction(CTableDeleteColumn);
+end;
+
+function TTyCustomRichEdit.DeleteTable: Boolean;
+begin
+  Result := RunTableAction(CTableDeleteTable);
+end;
+
+procedure TTyCustomRichEdit.AskTables;
+var
+  t: TTyRichText;
+  k, ks: Integer;
+  busy: Boolean;
+  c: TTyRichCell;
+  rr, cr: TTyRichTableRefusal;
+  pos: TTyRichPos;
+
+  // a paragraph a file read on demand has not given yet has no value: not read just to answer
+  function Known(AIndex: Integer): Boolean;
+  begin
+    Result := (FDoc.Loader = nil) or (t.ParaData[AIndex] <> nil);
+  end;
+
+begin
+  busy := RefusalReason <> '';
+  if FAskValid and (FAskState = FDoc.ContentState) and (FAskCaret = FCaret) and
+     (FAskAnchor = FSelAnchor) and (FAskBusy = busy) then
+    Exit;
+  FAskIn := False;
+  FAskInsTable := False;
+  FAskRows := False;
+  FAskColIns := False;
+  FAskColDel := False;
+  FAskTable := False;
+  FAskValid := True;
+  FAskState := FDoc.ContentState;
+  FAskCaret := FCaret;
+  FAskAnchor := FSelAnchor;
+  FAskBusy := busy;
+  t := FDoc.Text;
+  try
+    ks := t.ParaOfPos(Math.Min(GetSelStart, t.Length));
+    k := CaretTablePara;
+    FDoc.BeginRead;
+    try
+      FAskInsTable := not Known(ks) or (FDoc.CellAt(ks) = nil);
+      if not Known(k) then Exit;
+      c := FDoc.CellAt(k);
+      FAskIn := c <> nil;
+      if not FAskIn or busy then Exit;
+      if c.Table.Cut then
+      begin
+        { A part of a table a file read on demand gives: whether it can be given whole needs
+          its neighbours read. The cheap answer: what is read already - merged cells, a table
+          in a cell - says no; else yes, and the action tells the reason it finds. }
+        FAskRows := not c.Table.ContentLocked and not c.Row.HoldsNestedTable;
+        FAskColIns := FAskRows;
+        FAskColDel := FAskRows;
+        FAskTable := True;
+        Exit;
+      end;
+    finally
+      FDoc.EndRead;
+    end;
+    { The table read once, for a column at cell 0 (an index every table has): its reason is
+      the rows' reason too - the table's state, what its content forbids - but for rows of
+      different numbers of cells, which forbid columns only; only then is it read again,
+      for a row. What keeps a row from going keeps the others; a column too many for an
+      insert is none too many for a delete. }
+    pos := t.ParaStart(k);
+    cr := FDoc.TableEditRefusal(TyRichTableEdit(rtkInsertColumn, pos, 0));
+    if cr = rtrIrregularRows then
+      rr := FDoc.TableEditRefusal(TyRichTableEdit(rtkInsertRow, pos, 0))
+    else if cr = rtrOutOfRange then
+      rr := rtrNone
+    else
+      rr := cr;
+    FAskRows := rr = rtrNone;
+    FAskColIns := cr = rtrNone;
+    FAskColDel := cr in [rtrNone, rtrOutOfRange];
+    FAskTable := rr in [rtrNone, rtrMergedCells, rtrNestedTable, rtrIrregularRows];
+  except
+    // (never raised to an action's Update: a file that cannot be read answers no)
+    on Exception do
+    begin
+      FAskIn := False;
+      FAskInsTable := False;
+      FAskRows := False;
+      FAskColIns := False;
+      FAskColDel := False;
+      FAskTable := False;
+    end;
+  end;
+end;
+
+function TTyCustomRichEdit.InTable: Boolean;
+begin
+  AskTables;
+  Result := FAskIn;
+end;
+
+function TTyCustomRichEdit.CanInsertTable: Boolean;
+begin
+  Result := TableActionsOpen;
+  if not Result then Exit;
+  AskTables;
+  Result := FAskInsTable;
+end;
+
+function TTyCustomRichEdit.CanInsertRow: Boolean;
+begin
+  Result := TableActionsOpen;
+  if not Result then Exit;
+  AskTables;
+  Result := FAskRows;
+end;
+
+function TTyCustomRichEdit.CanInsertColumn: Boolean;
+begin
+  Result := TableActionsOpen;
+  if not Result then Exit;
+  AskTables;
+  Result := FAskColIns;
+end;
+
+function TTyCustomRichEdit.CanDeleteRow: Boolean;
+begin
+  Result := TableActionsOpen;
+  if not Result then Exit;
+  AskTables;
+  Result := FAskRows;
+end;
+
+function TTyCustomRichEdit.CanDeleteColumn: Boolean;
+begin
+  Result := TableActionsOpen;
+  if not Result then Exit;
+  AskTables;
+  Result := FAskColDel;
+end;
+
+function TTyCustomRichEdit.CanDeleteTable: Boolean;
+begin
+  Result := TableActionsOpen;
+  if not Result then Exit;
+  AskTables;
+  Result := FAskTable;
+end;
+
+function TTyCustomRichEdit.TableTab(AForward: Boolean): Boolean;
+var
+  t: TTyRichText;
+  k, ci, next, fp, lp: Integer;
+  b: TTyBlockLayout;
+  found: Boolean;
+  a, q: TTyRichPos;
+
+  { The cell shown in row block AB from cell AFrom on (backward with Shift+Tab) that has
+    paragraphs: its first (fp) and last (lp) paragraph. A cell merged into the one before
+    it is passed over. }
+  function ShownCell(AB: TTyBlockLayout; AFrom: Integer): Boolean;
+  var
+    row: TTyRowLayout;
+    cell, i: Integer;
+  begin
+    Result := False;
+    if not (AB is TTyRowLayout) then Exit;
+    row := TTyRowLayout(AB);
+    cell := AFrom;
+    while (cell >= 0) and (cell < row.CellCount) do
+    begin
+      if not row.Cells[cell].Hidden then
+      begin
+        fp := -1;
+        for i := 0 to row.ItemCount - 1 do
+          if row.Items[i].Cell = cell then
+          begin
+            if fp < 0 then fp := AB.FirstPara + i;
+            lp := AB.FirstPara + i;
+          end;
+        if fp >= 0 then Exit(True);
+      end;
+      if AForward then Inc(cell) else Dec(cell);
+    end;
+  end;
+
+begin
+  Result := False;
+  t := FDoc.Text;
+  k := t.ParaOfPos(Math.Min(FCaret, t.Length));
+  found := False;
+  fp := -1;
+  lp := -1;
+  EnsureParams;
+  FDoc.BeginRead;
+  try
+    if FDoc.CellAt(k) = nil then Exit;
+    Result := True;
+    b := LayoutBlockAt(k);
+    try
+      if b is TTyRowLayout then
+      begin
+        // (a caret never stands in a cell merged away; its paragraphs count as the cell's)
+        ci := TTyRowLayout(b).Items[k - b.FirstPara].Cell;
+        ci := TTyRowLayout(b).Cells[ci].Owner;
+        if AForward then found := ShownCell(b, ci + 1) else found := ShownCell(b, ci - 1);
+      end;
+      if AForward then next := b.LastPara + 1 else next := b.FirstPara - 1;
+    finally
+      b.Release;
+    end;
+    { The rows after (before) it as a person sees the table: every row block of table
+      paragraphs next to each other, whatever table object holds them. }
+    while not found and (next >= 0) and (next < t.ParaCount) and (FDoc.CellAt(next) <> nil) do
+    begin
+      b := LayoutBlockAt(next);
+      try
+        if AForward then found := ShownCell(b, 0)
+        else if b is TTyRowLayout then found := ShownCell(b, TTyRowLayout(b).CellCount - 1);
+        if AForward then next := b.LastPara + 1 else next := b.FirstPara - 1;
+      finally
+        b.Release;
+      end;
+    end;
+  finally
+    FDoc.EndRead;
+  end;
+  if found then
+  begin
+    // the cell's content selected, Word's way: not its last paragraph's end
+    a := t.ParaStart(fp);
+    q := OutOfTail(t.ParaStart(lp) + t.ParaLength(lp), False);
+    Select(a, q, False);
+    Moved(False);
+  end
+  else if AForward then
+  begin
+    { The table's last cell: a row below - an edit, through the door. With ReadOnly nothing,
+      as for a typed character - asked first: a viewer is not told that a plain text
+      document holds no table. }
+    if FReadOnly then Exit;
+    if PlainTextDocument then
+    begin
+      EditRefused(rsRichEditRefusedPlainTable);
+      Exit;
+    end;
+    FTableKind := CTableTabRow;
+    RunUserEdit(@MakeTableEdit);
+  end;
 end;
 
 type
@@ -6118,12 +6968,13 @@ begin
             FreeAndNil(src);
             raise;
           end;
-          { Rows over a selection of whole rows: until table editing pastes cells, refused as a
-            selection across cells is (the rows would go into the next row's first cell). }
+          { Rows over a selection of whole rows: refused - they would go into the next row's
+            first cell, and rows put into the table instead would need the two tables'
+            columns made one. }
           if (src <> nil) and rows and HoldsRows(src) then
           begin
             src.Free;
-            EditRefused(rsRichEditRefusedCells);
+            EditRefused(rsRichEditRefusedPasteRows);
             Exit;
           end;
           { What the reader kept of the clipboard's file by number (styles, colours, fonts,
@@ -13092,6 +13943,21 @@ begin
     PasteFromClipboard;
     Key := 0;
     Exit;
+  end;
+  { Tab and Shift+Tab in a table go from cell to cell (Word's way) - with ReadOnly too: they
+    move; only a new row is an edit. Ctrl+Tab, and Tab outside a table, are the edit key's. }
+  if (Key = VK_TAB) and FWantTabs and (Shift * [ssCtrl, ssAlt, ssMeta] = []) then
+  begin
+    EndCompositionForUser;
+    if not ViewBehind then
+    begin
+      Settle;
+      if TableTab(not (ssShift in Shift)) then
+      begin
+        Key := 0;
+        Exit;
+      end;
+    end;
   end;
   if IsEditKey(Key, Shift) then
   begin

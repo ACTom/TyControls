@@ -301,6 +301,7 @@ uses
   test.richedit.findctl,
   test.richedit.msftedit,
   test.richedit.tables,
+  test.richedit.tableedit,
   test.richedit.perf;
 
 type

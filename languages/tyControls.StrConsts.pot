@@ -713,6 +713,10 @@ msgstr ""
 msgid "Delete column"
 msgstr ""
 
+#: tycontrols.strconsts.rsrichundodeletetable
+msgid "Delete table"
+msgstr ""
+
 #: tycontrols.strconsts.rsricheditincomplete
 msgid "The document was not loaded completely, so it cannot be saved."
 msgstr ""
@@ -775,6 +779,52 @@ msgstr ""
 
 #: tycontrols.strconsts.rsricheditrefusedmemory
 msgid "There is not enough memory to paste this."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditrefusedpasterows
+msgid "Table rows cannot be pasted over rows of a table: paste them outside the table, or into a cell as its text."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditrefusedreadonly
+msgid "The document is read-only: it cannot be changed."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditrefusedplaintable
+msgid "A plain text document cannot hold a table."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditrefusednotable
+msgid "The caret is not in a table."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditrefusedtableintable
+msgid "A table cannot be inserted into a table."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditrefusedmergedcells
+msgid "This table has merged cells: its rows and columns cannot be inserted or deleted."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditrefusednestedtable
+msgid "This table has a table inside one of its cells: its rows and columns cannot be inserted or deleted."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditrefusedtablenotwhole
+msgid "This table is too large, or not complete in its file, for its rows and columns to be inserted or deleted."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditrefusedirregularrows
+msgid "The rows of this table do not all have the same number of cells: its columns cannot be inserted or deleted."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditrefusedtablesize
+#, object-pascal-format
+msgid "A table can have 1 to %d rows and 1 to %d columns."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditrefusedtablecolumns
+#, object-pascal-format
+msgid "This table has as many columns as a table can have (%d)."
 msgstr ""
 
 #: tycontrols.strconsts.rsrichmodelnestedrow

@@ -3070,9 +3070,10 @@ begin
   end;
 end;
 
-{ until table editing pastes cells, a paste of rows over a selection of whole rows is
-  refused as a selection across cells is (the rows would go into the next row's first cell);
-  plain content over whole rows goes in as typing over them does. }
+{ A paste of rows over a selection of whole rows is refused, with a reason of its own (the
+  rows would go into the next row's first cell, and rows put into the table would need its
+  columns and theirs made one); plain content over whole rows goes in as typing over them
+  does. }
 procedure TTyRichEditPasteTest.TestRowsOverWholeRowsAreRefused;
 const
   Rows = '{' + BS + 'rtf1' + BS + 'ansi' + BS + 'trowd' + BS + 'cellx1000' + BS + 'cellx2000' +
@@ -3092,7 +3093,7 @@ begin
   Clip(Rows, '');
   FRich.PasteFromClipboard;
   AssertEquals('refused', 1, FRich.Refused);
-  AssertEquals('as a selection across cells', rsRichEditRefusedCells, FRich.LastReason);
+  AssertEquals('rows over rows', rsRichEditRefusedPasteRows, FRich.LastReason);
   AssertTrue('nothing changed', SameRaw(before, d.Text.GetText(0, d.Text.Length)));
   // RTF without rows over the same selection: as typing over it
   ResetEvents;

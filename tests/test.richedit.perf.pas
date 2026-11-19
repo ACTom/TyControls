@@ -4,7 +4,8 @@ unit test.richedit.perf;
   serial list). The acceptance lines are the design's - a 100 MB txt and a 100 MB RTF show
   their first screen in 1 s and any scroll position in 100 ms, a keystroke paints in 30 ms;
   a bench run measures them on the user's machine - and the thresholds here are three
-  times them: 3 s, 300 ms and 90 ms.
+  times them: 3 s, 300 ms and 90 ms. A table of 10,000 rows is held to the keystroke's line
+  for Tab and for the answers a table action's Update asks.
 
   How it paints: the control with no window, painted by PaintArea into an off-screen bitmap
   as a window paint (deferred pictures, the kept surface brought up to date and blitted) - the
@@ -44,12 +45,14 @@ type
   published
     procedure TestA100MBTextFileFirstScreenAndMiddle;
     procedure TestA100MBRtfFileFirstScreenAndMiddle;
+    procedure TestTabAndTheTableAnswersInALongTable;
   end;
 
 implementation
 
 uses
-  Math, LCLType, tyControls.RichEdit.Text, tyControls.RichEdit.RtfRead;
+  Math, LCLType, tyControls.RichEdit.Text, tyControls.RichEdit.RtfRead,
+  tyControls.RichEdit.Model, tyControls.RichEdit.Commands;
 
 {$IFDEF MSWINDOWS}
 type
@@ -464,6 +467,68 @@ begin
       [midTop, indexed]), midTop > indexed div 4);
     AssertTrue('the view in the middle of the whole',
       FRich.TopParagraph > FRich.Document.Text.ParaCount div 4);
+  finally
+    bmp.Free;
+  end;
+end;
+
+{ A table of 10,000 rows of two cells: Tab in its middle, from the key to the end of its
+  paint, within 90 ms (a move: no table is walked); the first answer of the table actions'
+  Can... functions after that move within 90 ms too (each walks the caret's table once), and
+  a second one (from what the first found). Printed: those, and a row added by Tab in the
+  table's last cell (the engine's row edit reads the table: not asserted). }
+procedure TTyRichEditPerfTest.TestTabAndTheTableAnswersInALongTable;
+const
+  Rows = 10000;
+var
+  bmp: TBitmap;
+  d: TTyRichDocument;
+  t: TTyRichText;
+  k: Integer;
+  t0, tab, first, again, add: Double;
+  info: TTyRichTableInfo;
+begin
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf32bit;
+    bmp.SetSize(FRich.Width, FRich.Height);
+    FRich.WantTabs := True;
+    FRich.Lines.Text := 'before' + LineEnding + 'after';
+    d := FRich.Document;
+    t := d.Text;
+    AssertTrue('a long table', d.Execute(TTyRichInsertTable.Create(t.ParaStart(1), Rows, 2)));
+    k := 1 + 2 * (Rows div 2);
+    FRich.SelStart := t.ParaStart(k);
+    TPerfRich(FRich).PaintInto(bmp);
+    t0 := Clock;
+    TPerfRich(FRich).Key(VK_TAB, []);
+    TPerfRich(FRich).PaintInto(bmp);
+    tab := Clock - t0;
+    AssertEquals('Tab went to the next cell', t.ParaStart(k + 1), FRich.SelStart);
+    Report(Format('table of %d rows: Tab in the middle, to the end of its paint', [Rows]), tab);
+    t0 := Clock;
+    AssertTrue('a row, a column', FRich.CanInsertRow and FRich.CanInsertColumn and
+      FRich.CanDeleteRow and FRich.CanDeleteColumn and FRich.CanDeleteTable and
+      not FRich.CanInsertTable);
+    first := Clock - t0;
+    Report('table: the Can... answers after a move, the first time', first);
+    t0 := Clock;
+    AssertTrue('again', FRich.CanInsertRow and FRich.CanInsertColumn and
+      FRich.CanDeleteRow and FRich.CanDeleteColumn and FRich.CanDeleteTable);
+    again := Clock - t0;
+    Report('table: the Can... answers asked again', again);
+    // the last cell: a row below, through the user's door
+    FRich.SelStart := t.ParaStart(2 * Rows);
+    TPerfRich(FRich).PaintInto(bmp);
+    t0 := Clock;
+    TPerfRich(FRich).Key(VK_TAB, []);
+    TPerfRich(FRich).PaintInto(bmp);
+    add := Clock - t0;
+    AssertTrue('a row added', d.TableInfoAt(1, info) and (info.RowCount = Rows + 1));
+    Report('table: Tab in the last cell adds a row, to the end of its paint (not asserted)', add);
+    AssertTrue(Format('Tab in %.1f ms', [tab]), tab <= CKeystrokeMs);
+    AssertTrue(Format('the first answers in %.1f ms', [first]), first <= CKeystrokeMs);
+    AssertTrue(Format('the answers again in %.1f ms', [again]), again <= CKeystrokeMs);
   finally
     bmp.Free;
   end;

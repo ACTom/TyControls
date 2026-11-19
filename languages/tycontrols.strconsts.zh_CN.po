@@ -874,6 +874,10 @@ msgstr "插入列"
 msgid "Delete column"
 msgstr "删除列"
 
+#: tycontrols.strconsts.rsrichundodeletetable
+msgid "Delete table"
+msgstr "删除表格"
+
 #: tycontrols.strconsts.rsricheditincomplete
 msgid "The document was not loaded completely, so it cannot be saved."
 msgstr "文档没有完整载入,不能保存。"
@@ -933,6 +937,52 @@ msgstr "纯文本文档只能粘贴文字，不能粘贴图片或带格式的文
 #: tycontrols.strconsts.rsricheditrefusedmemory
 msgid "There is not enough memory to paste this."
 msgstr "内存不足，无法粘贴。"
+
+#: tycontrols.strconsts.rsricheditrefusedpasterows
+msgid "Table rows cannot be pasted over rows of a table: paste them outside the table, or into a cell as its text."
+msgstr "复制的表格行不能粘贴到表格的行上：请粘贴到表格外面，或者粘贴到一个单元格里作为它的文字。"
+
+#: tycontrols.strconsts.rsricheditrefusedreadonly
+msgid "The document is read-only: it cannot be changed."
+msgstr "文档是只读的，不能修改。"
+
+#: tycontrols.strconsts.rsricheditrefusedplaintable
+msgid "A plain text document cannot hold a table."
+msgstr "纯文本文档里不能有表格。"
+
+#: tycontrols.strconsts.rsricheditrefusednotable
+msgid "The caret is not in a table."
+msgstr "光标不在表格里。"
+
+#: tycontrols.strconsts.rsricheditrefusedtableintable
+msgid "A table cannot be inserted into a table."
+msgstr "不能在表格里插入表格。"
+
+#: tycontrols.strconsts.rsricheditrefusedmergedcells
+msgid "This table has merged cells: its rows and columns cannot be inserted or deleted."
+msgstr "这个表格有合并的单元格，不能插入或删除它的行和列。"
+
+#: tycontrols.strconsts.rsricheditrefusednestedtable
+msgid "This table has a table inside one of its cells: its rows and columns cannot be inserted or deleted."
+msgstr "这个表格的单元格里套着另一个表格，不能插入或删除它的行和列。"
+
+#: tycontrols.strconsts.rsricheditrefusedtablenotwhole
+msgid "This table is too large, or not complete in its file, for its rows and columns to be inserted or deleted."
+msgstr "这个表格太大，或者在文件里不完整，不能插入或删除它的行和列。"
+
+#: tycontrols.strconsts.rsricheditrefusedirregularrows
+msgid "The rows of this table do not all have the same number of cells: its columns cannot be inserted or deleted."
+msgstr "这个表格各行的单元格数不一样，不能插入或删除它的列。"
+
+#: tycontrols.strconsts.rsricheditrefusedtablesize
+#, object-pascal-format
+msgid "A table can have 1 to %d rows and 1 to %d columns."
+msgstr "表格可以有 1 到 %d 行、1 到 %d 列。"
+
+#: tycontrols.strconsts.rsricheditrefusedtablecolumns
+#, object-pascal-format
+msgid "This table has as many columns as a table can have (%d)."
+msgstr "这个表格的列数已经是表格能有的最多列数（%d）。"
 
 #: tycontrols.strconsts.rsricheditrefusedlongpara
 msgid "This paragraph is too long to edit here: what is typed past the part shown would not be seen."
