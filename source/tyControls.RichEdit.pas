@@ -5388,6 +5388,7 @@ var
   buf: array of Byte;
   k: Integer;
   n, got: Int64;
+  tail: array[0..4095] of Byte;
 begin
   Result := False;
   ABytes := nil;
@@ -5414,24 +5415,30 @@ begin
         Inc(got, k);
       end;
       { All it said it holds: it may hold more than it said (a size it does not know is told
-        as 0 by some streams, a pipe's seek fails) - read on in pieces until it gives nothing,
-        a byte past the limit refused (and nothing more read). }
+        as 0 by some streams, a pipe's seek fails). Asked into a small buffer first, so that a
+        stream that told the truth - every file - costs no second block of the picture's size;
+        only what it then gives is appended, in pieces until it gives nothing, a byte past the
+        limit refused (and nothing more read). }
       if got = n then
         repeat
-          if got > CRichPictureMaxBytes then
+          // (never more than one byte past the limit is asked for)
+          k := AStream.Read(tail[0], Math.Min(Int64(Length(tail)),
+            Int64(CRichPictureMaxBytes) + 1 - got));
+          if k <= 0 then Break;
+          if got + k > CRichPictureMaxBytes then
           begin
             ABytes := nil;
             EditRefused(rsRichEditRefusedPicture);
             Exit;
           end;
-          if got = Length(ABytes) then
-            SetLength(ABytes, Math.Min(got + Math.Max(Int64(64 * 1024), got div 2),
-              Int64(CRichPictureMaxBytes) + 1));
-          k := AStream.Read(ABytes[got], Length(ABytes) - got);
-          if k > 0 then Inc(got, k);
-        until k <= 0;
-      // (a stream shorter than it said: what it gave)
-      SetLength(ABytes, got);
+          if got + k > Length(ABytes) then
+            SetLength(ABytes, Math.Min(got + Math.Max(Int64(k), got div 2),
+              Int64(CRichPictureMaxBytes)));
+          Move(tail[0], ABytes[got], k);
+          Inc(got, k);
+        until False;
+      // (a stream shorter or longer than it said: what it gave)
+      if got <> Length(ABytes) then SetLength(ABytes, got);
     except
       on EOutOfMemory do
       begin

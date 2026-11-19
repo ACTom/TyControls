@@ -59,6 +59,8 @@ type
     function GetSize: Int64; override;
   public
     BytesGiven: Int64;
+    // where the first read was asked to put its bytes
+    FirstBuffer: Pointer;
     constructor Create(const AData: TBytes; ASize: Int64; ASeekFails: Boolean;
       ATotal: Int64 = -1);
     function Read(var Buffer; Count: Longint): Longint; override;
@@ -422,6 +424,7 @@ var
   p: PByte;
   i: Integer;
 begin
+  if FirstBuffer = nil then FirstBuffer := @Buffer;
   if Count > FTotal - FPos then Count := FTotal - FPos;
   if Count < 0 then Count := 0;
   p := @Buffer;
@@ -1873,6 +1876,7 @@ var
   sized: TSizedStream;
   lying: TLyingStream;
   k: Integer;
+  told: TBytes;
   big: TBytes;
   b: TBitmap;
   missing: string;
@@ -1910,6 +1914,19 @@ begin
     b.Free;
   end;
   CheckRefused('no stream', FRich.InsertPictureFromStream(nil), rsRichEditRefusedNoPicture);
+  // a stream that tells its size truly: its bytes read once, into the block the picture keeps
+  told := NoisePng(300, 300);
+  lying := TLyingStream.Create(told, Length(told), False);
+  try
+    FRich.SelStart := 0;
+    AssertTrue('a PNG from a stream that tells its size', FRich.InsertPictureFromStream(lying));
+    AssertTrue('the picture keeps the very block read into', Pointer(PictureAt(0).Data) =
+      lying.FirstBuffer);
+    AssertEquals('its length', Length(told), Length(PictureAt(0).Data));
+  finally
+    lying.Free;
+  end;
+  FRich.Undo;
   // a stream that says less than it holds: all it holds is read
   for k := 0 to 2 do
   begin
