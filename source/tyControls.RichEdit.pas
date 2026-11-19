@@ -6927,8 +6927,15 @@ end;
 
 procedure TTyCustomRichEdit.DoObjectResize(AObject: TTyRichObject; var AWidthTwips,
   AHeightTwips: Integer; var AAllow: Boolean);
+
+  procedure Fire;
+  begin
+    FOnObjectResize(Self, AObject, AWidthTwips, AHeightTwips, AAllow);
+  end;
+
 begin
-  if Assigned(FOnObjectResize) then FOnObjectResize(Self, AObject, AWidthTwips, AHeightTwips, AAllow);
+  // (the application's code: through the handler bracket - it may call the control, or free it)
+  if Assigned(FOnObjectResize) then CallHandler(@Fire);
 end;
 
 procedure TTyCustomRichEdit.StartResize(AHandle: TTyRichHandle; APos: TTyRichPos;

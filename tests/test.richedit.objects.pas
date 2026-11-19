@@ -121,6 +121,14 @@ type
     function FreshSurface(const ABytes: TBytes; ATw, ATh: Integer): TBGRABitmap;
     procedure OnResize(Sender: TObject; AObject: TTyRichObject; var AWidthTwips,
       AHeightTwips: Integer; var AAllow: Boolean);
+  private
+    // a resize's handler that calls the control (whose nested OnChange frees it), or frees it
+    FRaisedInHandler, FHandlerEnded: Boolean;
+    procedure FreeOnChange(Sender: TObject);
+    procedure ResizeCallsTheControl(Sender: TObject; AObject: TTyRichObject; var AWidthTwips,
+      AHeightTwips: Integer; var AAllow: Boolean);
+    procedure ResizeFreesTheControl(Sender: TObject; AObject: TTyRichObject; var AWidthTwips,
+      AHeightTwips: Integer; var AAllow: Boolean);
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -140,6 +148,7 @@ type
     procedure TestTheBoundsOfAResize;
     procedure TestEscALostCaptureAndAChangeEndADragWithNothingDone;
     procedure TestOnObjectResizeConstrainsOrVetoes;
+    procedure TestAResizeHandlerThatFreesTheControlStopsThere;
     procedure TestTheResizeCommandInTheDocument;
     procedure TestAResizeKeepsNoSecondCopyInTheHistory;
     procedure TestAResizedPictureShowsItsDecodedPixels;
@@ -717,6 +726,73 @@ procedure TTyRichObjectsTest.CheckSilent(const AWhat: string; AResult: Boolean);
 begin
   AssertFalse(AWhat + ': not done', AResult);
   AssertEquals(AWhat + ': nothing told', 0, FRich.Refused);
+end;
+
+procedure TTyRichObjectsTest.FreeOnChange(Sender: TObject);
+begin
+  FreeAndNil(FRich);
+end;
+
+procedure TTyRichObjectsTest.ResizeCallsTheControl(Sender: TObject; AObject: TTyRichObject;
+  var AWidthTwips, AHeightTwips: Integer; var AAllow: Boolean);
+begin
+  FRich.OnChange := @FreeOnChange;
+  try
+    FRich.InsertTable(2, 2);
+  except
+    on Exception do FRaisedInHandler := True;
+  end;
+  FHandlerEnded := True;
+end;
+
+procedure TTyRichObjectsTest.ResizeFreesTheControl(Sender: TObject; AObject: TTyRichObject;
+  var AWidthTwips, AHeightTwips: Integer; var AAllow: Boolean);
+begin
+  FreeAndNil(FRich);
+  FHandlerEnded := True;
+end;
+
+{ OnObjectResize calling the control, whose nested OnChange frees it: nothing is raised into
+  the handler, which runs to its end; OnObjectResize freeing the control: the release returns
+  and touches nothing of it (freed memory poisoned). }
+procedure TTyRichObjectsTest.TestAResizeHandlerThatFreesTheControlStopsThere;
+var
+  i: Integer;
+  rs: TTyRichHandleRects;
+  c: TPoint;
+  raised: Boolean;
+  what: string;
+begin
+  for i := 0 to 1 do
+  begin
+    what := Format('case %d', [i]);
+    if FRich = nil then FRich := NewProbe;
+    PictureDoc(100, 50);
+    if i = 0 then FRich.OnObjectResize := @ResizeCallsTheControl
+    else FRich.OnObjectResize := @ResizeFreesTheControl;
+    FRaisedInHandler := False;
+    FHandlerEnded := False;
+    AssertTrue(what + ': handles to drag', FRich.Handles(rs));
+    c := Centre(rs[rhRight]);
+    FRich.PressAt(c.X, c.Y);
+    AssertTrue(what + ': a resize began', FRich.InResize);
+    FRich.MoveWith(c.X + 20, c.Y, []);
+    raised := False;
+    PoisonFreedMemory(True);
+    try
+      try
+        FRich.ReleaseWith(c.X + 20, c.Y, []);
+      except
+        on Exception do raised := True;
+      end;
+    finally
+      PoisonFreedMemory(False);
+    end;
+    AssertTrue(what + ': freed', FRich = nil);
+    AssertFalse(what + ': the release raised nothing', raised);
+    AssertFalse(what + ': nothing raised into the handler', FRaisedInHandler);
+    AssertTrue(what + ': the handler ran to its end', FHandlerEnded);
+  end;
 end;
 
 procedure TTyRichObjectsTest.OnResize(Sender: TObject; AObject: TTyRichObject;
