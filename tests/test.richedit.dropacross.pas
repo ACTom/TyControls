@@ -116,6 +116,7 @@ type
   public
     Data: RawByteString;
     Position: Int64;
+    Reads: Integer;
     Chunk: Integer;
     NoStat: Boolean;
     function Read(pv: Pointer; cb: DWORD; pcbRead: PDWORD): HRESULT; stdcall;
@@ -633,6 +634,7 @@ begin
   if (Chunk > 0) and (n > Chunk) then n := Chunk;
   if n > 0 then Move(Data[Position + 1], pv^, n);
   Inc(Position, n);
+  Inc(Reads);
   if pcbRead <> nil then pcbRead^ := n;
   if n < cb then Result := S_FALSE else Result := S_OK;
 end;
@@ -2669,10 +2671,13 @@ var
   i, j: Integer;
   p: TPoint;
   what: string;
-  zhong: string;
+  zhong, ru: string;
+  nothing: Boolean;
 begin
   zhong := UTF8Encode(UnicodeString(WideChar($4E2D)));
-  for i := 0 to 9 do
+  // (two locales of two code pages: one of them is not the system's)
+  ru := UTF8Encode(UnicodeString(WideChar($0410)) + UnicodeString(WideChar($0411)));
+  for i := 0 to 11 do
   begin
     what := Format('case %d', [i]);
     Load(FA, 'one two three');
@@ -2724,6 +2729,15 @@ begin
           d.HasAnsi := True;
           d.Locale := $0804;
         end;
+      10:
+        begin
+          d.Ansi := #$C0#$C1;
+          d.HasAnsi := True;
+          d.Locale := $0419;
+        end;
+      11:
+        // its names said to begin past the block's end
+        d.RawDrop := #0#16#0#0#0#0#0#0#0#0#0#0#0#0#0#0#1#0#0#0'x'#0#0#0;
       9:
         begin
           SetLength(d.DibV5, 124 + 16);
@@ -2739,9 +2753,10 @@ begin
     p := Pt(FA, 4);
     e := DROPEFFECT_COPY;
     AssertEquals(what + ': DragEnter answers', S_OK, FA.Target.DragEnter(di, MK_LBUTTON, p, e));
-    if i < 3 then
+    nothing := i in [0, 1, 2, 11];
+    if nothing then
     begin
-      if i < 2 then AssertEquals(what + ': nothing usable', DROPEFFECT_NONE, e);
+      if i <> 2 then AssertEquals(what + ': nothing usable', DROPEFFECT_NONE, e);
       e := DROPEFFECT_COPY;
       AssertEquals(what + ': Drop answers', S_OK, FA.Target.Drop(di, 0, p, e));
       AssertEquals(what + ': nothing', DROPEFFECT_NONE, e);
@@ -2757,6 +2772,8 @@ begin
       case i of
         3, 4, 5, 6, 7: AssertEquals(what + ': the text', 'one NEWtwo three', TextOf(FA));
         8: AssertEquals(what + ': in its locale''s code page', 'one ' + zhong + 'two three',
+             TextOf(FA));
+        10: AssertEquals(what + ': in its locale''s code page', 'one ' + ru + 'two three',
              TextOf(FA));
         9: AssertTrue(what + ': a picture', FA.Document.ObjectAt(4) is TTyRichPicture);
       end;
@@ -2865,6 +2882,7 @@ begin
   AssertEquals('whole', 'abcdefghij', got);
   // no size told: grown by doubling
   ts.Chunk := 64 * 1024;
+  ts.Reads := 0;
   ts.NoStat := True;
   ts.Data := data;
   ts.Position := 0;
@@ -2881,6 +2899,8 @@ begin
   AssertTrue('whole', got = data);
   AssertTrue(Format('a few reallocations (%d), not one a piece (64)', [GReallocs]),
     GReallocs <= 12);
+  // (a growth follows a read that found more: the reads are the pieces and a few more)
+  AssertTrue(Format('the reads: the pieces and a few more (%d)', [ts.Reads]), ts.Reads <= 64 + 40);
   stm := nil;
 end;
 {$ENDIF}
