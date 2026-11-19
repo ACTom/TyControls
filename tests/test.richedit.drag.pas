@@ -659,6 +659,12 @@ begin
   FRich.ReleaseAt(p.X, p.Y);
   AssertEquals('a double press: the word', Int64(4), FRich.SelStart);
   AssertEquals('a double press: its length', Int64(3), FRich.SelLength);
+  // a press on the selection's line before it: a click
+  Sel(4, 3);
+  FRich.PressAt(Mid(1).X, Mid(1).Y);
+  AssertFalse('before it on its line: no drag', FRich.Pending);
+  AssertEquals('before it on its line: collapsed', Int64(0), FRich.SelLength);
+  FRich.ReleaseAt(Mid(1).X, Mid(1).Y);
   // a press outside the selection: a click, then a drag-select
   Sel(4, 3);
   FRich.PressAt(Mid(10).X, Mid(10).Y);
@@ -886,7 +892,7 @@ begin
     p := Pt(14);
     StartDrag(Mid(5), p);
     case i of
-      0: FRich.Press(VK_ESCAPE, [ssLeft]);
+      0: AssertEquals('Esc is taken', 0, FRich.KeyResult(VK_ESCAPE, [ssLeft]));
       1:
         begin
           menus := FRich.MenuShows;
@@ -895,7 +901,14 @@ begin
           AssertEquals('the right press: no menu', menus, FRich.MenuShows);
         end;
       2: FRich.LoseCapture;
-      3: FRich.Press(VK_END, [ssLeft]);
+      3:
+        begin
+          // a key that moves nothing ends it too; then End does what it does
+          FRich.Press(VK_F5, [ssLeft]);
+          AssertFalse('F5: the drag ended', FRich.OwnDrag);
+          AssertEquals('F5: the selection as it was', Int64(3), FRich.SelLength);
+          FRich.Press(VK_END, [ssLeft]);
+        end;
       4: FRich.SelStart := 1;
       5: FRich.Lines.Text := 'new text';
       6: FRich.Document.Execute(TTyRichInsertText.Create(0, 'x'));
@@ -1043,7 +1056,7 @@ var
   y0, y1, dSel, dDrop: Int64;
   other: TDragProbe;
   q: TTyRichPos;
-  m: TRect;
+  m, pr: TRect;
 begin
   s := '';
   for i := 1 to 80 do s := s + 'Line ' + IntToStr(i) + #13#10;
@@ -1086,6 +1099,9 @@ begin
   q := FRich.PositionAtPoint(Mid(1).X, area.Bottom - 1);
   AssertTrue('the mark at the place that came', FRich.Mark(m));
   AssertTrue('the place is far down', q > 200);
+  pr := FRich.PositionRect(q);
+  AssertTrue('the mark on that place', (m.Left <= pr.Left) and (m.Right > pr.Left) and
+    (m.Top = pr.Top));
   FRich.ReleaseWith(Mid(1).X, area.Bottom + 40, []);
   AssertEquals('dropped there: one step', 1, FRich.Document.UndoDepth);
   AssertEquals('the moved word there', 'Line', FRich.SelText);
@@ -1428,6 +1444,7 @@ var
   begin
     before := Dump(d);
     AssertTrue(AWhat + ': runs', d.Execute(ACmd));
+    AssertEquals(AWhat + ': the text''s integrity after it', '', d.Text.CheckIntegrity);
     AssertEquals(AWhat + ': the text', AText, StringReplace(DocText(d), #13, '', [rfReplaceAll]));
     after := Dump(d);
     AssertEquals(AWhat + ': one step', 1, d.UndoDepth);
@@ -1438,6 +1455,7 @@ var
       AssertEquals(AWhat + ': the text''s integrity', '', d.Text.CheckIntegrity);
       d.Redo;
       AssertEquals(AWhat + ': redo exact', after, Dump(d));
+      AssertEquals(AWhat + ': the text''s integrity after the redo', '', d.Text.CheckIntegrity);
     end;
     d.Undo;
     d.ClearUndo;
@@ -1551,8 +1569,9 @@ begin
       [moved, d.HistoryBytes]));
     AssertTrue(Format('the move''s step holds %d bytes', [d.HistoryBytes]),
       d.HistoryBytes < moved div 3);
-    // (and it counts what it holds: a value's place for each of the thousand paragraphs)
-    AssertTrue('the step counts its paragraphs', d.HistoryBytes >= 1000 * 17);
+    { (and it counts what it holds: the pieces the delete keeps and those the fragment keeps -
+      a piece a paragraph each, 24 bytes) }
+    AssertTrue('the step counts both', d.HistoryBytes >= 2 * 1000 * 24);
     added := t.AddedBytes;
     AssertTrue('a copy', d.Execute(TTyRichCopy.Create(t.ParaStart(10), t.ParaStart(1010) -
       t.ParaStart(10), t.Length)));
@@ -1579,6 +1598,7 @@ begin
     t := d.Text;
     AssertTrue('a move', d.Execute(TTyRichMove.Create(t.ParaStart(10), t.ParaStart(20) -
       t.ParaStart(10), t.ParaStart(150))));
+    AssertEquals('the move: the text''s integrity', '', t.CheckIntegrity);
     saved := SaveDoc(d);
     AssertTrue('an untouched paragraph is the file''s bytes',
       Pos('\pard\f0 Paragraph 100 of the \b file\b0.\par', saved) > 0);
@@ -1591,6 +1611,7 @@ begin
     AssertEquals('redone and undone: the file', file0, SaveDoc(d));
     AssertTrue('a copy', d.Execute(TTyRichCopy.Create(t.ParaStart(10), t.ParaStart(20) -
       t.ParaStart(10), t.ParaStart(150))));
+    AssertEquals('the copy: the text''s integrity', '', t.CheckIntegrity);
     d.Undo;
     AssertEquals('copied and undone: the file', file0, SaveDoc(d));
   finally
