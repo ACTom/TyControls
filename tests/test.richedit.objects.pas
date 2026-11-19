@@ -36,6 +36,34 @@ type
     procedure MoveWith(X, Y: Integer; AShift: TShiftState);
     procedure ReleaseWith(X, Y: Integer; AShift: TShiftState);
     procedure LoseCapture;
+    procedure RightPressAt(X, Y: Integer);
+  protected
+    function LeftButtonHeld: Boolean; override;
+    procedure MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
+  public
+    { The left button as the system has it when the capture changes (held unless the test
+      says it is up); the capture taken away at the start of the button-up's own handling. }
+    ButtonUp: Boolean;
+    CaptureInsideUp: Boolean;
+  end;
+
+  { A stream that says it holds ASize bytes and counts the reads asked of it (it gives none). }
+  TSizedStream = class(TStream)
+  private
+    FSize: Int64;
+  protected
+    function GetSize: Int64; override;
+  public
+    Reads: Integer;
+    constructor Create(ASize: Int64);
+    function Read(var Buffer; Count: Longint): Longint; override;
+    function Seek(const Offset: Int64; Origin: TSeekOrigin): Int64; override;
+  end;
+
+  // the document's load state, as a reader sets it
+  TLoadStateAccess = class(TTyRichDocBuilder)
+  public
+    class procedure Put(ADoc: TTyRichDocument; AIncomplete: Boolean);
   end;
 
   TTyRichObjectsTest = class(TTestCase)
@@ -46,6 +74,8 @@ type
     FResizeCalls: Integer;
     FResizeAllow: Boolean;
     FResizeSetW, FResizeSetH: Integer;
+    // the handler gives FResizeSetW x FResizeSetH whatever they are
+    FResizeForce: Boolean;
     FResizeSeen: TTyRichObject;
     FResizeSeenW, FResizeSeenH: Integer;
     function NewProbe: TObjProbe;
@@ -63,6 +93,13 @@ type
     procedure Drag(AHandle: TTyRichHandle; ADX, ADY: Integer; AShift: TShiftState = []);
     procedure CheckRefused(const AWhat: string; AResult: Boolean; const AReason: string);
     procedure CheckSilent(const AWhat: string; AResult: Boolean);
+    { 'first line', then 'ab' + a picture of ABytes shown ATw x ATh twips + 'cd': its place. }
+    function PictureDocOf(const ABytes: TBytes; ATw, ATh: Integer): TTyRichPos;
+    { The background work run out and a full repaint: the surface as it settles. }
+    procedure Settle;
+    { What a new control shows for PictureDocOf(ABytes, ATw, ATh), settled, with nothing
+      selected: a copy of its surface (the caller frees it). }
+    function FreshSurface(const ABytes: TBytes; ATw, ATh: Integer): TBGRABitmap;
     procedure OnResize(Sender: TObject; AObject: TTyRichObject; var AWidthTwips,
       AHeightTwips: Integer; var AAllow: Boolean);
   protected
@@ -91,6 +128,15 @@ type
     // inserting
     procedure TestInsertFromEachDoorAndFormat;
     procedure TestInsertRefusals;
+    // the corrections
+    procedure TestAResizedPictureBecomesSharpByItself;
+    procedure TestPicturesOfOneBytesAtTwoSizesSettle;
+    procedure TestAPressOnAHandleOutsideTheBoundsChangesNothing;
+    procedure TestTheHandlersSizeKeepsTheBounds;
+    procedure TestASelectionChangeEndsTheDrag;
+    procedure TestAHandleCutByTheViewIsNotPressedThere;
+    procedure TestTheReleaseFinishesInEveryCaptureOrder;
+    procedure TestAZoomAndAScrollDuringOrAroundTheHandles;
   end;
 
 implementation
@@ -322,6 +368,81 @@ begin
   CaptureChanged;
 end;
 
+procedure TObjProbe.RightPressAt(X, Y: Integer);
+begin
+  MouseDown(mbRight, [ssRight], X, Y);
+  MouseUp(mbRight, [], X, Y);
+end;
+
+function TObjProbe.LeftButtonHeld: Boolean;
+begin
+  Result := not ButtonUp;
+end;
+
+procedure TObjProbe.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+begin
+  if CaptureInsideUp and (Button = mbLeft) then CaptureChanged;
+  inherited MouseUp(Button, Shift, X, Y);
+end;
+
+constructor TSizedStream.Create(ASize: Int64);
+begin
+  inherited Create;
+  FSize := ASize;
+end;
+
+function TSizedStream.GetSize: Int64;
+begin
+  Result := FSize;
+end;
+
+function TSizedStream.Read(var Buffer; Count: Longint): Longint;
+begin
+  Inc(Reads);
+  Result := 0;
+end;
+
+function TSizedStream.Seek(const Offset: Int64; Origin: TSeekOrigin): Int64;
+begin
+  Result := 0;
+end;
+
+class procedure TLoadStateAccess.Put(ADoc: TTyRichDocument; AIncomplete: Boolean);
+begin
+  SetLoadState(ADoc, False, AIncomplete);
+end;
+
+{ Vertical stripes of 3 black and 3 white pixels: what a picture blurred by scaling up a
+  smaller copy shows grey. }
+function StripePng(AW, AH: Integer): TBytes;
+var
+  b: TBGRABitmap;
+  st: TBytesStream;
+  x: Integer;
+begin
+  b := TBGRABitmap.Create(AW, AH, BGRAWhite);
+  st := TBytesStream.Create;
+  try
+    x := 0;
+    while x < AW do
+    begin
+      b.FillRect(x, 0, x + 3, AH, BGRABlack, dmSet);
+      Inc(x, 6);
+    end;
+    b.SaveToStreamAs(st, ifPng);
+    Result := Copy(st.Bytes, 0, st.Size);
+  finally
+    st.Free;
+    b.Free;
+  end;
+end;
+
+function SameSurface(A, B: TBGRABitmap): Boolean;
+begin
+  Result := (A <> nil) and (B <> nil) and (A.Width = B.Width) and (A.Height = B.Height) and
+    CompareMem(A.Data, B.Data, A.Width * A.Height * SizeOf(TBGRAPixel));
+end;
+
 { ---- fixture ---- }
 
 procedure TTyRichObjectsTest.SetUp;
@@ -444,6 +565,48 @@ begin
   PaintAll;
 end;
 
+function TTyRichObjectsTest.PictureDocOf(const ABytes: TBytes; ATw, ATh: Integer): TTyRichPos;
+var
+  pic: TTyRichPicture;
+begin
+  FRich.Lines.Text := 'first line'#13#10'abcd';
+  Result := FRich.Document.Text.ParaStart(1) + 2;
+  pic := TTyRichPicture.Create(rpfPng, ABytes, ATw, ATh);
+  AssertTrue('the picture goes in', FRich.Document.Execute(TTyRichInsertObject.Create(Result, pic)));
+  FRich.Document.ClearUndo;
+  FRich.Modified := False;
+  FRich.UpdateView;
+end;
+
+procedure TTyRichObjectsTest.Settle;
+var
+  n: Integer;
+begin
+  PaintAll;
+  n := 0;
+  while FRich.Step and (n < 50) do Inc(n);
+  FRich.RedrawAll;
+  PaintAll;
+end;
+
+function TTyRichObjectsTest.FreshSurface(const ABytes: TBytes; ATw, ATh: Integer): TBGRABitmap;
+var
+  keep: TObjProbe;
+begin
+  keep := FRich;
+  FRich := NewProbe;
+  try
+    FRich.SetBounds(0, 0, keep.Width, keep.Height);
+    PictureDocOf(ABytes, ATw, ATh);
+    FRich.SelStart := 0;
+    Settle;
+    Result := FRich.Surf.Duplicate as TBGRABitmap;
+  finally
+    FRich.Free;
+    FRich := keep;
+  end;
+end;
+
 procedure TTyRichObjectsTest.SelectAt(APos: TTyRichPos);
 begin
   FRich.SelStart := APos;
@@ -474,7 +637,8 @@ begin
   AssertTrue('handles to drag', FRich.Handles(rs));
   c := Centre(rs[AHandle]);
   FRich.PressAt(c.X, c.Y, AShift);
-  AssertTrue('a resize began', FRich.InResize);
+  AssertTrue(Format('a resize began at handle %d (%d, %d)', [Ord(AHandle), c.X, c.Y]),
+    FRich.InResize);
   FRich.MoveWith(c.X + ADX, c.Y + ADY, AShift);
   FRich.ReleaseWith(c.X + ADX, c.Y + ADY, AShift);
   AssertFalse('the resize ended', FRich.InResize);
@@ -504,6 +668,12 @@ begin
   FResizeSeenW := AWidthTwips;
   FResizeSeenH := AHeightTwips;
   AAllow := FResizeAllow;
+  if FResizeForce then
+  begin
+    AWidthTwips := FResizeSetW;
+    AHeightTwips := FResizeSetH;
+    Exit;
+  end;
   if FResizeSetW > 0 then AWidthTwips := FResizeSetW;
   if FResizeSetH > 0 then AHeightTwips := FResizeSetH;
 end;
@@ -855,6 +1025,8 @@ end;
   as before. }
 procedure TTyRichObjectsTest.TestNoHandlesWhereNothingCanBeResized;
 var
+  cmd: TTyRichResizeObject;
+  k: TTyRichPos;
   p: TTyRichPos;
   rs: TTyRichHandleRects;
   got: TTyRichHandle;
@@ -894,8 +1066,45 @@ begin
   PaintAll;
   AssertFalse('it cannot be resized', FRich.Document.ObjectAt(1).CanResize);
   AssertFalse('no handles for it', FRich.Handles(rs));
-  AssertTrue('its command is refused', not TTyRichResizeObject.Create(1, 500, 500).CanExecute(
-    FRich.Document));
+  cmd := TTyRichResizeObject.Create(1, 500, 500);
+  try
+    AssertFalse('its command is refused', cmd.CanExecute(FRich.Document));
+  finally
+    cmd.Free;
+  end;
+  // a document that takes no edit (a load that stopped half way): the frame, no handles
+  p := PictureDoc(100, 50);
+  AssertTrue('editable: handles', FRich.Handles(rs));
+  TLoadStateAccess.Put(FRich.Document, True);
+  try
+    FRich.RedrawAll;
+    PaintAll;
+    AssertFalse('a document that takes no edit: no handles', FRich.Handles(rs));
+  finally
+    TLoadStateAccess.Put(FRich.Document, False);
+  end;
+  PaintAll;
+  AssertTrue('taking edits again: handles', FRich.Handles(rs));
+  // a picture in a row that holds a nested table: kept as the file has it, no handles
+  LoadRtf(Head + BS + 'pard before' + BS + 'par' + #13#10 + BS + 'trowd' + BS + 'cellx4000' + BS +
+    'cellx8000' + #13#10 + BS + 'pard' + BS + 'intbl' + BS + 'itap1 x{' + BS + 'pict' + BS +
+    'pngblip' + BS + 'picwgoal900' + BS + 'pichgoal450 ' + HexOf(PngOf(60, 30)) + '}y' + BS +
+    'par' + #13#10 + BS + 'pard' + BS + 'intbl' + BS + 'itap2 na' + BS + 'nestcell nb' + BS +
+    'nestcell{' + BS + '*' + BS + 'nesttableprops' + BS + 'trowd' + BS + 'cellx1500' + BS +
+    'cellx3000' + BS + 'nestrow}{' + BS + 'nonesttables' + BS + 'par}' + #13#10 + BS + 'pard' +
+    BS + 'intbl' + BS + 'itap1 ' + BS + 'cell b' + BS + 'cell' + BS + 'row' + #13#10 + BS +
+    'pard after' + BS + 'par}');
+  p := -1;
+  for k := 0 to FRich.Document.Text.Length - 1 do
+    if FRich.Document.ObjectAt(k) is TTyRichPicture then p := k;
+  AssertTrue('a picture in the row', p >= 0);
+  AssertFalse('the row cannot change', FRich.Document.CanChange(p, 0));
+  SelectAt(p);
+  PaintAll;
+  AssertFalse('a row that holds a nested table: no handles', FRich.Handles(rs));
+  AssertFalse('nor is the command taken', FRich.Document.Execute(TTyRichResizeObject.Create(p,
+    1200, 600)));
+  AssertEquals('the picture as it was', 900, PictureAt(p).WidthTwips);
 end;
 
 { Two pictures side by side: the handles of the selected one reach over the other; a press
@@ -1327,8 +1536,10 @@ begin
     AssertTrue(Format('the bytes once: %d against %d', [after, one]), after < one + 64 * 1024);
     AssertTrue('under the limit', after <= d.MaxUndoBytes);
     // undone all the way, then let go: back to nothing
-    for i := 1 to 21 do d.Undo;
-    AssertEquals('all undone', 1500, 1500);
+    for i := 1 to 20 do d.Undo;
+    AssertTrue('every resize undone: the first picture itself', d.ObjectAt(1) = pic);
+    AssertEquals('every resize undone: its width', 1500, pic.WidthTwips);
+    d.Undo;
     d.ClearUndo;
     AssertEquals('nothing held', 0, d.HistoryBytes);
     // two pictures that share their bytes, each inserted as a step of its own
@@ -1346,8 +1557,8 @@ begin
   end;
 end;
 
-{ The resized picture shows the pixels the old one had decoded: no decode, no empty box at the
-  release's paint; a smaller size is made from the reduced copy kept, with no decode. }
+{ The resized picture shows the pixels the old one had decoded at once: no decode and no empty
+  box at the release's paint; its own image at the new size is made by the background work. }
 procedure TTyRichObjectsTest.TestAResizedPictureShowsItsDecodedPixels;
 var
   p: TTyRichPos;
@@ -1374,9 +1585,10 @@ begin
   AssertEquals('the picture''s red', 200, FRich.Surf.GetPixel(c.X, c.Y).red);
   while FRich.Step do;
   PaintAll;
-  AssertEquals('an enlargement: drawn from the full image, no decode', decodes,
+  AssertEquals('an enlargement: its own image, made in the background', decodes + 1,
     FRich.Layouter.PictureDecodes);
-  // smaller: from the reduced copy, no decode
+  AssertEquals('nothing waits', 0, FRich.Pending);
+  // smaller: the reduced copy stands in
   FreeAndNil(FRich);
   FRich := NewProbe;
   p := PictureDoc(200, 100);
@@ -1396,9 +1608,12 @@ begin
   AssertTrue('handles', FRich.Handles(rs));
   c := Point(Centre(rs[rhBottomRight]).X - 10, Centre(rs[rhBottomRight]).Y - 10);
   AssertFalse('smaller: no empty box', SamePx(st.PlaceholderFill, FRich.Surf.GetPixel(c.X, c.Y)));
+  AssertEquals('smaller: no decode at the release', decodes, FRich.Layouter.PictureDecodes);
   while FRich.Step do;
   PaintAll;
-  AssertEquals('smaller: no decode', decodes, FRich.Layouter.PictureDecodes);
+  AssertEquals('smaller: its own image, decoded once in the background', decodes + 1,
+    FRich.Layouter.PictureDecodes);
+  AssertEquals('smaller: nothing waits', 0, FRich.Pending);
   AssertTrue('smaller: the picture', PictureAt(p).WidthTwips < 3000);
 end;
 
@@ -1598,6 +1813,7 @@ end;
   place a paste could not go; CanInsertPicture answers as the inserts. }
 procedure TTyRichObjectsTest.TestInsertRefusals;
 var
+  sized: TSizedStream;
   big: TBytes;
   b: TBitmap;
   missing: string;
@@ -1635,6 +1851,15 @@ begin
     b.Free;
   end;
   CheckRefused('no stream', FRich.InsertPictureFromStream(nil), rsRichEditRefusedNoPicture);
+  // a stream over the bound: refused from its size, nothing of it read
+  sized := TSizedStream.Create(Int64(CRichPictureMaxBytes) + 1);
+  try
+    CheckRefused('a stream over the bound', FRich.InsertPictureFromStream(sized),
+      rsRichEditRefusedPicture);
+    AssertEquals('nothing of it read', 0, sized.Reads);
+  finally
+    sized.Free;
+  end;
   // a PNG whose header promises more pixels than a picture may have
   big := PngOf(4, 4);
   big[16] := $00; big[17] := $01; big[18] := $00; big[19] := $00;
@@ -1670,6 +1895,386 @@ begin
   end;
   AssertTrue('Can: yes again', FRich.CanInsertPicture);
   AssertTrue('and it goes in', FRich.InsertPictureFromFile(TempFile('ok.png', PngOf(4, 4))));
+end;
+
+{ A picture shown reduced and made larger is shown at once from the pixels at hand, then gets
+  its own image at the new size in the background - the very pixels a new control shows for
+  it; a resize undone and redone, any number of times, comes back to those pixels too. }
+procedure TTyRichObjectsTest.TestAResizedPictureBecomesSharpByItself;
+var
+  bytes: TBytes;
+  p: TTyRichPos;
+  decodes, standIns: Int64;
+  fresh: TBGRABitmap;
+  i: Integer;
+
+  procedure CheckLikeFresh(const AWhat: string; ATw, ATh: Integer);
+  begin
+    FRich.SelStart := 0;
+    Settle;
+    AssertEquals(AWhat + ': nothing waits', 0, FRich.Pending);
+    fresh := FreshSurface(bytes, ATw, ATh);
+    try
+      AssertTrue(AWhat + ': the pixels a new control shows', SameSurface(fresh, FRich.Surf));
+    finally
+      fresh.Free;
+    end;
+  end;
+
+begin
+  bytes := StripePng(2000, 1500);
+  FRich.SetBounds(0, 0, 1000, 900);
+  // 200 x 150 pixels: shown reduced, the full image let go
+  p := PictureDocOf(bytes, 3000, 2250);
+  SelectAt(p);
+  Settle;
+  decodes := FRich.Layouter.PictureDecodes;
+  standIns := FRich.Layouter.PictureStandIns;
+  Drag(rhBottomRight, 600, 450);
+  AssertEquals('four times as wide', 12000, PictureAt(p).WidthTwips);
+  PaintAll;
+  AssertEquals('the release''s paint decodes nothing', decodes, FRich.Layouter.PictureDecodes);
+  AssertTrue('the pixels at hand stand in', FRich.Layouter.PictureStandIns > standIns);
+  AssertTrue('its own image waits for the background', FRich.Pending > 0);
+  Settle;
+  AssertEquals('one decode in the background', decodes + 1, FRich.Layouter.PictureDecodes);
+  CheckLikeFresh('larger', 12000, 9000);
+  // undone: the picture as it was, as a new control shows it
+  FRich.Undo;
+  CheckLikeFresh('undone', 3000, 2250);
+  // smaller, undone, redone - back and forth
+  SelectAt(p);
+  PaintAll;
+  Drag(rhBottomRight, -100, -75);
+  AssertEquals('half as wide', 1500, PictureAt(p).WidthTwips);
+  CheckLikeFresh('smaller', 1500, 1125);
+  for i := 1 to 3 do
+  begin
+    FRich.Undo;
+    Settle;
+    FRich.Redo;
+    Settle;
+  end;
+  CheckLikeFresh('redone three times', 1500, 1125);
+  FRich.Undo;
+  CheckLikeFresh('undone at last', 3000, 2250);
+end;
+
+{ Two pictures of one block of bytes shown at two sizes each have their own image: once the
+  background work has run, repaints scale and decode nothing and nothing waits. }
+procedure TTyRichObjectsTest.TestPicturesOfOneBytesAtTwoSizesSettle;
+var
+  bytes: TBytes;
+  scales, decodes: Int64;
+  i: Integer;
+begin
+  bytes := StripePng(800, 600);
+  FRich.SetBounds(0, 0, 1000, 900);
+  FRich.Lines.Text := 'ab';
+  AssertTrue('one', FRich.Document.Execute(TTyRichInsertObject.Create(1,
+    TTyRichPicture.Create(rpfPng, bytes, 6000, 4500))));
+  AssertTrue('the other, of the same bytes', FRich.Document.Execute(TTyRichInsertObject.Create(2,
+    TTyRichPicture.Create(rpfPng, bytes, 1500, 1125))));
+  Settle;
+  AssertEquals('nothing waits', 0, FRich.Pending);
+  scales := FRich.Layouter.PictureScales;
+  decodes := FRich.Layouter.PictureDecodes;
+  for i := 1 to 10 do
+  begin
+    FRich.RedrawAll;
+    PaintAll;
+  end;
+  AssertEquals('ten repaints scale nothing', scales, FRich.Layouter.PictureScales);
+  AssertEquals('ten repaints decode nothing', decodes, FRich.Layouter.PictureDecodes);
+  AssertEquals('nothing waits after them', 0, FRich.Pending);
+  AssertFalse('no background work left', FRich.Step);
+end;
+
+{ A press and a release on a handle without a move change nothing - also for a picture wider
+  than the room or smaller than the least: no step, not Modified, no event; a drag then makes
+  such a picture only smaller (the wide one) or only larger (the small one). }
+procedure TTyRichObjectsTest.TestAPressOnAHandleOutsideTheBoundsChangesNothing;
+const
+  Zooms: array[0..1] of Integer = (100, 150);
+  PPIs: array[0..1] of Integer = (96, 144);
+var
+  z, i, kind, n: Integer;
+  p: TTyRichPos;
+  old: TTyRichPicture;
+  rs: TTyRichHandleRects;
+  h: TTyRichHandle;
+  c: TPoint;
+  tw: TRect;
+  what: string;
+begin
+  FRich.OnObjectResize := @OnResize;
+  for z := 0 to 1 do
+    for i := 0 to 1 do
+      for kind := 0 to 1 do
+      begin
+        what := Format('%d %%, %d PPI, %d', [Zooms[z], PPIs[i], kind]);
+        FreeAndNil(FRich);
+        FRich := NewProbe;
+        FRich.Font.PixelsPerInch := PPIs[i];
+        FRich.Zoom := Zooms[z];
+        FRich.OnObjectResize := @OnResize;
+        FResizeCalls := 0;
+        // wider than the 400-pixel window's text, or a 16 x 16 icon (under the least)
+        if kind = 0 then p := PictureDocOf(PngOf(40, 20), 9000, 4500)
+        else p := PictureDocOf(PngOf(16, 16), 240, 240);
+        old := PictureAt(p);
+        SelectAt(p);
+        PaintAll;
+        AssertTrue(what + ': handles', FRich.Handles(rs));
+        tw := FRich.TextWindow;
+        n := 0;
+        for h := Low(TTyRichHandle) to High(TTyRichHandle) do
+        begin
+          c := Centre(rs[h]);
+          if not PtInRect(tw, c) then Continue;
+          Inc(n);
+          FRich.PressAt(c.X, c.Y);
+          AssertTrue(what + ': a resize', FRich.InResize);
+          FRich.ReleaseWith(c.X, c.Y, []);
+        end;
+        AssertTrue(what + ': handles pressed', n >= 1);
+        AssertEquals(what + ': no step', 0, FRich.Document.UndoDepth);
+        AssertFalse(what + ': not Modified', FRich.Modified);
+        AssertEquals(what + ': no event', 0, FResizeCalls);
+        AssertTrue(what + ': the same object', FRich.Document.ObjectAt(p) = old);
+        if kind = 0 then
+        begin
+          // a left handle the view shows (the picture may be taller than the view)
+          h := rhLeft;
+          if PtInRect(tw, Centre(rs[rhTopLeft])) then h := rhTopLeft
+          else if PtInRect(tw, Centre(rs[rhBottomLeft])) then h := rhBottomLeft;
+          // outward: it cannot grow past where it is
+          Drag(h, -30, 30 * (Ord(h = rhBottomLeft) - Ord(h = rhTopLeft)));
+          AssertEquals(what + ': not wider', 9000, PictureAt(p).WidthTwips);
+          AssertEquals(what + ': no step for it', 0, FRich.Document.UndoDepth);
+          Drag(h, 30, 30 * (Ord(h = rhTopLeft) - Ord(h = rhBottomLeft)));
+          AssertTrue(what + ': narrower', PictureAt(p).WidthTwips < 9000);
+        end
+        else
+        begin
+          // inward: it cannot shrink past where it is
+          Drag(rhBottomRight, -10, -10);
+          AssertEquals(what + ': not smaller', 240, PictureAt(p).WidthTwips);
+          AssertEquals(what + ': no step for it', 0, FRich.Document.UndoDepth);
+          Drag(rhBottomRight, 30, 30);
+          AssertTrue(what + ': larger', PictureAt(p).WidthTwips > 240);
+        end;
+        AssertEquals(what + ': one step', 1, FRich.Document.UndoDepth);
+      end;
+end;
+
+{ What OnObjectResize gives goes through the drag's bounds: nothing at 0 or below the least,
+  no wider than the room, no taller than 22 inches. }
+procedure TTyRichObjectsTest.TestTheHandlersSizeKeepsTheBounds;
+const
+  Ws: array[0..2] of Integer = (0, -5, MaxInt);
+var
+  i: Integer;
+  p: TTyRichPos;
+  room: Integer;
+begin
+  // the room: what a drag far to the right comes to
+  p := PictureDoc(100, 50);
+  Drag(rhRight, 2000, 0);
+  room := PictureAt(p).WidthTwips;
+  AssertTrue('the room is wider than the picture', room > 1500);
+  for i := 0 to 2 do
+  begin
+    FreeAndNil(FRich);
+    FRich := NewProbe;
+    p := PictureDoc(100, 50);
+    FRich.OnObjectResize := @OnResize;
+    FResizeForce := True;
+    FResizeSetW := Ws[i];
+    FResizeSetH := Ws[i];
+    Drag(rhRight, 20, 0);
+    if Ws[i] <= 0 then
+    begin
+      AssertEquals(Format('%d: the least width', [Ws[i]]), CRichObjectMinTwips, PictureAt(p).WidthTwips);
+      AssertEquals(Format('%d: the least height', [Ws[i]]), CRichObjectMinTwips, PictureAt(p).HeightTwips);
+    end
+    else
+    begin
+      AssertEquals('MaxInt: as wide as the room', room, PictureAt(p).WidthTwips);
+      AssertEquals('MaxInt: 22 inches high', CRichObjectMaxTwips, PictureAt(p).HeightTwips);
+    end;
+    AssertEquals(Format('%d: one step', [Ws[i]]), 1, FRich.Document.UndoDepth);
+  end;
+  FResizeForce := False;
+end;
+
+{ A press of another button, a key that is not a modifier, a selection set by code during the
+  drag end it with nothing done; Shift does not. }
+procedure TTyRichObjectsTest.TestASelectionChangeEndsTheDrag;
+var
+  p: TTyRichPos;
+  rs: TTyRichHandleRects;
+  c: TPoint;
+  kind: Integer;
+begin
+  for kind := 0 to 3 do
+  begin
+    FreeAndNil(FRich);
+    FRich := NewProbe;
+    p := PictureDoc(100, 50);
+    AssertTrue('handles', FRich.Handles(rs));
+    c := Centre(rs[rhBottomRight]);
+    FRich.PressAt(c.X, c.Y);
+    FRich.MoveWith(c.X + 20, c.Y + 10, []);
+    case kind of
+      0: FRich.RightPressAt(10, 10);
+      1: FRich.Press(VK_END, []);
+      2: FRich.SelStart := 0;
+    else
+      FRich.Press(VK_SHIFT, [ssShift]);
+    end;
+    FRich.ReleaseWith(c.X + 20, c.Y + 10, []);
+    if kind < 3 then
+    begin
+      AssertEquals(IntToStr(kind) + ': no step', 0, FRich.Document.UndoDepth);
+      AssertEquals(IntToStr(kind) + ': as it was', 1500, PictureAt(p).WidthTwips);
+    end
+    else
+      AssertEquals('Shift: the drag went on', 1, FRich.Document.UndoDepth);
+  end;
+end;
+
+{ A handle cut by the view's edge is pressed only where it is shown. }
+procedure TTyRichObjectsTest.TestAHandleCutByTheViewIsNotPressedThere;
+var
+  rs: TTyRichHandleRects;
+  tw: TRect;
+  got: TTyRichHandle;
+  x: Integer;
+begin
+  FRich.Lines.Text := 'abcd';
+  AssertTrue('a picture first', FRich.Document.Execute(TTyRichInsertObject.Create(0,
+    TTyRichPicture.Create(rpfPng, PngOf(100, 50), 1500, 750))));
+  SelectAt(0);
+  PaintAll;
+  AssertTrue('handles', FRich.Handles(rs));
+  tw := FRich.TextWindow;
+  AssertTrue('the top handle reaches above the text', rs[rhTop].Top < tw.Top);
+  x := Centre(rs[rhTop]).X;
+  AssertFalse('above the text: no handle', FRich.HandleAt(x, tw.Top - 1, got));
+  AssertTrue('above the text: no size cursor', FRich.CursorFor(x, tw.Top - 1) <> crSizeNS);
+  FRich.PressAt(x, tw.Top - 1);
+  AssertFalse('above the text: no resize', FRich.InResize);
+  FRich.ReleaseAt(x, tw.Top - 1);
+  SelectAt(0);
+  PaintAll;
+  AssertTrue('on its shown part: the handle', FRich.HandleAt(x, tw.Top, got) and (got = rhTop));
+end;
+
+{ The release ends the drag once, at its place, whether the capture lets go before, inside or
+  after the button-up; a capture taken away with the button down changes nothing. }
+procedure TTyRichObjectsTest.TestTheReleaseFinishesInEveryCaptureOrder;
+var
+  p: TTyRichPos;
+  rs: TTyRichHandleRects;
+  c: TPoint;
+  order: Integer;
+begin
+  for order := 0 to 3 do
+  begin
+    FreeAndNil(FRich);
+    FRich := NewProbe;
+    p := PictureDoc(100, 50);
+    AssertTrue('handles', FRich.Handles(rs));
+    c := Centre(rs[rhBottomRight]);
+    FRich.PressAt(c.X, c.Y);
+    FRich.MoveWith(c.X + 20, c.Y + 10, []);
+    case order of
+      0:
+        begin
+          FRich.ButtonUp := True;
+          FRich.LoseCapture;
+          FRich.ReleaseWith(c.X + 20, c.Y + 10, []);
+        end;
+      1:
+        begin
+          FRich.ButtonUp := True;
+          FRich.CaptureInsideUp := True;
+          FRich.ReleaseWith(c.X + 20, c.Y + 10, []);
+        end;
+      2:
+        begin
+          FRich.ReleaseWith(c.X + 20, c.Y + 10, []);
+          FRich.ButtonUp := True;
+          FRich.LoseCapture;
+        end;
+    else
+      begin
+        // taken away with the button down
+        FRich.LoseCapture;
+        AssertFalse('taken away: the drag ended', FRich.InResize);
+        FRich.ButtonUp := True;
+        FRich.ReleaseWith(c.X + 20, c.Y + 10, []);
+      end;
+    end;
+    AssertFalse(IntToStr(order) + ': no drag left', FRich.InResize);
+    if order < 3 then
+    begin
+      AssertEquals(IntToStr(order) + ': one step', 1, FRich.Document.UndoDepth);
+      AssertEquals(IntToStr(order) + ': at the release', 1800, PictureAt(p).WidthTwips);
+    end
+    else
+      AssertEquals('taken away: no step', 0, FRich.Document.UndoDepth);
+  end;
+end;
+
+{ A zoom during a drag ends it with nothing done; the handles go with the text when the view
+  scrolls: the surface after a scroll is what a full repaint draws. }
+procedure TTyRichObjectsTest.TestAZoomAndAScrollDuringOrAroundTheHandles;
+var
+  p: TTyRichPos;
+  rs: TTyRichHandleRects;
+  c: TPoint;
+  kept: TBGRABitmap;
+  s: string;
+  i: Integer;
+  pic: TTyRichPicture;
+begin
+  p := PictureDoc(100, 50);
+  AssertTrue('handles', FRich.Handles(rs));
+  c := Centre(rs[rhBottomRight]);
+  FRich.PressAt(c.X, c.Y);
+  FRich.MoveWith(c.X + 20, c.Y + 10, []);
+  FRich.Zoom := 150;
+  AssertFalse('a zoom ends the drag', FRich.InResize);
+  FRich.ReleaseWith(c.X + 20, c.Y + 10, []);
+  AssertEquals('a zoom: no step', 0, FRich.Document.UndoDepth);
+  AssertEquals('a zoom: as it was', 1500, PictureAt(p).WidthTwips);
+  // a long text with the picture in its fifth paragraph, scrolled by a few pixels each way
+  FRich.Zoom := 100;
+  s := '';
+  for i := 1 to 60 do s := s + 'line ' + IntToStr(i) + #13#10;
+  FRich.Lines.Text := s;
+  p := FRich.Document.Text.ParaStart(4) + 2;
+  pic := TTyRichPicture.Create(rpfPng, PngOf(100, 50), 1500, 750);
+  AssertTrue('the picture', FRich.Document.Execute(TTyRichInsertObject.Create(p, pic)));
+  SelectAt(p);
+  PaintAll;
+  AssertTrue('handles', FRich.Handles(rs));
+  for i := 1 to 4 do
+  begin
+    if Odd(i) then FRich.ScrollViewBy(7) else FRich.ScrollViewBy(-3);
+    PaintAll;
+    kept := FRich.Surf.Duplicate as TBGRABitmap;
+    try
+      FRich.RedrawAll;
+      PaintAll;
+      AssertTrue(Format('scroll %d: the surface is a full repaint''s', [i]), SameSurface(kept,
+        FRich.Surf));
+    finally
+      kept.Free;
+    end;
+  end;
 end;
 
 initialization

@@ -798,7 +798,7 @@ msgid "A plain text document cannot hold a picture."
 msgstr ""
 
 #: tycontrols.strconsts.rsricheditrefusedmetafile
-msgid "A metafile (WMF or EMF) cannot be inserted: it could only be shown as an empty frame."
+msgid "A metafile (WMF or EMF) cannot be inserted as a picture."
 msgstr ""
 
 #: tycontrols.strconsts.rsricheditrefusednopicture

@@ -955,8 +955,8 @@ msgid "A plain text document cannot hold a picture."
 msgstr "纯文本文档里不能有图片。"
 
 #: tycontrols.strconsts.rsricheditrefusedmetafile
-msgid "A metafile (WMF or EMF) cannot be inserted: it could only be shown as an empty frame."
-msgstr "图元文件（WMF 或 EMF）不能插入：它只能显示成一个空框。"
+msgid "A metafile (WMF or EMF) cannot be inserted as a picture."
+msgstr "图元文件（WMF 或 EMF）不能作为图片插入。"
 
 #: tycontrols.strconsts.rsricheditrefusednopicture
 msgid "This is not a picture that can be read."
@@ -965,7 +965,7 @@ msgstr "这不是能读取的图片。"
 #: tycontrols.strconsts.rsricheditrefusedpicturefile
 #, object-pascal-format
 msgid "The picture file cannot be read: %s"
-msgstr "图片文件读不了：%s"
+msgstr "无法读取图片文件：%s"
 
 #: tycontrols.strconsts.rsricheditrefusedplaintable
 msgid "A plain text document cannot hold a table."

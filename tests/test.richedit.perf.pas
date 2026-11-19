@@ -549,9 +549,9 @@ end;
   inside the table reads it no more), each within 90 ms. Printed: those, and a row added by
   Tab in the table's last cell (the engine's row edit reads the table: not asserted). }
 { A picture of 20 MB in the middle of a 100 MB document, shown reduced, selected and resized
-  by a drag of a handle: from the release to the end of its paint within 90 ms, the picture not
-  decoded again - not for the release's paint, nor by the background work after it - and one
-  undo step more. }
+  by a drag of a handle: from the release to the end of its paint within 90 ms, nothing decoded
+  for it (the pixels at hand stand in) and one undo step more; then the background work makes
+  its image at the new size - one decode - and ends (printed, not asserted: its time). }
 procedure TTyRichEditPerfTest.TestAPictureResizedInALargeDocument;
 var
   path: string;
@@ -560,7 +560,7 @@ var
   pic: TTyRichPicture;
   at: TTyRichPos;
   c: TPoint;
-  t0, release: Double;
+  t0, release, sharp: Double;
   decodes: Int64;
   depth, steps: Integer;
 begin
@@ -601,11 +601,18 @@ begin
     Report(Format('a %d MB picture in a 100 MB document resized: the release to the end of its ' +
       'paint', [Length(data) div (1024 * 1024)]), release);
     AssertEquals('one undo step more', depth + 1, FRich.Document.UndoDepth);
-    AssertEquals('not decoded for the release', decodes, FRich.Layouter.PictureDecodes);
+    AssertEquals('nothing decoded for the release', decodes, FRich.Layouter.PictureDecodes);
+    // its own image at the new size: decoded once in the background, and the work ends
     steps := 0;
+    t0 := Clock;
     while TPerfRich(FRich).Step and (steps < 20) do Inc(steps);
     TPerfRich(FRich).PaintInto(bmp);
-    AssertEquals('not decoded by the work after it', decodes, FRich.Layouter.PictureDecodes);
+    sharp := Clock - t0;
+    Report('the background work that makes its image at the new size, and the paint after it ' +
+      '(not asserted)', sharp);
+    AssertEquals('decoded once in the background', decodes + 1, FRich.Layouter.PictureDecodes);
+    AssertTrue('the background work ended', steps < 20);
+    AssertFalse('nothing left to do', TPerfRich(FRich).Step);
     AssertTrue(Format('the release in %.1f ms', [release]), release <= CKeystrokeMs);
   finally
     bmp.Free;

@@ -812,10 +812,12 @@ type
     FTrustFrom: Integer;
     FWalkData: array of Pointer;
     FWalkFirst, FWalkLast: Integer;
-    { decoded pictures: by their bytes (PictureKey: pictures that share their data - a resized
-      one and the one it was made from - share what was decoded of it), LRU order (most
-      recent first), bounded by bytes }
+    // decoded pictures: by picture, LRU order (most recent first), bounded by bytes
     FPictures: specialize TDictionary<Pointer, TObject>;
+    { The entry that last had pixels of a picture's bytes (PictureKey): where a picture made
+      from the same bytes - a resized one, the one it was made from after an undo - finds pixels
+      to stand in with while its own are made. }
+    FByData: specialize TDictionary<Pointer, TObject>;
     FPictureStandIns: Int64;
     FPicFirst, FPicLast: TObject;
     FPictureBytes: Int64;
@@ -1052,11 +1054,13 @@ type
       PictureReady(APicture, AWidth, AHeight) is True. }
     procedure PreparePicture(APicture: TTyRichPicture; AWidth, AHeight: Integer);
     { What a paint that defers pictures draws for a picture not ready at the box's size: the
-      pixels already decoded of its bytes (the full image, else a reduced copy), stretched to
-      the box for the part inside the clip - a resized picture, which shares its bytes and so
-      its decoded pixels with the one it was made from, shows at once at its new size, with
-      no decode and no empty box. False when nothing of it is decoded (the paint fills the box
-      then). Nothing is decoded or kept here. }
+      pixels already decoded of its bytes - its own at another size, else those of another
+      picture of the same bytes (a resized picture and the one it was made from) - the full
+      image if kept, else the reduced copy, stretched to the box for the part inside the clip:
+      it shows at once at its new size, with no decode and no empty box, until its own image
+      at that size is made (the paint notes it as skipped, as any picture not ready). False
+      when nothing of those bytes is decoded (the paint fills the box then). Nothing is
+      decoded or kept here. }
     function DrawPictureKept(ATarget: TBGRABitmap; APicture: TTyRichPicture;
       const ABox: TRect): Boolean;
     { DrawPictureKept's draws (for the tests that check no empty box was shown). }
@@ -4680,10 +4684,7 @@ type
   TTyPictureEntry = class
   public
     Pic: TTyRichPicture;
-    Key: Pointer;
     Tried, Failed: Boolean;
-    // another picture of these bytes took the entry over (a resize): see PictureMakeReady
-    Handed: Boolean;
     ImgW, ImgH: Integer;
     Image: TBGRABitmap;
     Scaled: TBGRABitmap;
@@ -4925,9 +4926,9 @@ end;
 
 { ---- layouter: pictures ---- }
 
-{ What a picture's decoded pixels are kept under: its bytes and the format they are read as
-  (two pictures that share both show the same pixels); a picture with no bytes, itself. The
-  format is added to the block's address: blocks lie further apart than the formats count. }
+{ What pictures that show the same pixels share: their bytes and the format they are read as;
+  a picture with no bytes, itself. The format is added to the block's address: blocks lie
+  further apart than the formats count. }
 function PictureKey(APicture: TTyRichPicture): Pointer; inline;
 begin
   if Length(APicture.Data) = 0 then Result := APicture
@@ -4960,10 +4961,12 @@ end;
 procedure TTyRichLayouter.PictureDrop(AEntry: TObject);
 var
   e: TTyPictureEntry;
+  o: TObject;
 begin
   e := TTyPictureEntry(AEntry);
   PictureUnlink(e);
-  FPictures.Remove(e.Key);
+  FPictures.Remove(e.Pic);
+  if FByData.TryGetValue(PictureKey(e.Pic), o) and (o = e) then FByData.Remove(PictureKey(e.Pic));
   Dec(FPictureBytes, e.Bytes);
   e.Free;
 end;
@@ -5056,6 +5059,8 @@ begin
   if not e.Failed then Inc(b, System.Length(e.Pic.Data));
   Inc(FPictureBytes, b - e.Bytes);
   e.Bytes := b;
+  // pixels of these bytes: what another picture of them stands in with
+  if (e.Image <> nil) or (e.Scaled <> nil) then FByData.AddOrSetValue(PictureKey(e.Pic), e);
 end;
 
 { Decodes the entry's picture into Image (again, when it was let go). The size comes from the
@@ -5170,30 +5175,20 @@ var
   o: TObject;
   e: TTyPictureEntry;
 begin
-  if FPictures.TryGetValue(PictureKey(APicture), o) then
+  if FPictures.TryGetValue(APicture, o) then
   begin
     e := TTyPictureEntry(o);
     PictureUnlink(e);
     PicturePushFront(e);
-    { Another picture of the same bytes (a resized one): the entry holds the newest one, so
-      an old picture the document let go of is not kept alive by the cache. }
-    if e.Pic <> APicture then
-    begin
-      APicture.AddRef;
-      e.Pic.Release;
-      e.Pic := APicture;
-      e.Handed := True;
-    end;
   end
   else
   begin
     e := TTyPictureEntry.Create;
     e.Pic := APicture;
     APicture.AddRef;
-    e.Key := PictureKey(APicture);
     e.BadW := -1;
     e.BadH := -1;
-    FPictures.Add(e.Key, e);
+    FPictures.Add(APicture, e);
     PicturePushFront(e);
     PictureRecount(e);
   end;
@@ -5209,7 +5204,7 @@ procedure TTyRichLayouter.PictureMakeReady(AEntry: TObject; AWidth, AHeight: Int
 var
   e: TTyPictureEntry;
   how: TPictureDraw;
-  s, src: TBGRABitmap;
+  s: TBGRABitmap;
 begin
   e := TTyPictureEntry(AEntry);
   try
@@ -5221,25 +5216,14 @@ begin
       pdScaled:
         if (e.Scaled = nil) or (e.Scaled.Width <> AWidth) or (e.Scaled.Height <> AHeight) then
         begin
-          { A resized picture (it took this entry over from the one it was made from) whose
-            full image was let go: its new size is made from the reduced copy kept, with no
-            decode of the bytes again - larger than that copy it is a little softer. (A zoom
-            decodes again: its sizes come back exact.) }
-          src := nil;
-          if e.Handed and (e.Image = nil) and (e.Scaled <> nil) then
-            src := e.Scaled
-          else
-          begin
-            FreeAndNil(e.Scaled);
-            if e.Image = nil then PictureDecode(e);
-            src := e.Image;
-          end;
-          if src <> nil then
+          FreeAndNil(e.Scaled);
+          if e.Image = nil then PictureDecode(e);
+          if e.Image <> nil then
           begin
             Inc(FPictureScales);
             s := nil;
             try
-              s := ScaleImage(src, AWidth, AHeight);
+              s := ScaleImage(e.Image, AWidth, AHeight);
             except
               on E: Exception do
               begin
@@ -5255,9 +5239,6 @@ begin
             end
             else
             begin
-              // (the copy it was reduced from goes when it is replaced)
-              e.Handed := False;
-              e.Scaled.Free;
               e.Scaled := s;
               // shown reduced: the full image goes (decoded again for a size that needs it)
               FreeAndNil(e.Image);
@@ -5325,7 +5306,7 @@ var
 begin
   if (APicture = nil) or (AWidth <= 0) or (AHeight <= 0) then Exit(True);
   // never drawn: there is something to decode, unless nothing of it can be shown
-  if not FPictures.TryGetValue(PictureKey(APicture), o) then
+  if not FPictures.TryGetValue(APicture, o) then
     Exit(not APicture.DisplayData(fmt, start, count));
   e := TTyPictureEntry(o);
   if not e.Tried then Exit(False);
@@ -5364,10 +5345,18 @@ begin
   Result := False;
   if (ATarget = nil) or (APicture = nil) or (ABox.Right <= ABox.Left) or
     (ABox.Bottom <= ABox.Top) then Exit;
-  if not FPictures.TryGetValue(PictureKey(APicture), o) then Exit;
-  e := TTyPictureEntry(o);
-  // the most pixels there are: the full image, else the reduced copy
-  if e.Image <> nil then src := e.Image else src := e.Scaled;
+  // its own pixels (at another size), else those another picture of its bytes has
+  src := nil;
+  if FPictures.TryGetValue(APicture, o) then
+  begin
+    e := TTyPictureEntry(o);
+    if e.Image <> nil then src := e.Image else src := e.Scaled;
+  end;
+  if (src = nil) and FByData.TryGetValue(PictureKey(APicture), o) then
+  begin
+    e := TTyPictureEntry(o);
+    if e.Image <> nil then src := e.Image else src := e.Scaled;
+  end;
   if src = nil then Exit;
   PaintEnter;
   try
@@ -5425,6 +5414,7 @@ begin
   FOrdinals := specialize TDictionary<Integer, TTyRichListOrdinal>.Create;
   FListOfFormat := specialize TDictionary<Integer, TTyListFormat>.Create;
   FPictures := specialize TDictionary<Pointer, TObject>.Create;
+  FByData := specialize TDictionary<Pointer, TObject>.Create;
   FPictureLimit := CRichPictureCacheBytes;
   FPictureDecodeBudget := CRichPictureMaxPixels;
   FPictureScaleBudget := CRichPictureMaxScaledPixels;
@@ -5438,6 +5428,7 @@ begin
   Clear;
   ClearSkippedPictures;
   FPictures.Free;
+  FByData.Free;
   FListOfFormat.Free;
   FOrdinals.Free;
   FFormatFonts.Free;

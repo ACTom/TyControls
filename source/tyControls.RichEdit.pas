@@ -637,8 +637,9 @@ type
     FResizeBox: TRect;
     FResizeFrom: TPoint;
     FResizeW0, FResizeH0, FResizeW, FResizeH, FResizeMaxW: Integer;
-    // inside the left button's release: the capture it lets go of ends no drag
-    FReleasing: Boolean;
+    // where the pointer was last seen in a drag of a handle, and the keys held then
+    FResizeLast: TPoint;
+    FResizeShift: TShiftState;
     // the cursor of the handle the pointer was last seen over (crDefault: none)
     FOverHandle: TCursor;
     FOnObjectResize: TTyRichObjectResizeEvent;
@@ -1526,9 +1527,9 @@ type
       or clear AAllow; a size equal to the object's own changes nothing. }
     procedure DoObjectResize(AObject: TTyRichObject; var AWidthTwips, AHeightTwips: Integer;
       var AAllow: Boolean); virtual;
-    { The left button's release: the capture LCL lets go of first ends no drag of a handle
-      (the release finishes it). }
-    procedure WMLButtonUp(var Message: TLMLButtonUp); message LM_LBUTTONUP;
+    { The left button is down now (the system's state, not a message's): what tells a capture
+      taken away during a drag of a handle from the one its own release lets go of. }
+    function LeftButtonHeld: Boolean; virtual;
     { OnSelectionChange, when the caret or the anchor moved since it was last raised. }
     procedure DoSelectionChange; virtual;
     { A copy's two flavours to the clipboard, in one Open .. Close of LCL's Clipboard: the RTF
@@ -1999,7 +2000,7 @@ type
       no picture that can be read.
       InsertPictureFromFile: a PNG or JPEG file goes in with its own bytes, unchanged - the
       way for photographs; a bitmap, GIF, TIFF, icon or any other image the LCL can read is
-      decoded and kept as PNG; a metafile (.wmf, .emf: it could only show as an empty frame)
+      decoded and kept as PNG; a metafile (.wmf, .emf)
       is refused, and so is a file that cannot be opened (its reason from the system). No
       dialog is shown: the application asks for the name. InsertPictureFromStream: the same
       from the stream's position to its end (read here; nothing keeps the stream).
@@ -2024,10 +2025,14 @@ type
       changing that side only, the opposite handle staying where it is; nothing changes in the
       document until the release. Each side at least CRichObjectMinTwips, at most
       CRichObjectMaxTwips, the width at most the room at its place - a shape kept is kept in
-      the bounds too. The release is one command (TTyRichResizeObject, one undo step named
+      the bounds too; the bounds stop a drag, they never move a side already past them (a
+      press and release without a move changes nothing). The release is one command (TTyRichResizeObject, one undo step named
       rsRichUndoResizeObject; OnObjectResize first), the object selected again with its
       handles; a release at the size it had, Esc, the capture lost, the window or the content
-      going end it with nothing changed. A resized picture keeps its bytes and format; what
+      going, a press of another button, a key that is not a modifier or a selection set by
+      code end it with nothing changed. The resized picture is shown at once from the pixels
+      already decoded and made sharp at its new size by the background work. A resized
+      picture keeps its bytes and format; what
       its file's group said besides (scaling words, cropping, other representations of the
       picture) is not kept - it is written at its new size from the model. }
     property OnObjectResize: TTyRichObjectResizeEvent read FOnObjectResize write FOnObjectResize;
@@ -2544,7 +2549,10 @@ function TyRichMakePicture(const ABytes: TBytes; AKind: TTyRichImageKind;
   pointer moved ADX, ADY twips (right and down positive): a corner moves both sides, the middle
   of a side that side only (the other stays as it is). AKeepRatio (a corner without Shift): the
   shape is kept - the side the drag changed more, relatively, decides, and the other follows.
-  Each changed side within AMin .. its maximum (AMaxWidth, AMaxHeight); with the shape kept,
+  The bounds limit how far a drag takes a side, never where a side is already: a side is held
+  to AMin .. its maximum (AMaxWidth, AMaxHeight), but one already past a bound is held to
+  where it is instead (a side over the maximum can only get smaller, one under AMin only
+  larger) - so a pointer that did not move gives the size back exactly. With the shape kept,
   the bounds hold for both sides at once (the shape survives them, unless the bounds leave no
   room for it: then the maximum wins). Each side at least 1. }
 procedure TyRichResizedSize(AHandle: TTyRichHandle; AWidth, AHeight, ADX, ADY: Integer;
@@ -4101,6 +4109,8 @@ begin
     the memo's caret moves end its run (an edit's own placing is not one: the edits place the
     caret themselves). }
   if (FEditing = 0) and ((AAnchor <> FSelAnchor) or (ACaret <> FCaret)) then EndTypingRun;
+  // a drag of a handle is of the selection it began with
+  if FResizing and ((AAnchor <> FSelAnchor) or (ACaret <> FCaret)) then CancelResize;
   { The selection set again - also to the same place, and by an edit's own placing - ends a
     pending format (as on Windows' rich edit); a façade's write keeps the selection and it. }
   if FApiWrite = 0 then FHasPendingFmt := False;
@@ -4508,6 +4518,8 @@ var
 begin
   // (in the form designer a press selects the control, not text: no caret, no drag)
   if not IsEnabled or (csDesigning in ComponentState) then Exit;
+  // another press during a drag of a handle (another button): the drag ends, nothing done
+  CancelResize;
   { A press while composing is placed on what the user saw: the text with the composition in
     it (the hit test answers the document's positions behind it), taken before the
     composition ends. A point on the composition is its place, behind it. The object under
@@ -4810,11 +4822,14 @@ end;
 procedure TTyCustomRichEdit.CaptureChanged;
 begin
   inherited CaptureChanged;
-  { The capture went elsewhere (a menu, another window): the drag is over - a drag of a
-    handle with nothing changed. Not the capture the left button's release lets go of first:
-    the release itself ends that drag (MouseUp). }
-  if FReleasing then Exit;
-  if FResizing and not MouseCapture then CancelResize;
+  { The capture went elsewhere (a menu, another window): the drag is over. A drag of a handle:
+    taken away with the button still down, nothing is done; the button already up, this is
+    the release's own capture going - before, inside or after the button-up message, by
+    widgetset - and the drag ends as the release ends it, at the pointer's last place (the
+    release's MouseUp, if it comes after, finds no drag). }
+  if FResizing and not MouseCapture then
+    if LeftButtonHeld then CancelResize
+    else FinishResize(FResizeLast.X, FResizeLast.Y, FResizeShift);
   if FDragging and not MouseCapture then StopDrag;
 end;
 
@@ -4839,14 +4854,14 @@ end;
 procedure TyRichResizedSize(AHandle: TTyRichHandle; AWidth, AHeight, ADX, ADY: Integer;
   AKeepRatio: Boolean; AMin, AMaxWidth, AMaxHeight: Integer; out ANewWidth, ANewHeight: Integer);
 var
-  sx, sy: Integer;
+  sx, sy, minW, minH: Integer;
   nw, nh: Int64;
   f, fw, fh, fmin, fmax: Double;
 
-  function Bound(V: Int64; AMax: Integer): Integer;
+  function Bound(V: Int64; ALeast, AMost: Integer): Integer;
   begin
-    if V > AMax then V := AMax;
-    if V < AMin then V := AMin;
+    if V > AMost then V := AMost;
+    if V < ALeast then V := ALeast;
     if V < 1 then V := 1;
     Result := Integer(V);
   end;
@@ -4856,6 +4871,11 @@ begin
   if AHeight < 1 then AHeight := 1;
   if AMaxWidth < AMin then AMaxWidth := AMin;
   if AMaxHeight < AMin then AMaxHeight := AMin;
+  // a side past a bound already: the bound is where it is
+  minW := Math.Min(AMin, AWidth);
+  minH := Math.Min(AMin, AHeight);
+  AMaxWidth := Math.Max(AMaxWidth, AWidth);
+  AMaxHeight := Math.Max(AMaxHeight, AHeight);
   // which way each side moves for a move of the pointer: the left ones and the top ones grow
   // the other way
   case AHandle of
@@ -4880,7 +4900,7 @@ begin
     fw := nw / AWidth;
     fh := nh / AHeight;
     if Abs(fw - 1) >= Abs(fh - 1) then f := fw else f := fh;
-    fmin := Math.Max(AMin / AWidth, AMin / AHeight);
+    fmin := Math.Max(minW / AWidth, minH / AHeight);
     fmax := Math.Min(AMaxWidth / AWidth, AMaxHeight / AHeight);
     if f < fmin then f := fmin;
     if f > fmax then f := fmax;
@@ -4888,8 +4908,8 @@ begin
     ANewHeight := Math.Max(1, Integer(Round(AHeight * f)));
     Exit;
   end;
-  if sx <> 0 then ANewWidth := Bound(nw, AMaxWidth);
-  if sy <> 0 then ANewHeight := Bound(nh, AMaxHeight);
+  if sx <> 0 then ANewWidth := Bound(nw, minW, AMaxWidth);
+  if sy <> 0 then ANewHeight := Bound(nh, minH, AMaxHeight);
 end;
 
 function TTyCustomRichEdit.HandleObject(out APos: TTyRichPos; out ABox: TRect): Boolean;
@@ -5117,8 +5137,9 @@ var
   box, area: TRect;
   rs: TTyRichHandleRects;
   h: TTyRichHandle;
-  vx, vy: Int64;
+  vx, vy, cl, ct, cr, cb: Int64;
   s: Integer;
+  clip: TRect;
 begin
   Result := False;
   AHandle := rhTopLeft;
@@ -5131,6 +5152,13 @@ begin
   // the client pixel's raster pixels: one of them on a handle is enough
   vx := (Int64(X) - area.Left) * s;
   vy := (Int64(Y) - area.Top) * s;
+  // only the part of a handle the view shows: what the text clip cuts away is not there
+  clip := TextWindowRect;
+  cl := (Int64(clip.Left) - area.Left) * s;
+  ct := (Int64(clip.Top) - area.Top) * s;
+  cr := (Int64(clip.Right) - area.Left) * s;
+  cb := (Int64(clip.Bottom) - area.Top) * s;
+  if (vx < cl) or (vx >= cr) or (vy < ct) or (vy >= cb) then Exit;
   for h := Low(TTyRichHandle) to High(TTyRichHandle) do
     if (vx + s > rs[h].Left) and (vx < rs[h].Right) and (vy + s > rs[h].Top) and
       (vy < rs[h].Bottom) then
@@ -5187,7 +5215,11 @@ begin
   FResizing := True;
   FResizeHandle := AHandle;
   FResizePos := APos;
+  // held through the drag: the release compares it with what is there then
   FResizeObj := o;
+  if o <> nil then o.AddRef;
+  FResizeLast := Point(X, Y);
+  FResizeShift := [];
   FResizeBox := ABox;
   FResizeFrom := Point((X - area.Left) * s, (Y - area.Top) * s);
   FResizeW0 := w;
@@ -5220,16 +5252,22 @@ end;
 
 procedure TTyCustomRichEdit.MoveResize(X, Y: Integer; AShift: TShiftState);
 begin
+  FResizeLast := Point(X, Y);
+  FResizeShift := AShift;
   // nothing in the document changes before the release: the outline alone moves
   ResizeSizeAt(X, Y, AShift, FResizeW, FResizeH);
   SyncObjectOverlay;
 end;
 
 procedure TTyCustomRichEdit.CancelResize;
+var
+  o: TTyRichObject;
 begin
   if not FResizing then Exit;
   FResizing := False;
+  o := FResizeObj;
   FResizeObj := nil;
+  if o <> nil then o.Release;
   FOverHandle := crDefault;
   // the outline goes (the handles stay as the selection has them)
   if not IsRectEmpty(FPreviewRect) then
@@ -5248,29 +5286,49 @@ var
   pos: TTyRichPos;
   obj: TTyRichObject;
   place: TTyRichEditPlace;
+
+  // the drag's bounds, which never pull back a side already past them
+  function Bounded(V, ALeast, AMost: Integer): Integer;
+  begin
+    Result := V;
+    if Result > AMost then Result := AMost;
+    if Result < ALeast then Result := ALeast;
+    if Result < 1 then Result := 1;
+  end;
+
 begin
   ResizeSizeAt(X, Y, AShift, w, h);
   pos := FResizePos;
+  // the drag's reference to the object is this call's now
   obj := FResizeObj;
+  FResizeObj := nil;
   CancelResize;
-  // the size it had: nothing happens, no step
-  if (w = FResizeW0) and (h = FResizeH0) then Exit;
-  allow := True;
-  DoObjectResize(obj, w, h, allow);
-  // (a handler that edited, loaded or freed the selection: the object is not the one dragged)
-  if not allow or (w <= 0) or (h <= 0) or ViewBehind then Exit;
-  if (w = FResizeW0) and (h = FResizeH0) then Exit;
-  FDoc.BeginRead;
   try
-    if FDoc.ObjectAt(pos) <> obj then Exit;
+    // the size it had: nothing happens, no step
+    if (w = FResizeW0) and (h = FResizeH0) then Exit;
+    allow := True;
+    DoObjectResize(obj, w, h, allow);
+    // what the handler gives goes through the drag's own bounds
+    w := Bounded(w, Math.Min(CRichObjectMinTwips, FResizeW0), Math.Max(FResizeMaxW, FResizeW0));
+    h := Bounded(h, Math.Min(CRichObjectMinTwips, FResizeH0),
+      Math.Max(CRichObjectMaxTwips, FResizeH0));
+    if not allow or ViewBehind then Exit;
+    if (w = FResizeW0) and (h = FResizeH0) then Exit;
+    // (a handler that edited, loaded or freed the selection: the object is not the one dragged)
+    FDoc.BeginRead;
+    try
+      if FDoc.ObjectAt(pos) <> obj then Exit;
+    finally
+      FDoc.EndRead;
+    end;
+    // the object, new, selected again: its handles come back with it
+    place := Default(TTyRichEditPlace);
+    place.Anchor := pos;
+    place.Caret := pos + 1;
+    RunMade(TTyRichResizeObject.Create(pos, w, h), place, True);
   finally
-    FDoc.EndRead;
+    if obj <> nil then obj.Release;
   end;
-  // the object, new, selected again: its handles come back with it
-  place := Default(TTyRichEditPlace);
-  place.Anchor := pos;
-  place.Caret := pos + 1;
-  RunMade(TTyRichResizeObject.Create(pos, w, h), place, True);
 end;
 
 function TTyCustomRichEdit.ResizeOutline(out ARect: TRect; out AWidthTwips,
@@ -5287,14 +5345,9 @@ begin
   ARect := ClientOf(TextArea(Rect(0, 0, Width, Height), ViewPPI), r.Left, r.Top, r.Right, r.Bottom);
 end;
 
-procedure TTyCustomRichEdit.WMLButtonUp(var Message: TLMLButtonUp);
+function TTyCustomRichEdit.LeftButtonHeld: Boolean;
 begin
-  FReleasing := True;
-  try
-    inherited;
-  finally
-    FReleasing := False;
-  end;
+  Result := GetKeyState(VK_LBUTTON) < 0;
 end;
 
 { ---- pictures from code ---- }
@@ -5334,9 +5387,51 @@ var
   ms: TMemoryStream;
   buf: array of Byte;
   k: Integer;
+  n, got: Int64;
 begin
   Result := False;
   ABytes := nil;
+  // a stream that tells its size: refused from it, else read straight into the bytes
+  try
+    n := AStream.Size - AStream.Position;
+  except
+    n := -1;
+  end;
+  if n > CRichPictureMaxBytes then
+  begin
+    EditRefused(rsRichEditRefusedPicture);
+    Exit;
+  end;
+  if n >= 0 then
+  begin
+    try
+      SetLength(ABytes, n);
+      got := 0;
+      while got < n do
+      begin
+        k := AStream.Read(ABytes[got], Math.Min(n - got, Int64(64 * 1024 * 1024)));
+        if k <= 0 then Break;
+        Inc(got, k);
+      end;
+      // (a stream shorter than it said: what it gave)
+      if got < n then SetLength(ABytes, got);
+    except
+      on EOutOfMemory do
+      begin
+        ABytes := nil;
+        EditRefused(rsRichEditRefusedMemory);
+        Exit;
+      end;
+      on E: Exception do
+      begin
+        ABytes := nil;
+        if AFromFile then EditRefused(Format(rsRichEditRefusedPictureFile, [E.Message]))
+        else EditRefused(rsRichEditRefusedNoPicture);
+        Exit;
+      end;
+    end;
+    Exit(True);
+  end;
   ms := TMemoryStream.Create;
   try
     try
@@ -5461,6 +5556,7 @@ var
   png: TPortableNetworkGraphic;
   kind: TTyRichImageKind;
   bytes: TBytes;
+  n: Int64;
 begin
   Result := False;
   if (AGraphic = nil) or AGraphic.Empty or (AGraphic.Width <= 0) or (AGraphic.Height <= 0) then
@@ -5493,7 +5589,9 @@ begin
         end;
         kind := rikPng;
       end;
-      bytes := Copy(st.Bytes, 0, st.Size);
+      // the stream's own array, cut to its size once the stream lets go of it (no copy)
+      bytes := st.Bytes;
+      n := st.Size;
     except
       on EOutOfMemory do
       begin
@@ -5509,6 +5607,7 @@ begin
   finally
     st.Free;
   end;
+  SetLength(bytes, n);
   Result := InsertPictureMade(bytes, kind);
 end;
 
@@ -5718,7 +5817,7 @@ var
   le: Boolean;
   seen: TBits;
   entries: Int64;
-  st: TMemoryStream;
+  st: TStream;
   outSt: TBytesStream;
   bmp: TBGRABitmap;
   rd: TFPCustomImageReader;
@@ -5910,12 +6009,19 @@ begin
   end;
   if (w = 0) or (h = 0) or (w < -1) or (h < -1) then Exit;
   if (w > 0) and (h > 0) and (w > CRichPictureMaxPixels div h) then Exit(rpmTooLarge);
-  st := TMemoryStream.Create;
+  { The decoder reads the bytes themselves (no copy of a large file); a DIB gets the file
+    header it lacks in a copy of its own. }
+  if AKind = rikDib then
+  begin
+    st := TMemoryStream.Create;
+    WriteDibFileHeader(st, ABytes);
+    st.WriteBuffer(ABytes[0], Length(ABytes));
+  end
+  else
+    st := TBytesStream.Create(ABytes);
   bmp := TBGRABitmap.Create;
   rd := nil;
   try
-    if AKind = rikDib then WriteDibFileHeader(st, ABytes);
-    st.WriteBuffer(ABytes[0], Length(ABytes));
     st.Position := 0;
     case AKind of
       rikPng: rd := TBGRAReaderPNG.Create;
@@ -15162,13 +15268,18 @@ begin
   // a user action is an entry point of the loop (see SchedulingFailed)
   EndOwedLoad;
   if (Key = 0) or not IsEnabled then Exit;
-  // Esc ends a drag of a handle with nothing changed
+  { A drag of a handle: Esc ends it with nothing changed (the key taken); any other key that
+    is not a modifier (Shift and Ctrl change what the drag does) ends it too, and does what it
+    does. }
   if FResizing and (Key = VK_ESCAPE) then
   begin
     CancelResize;
     Key := 0;
     Exit;
   end;
+  if FResizing and not (Key in [VK_SHIFT, VK_CONTROL, VK_MENU, VK_LSHIFT, VK_RSHIFT, VK_LCONTROL,
+    VK_RCONTROL, VK_LMENU, VK_RMENU, VK_LWIN, VK_RWIN]) then
+    CancelResize;
   { Inside the document's update a key that moves or copies does nothing: the view does not
     know the text yet. The viewer's keys are still taken - they never go on to the form. }
   if ViewBehind then

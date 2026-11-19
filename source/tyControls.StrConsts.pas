@@ -330,7 +330,7 @@ resourcestring
   { A picture inserted from code (TTyCustomRichEdit.InsertPictureFromFile and the other
     insert methods) that cannot go in. %s is the system's message. }
   rsRichEditRefusedPlainPicture = 'A plain text document cannot hold a picture.';
-  rsRichEditRefusedMetafile   = 'A metafile (WMF or EMF) cannot be inserted: it could only be shown as an empty frame.';
+  rsRichEditRefusedMetafile   = 'A metafile (WMF or EMF) cannot be inserted as a picture.';
   rsRichEditRefusedNoPicture  = 'This is not a picture that can be read.';
   rsRichEditRefusedPictureFile = 'The picture file cannot be read: %s';
   { A table action (TTyCustomRichEdit.InsertTable, InsertRow, DeleteColumn and the like, and
