@@ -2117,7 +2117,7 @@ var
   c: TPoint;
   kind: Integer;
 begin
-  for kind := 0 to 3 do
+  for kind := 0 to 5 do
   begin
     FreeAndNil(FRich);
     FRich := NewProbe;
@@ -2130,11 +2130,15 @@ begin
       0: FRich.RightPressAt(10, 10);
       1: FRich.Press(VK_END, []);
       2: FRich.SelStart := 0;
+      // a right press on the picture keeps the selection; a key that moves nothing
+      3: FRich.RightPressAt(Centre(rs[rhLeft]).X + 20, Centre(rs[rhLeft]).Y);
+      4: FRich.Press(VK_F5, []);
     else
       FRich.Press(VK_SHIFT, [ssShift]);
     end;
+    if kind = 3 then AssertEquals('the right press kept the selection', 1, FRich.SelLength);
     FRich.ReleaseWith(c.X + 20, c.Y + 10, []);
-    if kind < 3 then
+    if kind < 5 then
     begin
       AssertEquals(IntToStr(kind) + ': no step', 0, FRich.Document.UndoDepth);
       AssertEquals(IntToStr(kind) + ': as it was', 1500, PictureAt(p).WidthTwips);
