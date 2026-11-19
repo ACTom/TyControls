@@ -2571,6 +2571,11 @@ begin
     rdPict: PictWord(kw);
     rdUpr:
       if kw in [kwAnsiCpg, kwUc] then BodyWord(kw);
+    rdFieldShown:
+      { The field's own group: its character words are in effect in its result (the result's
+        group takes them over, as any group does) - a font, bold, the slots; not its
+        paragraph words nor its text words (\tab, \par), which are no result's. }
+      if (kw = kwUc) or ((kw >= kwPlain) and (kw <= kwLtrCh)) then BodyWord(kw);
     rdListText:
       case kw of
         kwUc, kwU, kwPlain, kwF, kwAf, kwLoch, kwHich, kwDbch, kwTab, kwLdblquote..kwZwnbo:
