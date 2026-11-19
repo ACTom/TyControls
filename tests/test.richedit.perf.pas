@@ -105,7 +105,11 @@ type
   protected
     function DropPointOf(const AScreen: TPoint): TPoint; override;
     procedure FocusAfterDrop; override;
+    function ClipboardFlavours: TTyRichClipFlavours; override;
+    function ReadClipboardRtf: RawByteString; override;
   public
+    { what a paste reads as the clipboard's RTF when not '' (never the system's clipboard) }
+    ClipRtf: RawByteString;
     {$IFDEF LCLWin32}
     function DropTarget: IUnknown;
     {$ENDIF}
@@ -172,6 +176,16 @@ end;
 procedure TPerfRich.FocusAfterDrop;
 begin
   // (never the focus or the foreground in a test)
+end;
+
+function TPerfRich.ClipboardFlavours: TTyRichClipFlavours;
+begin
+  if ClipRtf <> '' then Result := [rcfRtf] else Result := inherited ClipboardFlavours;
+end;
+
+function TPerfRich.ReadClipboardRtf: RawByteString;
+begin
+  if ClipRtf <> '' then Result := ClipRtf else Result := inherited ReadClipboardRtf;
 end;
 
 {$IFDEF LCLWin32}
@@ -856,9 +870,10 @@ end;
 { Another program's drop of a large RTF (the Windows widgetset's drop target, fed a data object
   of the test's in this process): 10 MB and 100 MB, from the drop to the end of its paint - a
   paste of it, read the paste's way (the data object's block copied once into a string, as
-  the clipboard's is). Printed, not asserted: a paste of that much has no line of its own. The
-  peak working set includes the data object's own copies (its string and the block it hands
-  over: what the other program holds). }
+  the clipboard's is). Printed, not asserted: a paste of that much has no line of its own; the
+  10 MB one is pasted too (from a stand-in clipboard), as the yardstick. The peak working set
+  includes the data object's own copies (its string and the block it hands over: what the
+  other program holds). }
 procedure TTyRichEditPerfTest.TestDroppingALargeRtfFromAnotherProgram;
 {$IFDEF LCLWin32}
 const
@@ -899,6 +914,21 @@ begin
         Move(ms.Memory^, rtf[1], ms.Size);
       finally
         ms.Free;
+      end;
+      // (the smaller one pasted too, from a stand-in clipboard: what the drop is held against)
+      if k = 0 then
+      begin
+        TPerfRich(FRich).ClipRtf := rtf;
+        FRich.SelStart := FRich.Document.Text.Length;
+        t0 := Clock;
+        FRich.PasteFromClipboard;
+        TPerfRich(FRich).PaintInto(bmp);
+        Report(Format('a paste of the same %d MB of RTF, to the end of its paint (not asserted)',
+          [Sizes[k] div (1024 * 1024)]), Clock - t0);
+        TPerfRich(FRich).ClipRtf := '';
+        AssertTrue('pasted', FRich.Document.Text.Length > n);
+        FRich.Lines.Text := 'start';
+        TPerfRich(FRich).PaintInto(bmp);
       end;
       data := NewRtfData(rtf);
       keep := data as IUnknown;
