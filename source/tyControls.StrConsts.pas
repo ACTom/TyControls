@@ -325,7 +325,6 @@ resourcestring
   rsRichEditRefusedPlainPaste = 'A plain text document takes only text: a picture or formatted text cannot be pasted into it.';
   rsRichEditRefusedMemory     = 'There is not enough memory to paste this.';
   rsRichEditRefusedPasteRows  = 'Table rows cannot be pasted over rows of a table: paste them outside the table, or into a cell as its text.';
-  rsRichEditRefusedReadOnly   = 'The document is read-only: it cannot be changed.';
   { A table action (TTyCustomRichEdit.InsertTable, InsertRow, DeleteColumn and the like, and
     Tab in a table's last cell) that the table or the place does not allow. The first %d
     is the most rows a table can have, the second (and the one of ...TableColumns) the most
@@ -336,6 +335,7 @@ resourcestring
   rsRichEditRefusedMergedCells   = 'This table has merged cells: its rows and columns cannot be inserted or deleted.';
   rsRichEditRefusedNestedTable   = 'This table has a table inside one of its cells: its rows and columns cannot be inserted or deleted.';
   rsRichEditRefusedTableNotWhole = 'This table is too large, or not complete in its file, for its rows and columns to be inserted or deleted.';
+  rsRichEditRefusedDeleteNotWhole = 'This table is too large, or not complete in its file, to be deleted as a whole.';
   rsRichEditRefusedIrregularRows = 'The rows of this table do not all have the same number of cells: its columns cannot be inserted or deleted.';
   rsRichEditRefusedTableSize     = 'A table can have 1 to %d rows and 1 to %d columns.';
   rsRichEditRefusedTableColumns  = 'This table has as many columns as a table can have (%d).';

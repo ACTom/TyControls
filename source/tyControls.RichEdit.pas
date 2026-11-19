@@ -589,6 +589,12 @@ type
     FAskCaret, FAskAnchor: TTyRichPos;
     FAskBusy: Boolean;
     FAskIn, FAskInsTable, FAskRows, FAskColIns, FAskColDel, FAskTable: Boolean;
+    { What is true of the whole table (its refusals do not depend on the row or the cell), for
+      the table object (a reference held: it is not reused while kept) and content state it
+      was found for: a move inside that table reads nothing again. }
+    FAskTbl: TTyRichTable;
+    FAskTblState: Int64;
+    FAskTblRows, FAskTblColIns, FAskTblColDel, FAskTblDelete: Boolean;
     FOnEditRefused: TTyRichEditRefusedEvent;
     { The input method. A composition goes in at FCompPos (the caret when it began)
       and is not the document's: the layouter shows FCompText there (SetComposition), in
@@ -1108,6 +1114,9 @@ type
     // tables
     { What the user is told when table edit AEdit is refused for AReason. }
     function TableRefusalText(AReason: TTyRichTableRefusal; const AEdit: TTyRichTableEdit): string;
+    { The reason of a built-in table command the document refused (RunEdit keeps only its
+      edit): CommandRefusal asked of a command like it. }
+    function LateTableRefusal(const AEdit: TTyRichTableEdit): string;
     { A table action (FTableKind) through the door of a user's edit, after what the door does
       not tell: disabled or inside the document's update, nothing; ReadOnly and a plain text
       document, refused (told). True: it ran. }
@@ -1723,7 +1732,7 @@ type
 
       Two kinds of public methods change the document. The USER's actions - CutToClipboard,
       PasteFromClipboard, ClearSelection, Undo, Redo, the table actions (InsertTable ..
-      DeleteTable, which also tell ReadOnly as a refusal), what an application wires to its
+      DeleteTable), what an application wires to its
       toolbar and menu - behave as their keys: they respect ReadOnly (and do nothing on a
       disabled control) and never raise for a refusal, which is told through EditRefused.
       CopyToClipboard and SelectAll always work. The document API - SelText :=, Lines, the
@@ -1810,9 +1819,10 @@ type
     { Tables: the user's actions for a toolbar, a menu or an action, each one undo step whose
       undo puts the selection back as it was before it and whose redo leaves the caret where
       the action left it. As the user's other actions: an open composition ends first; a
-      disabled control, or one inside the document's update, does nothing; a refusal is
-      told once through EditRefused (OnEditRefused) with its reason, never raised, and
-      nothing changes - ReadOnly, a plain text document, the document loading, incomplete
+      read-only or disabled control, or one inside the document's update, does nothing and
+      tells nothing (False); a refusal is told once through EditRefused (OnEditRefused) with
+      its reason, never raised, and nothing changes - a plain text document, the document
+      loading, incomplete
       or being saved, the caret in no table, and a table whose rows and columns cannot change
       (merged cells, a table inside a cell, rows of different numbers of cells for a column
       edit, a table too large or not complete in a file read on demand). True: done.
@@ -1835,10 +1845,13 @@ type
       that took their place, else of the row above them, else - the table is gone - to the
       start of the paragraph after it. }
     function DeleteRow: Boolean;
-    { Every column the selection touches in the caret end's table - the cells between its two
-      ends' cells; all of them when an end is outside the table - (the caret's column when
-      nothing is selected), as one step: all of the table's columns are the table. The caret
-      goes into the cell of its row that took their place, else the one left of them. }
+    { The column of every cell the selection covers in the caret end's table, in text order as
+      it is painted - in one row the cells between its ends; across rows the start's cell to
+      its row's end, every cell of the rows between, the end's row up to its cell (so a whole
+      row covered is every column); an end outside the table stands at the table's first
+      (last) cell - or the caret's column when nothing is selected; one step: all of the
+      table's columns are the table. The caret goes into the cell of its row that took their
+      place, else the one left of them. }
     function DeleteColumn: Boolean;
     { The whole table the caret is in, as one step; merged cells or a table inside a cell do
       not keep it. The caret goes to the start of the paragraph after it. }
@@ -3043,6 +3056,8 @@ begin
   EndComposition(False);
   FCompPending := False;
   FCompBefore := False;
+  if FAskTbl <> nil then FAskTbl.Release;
+  FAskTbl := nil;
   FCocoaSession := False;
   FCocoaSwallow := False;
   TyImeUninstall(FImeHook);
@@ -5322,11 +5337,24 @@ var
   atEnd, ok: Boolean;
   marks: TTyRichStepMarks;
   refusal, cannot: string;
+  lateWhy: Boolean;
+  edit: TTyRichTableEdit;
 begin
   Result := False;
   refusal := '';
-  // (asked before: a command the document refuses is freed by it)
-  cannot := CommandRefusal(ACmd);
+  { Asked before: a command the document refuses is freed by it. A built-in table command
+    would read its whole table for a reason that is rarely needed: its edit (a record) is
+    kept instead, and the reason asked only when the command was refused. }
+  lateWhy := (ACmd.ClassType = TTyRichInsertTable) or (ACmd.ClassType = TTyRichInsertRow) or
+    (ACmd.ClassType = TTyRichDeleteRow) or (ACmd.ClassType = TTyRichInsertColumn) or
+    (ACmd.ClassType = TTyRichDeleteColumn);
+  if lateWhy then
+  begin
+    edit := TTyRichTableCommand(ACmd).Edit;
+    cannot := '';
+  end
+  else
+    cannot := CommandRefusal(ACmd);
   c := FCaret;
   a := FSelAnchor;
   atEnd := FCaretAtEnd;
@@ -5382,7 +5410,8 @@ begin
   if not ok then
   begin
     PayModifiedOwed;
-    // CanExecute said no: the reason that holds for that command
+    // CanExecute said no: the reason that holds for that command (asked of one like it)
+    if lateWhy then cannot := LateTableRefusal(edit);
     Refuse(cannot, AUser);
     Exit;
   end;
@@ -5392,6 +5421,25 @@ begin
   { The step it became - its own, or the run of typing it merged into: the newest of the
     history (inside the document's update it went into the update's block: no step yet). }
   if Result and not FDoc.Updating then FEditStep := FDoc.UndoStep;
+end;
+
+function TTyCustomRichEdit.LateTableRefusal(const AEdit: TTyRichTableEdit): string;
+var
+  cmd: TTyRichCommand;
+begin
+  case AEdit.Kind of
+    rtkInsertTable: cmd := TTyRichInsertTable.Create(AEdit.Pos, AEdit.Rows, AEdit.Cols, AEdit.Width);
+    rtkInsertRow: cmd := TTyRichInsertRow.Create(AEdit.Pos, AEdit.Index);
+    rtkDeleteRow: cmd := TTyRichDeleteRow.Create(AEdit.Pos, AEdit.Index);
+    rtkInsertColumn: cmd := TTyRichInsertColumn.Create(AEdit.Pos, AEdit.Index);
+  else
+    cmd := TTyRichDeleteColumn.Create(AEdit.Pos, AEdit.Index);
+  end;
+  try
+    Result := CommandRefusal(cmd);
+  finally
+    cmd.Free;
+  end;
 end;
 
 function TTyCustomRichEdit.CommandRefusal(ACmd: TTyRichCommand): string;
@@ -5888,9 +5936,15 @@ begin
   t := FDoc.Text;
   q := Math.Min(FCaret, t.Length);
   Result := t.ParaOfPos(q);
-  if (FSelAnchor < q) and (Result > 0) and (q = t.ParaStart(Result)) and
-     (FSelAnchor < t.ParaStart(Result)) then
-    Dec(Result);
+  if (FSelAnchor < q) and (Result > 0) and (q = t.ParaStart(Result)) then
+  begin
+    FDoc.BeginRead;
+    try
+      if FDoc.WholeRows(FSelAnchor, q) then Dec(Result);
+    finally
+      FDoc.EndRead;
+    end;
+  end;
 end;
 
 function TTyCustomRichEdit.RunTableAction(AKind: Integer): Boolean;
@@ -5902,13 +5956,8 @@ begin
     action is set up (its commit's handlers may ask an action of their own). }
   EndCompositionForUser;
   if not IsEnabled or ViewBehind then Exit;
-  { The door tells nothing for ReadOnly (a viewer takes a key and does nothing, as the memo);
-    an action asked for by name is told why it did nothing. }
-  if FReadOnly then
-  begin
-    EditRefused(rsRichEditRefusedReadOnly);
-    Exit;
-  end;
+  // a viewer does nothing and tells nothing, as for its other user's actions
+  if FReadOnly then Exit;
   // a table cannot be saved into a text file
   if PlainTextDocument then
   begin
@@ -5923,7 +5972,8 @@ function TTyCustomRichEdit.MakeTableEdit(var APlace: TTyRichEditPlace): TTyRichC
 var
   t: TTyRichText;
   s, e, pos, from, stop: TTyRichPos;
-  k, ks, ke, p1, p2, r1, r2, c1, c2, m, f, lastFirst: Integer;
+  k, ks, ke, p1, p2, r1, r2, c1, c2, m, n, lastFirst: Integer;
+  cols: array of Boolean;
   info: TTyRichTableInfo;
   why: TTyRichTableRefusal;
   reason: string;
@@ -6018,6 +6068,43 @@ begin
   end;
   k := CaretTablePara;
   pos := t.ParaStart(k);
+  if FTableKind in [CTableInsertRow, CTableTabRow] then
+  begin
+    { A row beside the caret's row: the engine finds that row in the read it makes anyway
+      (CRichRowAbove / CRichRowBelow); here only the caret's row is looked at, for where the
+      new row's first paragraph will be. }
+    FDoc.BeginRead;
+    try
+      if FDoc.CellAt(k) = nil then
+        reason := rsRichEditRefusedNoTable
+      else
+      begin
+        row := FDoc.CellAt(k).Row;
+        p1 := k;
+        while (p1 > 0) and (FDoc.CellAt(p1 - 1) <> nil) and (FDoc.CellAt(p1 - 1).Row = row) do
+          Dec(p1);
+        p2 := k;
+        while (p2 < t.ParaCount - 1) and (FDoc.CellAt(p2 + 1) <> nil) and
+          (FDoc.CellAt(p2 + 1).Row = row) do
+          Inc(p2);
+        // (Tab's row: below the caret's row, the last of the table a person sees)
+        if (FTableKind = CTableTabRow) or FTableAfter then
+        begin
+          FAimPara := p2 + 1;
+          Result := TTyRichInsertRow.Create(pos, CRichRowBelow);
+        end
+        else
+        begin
+          FAimPara := p1;
+          Result := TTyRichInsertRow.Create(pos, CRichRowAbove);
+        end;
+      end;
+    finally
+      FDoc.EndRead;
+    end;
+    if reason <> '' then EditRefused(reason);
+    Exit;
+  end;
   if not FDoc.TableInfoAt(k, info) then
   begin
     EditRefused(rsRichEditRefusedNoTable);
@@ -6026,17 +6113,6 @@ begin
   FDoc.BeginRead;
   try
     case FTableKind of
-      CTableInsertRow:
-        begin
-          if FTableAfter then FAimPara := info.RowLast + 1 else FAimPara := info.RowFirst;
-          Result := TTyRichInsertRow.Create(pos, info.Row + Ord(FTableAfter));
-        end;
-      CTableTabRow:
-        begin
-          // below the last row: its paragraphs go before the paragraph after the table
-          FAimPara := info.Last + 1;
-          Result := TTyRichInsertRow.Create(pos, info.RowCount);
-        end;
       CTableInsertColumn:
         begin
           FAimPara := info.First;
@@ -6050,6 +6126,9 @@ begin
           // what keeps the rows and columns from changing does not keep the table
           if why in [rtrNone, rtrMergedCells, rtrNestedTable, rtrIrregularRows] then
             Result := WholeTable(why)
+          // (the table cannot be read whole: deleting it is what cannot be done)
+          else if why = rtrNotWhole then
+            reason := rsRichEditRefusedDeleteNotWhole
           else
             reason := TableRefusalText(why, TyRichTableEdit(rtkDeleteRow, pos, 0));
         end;
@@ -6109,40 +6188,67 @@ begin
         end
         else
         begin
-          // columns: between the two ends' cells; an end outside the table takes the row's edge
-          if (ks >= info.First) and (ks <= info.Last) then c1 := FDoc.CellAt(ks).Index
-          else c1 := 0;
-          if (ke >= info.First) and (ke <= info.Last) then c2 := FDoc.CellAt(ke).Index
-          else c2 := info.CellCount - 1;
+          { Columns: those of every cell the selection covers, in text order - as it is
+            painted: from its start's cell to the end of that row, the rows between whole, the
+            end's row up to its cell. An end outside the table stands at the table's first
+            cell (before it) or its last (after it). }
+          SetLength(cols, info.CellCount);
+          for m := 0 to High(cols) do cols[m] := False;
           if GetSelLength = 0 then
+            cols[Math.Min(FDoc.CellAt(k).Index, High(cols))] := True
+          else
           begin
-            c1 := FDoc.CellAt(k).Index;
-            c2 := c1;
+            if (ks >= info.First) and (ks <= info.Last) then
+            begin
+              r1 := RowOf(ks);
+              c1 := FDoc.CellAt(ks).Index;
+            end
+            else
+            begin
+              r1 := 0;
+              c1 := 0;
+            end;
+            if (ke >= info.First) and (ke <= info.Last) then
+            begin
+              r2 := RowOf(ke);
+              c2 := FDoc.CellAt(ke).Index;
+            end
+            else
+            begin
+              r2 := info.RowCount - 1;
+              c2 := info.CellCount - 1;
+            end;
+            for m := 0 to High(cols) do
+              if r1 = r2 then cols[m] := (m >= c1) and (m <= c2)
+              else if r2 > r1 + 1 then cols[m] := True
+              else cols[m] := (m >= c1) or (m <= c2);
           end;
-          if c1 > c2 then
-          begin
-            m := c1;
-            c1 := c2;
-            c2 := m;
-          end;
+          n := 0;
+          c1 := -1;
+          for m := High(cols) downto 0 do
+            if cols[m] then
+            begin
+              Inc(n);
+              c1 := m;
+            end;
           FAimPara := info.First;
           FAimRow := info.Row;
           FAimCell := c1;
-          if c1 = c2 then
+          if n = 1 then
             Result := TTyRichDeleteColumn.Create(pos, c1)
           else
           begin
             why := FDoc.TableEditRefusal(TyRichTableEdit(rtkDeleteColumn, pos, c1));
             if why <> rtrNone then
               reason := TableRefusalText(why, TyRichTableEdit(rtkDeleteColumn, pos, c1))
-            else if (c1 = 0) and (c2 >= info.CellCount - 1) then
+            else if n = Length(cols) then
               Result := WholeTable(why)
             else
             begin
               // right to left: the cell indexes of those still to go stay as they were
               comp := TTyRichCompositeCommand.Create(rsRichUndoDeleteColumn);
-              for f := Math.Min(c2, info.CellCount - 1) downto c1 do
-                comp.Add(TTyRichDeleteColumn.Create(pos, f));
+              for m := High(cols) downto 0 do
+                if cols[m] then comp.Add(TTyRichDeleteColumn.Create(pos, m));
               Result := comp;
             end;
           end;
@@ -6308,6 +6414,7 @@ var
   c: TTyRichCell;
   rr, cr: TTyRichTableRefusal;
   pos: TTyRichPos;
+  same: Boolean;
 
   // a paragraph a file read on demand has not given yet has no value: not read just to answer
   function Known(AIndex: Integer): Boolean;
@@ -6338,7 +6445,13 @@ begin
     FDoc.BeginRead;
     try
       FAskInsTable := not Known(ks) or (FDoc.CellAt(ks) = nil);
-      if not Known(k) then Exit;
+      // (an answer for a paragraph not read yet is not kept: asked again, it is read by then)
+      if not Known(ks) then FAskValid := False;
+      if not Known(k) then
+      begin
+        FAskValid := False;
+        Exit;
+      end;
       c := FDoc.CellAt(k);
       FAskIn := c <> nil;
       if not FAskIn or busy then Exit;
@@ -6353,6 +6466,7 @@ begin
         FAskTable := True;
         Exit;
       end;
+      same := (FAskTbl <> nil) and (FAskTbl = c.Table) and (FAskTblState = FDoc.ContentState);
     finally
       FDoc.EndRead;
     end;
@@ -6361,22 +6475,48 @@ begin
       different numbers of cells, which forbid columns only; only then is it read again,
       for a row. What keeps a row from going keeps the others; a column too many for an
       insert is none too many for a delete. }
-    pos := t.ParaStart(k);
-    cr := FDoc.TableEditRefusal(TyRichTableEdit(rtkInsertColumn, pos, 0));
-    if cr = rtrIrregularRows then
-      rr := FDoc.TableEditRefusal(TyRichTableEdit(rtkInsertRow, pos, 0))
-    else if cr = rtrOutOfRange then
-      rr := rtrNone
-    else
-      rr := cr;
-    FAskRows := rr = rtrNone;
-    FAskColIns := cr = rtrNone;
-    FAskColDel := cr in [rtrNone, rtrOutOfRange];
-    FAskTable := rr in [rtrNone, rtrMergedCells, rtrNestedTable, rtrIrregularRows];
+    { All of it is true of the whole table: kept for its table object and content, so a
+      move inside the table reads nothing. }
+    if not same then
+    begin
+      pos := t.ParaStart(k);
+      cr := FDoc.TableEditRefusal(TyRichTableEdit(rtkInsertColumn, pos, 0));
+      if cr = rtrIrregularRows then
+        rr := FDoc.TableEditRefusal(TyRichTableEdit(rtkInsertRow, pos, 0))
+      else if cr = rtrOutOfRange then
+        rr := rtrNone
+      else
+        rr := cr;
+      if FAskTbl <> nil then FAskTbl.Release;
+      FAskTbl := nil;
+      FDoc.BeginRead;
+      try
+        // (the object read again in a scope: a read in between may have let the first go)
+        c := FDoc.CellAt(k);
+        if c <> nil then
+        begin
+          FAskTbl := c.Table;
+          FAskTbl.AddRef;
+        end;
+      finally
+        FDoc.EndRead;
+      end;
+      FAskTblState := FDoc.ContentState;
+      FAskTblRows := rr = rtrNone;
+      FAskTblColIns := cr = rtrNone;
+      FAskTblColDel := cr in [rtrNone, rtrOutOfRange];
+      FAskTblDelete := rr in [rtrNone, rtrMergedCells, rtrNestedTable, rtrIrregularRows];
+    end;
+    FAskRows := FAskTblRows;
+    FAskColIns := FAskTblColIns;
+    FAskColDel := FAskTblColDel;
+    FAskTable := FAskTblDelete;
   except
     // (never raised to an action's Update: a file that cannot be read answers no)
     on Exception do
     begin
+      // (not kept: asked again, it reads again)
+      FAskValid := False;
       FAskIn := False;
       FAskInsTable := False;
       FAskRows := False;
@@ -6481,7 +6621,8 @@ var
 begin
   Result := False;
   t := FDoc.Text;
-  k := t.ParaOfPos(Math.Min(FCaret, t.Length));
+  // the paragraph the methods take too (a caret ending whole rows stands in the last of them)
+  k := CaretTablePara;
   found := False;
   fp := -1;
   lp := -1;
@@ -8490,8 +8631,8 @@ end;
 
 { ---- the input method ----
 
-  How the package's memo takes an input method, and what of it is here (phase 1 changes
-  nothing in the memo):
+  How the package's memo takes an input method, and what of it is here (the memo itself is
+  not changed by it):
   - win32: the memo leaves the composition to the system's composition window (placed at its
     caret, TySetImeCaretPos) and takes the commit as WM_CHAR typing. Here the composition is
     shown in the text: the messages are taken (Result 1, so neither the composition window nor
@@ -8846,15 +8987,16 @@ begin
 end;
 
 { The one door of a user's edit and action: a key's edit (KeyDown's edit keys, a character
-  typed, Ctrl+A), a press, the menu's actions - and paste, the format actions and
-  table editing (Tasks 11, 12) must come in through it as well. A composition open in the text
+  typed, Ctrl+A, Tab between cells), a press, the menu's actions, paste, the format actions
+  and the table actions all come in through it. A composition open in the text
   ends first, committed as a press commits it (what the input method has goes in where it was
   shown), so that the action works on the document the user sees: never on the text under a
   composition, nor a commit on a selection the action made (Ctrl+A, then a commit replacing
   everything). Copying, moving the caret, scrolling and zooming do not end it.
   The public methods that are a user's actions in an application's hands - an action list's
   shortcut (the form takes it before KeyDown), a toolbar button that never takes the focus -
-  come through it too: CutToClipboard, PasteFromClipboard, Undo, Redo. Not the
+  come through it too: CutToClipboard, PasteFromClipboard, Undo, Redo, InsertTable ..
+  DeleteTable. Not the
   ones that are code: SelText :=, SelectAll, the setters, Lines, the document's own API (a
   composition follows such a change, and its commit goes where it moved). }
 procedure TTyCustomRichEdit.EndCompositionForUser;

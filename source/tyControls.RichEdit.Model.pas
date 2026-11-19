@@ -369,8 +369,9 @@ type
     Kind: TTyRichTableEditKind;
     { rtkInsertTable: where the table goes; the others: any position in the table. }
     Pos: TTyRichPos;
-    { The row (rtkInsertRow 0 .. row count: the new row's index) or the cell index
-      (rtkInsertColumn 0 .. cell count; the delete kinds: an existing one). }
+    { The row (rtkInsertRow 0 .. row count: the new row's index, or CRichRowAbove /
+      CRichRowBelow) or the cell index (rtkInsertColumn 0 .. cell count; the delete kinds:
+      an existing one). }
     Index: Integer;
     // rtkInsertTable: its size, and its width in twips (0: the document's text width)
     Rows, Cols, Width: Integer;
@@ -406,6 +407,10 @@ const
   // the size of a table made here: Word's limits, 63 columns and 32767 rows
   CRichMaxTableCols = 63;
   CRichMaxTableRows = 32767;
+  { rtkInsertRow's Index for a row right above / below the row Pos is in: the edit finds that
+    row in the read it makes anyway, so a caller that knows only the position reads nothing. }
+  CRichRowAbove = -1;
+  CRichRowBelow = -2;
 
 type
 
@@ -5303,7 +5308,9 @@ begin
   if S.Locked <> rtrNone then Exit(S.Locked);
   case AEdit.Kind of
     rtkInsertRow:
-      if (AEdit.Index < 0) or (AEdit.Index > S.RowCount) then Exit(rtrOutOfRange);
+      if (AEdit.Index <> CRichRowAbove) and (AEdit.Index <> CRichRowBelow) and
+         ((AEdit.Index < 0) or (AEdit.Index > S.RowCount)) then
+        Exit(rtrOutOfRange);
     rtkDeleteRow:
       if (AEdit.Index < 0) or (AEdit.Index >= S.RowCount) then Exit(rtrOutOfRange);
   else
@@ -5320,6 +5327,27 @@ begin
   // (a row edit needs the rows' cells in order too: a cell's paragraphs are found by it)
   if not S.Ordered then Exit(rtrIrregularRows);
   Result := rtrNone;
+end;
+
+{ AEdit with a row named by its position (CRichRowAbove, CRichRowBelow) given its index in S:
+  the row of the paragraph at AEdit.Pos, or the one after it. }
+function ResolvedEdit(ADoc: TTyRichDocument; const AEdit: TTyRichTableEdit;
+  const S: TTyRichShape): TTyRichTableEdit;
+var
+  k, r: Integer;
+begin
+  Result := AEdit;
+  if (AEdit.Kind <> rtkInsertRow) or
+     ((AEdit.Index <> CRichRowAbove) and (AEdit.Index <> CRichRowBelow)) then
+    Exit;
+  k := ADoc.FText.ParaOfPos(AEdit.Pos);
+  for r := 0 to S.RowCount - 1 do
+    if (k >= S.Rows[r].First) and (k <= S.Rows[r].Last) then
+    begin
+      Result.Index := r + Ord(AEdit.Index = CRichRowBelow);
+      Exit;
+    end;
+  Result.Index := S.RowCount;
 end;
 
 function TTyRichDocument.TableEditRefusal(const AEdit: TTyRichTableEdit): TTyRichTableRefusal;
@@ -5408,7 +5436,7 @@ begin
       if r <> rtrNone then
         raise ETyRichRefused.CreateFmt('The table edit is refused (%s)', [RefusalName(r)]);
       ed.Doc := Self;
-      ed.Edit := AEdit;
+      ed.Edit := ResolvedEdit(Self, AEdit, ed.Shape);
       ed.Kept := @ATables;
       Result := ed.Run;
     finally

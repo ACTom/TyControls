@@ -942,10 +942,6 @@ msgstr "内存不足，无法粘贴。"
 msgid "Table rows cannot be pasted over rows of a table: paste them outside the table, or into a cell as its text."
 msgstr "复制的表格行不能粘贴到表格的行上：请粘贴到表格外面，或者粘贴到一个单元格里作为它的文字。"
 
-#: tycontrols.strconsts.rsricheditrefusedreadonly
-msgid "The document is read-only: it cannot be changed."
-msgstr "文档是只读的，不能修改。"
-
 #: tycontrols.strconsts.rsricheditrefusedplaintable
 msgid "A plain text document cannot hold a table."
 msgstr "纯文本文档里不能有表格。"
@@ -969,6 +965,10 @@ msgstr "这个表格的单元格里套着另一个表格，不能插入或删除
 #: tycontrols.strconsts.rsricheditrefusedtablenotwhole
 msgid "This table is too large, or not complete in its file, for its rows and columns to be inserted or deleted."
 msgstr "这个表格太大，或者在文件里不完整，不能插入或删除它的行和列。"
+
+#: tycontrols.strconsts.rsricheditrefuseddeletenotwhole
+msgid "This table is too large, or not complete in its file, to be deleted as a whole."
+msgstr "这个表格太大，或者在文件里不完整，不能整个删除。"
 
 #: tycontrols.strconsts.rsricheditrefusedirregularrows
 msgid "The rows of this table do not all have the same number of cells: its columns cannot be inserted or deleted."

@@ -75,6 +75,10 @@ type
     procedure TestTheViewIsAFreshControlsAfterEachAction;
     procedure TestARowEditLaysOutOnlyTheRowsItChanged;
     procedure TestThePathsThatStayAsTheyWereOnAChangedTable;
+    // which cells a selection takes, which paragraph a caret stands for, the edges
+    procedure TestDeleteColumnTakesTheColumnOfEveryCellCovered;
+    procedure TestTheCaretStandsForOneParagraphForEveryAction;
+    procedure TestTheTableKeysAndActionsAtTheEdges;
   end;
 
 implementation
@@ -378,6 +382,44 @@ begin
   Result := TTyRichTable.Create([1500, 3000]);
   Result.AddRow(2);
   Result.AddRow(2);
+end;
+
+// 'before', a 1 x 2 table, 'mid', a table of one cell, 'after'.
+function TouchRtf: RawByteString;
+begin
+  Result := Head + RowRtf(['a0', 'a1'], []) + BS + 'pard mid' + BS + 'par' + #13#10 +
+    RowRtf(['b0'], []) + BS + 'pard after' + BS + 'par' + #13#10 + '}';
+end;
+
+type
+  // A paragraph loader that leaves every paragraph plain - or, with Fail, raises.
+  TFailingLoader = class(TTyRichParaLoader)
+  public
+    Fail: Boolean;
+    procedure LoadParagraph(ADoc: TTyRichDocument; AIndex: Integer); override;
+  end;
+
+  TBuilderAccess = class(TTyRichDocBuilder)
+  end;
+
+  // The editor's probe on a document that reads its paragraphs through TFailingLoader.
+  TLoaderProbe = class(TEditProbe)
+  protected
+    function CreateDocument: TTyRichDocument; override;
+  public
+    Loader: TFailingLoader;
+  end;
+
+procedure TFailingLoader.LoadParagraph(ADoc: TTyRichDocument; AIndex: Integer);
+begin
+  if Fail then raise Exception.Create('the paragraph cannot be read');
+end;
+
+function TLoaderProbe.CreateDocument: TTyRichDocument;
+begin
+  Result := TTyRichDocument.CreateFromUtf8(RawBytes('before' + #10 + 'after'));
+  Loader := TFailingLoader.Create;
+  Result.InstallLoader(Loader, True);
 end;
 
 { ---- the suite ---- }
@@ -801,6 +843,7 @@ var
   d: TTyRichDocument;
   t: TTyRichText;
   k: Integer;
+  engine: Int64;
 begin
   LongTable(Rows);
   FRich.WantTabs := True;
@@ -820,6 +863,30 @@ begin
   AssertEquals('no table paragraph visited', 0, d.TableParaVisits);
   AssertTrue(Format('%d paragraphs laid out', [FRich.LaidParas]), FRich.LaidParas < 100);
   AssertFalse('no step', d.CanUndo);
+  // a row by Tab in the last cell, and by InsertRow: the engine's own reads of the table only
+  d.TableParaVisits := 0;
+  AssertTrue('the engine''s row', d.Execute(TTyRichInsertRow.Create(t.ParaStart(1), Rows)));
+  engine := d.TableParaVisits;
+  d.Undo;
+  AssertTrue('the engine reads the table', engine > 2 * Rows);
+  FRich.SelStart := t.ParaStart(2 * Rows);
+  d.TableParaVisits := 0;
+  Press(VK_TAB);
+  AssertEquals('Tab''s row: the engine''s reads, no more', engine, d.TableParaVisits);
+  AssertEquals('Tab''s row: below the last', '', ParaText(d, 2 * Rows + 1));
+  AssertTrue('Tab''s row: in the table', d.CellAt(2 * Rows + 2) <> nil);
+  CheckSel('Tab''s row: its first cell', t.ParaStart(2 * Rows + 1), 0);
+  FRich.Undo;
+  FRich.SelStart := t.ParaStart(k);
+  d.TableParaVisits := 0;
+  AssertTrue('InsertRow', FRich.InsertRow);
+  AssertEquals('InsertRow: the engine''s reads, no more', engine, d.TableParaVisits);
+  CheckSel('InsertRow: the new row''s first cell', t.ParaStart(k + 2), 0);
+  FRich.Undo;
+  d.TableParaVisits := 0;
+  AssertTrue('InsertRow above', FRich.InsertRow(False));
+  AssertEquals('InsertRow above: the engine''s reads, no more', engine, d.TableParaVisits);
+  CheckSel('InsertRow above: the new row''s first cell', t.ParaStart(k), 0);
 end;
 
 { ---- the actions ---- }
@@ -969,7 +1036,7 @@ begin
   FRich.SelStart := 2;
   FRich.SelLength := t.ParaStart(f + 4) + 1 - 2;
   AssertTrue('columns from before the table', FRich.DeleteColumn);
-  AssertEquals('columns 0 and 1 gone (from the row''s edge)', 'r0c2/r1c2/r2c2', Shape(d, f));
+  AssertEquals('the whole first row covered: every column, the table', -1, FirstTablePara(d));
   FRich.Undo;
   // all of them: the table; the caret to what followed it
   FRich.SelStart := t.ParaStart(f) + 1;
@@ -995,12 +1062,12 @@ begin
   // the columns between the selection's two cells, one step
   FRich.SelStart := t.ParaStart(f + 1);
   FRich.SelLength := t.ParaStart(f + 5) + 1 - FRich.SelStart;
-  AssertTrue('two columns', FRich.DeleteColumn);
-  AssertEquals('columns 1 and 2 gone', 'r0c0/r1c0/r2c0', Shape(d, f));
-  CheckSel('the cell left of them in the caret''s row', t.ParaStart(f + 1), 0);
-  AssertEquals('one step', rsRichUndoDeleteColumn, d.UndoDescription);
+  AssertTrue('two rows'' cells', FRich.DeleteColumn);
+  // (row 0 from cell 1 on and row 1 to cell 2: every column is covered)
+  AssertEquals('every column: the table', -1, FirstTablePara(d));
+  AssertEquals('one step', rsRichUndoDeleteTable, d.UndoDescription);
   FRich.Undo;
-  AssertEquals('undone in one', shape0, Shape(d, f));
+  AssertEquals('undone at once', shape0, Shape(d, f));
   FRich.SelStart := t.ParaStart(f + 3);
   FRich.SelLength := t.ParaStart(f + 4) + 1 - FRich.SelStart;
   AssertTrue('the first two columns', FRich.DeleteColumn);
@@ -1182,7 +1249,14 @@ var
       else
         r := FRich.InsertTable(2, 2);
       end;
-      CheckRefused(Format('%s, %d', [AWhat, j]), r, AReason);
+      if AReason = '' then
+      begin
+        // a viewer: nothing, and nothing told, as for its other user's actions
+        AssertFalse(Format('%s, %d: not done', [AWhat, j]), r);
+        AssertEquals(Format('%s, %d: nothing told', [AWhat, j]), 0, FRich.Refused);
+      end
+      else
+        CheckRefused(Format('%s, %d', [AWhat, j]), r, AReason);
     end;
     AssertEquals(AWhat + ': nothing changed', before, Shape(d, f));
   end;
@@ -1197,7 +1271,7 @@ begin
   d.ClearUndo;
   // the control's states: ReadOnly, a plain text document
   FRich.ReadOnly := True;
-  Each('read-only', rsRichEditRefusedReadOnly);
+  Each('read-only', '');
   FRich.ReadOnly := False;
   FRich.PlainText := True;
   Each('plain text', rsRichEditRefusedPlainTable);
@@ -1398,6 +1472,7 @@ var
   t: TTyRichText;
   k: Integer;
   first: Int64;
+  r: TRect;
 
   procedure AskAll;
   begin
@@ -1414,6 +1489,11 @@ begin
   LongTable(Rows);
   d := FRich.Document;
   t := d.Text;
+  // a second table, of one cell, after the long one's 'after'
+  AssertTrue('a second table', d.Execute(TTyRichInsertTable.Create(t.Length, 1, 1)));
+  d.ClearUndo;
+  FRich.UpdateView;
+  AssertTrue('the second table', d.CellAt(2 * Rows + 2) <> nil);
   k := 1 + 2 * (Rows div 2);
   FRich.SelStart := t.ParaStart(k);
   d.TableParaVisits := 0;
@@ -1424,20 +1504,36 @@ begin
   AskAll;
   AskAll;
   AssertEquals('asked again: nothing read', first, d.TableParaVisits);
-  // the selection moves: asked again
-  FRich.SelStart := t.ParaStart(k + 1);
+  { Moves inside the table - a key, another, a click in another row: what is true of the
+    whole table is kept, nothing is read again. }
+  Press(VK_DOWN);
+  AssertEquals('Down', t.ParaStart(k + 2), FRich.CaretIndex);
   AskAll;
-  AssertEquals('a move: read again', 2 * first, d.TableParaVisits);
+  Press(VK_RIGHT);
   AskAll;
-  AssertEquals('then not', 2 * first, d.TableParaVisits);
-  // an edit: asked again
+  FRich.UpdateView;
+  r := FRich.PositionRect(t.ParaStart(k + 4));
+  FRich.PressAt(r.Left + 1, (r.Top + r.Bottom) div 2);
+  FRich.ReleaseAt(r.Left + 1, (r.Top + r.Bottom) div 2);
+  AssertEquals('a click in another row', t.ParaStart(k + 4), FRich.CaretIndex);
+  AskAll;
+  AssertEquals('moves inside the table: nothing read', first, d.TableParaVisits);
+  AssertTrue('the answers there', FRich.CanInsertRow and FRich.CanDeleteColumn);
+  // an edit: read again
   FRich.SelText := 'x';
   AskAll;
-  AssertEquals('an edit: read again', 3 * first, d.TableParaVisits);
+  AssertEquals('an edit: read again', 2 * first, d.TableParaVisits);
+  // the caret into another table: that one read (its cell and the paragraph on either side)
+  FRich.SelStart := t.ParaStart(2 * Rows + 2);
+  AskAll;
+  AssertEquals('another table: read', 2 * first + 3, d.TableParaVisits);
+  FRich.SelStart := t.ParaStart(k);
+  AskAll;
+  AssertEquals('back in the first: read again', 3 * first + 3, d.TableParaVisits);
   // outside a table: nothing read; and the answers follow the caret
   FRich.SelStart := 0;
   AskAll;
-  AssertEquals('outside: nothing read', 3 * first, d.TableParaVisits);
+  AssertEquals('outside: nothing read', 3 * first + 3, d.TableParaVisits);
   AssertFalse('outside: no row', FRich.CanInsertRow);
   FRich.SelStart := t.ParaStart(k);
   AssertTrue('inside: a row', FRich.CanInsertRow);
@@ -1554,7 +1650,7 @@ begin
   CheckRefused('too large: a row', FRich.InsertRow, rsRichEditRefusedTableNotWhole);
   CheckRefused('too large: a column', FRich.InsertColumn, rsRichEditRefusedTableNotWhole);
   CheckRefused('too large: delete a row', FRich.DeleteRow, rsRichEditRefusedTableNotWhole);
-  CheckRefused('too large: the table', FRich.DeleteTable, rsRichEditRefusedTableNotWhole);
+  CheckRefused('too large: the table', FRich.DeleteTable, rsRichEditRefusedDeleteNotWhole);
   q := t.ParaStart(k + 1);
   Press(VK_TAB);
   CheckSel('Tab moves in it', q, Length('r7000 b'));
@@ -1615,6 +1711,16 @@ begin
   finally
     d.EndUpdate;
   end;
+  // once the paragraph is read, the real answer: that answer was not kept
+  d.BeginRead;
+  try
+    AssertTrue('a table paragraph', d.CellAt(k) <> nil);
+  finally
+    d.EndRead;
+  end;
+  AssertEquals('the caret still there', d.Text.ParaStart(k), FRich.CaretIndex);
+  AssertTrue('read: in a table', FRich.InTable);
+  AssertTrue('read: a row', FRich.CanInsertRow);
 end;
 
 { ---- the caret, the view, the other paths ---- }
@@ -1906,6 +2012,237 @@ begin
     FRich.PasteFromClipboard;
     CheckRefused('rows over rows', False, rsRichEditRefusedPasteRows);
     AssertEquals('nothing changed at last', before, Shape(d, f));
+  end;
+end;
+
+{ ---- which cells, which paragraph, the edges ---- }
+
+procedure TTyRichTableEditTest.TestDeleteColumnTakesTheColumnOfEveryCellCovered;
+var
+  d: TTyRichDocument;
+  t: TTyRichText;
+  f: Integer;
+  shape0: string;
+
+  procedure Sel(AAnchor, ACaret: TTyRichPos);
+  begin
+    FRich.SelStart := AAnchor;
+    FRich.SelLength := ACaret - AAnchor;
+  end;
+
+  procedure Check(const AWhat, AShape: string; ACaretPara: Integer = -1);
+  begin
+    AssertTrue(AWhat + ': done', FRich.DeleteColumn);
+    if ACaretPara >= 0 then CheckSel(AWhat + ': the caret', t.ParaStart(ACaretPara), 0);
+    if AShape = '' then
+    begin
+      AssertEquals(AWhat + ': the table gone', -1, FirstTablePara(d));
+      AssertEquals(AWhat + ': a step of its own', rsRichUndoDeleteTable, d.UndoDescription);
+    end
+    else
+    begin
+      AssertEquals(AWhat + ': the columns left', AShape, Shape(d, f));
+      AssertEquals(AWhat + ': one step', rsRichUndoDeleteColumn, d.UndoDescription);
+    end;
+    FRich.Undo;
+    AssertEquals(AWhat + ': undone', shape0, Shape(d, f));
+  end;
+
+begin
+  LoadRtf(TableRtf(2, 3, []));
+  d := FRich.Document;
+  t := d.Text;
+  f := FirstTablePara(d);
+  shape0 := Shape(d, f);
+  // from before the table into row 1: every cell of row 0 is covered
+  Sel(2, t.ParaStart(f + 3) + 2);
+  Check('from before the table into row 1', '');
+  // from after the table back into row 0's last cell: every cell of row 1 is covered
+  Sel(t.ParaStart(f + 6) + 2, t.ParaStart(f + 2) + 1);
+  Check('from after the table into row 0', '');
+  // from before the table into row 0: the cells up to the end's
+  Sel(2, t.ParaStart(f + 1) + 1);
+  Check('from before the table into row 0', 'r0c2/r1c2');
+  // ends in rows next to each other: the start's cell to its row's end, the end's row to its cell
+  Sel(t.ParaStart(f + 2) + 1, t.ParaStart(f + 3) + 1);
+  // (the caret in its row's cell that took the place of the first column that went)
+  Check('row 0''s last cell to row 1''s first', 'r0c1/r1c1', f + 1);
+  Sel(t.ParaStart(f + 3) + 1, t.ParaStart(f + 2) + 1);
+  Check('the same, reversed', 'r0c1/r1c1');
+  Sel(t.ParaStart(f + 1) + 1, t.ParaStart(f + 4) + 1);
+  Check('row 0''s second cell to row 1''s second', '');
+  // in one row, reversed
+  Sel(t.ParaStart(f + 2) + 1, t.ParaStart(f + 1) + 1);
+  Check('in one row, reversed', 'r0c0/r1c0');
+end;
+
+procedure TTyRichTableEditTest.TestTheCaretStandsForOneParagraphForEveryAction;
+var
+  d: TTyRichDocument;
+  t: TTyRichText;
+  f, m: Integer;
+begin
+  // a selection from the paragraph above to the first cell's start: the caret is in that cell
+  LoadRtf(TableRtf(2, 2, []));
+  FRich.WantTabs := True;
+  d := FRich.Document;
+  t := d.Text;
+  f := FirstTablePara(d);
+  FRich.SelStart := 2;
+  FRich.SelLength := t.ParaStart(f) - 2;
+  AssertTrue('in a table', FRich.InTable);
+  AssertTrue('a row: yes', FRich.CanInsertRow);
+  AssertTrue('a row', FRich.InsertRow);
+  AssertEquals('below the caret''s row', 'r0c0|r0c1/|/r1c0|r1c1', Shape(d, f));
+  AssertEquals('nothing told', 0, FRich.Refused);
+  FRich.Undo;
+  FRich.SelStart := 2;
+  FRich.SelLength := t.ParaStart(f) - 2;
+  Press(VK_TAB);
+  CheckSel('Tab from the same cell', t.ParaStart(f + 1), 4);
+  // inside the table, not whole rows: the caret's own cell
+  LoadRtf(TableRtf(3, 2, []));
+  t := d.Text;
+  f := FirstTablePara(d);
+  FRich.SelStart := t.ParaStart(f) + 2;
+  FRich.SelLength := t.ParaStart(f + 4) - FRich.SelStart;
+  AssertTrue('a column', FRich.InsertColumn);
+  AssertEquals('right of the caret''s cell', 'r0c0||r0c1/r1c0||r1c1/r2c0||r2c1', Shape(d, f));
+  CheckSel('its cell in the caret''s row', t.ParaStart(f + 7), 0);
+  FRich.Undo;
+  FRich.SelStart := t.ParaStart(f) + 2;
+  FRich.SelLength := t.ParaStart(f + 4) - FRich.SelStart;
+  AssertTrue('a row', FRich.InsertRow);
+  AssertEquals('below the caret''s row', 'r0c0|r0c1/r1c0|r1c1/r2c0|r2c1/|', Shape(d, f));
+  FRich.Undo;
+  // whole rows down to the next row's start: the caret stands for the last of them
+  FRich.SelStart := t.ParaStart(f + 2);
+  FRich.SelLength := t.ParaStart(f + 4) - FRich.SelStart;
+  AssertTrue('a row below whole rows', FRich.InsertRow);
+  AssertEquals('below the selected row', 'r0c0|r0c1/r1c0|r1c1/|/r2c0|r2c1', Shape(d, f));
+  FRich.Undo;
+  // Tab with the last row selected whole, down to the paragraph after the table: its last
+  // cell's Tab - a row below
+  FRich.SelStart := t.ParaStart(f + 4);
+  FRich.SelLength := t.ParaStart(f + 6) - FRich.SelStart;
+  Press(VK_TAB);
+  AssertEquals('Tab: a row below the selected one', 'r0c0|r0c1/r1c0|r1c1/r2c0|r2c1/|', Shape(d, f));
+  CheckSel('Tab: its first cell', t.ParaStart(f + 6), 0);
+  FRich.Undo;
+  // two tables that touch, a selection from the first ending at the second's cell: Tab's row
+  // goes into the second, below the caret's row
+  LoadRtf(TouchRtf);
+  t := d.Text;
+  f := FirstTablePara(d);
+  m := f + 2;
+  AssertTrue('the paragraph between deleted', d.Execute(TTyRichDelete.Create(t.ParaStart(m),
+    t.ParaLength(m) + 1)));
+  FRich.UpdateView;
+  AssertEquals('the second table', 'b0', Shape(d, f + 2));
+  FRich.SelStart := t.ParaStart(f + 1) + 1;
+  FRich.SelLength := t.ParaStart(f + 2) - FRich.SelStart;
+  Press(VK_TAB);
+  AssertEquals('the first table as it was', 'a0|a1', Shape(d, f));
+  AssertEquals('a row in the second', 'b0/', Shape(d, f + 2));
+  CheckSel('its cell', t.ParaStart(f + 3), 0);
+end;
+
+procedure TTyRichTableEditTest.TestTheTableKeysAndActionsAtTheEdges;
+var
+  d: TTyRichDocument;
+  t: TTyRichText;
+  f, n, i: Integer;
+  before: string;
+  ok: Boolean;
+  lp: TLoaderProbe;
+
+  function Act(AIndex: Integer): Boolean;
+  begin
+    case AIndex of
+      0: Result := FRich.InsertRow;
+      1: Result := FRich.InsertColumn;
+      2: Result := FRich.DeleteRow;
+      3: Result := FRich.DeleteColumn;
+      4: Result := FRich.DeleteTable;
+    else
+      Result := FRich.InsertTable(2, 2);
+    end;
+  end;
+
+begin
+  LoadRtf(TableRtf(2, 2, []));
+  FRich.WantTabs := True;
+  d := FRich.Document;
+  t := d.Text;
+  f := FirstTablePara(d);
+  // a composition open in the cell goes in before Tab moves
+  FRich.SelStart := t.ParaStart(f);
+  FRich.UpdateComposition('xy');
+  AssertTrue('composing', FRich.Composing);
+  Press(VK_TAB);
+  AssertFalse('the composition ended', FRich.Composing);
+  AssertEquals('it went in where it was', 'xyr0c0', ParaText(d, f));
+  CheckSel('then Tab moved', t.ParaStart(f + 1), 4);
+  FRich.Undo;
+  // Alt+Tab and Meta+Tab are not the table's keys: a tab character, as outside a table
+  FRich.SelStart := t.ParaStart(f);
+  Press(VK_TAB, [ssAlt]);
+  AssertEquals('Alt+Tab: a tab character', #9 + 'r0c0', ParaText(d, f));
+  Press(VK_TAB, [ssMeta]);
+  AssertEquals('Meta+Tab: a tab character', #9#9 + 'r0c0', ParaText(d, f));
+  FRich.Undo;
+  FRich.Undo;
+  before := Shape(d, f);
+  FRich.SelStart := t.ParaStart(f);
+  // disabled, inside BeginEdit, inside the document's update: nothing, nothing told
+  for n := 0 to 2 do
+  begin
+    case n of
+      0: FRich.Enabled := False;
+      1: FRich.BeginEdit;
+    else
+      d.BeginUpdate;
+    end;
+    try
+      ResetEvents;
+      for i := 0 to 5 do
+      begin
+        ok := Act(i);
+        AssertFalse(Format('%d, %d: not done', [n, i]), ok);
+      end;
+      AssertEquals(Format('%d: nothing told', [n]), 0, FRich.Refused);
+    finally
+      case n of
+        0: FRich.Enabled := True;
+        1: FRich.EndEdit;
+      else
+        d.EndUpdate;
+      end;
+    end;
+    AssertEquals(Format('%d: nothing changed', [n]), before, Shape(d, f));
+  end;
+  AssertTrue('afterwards: done', FRich.InsertRow);
+  // a read that raises: the answer is no, and it is not kept - asked again, read again
+  lp := TLoaderProbe.Create(nil);
+  try
+    lp.Controller := FCtl;
+    lp.Font.PixelsPerInch := 96;
+    lp.SetBounds(0, 0, 400, 300);
+    d := lp.Document;
+    t := d.Text;
+    AssertTrue('a table', d.Execute(TTyRichInsertTable.Create(t.ParaStart(1), 2, 2)));
+    lp.UpdateView;
+    lp.SelStart := t.ParaStart(2);
+    // the paragraphs around the table sent back unread: a read of the table reads them
+    AssertTrue('before unread', TBuilderAccess.UnsetParagraph(d, 0, t.ParaData[0]));
+    AssertTrue('after unread', TBuilderAccess.UnsetParagraph(d, 5, t.ParaData[5]));
+    lp.Loader.Fail := True;
+    AssertFalse('the read raised: no', lp.CanInsertRow);
+    AssertEquals('nothing told', 0, lp.Refused);
+    lp.Loader.Fail := False;
+    AssertTrue('asked again: read again, yes', lp.CanInsertRow);
+  finally
+    lp.Free;
   end;
 end;
 

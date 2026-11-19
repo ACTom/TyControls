@@ -204,7 +204,8 @@ type
     function Description: string; override;
   end;
 
-  { A row at AIndex (0 .. the row count) of the table ATablePos is in. }
+  { A row at AIndex (0 .. the row count) of the table ATablePos is in; CRichRowAbove /
+    CRichRowBelow: right above / below the row ATablePos is in. }
   TTyRichInsertRow = class(TTyRichTableCommand)
   public
     constructor Create(ATablePos: TTyRichPos; AIndex: Integer);

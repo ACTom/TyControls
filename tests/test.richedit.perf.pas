@@ -475,8 +475,9 @@ end;
 { A table of 10,000 rows of two cells: Tab in its middle, from the key to the end of its
   paint, within 90 ms (a move: no table is walked); the first answer of the table actions'
   Can... functions after that move within 90 ms too (each walks the caret's table once), and
-  a second one (from what the first found). Printed: those, and a row added by Tab in the
-  table's last cell (the engine's row edit reads the table: not asserted). }
+  a second one (from what the first found); Down and the six answers, twenty times (a move
+  inside the table reads it no more), each within 90 ms. Printed: those, and a row added by
+  Tab in the table's last cell (the engine's row edit reads the table: not asserted). }
 procedure TTyRichEditPerfTest.TestTabAndTheTableAnswersInALongTable;
 const
   Rows = 10000;
@@ -485,7 +486,8 @@ var
   d: TTyRichDocument;
   t: TTyRichText;
   k: Integer;
-  t0, tab, first, again, add: Double;
+  t0, tab, first, again, add, move, total, worst: Double;
+  i: Integer;
   info: TTyRichTableInfo;
 begin
   bmp := TBitmap.Create;
@@ -517,6 +519,25 @@ begin
       FRich.CanDeleteRow and FRich.CanDeleteColumn and FRich.CanDeleteTable);
     again := Clock - t0;
     Report('table: the Can... answers asked again', again);
+    // Down, then the six answers an action list's idle asks: a move inside the table
+    total := 0;
+    worst := 0;
+    for i := 1 to 20 do
+    begin
+      t0 := Clock;
+      TPerfRich(FRich).Key(VK_DOWN, []);
+      FRich.CanInsertRow;
+      FRich.CanInsertColumn;
+      FRich.CanDeleteRow;
+      FRich.CanDeleteColumn;
+      FRich.CanDeleteTable;
+      FRich.CanInsertTable;
+      move := Clock - t0;
+      total := total + move;
+      if move > worst then worst := move;
+    end;
+    Report('table: Down and the six answers, the average of 20', total / 20);
+    Report('table: Down and the six answers, the slowest of 20', worst);
     // the last cell: a row below, through the user's door
     FRich.SelStart := t.ParaStart(2 * Rows);
     TPerfRich(FRich).PaintInto(bmp);
@@ -529,6 +550,7 @@ begin
     AssertTrue(Format('Tab in %.1f ms', [tab]), tab <= CKeystrokeMs);
     AssertTrue(Format('the first answers in %.1f ms', [first]), first <= CKeystrokeMs);
     AssertTrue(Format('the answers again in %.1f ms', [again]), again <= CKeystrokeMs);
+    AssertTrue(Format('Down and the answers in %.1f ms at most', [worst]), worst <= CKeystrokeMs);
   finally
     bmp.Free;
   end;

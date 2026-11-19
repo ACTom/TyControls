@@ -79,6 +79,8 @@ type
     procedure TestANeighbourPartWithNoUnreadParagraphIsNotWhole;
     procedure TestALoadersRangeWithAParagraphOutsideATable;
     procedure TestARowWithTheTablesEdges;
+    // a row named by a position
+    procedure TestARowBesideTheRowOfAPosition;
   end;
 
 implementation
@@ -2635,6 +2637,60 @@ begin
     AssertEquals('the new edges', '1000,2500,4000', RowEdgesOf(d.TableAt(0).Rows[0]));
     AssertEquals('every row', '1000,2500,4000', RowEdgesOf(d.TableAt(0).Rows[1]));
     AssertEquals('the shape', 'a|b|/c|d|', TableShape(d, 0));
+  finally
+    d.Free;
+  end;
+end;
+
+{ ---- a row named by a position ---- }
+
+{ CRichRowAbove / CRichRowBelow: the row right above / below the row the position is in, the
+  same edit as with its index, for the same reads of the table; undone and redone exactly. }
+procedure TTyRichTablesTest.TestARowBesideTheRowOfAPosition;
+var
+  d, e: TTyRichDocument;
+  r, side: Integer;
+  p: TTyRichPos;
+  before, after, msg: string;
+  visits: Int64;
+begin
+  for r := 0 to 2 do
+    for side := 0 to 1 do
+    begin
+      msg := Format('row %d, side %d', [r, side]);
+      e := TableDoc(3, 2);
+      d := TableDoc(3, 2);
+      try
+        e.TableParaVisits := 0;
+        AssertTrue(msg + ': by its index', Exec(e, TTyRichInsertRow.Create(TablePos(e), r + side)));
+        visits := e.TableParaVisits;
+        // a position inside the row's second cell
+        p := d.Text.ParaStart(1 + 2 * r + 1) + 1;
+        AssertTrue(msg + ': allowed', Refusal(d, rtkInsertRow, p, CRichRowBelow) = rtrNone);
+        before := Dump(d);
+        d.TableParaVisits := 0;
+        if side = 1 then
+          AssertTrue(msg + ': below', Exec(d, TTyRichInsertRow.Create(p, CRichRowBelow)))
+        else
+          AssertTrue(msg + ': above', Exec(d, TTyRichInsertRow.Create(p, CRichRowAbove)));
+        AssertEquals(msg + ': the same reads', visits, d.TableParaVisits);
+        AssertEquals(msg + ': the same table', TableShape(e, 1), TableShape(d, 1));
+        after := Dump(d);
+        d.Undo;
+        AssertEquals(msg + ': undone', before, Dump(d));
+        d.Redo;
+        AssertEquals(msg + ': redone', after, Dump(d));
+      finally
+        d.Free;
+        e.Free;
+      end;
+    end;
+  d := TableDoc(2, 2);
+  try
+    AssertTrue('outside a table: no table', Refusal(d, rtkInsertRow, 0, CRichRowBelow) = rtrNoTable);
+    AssertFalse('outside a table: not done', Exec(d, TTyRichInsertRow.Create(0, CRichRowAbove)));
+    AssertTrue('another negative index: out of range',
+      Refusal(d, rtkInsertRow, TablePos(d), -3) = rtrOutOfRange);
   finally
     d.Free;
   end;
