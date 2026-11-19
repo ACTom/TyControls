@@ -19,7 +19,8 @@ interface
 uses
   Classes, SysUtils, Types, Math, fpcunit, testregistry, Controls, Graphics, LCLType,
   BGRABitmap, BGRABitmapTypes,
-  tyControls.Controller, tyControls.StrConsts,
+  tyControls.Controller, tyControls.StrConsts, tyControls.StyleModel, tyControls.Painter,
+  tyControls.BuiltinThemes,
   tyControls.RichEdit.Text, tyControls.RichEdit.Model, tyControls.RichEdit.Commands,
   tyControls.RichEdit.RtfRead, tyControls.RichEdit.RtfWrite, tyControls.RichEdit.Layout,
   tyControls.RichEdit, test.richedit.control, test.richedit.edit, test.richedit.msftedit;
@@ -759,7 +760,24 @@ var
   c: TPoint;
   line0: TRect;
   hBefore, hAfter: Integer;
+  dark: TTyStyleController;
 begin
+  // the theme's own: TyRichEditObject's background (the dark mode's surface is not white)
+  TyRegisterBuiltinThemes;
+  dark := TTyStyleController.Create(nil);
+  try
+    dark.ThemeName := 'default';
+    dark.Mode := 'dark';
+    FRich.Controller := dark;
+    st := FRich.Style;
+    AssertTrue('the fill from the theme''s key', SamePx(TyColorToBGRA(dark.Model.ResolveStyle(
+      'TyRichEditObject', '', []).Background.Color), st.ObjectHandleFill));
+    AssertFalse('not the default', SamePx(TyRichDefaultPaintStyle.ObjectHandleFill,
+      st.ObjectHandleFill));
+  finally
+    FRich.Controller := FCtl;
+    dark.Free;
+  end;
   FRich.StyleOverride := 'background: #FFFFFF; --surface: #10E010; --accent: #E01010;';
   p := PictureDoc(100, 50);
   st := FRich.Style;
@@ -943,6 +961,8 @@ begin
   SelectAt(p);
   PaintAll;
   AssertTrue('handles in the cell', FRich.Handles(rs));
+  AssertEquals('the handles where the picture is in its cell', FRich.PositionRect(p).Left,
+    Centre(rs[rhTopLeft]).X);
   c := Centre(rs[rhRight]);
   FRich.PressAt(c.X, c.Y);
   FRich.MoveWith(c.X + 300, c.Y, [ssShift]);
@@ -1600,6 +1620,9 @@ begin
     rsRichEditRefusedMetafile);
   CheckRefused('an EMF named .dat', FRich.InsertPictureFromFile(TempFile('me.dat', EmfHeader)),
     rsRichEditRefusedMetafile);
+  CheckRefused('a placeable WMF', FRich.InsertPictureFromFile(TempFile('mp.dat',
+    RawBytes(#$D7#$CD#$C6#$9A + StringOfChar(#0, 18) + StrOfBytes(WmfDrawing)))),
+    rsRichEditRefusedMetafile);
   CheckRefused('no picture', FRich.InsertPictureFromFile(TempFile('t.png', RawBytes('hello'))),
     rsRichEditRefusedNoPicture);
   CheckRefused('a PNG that does not decode', FRich.InsertPictureFromFile(TempFile('h.png',
@@ -1623,6 +1646,8 @@ begin
   // read-only and disabled: nothing, nothing told
   FRich.ReadOnly := True;
   CheckSilent('read-only', FRich.InsertPictureFromFile(TempFile('r.png', PngOf(4, 4))));
+  CheckSilent('read-only: a file that is not there', FRich.InsertPictureFromFile(missing));
+  CheckSilent('read-only: a metafile', FRich.InsertPictureFromFile(TempFile('r.wmf', WmfDrawing)));
   AssertFalse('Can: read-only', FRich.CanInsertPicture);
   FRich.ReadOnly := False;
   FRich.Enabled := False;
