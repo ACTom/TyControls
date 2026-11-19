@@ -701,7 +701,9 @@ type
       (FDropPos, FDropAtEnd, FDropEffect), the pointer and the keys last known, and
       whether the selection dragged can be moved at all (FDropCuttable). FDropRect: the
       drop mark on the surface (raster pixels of the view, as FHandleRect). FEatMenu: a right
-      press ended a drag - its menu is not shown. }
+      press ended a drag - its menu is not shown; that press's only: the popup it would
+      bring, the next key, a move without the right button or another button's release clear
+      it. }
     FDragDropEditing: Boolean;
     FDragPending: Boolean;
     FPressPoint: TPoint;
@@ -718,6 +720,7 @@ type
     FDropCuttable: Boolean;
     FDropRect: TRect;
     FEatMenu: Boolean;
+    FDropFollowing: Boolean;
     { The input method. A composition goes in at FCompPos (the caret when it began)
       and is not the document's: the layouter shows FCompText there (SetComposition), in
       FCompFormat (the typing format then), the input method's caret and clause in it
@@ -1173,7 +1176,10 @@ type
     function PressInSelection(X, Y: Integer): Boolean;
     procedure PlainClick(X, Y: Integer; AQ: TTyRichPos; AAtEnd: Boolean; AObj: TTyRichPos);
     procedure ReleasePending;
-    procedure BeginSelectionDrag(X, Y: Integer; AShift: TShiftState);
+    function BeginSelectionDrag(X, Y: Integer; AShift: TShiftState): Boolean;
+    { A view's move during a drop (a scroll, a zoom, a new size): the place, the mark and the
+      verdict worked out again at the pointer's last place. }
+    procedure DropFollowPointer;
     procedure CancelSelectionDrag;
     function OwnDragging: Boolean;
     procedure DropScrollTick;
@@ -1649,8 +1655,8 @@ type
     { The pointer's shape during the control's own drag: crDrag for a move, crMultiDrag for a
       copy, crNoDrop where nothing would happen. }
     function DropCursor(AEffect: TTyRichDropEffect): TCursor; virtual;
-    { How far the pointer goes, pressed inside the selection, before the drag begins (the
-      system's: Mouse.DragThreshold). }
+    { How far the pointer goes, pressed inside the selection, before the drag begins: LCL's
+      Mouse.DragThreshold (pixels at 96 PPI) scaled by the control's PPI. }
     function DragThreshold: Integer; virtual;
     { The drop mark in client pixels (rounded outward): False when none is shown. }
     function DropMark(out ARect: TRect): Boolean;
@@ -2558,15 +2564,18 @@ type
       PasteFromClipboard, ClearSelection, Undo, Redo) do nothing, as Delphi's. }
     property ReadOnly: Boolean read FReadOnly write SetReadOnly default False;
     { True: the selection - text or an object - can be dragged to another place of the
-      control: a left press inside it and a move past the system's drag threshold begin the
-      drag, the drop mark shows where it would go, the release moves it there, or copies it
-      with Ctrl held (each one undo step; the clipboard is not used). Esc, the right button,
-      the capture lost, a key that is not a modifier, a change of the selection or of the
-      content end the drag with nothing changed; a release inside the selection does
-      nothing; a press and release without a drag is the click it always was. Not with
-      ReadOnly, nor while the document takes no edit; DragMode dmAutomatic leaves the press to
-      LCL's own drag (no drag of the selection begins). False: a press inside the selection
-      is a plain click, as before, and no drop is taken (DropEnter answers rdeNone). }
+      control: a left press inside it and a move past the drag threshold (DragThreshold)
+      begin the drag - a background find or replace then ends, cancelled, as typing ends it -,
+      the drop mark shows where it would go (the place under the pointer, also after a scroll
+      or a zoom during the drag; outside the control nothing is a place), the release moves it
+      there, or copies it with Ctrl held (each one undo step; the clipboard is not used). Esc,
+      the right button, the capture lost, a key that is not a modifier, a change of the
+      selection or of the content end the drag with nothing changed; a release inside the
+      selection or outside the control does nothing; a press and release without a drag is a
+      plain click. Not with ReadOnly, nor while the document takes no edit (loading, saving);
+      DragMode dmAutomatic leaves the press to LCL's own drag (no drag of the selection
+      begins). False: a press inside the selection is a plain click, and no drop is taken
+      (DropEnter answers rdeNone). }
     property DragDropEditing: Boolean read FDragDropEditing write SetDragDropEditing default True;
     { True: Tab inserts a tab character (Shift+Tab and Ctrl+Tab too, as the memo) - in a table
       Tab goes to the next cell and Shift+Tab to the one before (Word's keys: see KeyDown),
@@ -3571,6 +3580,8 @@ begin
   FZoom := AValue;
   // CheckLayoutParams sees the new zoom: every height an estimate again, the anchor kept
   ViewMoved;
+  // a drop goes on: what is under the pointer at the new zoom
+  DropFollowPointer;
   DoZoomChange;
 end;
 
@@ -3581,6 +3592,7 @@ begin
   FScrollX := 0;
   FWidestSeen := 0;
   ViewMoved;
+  DropFollowPointer;
 end;
 
 procedure TTyCustomRichEdit.SetReadOnly(AValue: Boolean);
@@ -4959,9 +4971,12 @@ begin
   if not IsEnabled then Exit;
   inherited MouseMove(Shift, X, Y);
   // a press inside the selection: past the drag threshold the drag begins
+  // (a move with no right button held lets the menu come again: see FEatMenu)
+  if not (ssRight in Shift) then FEatMenu := False;
   if FDragPending and not ViewBehind and ((Abs(X - FPressPoint.X) > DragThreshold) or
     (Abs(Y - FPressPoint.Y) > DragThreshold)) then
-    BeginSelectionDrag(X, Y, Shift);
+    // (a handler of the background work it ended freed the control: nothing more)
+    if not BeginSelectionDrag(X, Y, Shift) then Exit;
   // the drop's place, mark and verdict follow the pointer (the cursor below says it)
   if OwnDragging then DropOver(X, Y, Shift);
   { The arrow over the padding (a cursor set by the user is left alone): GetCursor answers it
@@ -5038,6 +5053,8 @@ end;
 procedure TTyCustomRichEdit.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 begin
   inherited MouseUp(Button, Shift, X, Y);
+  // (another button's release lets the menu come again; the right one's is its press's)
+  if Button <> mbRight then FEatMenu := False;
   if Button <> mbLeft then Exit;
   if FResizing then
     FinishResize(X, Y, Shift)
@@ -5217,7 +5234,7 @@ end;
 
 function TTyCustomRichEdit.DragStartOpen: Boolean;
 begin
-  // whatever makes every edit impossible makes no drag (the press is a click, as before)
+  // whatever makes every edit impossible makes no drag (the press is a plain click)
   Result := FDragDropEditing and (DragMode <> dmAutomatic) and not FReadOnly and IsEnabled and
     HasSelection and not ViewBehind and (RefusalReason = '');
 end;
@@ -5282,11 +5299,36 @@ begin
   Result := FDropOffer <> nil;
 end;
 
-procedure TTyCustomRichEdit.BeginSelectionDrag(X, Y: Integer; AShift: TShiftState);
+function TTyCustomRichEdit.BeginSelectionDrag(X, Y: Integer; AShift: TShiftState): Boolean;
 var
   offer: TTyRichSelectionOffer;
+  s, n: TTyRichPos;
+  life: TTyRichLife;
 begin
+  Result := True;
   FDragPending := False;
+  { The drag's start is the user taking the document in hand, as the first character typed
+    is: a background find or replace ends - cancelled, its event told - as an edit makes it
+    end at its next turn; nothing changes the document or the selection under the drag after
+    that. Its handler may change things (or free the control: False, nothing touched): the drag
+    begins only on what is left. }
+  if FFindKind <> rfkNone then
+  begin
+    s := GetSelStart;
+    n := GetSelLength;
+    LifeEnter(life);
+    try
+      try
+        EndFind(rfsCancelled, True);
+      except
+        on ETyRichGone do if TyRichGonePasses(life) then raise;
+      end;
+    finally
+      if not life.Gone then LifeLeave(life);
+    end;
+    if life.Gone then Exit(False);
+    if not DragStartOpen or (GetSelStart <> s) or (GetSelLength <> n) then Exit;
+  end;
   if FDropOffer <> nil then DropLeave;
   offer := TTyRichSelectionOffer.Create(Self, GetSelStart, GetSelLength);
   FDropOwn := True;
@@ -5302,6 +5344,17 @@ begin
   end;
 end;
 
+procedure TTyCustomRichEdit.DropFollowPointer;
+begin
+  if (FDropOffer = nil) or FDropFollowing then Exit;
+  FDropFollowing := True;
+  try
+    DropOver(FDropPoint.X, FDropPoint.Y, FDropShift);
+  finally
+    FDropFollowing := False;
+  end;
+end;
+
 procedure TTyCustomRichEdit.CancelSelectionDrag;
 begin
   FDragPending := False;
@@ -5310,7 +5363,8 @@ end;
 
 function TTyCustomRichEdit.DragThreshold: Integer;
 begin
-  Result := Mouse.DragThreshold;
+  // LCL's distance is for 96 PPI: the same distance on every screen
+  Result := MulDiv(Mouse.DragThreshold, ViewPPI, 96);
 end;
 
 function TTyCustomRichEdit.DropCursor(AEffect: TTyRichDropEffect): TCursor;
@@ -5418,7 +5472,7 @@ var
   area: TRect;
   band: Integer;
   q: TTyRichPos;
-  atEnd: Boolean;
+  atEnd, inside: Boolean;
 begin
   Result := rdeNone;
   if FDropOffer = nil then Exit;
@@ -5427,15 +5481,23 @@ begin
   // inside the document's update the place waits
   if ViewBehind then Exit(FDropEffect);
   area := TextArea(Rect(0, 0, Width, Height), ViewPPI);
-  { Near an edge of the text, or past it, the view scrolls (the drag-select's timer and
-    speeds): a drop from elsewhere never has the pointer outside the control. }
+  { Inside the control near an edge of the text (half a line inside it, and the padding
+    between it and the control's edge) the view scrolls, at the drag-select's timer and
+    speeds; outside the control it does not, and nothing is a place there: no mark, "not here",
+    a release does nothing. }
+  inside := (X >= 0) and (X < Width) and (Y >= 0) and (Y < Height);
   band := Math.Max(1, (FEstimate div Math.Max(1, FScale)) div 2);
-  if (Y < area.Top + band) or (Y >= area.Bottom - band) or ((FWidestSeen > FViewW) and
-    ((X < area.Left + band) or (X >= area.Right - band))) then
+  if inside and ((Y < area.Top + band) or (Y >= area.Bottom - band) or ((FWidestSeen > FViewW) and
+    ((X < area.Left + band) or (X >= area.Right - band)))) then
     StartDragTimer
   else if FDragTimer <> nil then
     FDragTimer.Enabled := False;
-  q := DropPlaceAt(X, Y, atEnd);
+  if inside then q := DropPlaceAt(X, Y, atEnd)
+  else
+  begin
+    q := -1;
+    atEnd := False;
+  end;
   FDropPos := q;
   FDropAtEnd := atEnd;
   if q < 0 then FDropEffect := rdeNone
@@ -5570,6 +5632,13 @@ begin
   end;
   // inside the document's update: no query, the drag waits
   if ViewBehind then Exit;
+  // (outside the control nothing scrolls)
+  if (FDropPoint.X < 0) or (FDropPoint.X >= Width) or (FDropPoint.Y < 0) or
+    (FDropPoint.Y >= Height) then
+  begin
+    if FDragTimer <> nil then FDragTimer.Enabled := False;
+    Exit;
+  end;
   area := TextArea(Rect(0, 0, Width, Height), ViewPPI);
   est := Math.Max(1, FEstimate div Math.Max(1, FScale));
   band := Math.Max(1, est div 2);
@@ -12381,6 +12450,7 @@ end;
 procedure TTyCustomRichEdit.SetScrollY(AValue: Int64);
 begin
   ScrollRasterTo(AValue * FScale);
+  DropFollowPointer;
 end;
 
 procedure TTyCustomRichEdit.ScrollViewBy(ADeltaY: Integer);
@@ -12557,6 +12627,7 @@ begin
   FAnchorOffset := 0;
   FAnchorShareDen := 0;
   ViewMoved;
+  DropFollowPointer;
 end;
 
 procedure TTyCustomRichEdit.ScrollToEnd;
@@ -12875,6 +12946,7 @@ begin
     ScrollToEnd
   else
     SetScrollY(Int64(FVBar.Position) * FBarScale);
+  DropFollowPointer;
 end;
 
 procedure TTyCustomRichEdit.HBarChange(Sender: TObject);
@@ -12889,6 +12961,7 @@ begin
   CancelResize;
   MoveSurfaceText(was - FScrollX, 0);
   InvalidateArea(TextWindowRect);
+  DropFollowPointer;
 end;
 
 { ---- painting ---- }
@@ -12964,6 +13037,7 @@ begin
   inherited Resize;
   FViewValid := False;
   if FViewPPI > 0 then PlaceBars;
+  DropFollowPointer;
 end;
 
 { ---- points and positions ---- }
@@ -16205,6 +16279,8 @@ var
 begin
   // the form designer's keys are the designer's: nothing is edited or moved there
   if csDesigning in ComponentState then Exit;
+  // (a key lets the menu come again: see FEatMenu)
+  FEatMenu := False;
   inherited KeyDown(Key, Shift);
   // a user action is an entry point of the loop (see SchedulingFailed)
   EndOwedLoad;
@@ -16402,6 +16478,8 @@ begin
     ScrollRasterBy(-notches * Int64(Math.Max(FEstimate, FViewH - FEstimate)))
   else
     ScrollRasterBy(-notches * Int64(perNotch) * Math.Max(1, FEstimate));
+  // a drop goes on: what came under the pointer
+  DropFollowPointer;
 end;
 
 function TTyCustomRichEdit.DoMouseWheelHorz(Shift: TShiftState; WheelDelta: Integer;
@@ -16434,6 +16512,7 @@ begin
   end;
   MoveSurfaceText(was - FScrollX, 0);
   InvalidateArea(TextWindowRect);
+  DropFollowPointer;
 end;
 
 procedure TTyCustomRichEdit.MouseEnter;

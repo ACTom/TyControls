@@ -46,6 +46,17 @@ type
     function Effect: TTyRichDropEffect;
     function Pending: Boolean;
     function OwnDrag: Boolean;
+    procedure SetFindSlice(AChars: Int64);
+    procedure Designing;
+  end;
+
+  { An opaque object whose clones are counted alive, and whose CloneFailAt-th clone raises. }
+  TCloneCounted = class(TTyRichOpaque)
+  public
+    class var Live, Clones, CloneFailAt: Integer;
+    constructor Create(const ABytes: RawByteString);
+    destructor Destroy; override;
+    function Clone: TTyRichObject; override;
   end;
 
   { Another's content, as a drop offers it: text, a picture, or both. }
@@ -65,6 +76,7 @@ type
   TDragLoadState = class(TTyRichDocBuilder)
   public
     class procedure Put(ADoc: TTyRichDocument; AIncomplete: Boolean);
+    class procedure PutLoading(ADoc: TTyRichDocument; ALoading: Boolean);
   end;
 
   TTyRichDragTest = class(TTestCase)
@@ -94,6 +106,11 @@ type
       the same bytes; one step; undo gives the document back. }
     procedure CheckLikeCutAndPaste(const AWhat: string; const ARtf: RawByteString;
       AFrom, ALen, APress, APlace: TTyRichPos; ACopy: Boolean);
+  private
+    FFindEnds: array of string;
+    procedure FindDone(Sender: TObject; AEnd: TTyRichFindEnd; APos, ALen: TTyRichPos);
+    procedure ReplaceDone(Sender: TObject; const AResult: TTyRichReplaceResult);
+    procedure TurnSome(AMost: Integer);
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -114,6 +131,14 @@ type
     procedure TestADropFromElsewhereGoesInAsAPaste;
     procedure TestTheCommandsWithoutAControl;
     procedure TestTheCommandsKeepTheFileAndCopyNoText;
+    procedure TestADragEndsBackgroundWorkAsTypingDoes;
+    procedure TestTheMarkFollowsTheViewUnderThePointer;
+    procedure TestOutsideTheControlIsNoPlace;
+    procedure TestACopyWhoseCloneFailsLeavesNothingAlive;
+    procedure TestTheDragThresholdFollowsTheScreen;
+    procedure TestTheEatenMenuIsOnlyThatPresss;
+    procedure TestAMoveKeepsNoMoreThanACutAndAPaste;
+    procedure TestWhatHadNoTest;
   end;
 
 implementation
@@ -319,6 +344,35 @@ begin
   Result := DropActive;
 end;
 
+procedure TDragProbe.SetFindSlice(AChars: Int64);
+begin
+  FindSlice := AChars;
+end;
+
+procedure TDragProbe.Designing;
+begin
+  MakeDesigning;
+end;
+
+constructor TCloneCounted.Create(const ABytes: RawByteString);
+begin
+  inherited Create(ABytes, '', 1);
+  Inc(Live);
+end;
+
+destructor TCloneCounted.Destroy;
+begin
+  Dec(Live);
+  inherited Destroy;
+end;
+
+function TCloneCounted.Clone: TTyRichObject;
+begin
+  Inc(Clones);
+  if Clones = CloneFailAt then raise EOutOfMemory.Create('the test''s failing clone');
+  Result := TCloneCounted.Create(Bytes);
+end;
+
 function TTestOffer.Flavours: TTyRichClipFlavours;
 begin
   Result := [];
@@ -351,6 +405,11 @@ end;
 class procedure TDragLoadState.Put(ADoc: TTyRichDocument; AIncomplete: Boolean);
 begin
   SetLoadState(ADoc, False, AIncomplete);
+end;
+
+class procedure TDragLoadState.PutLoading(ADoc: TTyRichDocument; ALoading: Boolean);
+begin
+  SetLoadState(ADoc, ALoading, False);
 end;
 
 { ---- fixture ---- }
@@ -753,6 +812,7 @@ var
   on1, off1, off0: TBGRAPixel;
   q: TTyRichPos;
   s: string;
+  pp: TPoint;
 begin
   s := 'one two three four'#13#10'five six seven'#13#10'eight nine';
   for i := 1 to 40 do s := s + #13#10'more ' + IntToStr(i);
@@ -797,28 +857,28 @@ begin
   AssertFalse('inside the selection: no mark', FRich.Mark(m));
   AssertEquals('only the old mark painted again', 1, Length(FRich.Invalidated));
   AssertTrue('the old mark', EqualRect(FRich.Invalidated[0], m2));
-  // a zoom: the mark stays on its place, at the new size
-  FRich.MoveWith(Pt(20).X, Pt(20).Y, []);
-  q := 20;
+  // a zoom: the mark at the place now under the pointer, at the new size
+  pp := Pt(20);
+  FRich.MoveWith(pp.X, pp.Y, []);
   FRich.Zoom := 200;
   PaintAll;
   AssertTrue('the drag goes on through a zoom', FRich.OwnDrag);
   AssertTrue('a mark at 200 %', FRich.Mark(m));
+  q := FRich.PositionAtPoint(pp.X, pp.Y);
   pr := FRich.PositionRect(q);
-  AssertTrue('at its place at 200 %', (m.Left <= pr.Left) and (m.Right > pr.Left) and
-    (m.Top = pr.Top) and (m.Bottom = pr.Bottom));
+  AssertTrue('at the place under the pointer at 200 %', (m.Left <= pr.Left) and
+    (m.Right > pr.Left) and (m.Top = pr.Top) and (m.Bottom = pr.Bottom));
   FRich.Zoom := 100;
   PaintAll;
-  // a scroll (the wheel): the mark goes with its text
-  AssertTrue('a mark before the scroll', FRich.Mark(m));
-  FRich.ScrollY := 5;
+  // a scroll: the mark at the place now under the pointer
+  FRich.ScrollY := 40;
   PaintAll;
   AssertTrue('the drag goes on through a scroll', FRich.OwnDrag);
   AssertTrue('a mark after the scroll', FRich.Mark(m2));
+  q := FRich.PositionAtPoint(pp.X, pp.Y);
   pr := FRich.PositionRect(q);
-  AssertEquals('the mark with its text after the scroll', m.Top - 5, m2.Top);
-  AssertTrue('at its place after the scroll', (m2.Left <= pr.Left) and (m2.Right > pr.Left) and
-    (m2.Top = pr.Top));
+  AssertTrue('at the place under the pointer after the scroll', (m2.Left <= pr.Left) and
+    (m2.Right > pr.Left) and (m2.Top = pr.Top));
   // Esc: no mark, nothing changed
   FRich.Press(VK_ESCAPE, [ssLeft]);
   AssertFalse('Esc: no drag', FRich.OwnDrag);
@@ -1045,9 +1105,11 @@ begin
   AssertEquals('taken: the selection stays', Int64(9), FRich.SelLength);
 end;
 
-{ Past the text's bottom edge each tick scrolls as a drag-select's does (a line, and one more
-  for every line's height further out), near it (inside) a line a tick, in the middle not at
-  all; the place follows the text that came; the release drops there. Up past the top too. }
+{ Near an edge of the text, inside the control (half a line inside the text, and the padding
+  between the text and the control's edge), each tick scrolls - a line, and one more for every
+  line's height further out, as a drag-select's tick at the same point; in the middle, and with
+  the pointer outside the control, not at all. The place follows the text that came; the release
+  drops there. The top edge too. }
 procedure TTyRichDragTest.TestTheTextScrollsNearAndPastAnEdge;
 var
   s: string;
@@ -1057,23 +1119,26 @@ var
   other: TDragProbe;
   q: TTyRichPos;
   m, pr: TRect;
+  yb: Integer;
 begin
   s := '';
   for i := 1 to 80 do s := s + 'Line ' + IntToStr(i) + #13#10;
   LoadText(s);
   area := FRich.Area;
+  AssertTrue('room between the text and the control''s bottom edge', area.Bottom < FRich.Height - 1);
+  yb := FRich.Height - 1;
   Sel(0, 4);
   StartDrag(Mid(1), Point(Mid(1).X, (area.Top + area.Bottom) div 2));
   y0 := FRich.ScrollY;
   FRich.DragTick;
   AssertEquals('in the middle: no scroll', y0, FRich.ScrollY);
-  // near the bottom edge, inside: a line a tick
+  // near the bottom edge, inside the text: a line a tick
   FRich.MoveWith(Mid(1).X, area.Bottom - 2, []);
   FRich.DragTick;
   y1 := FRich.ScrollY;
   AssertTrue('near the edge: scrolled', y1 > y0);
-  // past it, as far as a drag-select there: the same scroll
-  FRich.MoveWith(Mid(1).X, area.Bottom + 40, []);
+  // below the text, on the control's last row of pixels: as a drag-select there
+  FRich.MoveWith(Mid(1).X, yb, []);
   y0 := FRich.ScrollY;
   FRich.DragTick;
   dDrop := FRich.ScrollY - y0;
@@ -1083,38 +1148,47 @@ begin
     other.UpdateView;
     PaintAll(other);
     other.PressAt(5, area.Top + 5);
-    other.MoveAt(5, area.Bottom + 40);
+    other.MoveAt(5, yb);
     y0 := other.ScrollY;
     other.DragTick;
     dSel := other.ScrollY - y0;
-    other.ReleaseAt(5, area.Bottom + 40);
+    other.ReleaseAt(5, yb);
   finally
     other.Free;
   end;
-  AssertTrue('past the edge: scrolled', dDrop > 0);
-  AssertEquals('past the edge: as a drag-select', dSel, dDrop);
+  AssertTrue('below the text: scrolled', dDrop > 0);
+  AssertEquals('below the text: as a drag-select', dSel, dDrop);
+  // outside the control: no scroll
+  FRich.MoveWith(Mid(1).X, FRich.Height + 40, []);
+  y0 := FRich.ScrollY;
+  FRich.DragTick;
+  AssertEquals('outside the control: no scroll', y0, FRich.ScrollY);
+  FRich.MoveWith(Mid(1).X, yb, []);
   for i := 1 to 5 do FRich.DragTick;
   PaintAll;
-  // the place: the last line shown, under the pointer held to the edge
+  // the place: the last line shown, under the pointer held to the text
   q := FRich.PositionAtPoint(Mid(1).X, area.Bottom - 1);
   AssertTrue('the mark at the place that came', FRich.Mark(m));
   AssertTrue('the place is far down', q > 200);
   pr := FRich.PositionRect(q);
   AssertTrue('the mark on that place', (m.Left <= pr.Left) and (m.Right > pr.Left) and
     (m.Top = pr.Top));
-  FRich.ReleaseWith(Mid(1).X, area.Bottom + 40, []);
+  FRich.ReleaseWith(Mid(1).X, yb, []);
   AssertEquals('dropped there: one step', 1, FRich.Document.UndoDepth);
   AssertEquals('the moved word there', 'Line', FRich.SelText);
   AssertTrue('moved far down', FRich.SelStart > 200);
-  // up past the top
+  // the top edge: near it a scroll up, outside the control none
   FRich.Undo;
   FRich.ScrollY := FRich.Document.Text.TotalHeight;
   PaintAll;
   Sel(FRich.Document.Text.ParaStart(78), 4);
-  StartDrag(Mid(FRich.Document.Text.ParaStart(78) + 1), Point(Mid(1).X, area.Top - 30));
+  StartDrag(Mid(FRich.Document.Text.ParaStart(78) + 1), Point(Mid(1).X, -30));
   y0 := FRich.ScrollY;
   FRich.DragTick;
-  AssertTrue('past the top: scrolled up', FRich.ScrollY < y0);
+  AssertEquals('above the control: no scroll', y0, FRich.ScrollY);
+  FRich.MoveWith(Mid(1).X, area.Top + 1, []);
+  FRich.DragTick;
+  AssertTrue('near the top: scrolled up', FRich.ScrollY < y0);
   FRich.Press(VK_ESCAPE, [ssLeft]);
 end;
 
@@ -1569,9 +1643,9 @@ begin
       [moved, d.HistoryBytes]));
     AssertTrue(Format('the move''s step holds %d bytes', [d.HistoryBytes]),
       d.HistoryBytes < moved div 3);
-    { (and it counts what it holds: the pieces the delete keeps and those the fragment keeps -
-      a piece a paragraph each, 24 bytes) }
-    AssertTrue('the step counts both', d.HistoryBytes >= 2 * 1000 * 24);
+    { (and it counts what it holds: the pieces of the paragraphs moved, which the delete and
+      the fragment share - 24 bytes a paragraph -, and a value's place for each, 17) }
+    AssertTrue('the step counts its pieces and its parts', d.HistoryBytes >= 1000 * (24 + 17));
     added := t.AddedBytes;
     AssertTrue('a copy', d.Execute(TTyRichCopy.Create(t.ParaStart(10), t.ParaStart(1010) -
       t.ParaStart(10), t.Length)));
@@ -1616,6 +1690,566 @@ begin
     AssertEquals('copied and undone: the file', file0, SaveDoc(d));
   finally
     d.Free;
+  end;
+end;
+
+procedure TTyRichDragTest.FindDone(Sender: TObject; AEnd: TTyRichFindEnd; APos, ALen: TTyRichPos);
+begin
+  SetLength(FFindEnds, Length(FFindEnds) + 1);
+  case AEnd of
+    rfeFound: FFindEnds[High(FFindEnds)] := 'find found';
+    rfeNotFound: FFindEnds[High(FFindEnds)] := 'find not found';
+  else
+    FFindEnds[High(FFindEnds)] := 'find cancelled';
+  end;
+end;
+
+procedure TTyRichDragTest.ReplaceDone(Sender: TObject; const AResult: TTyRichReplaceResult);
+begin
+  SetLength(FFindEnds, Length(FFindEnds) + 1);
+  if AResult.Ending = rreCancelled then FFindEnds[High(FFindEnds)] := 'replace cancelled'
+  else FFindEnds[High(FFindEnds)] := 'replace ended';
+end;
+
+procedure TTyRichDragTest.TurnSome(AMost: Integer);
+var
+  i: Integer;
+begin
+  for i := 1 to AMost do
+    if FRich.FindRunning then FRich.Turn;
+end;
+
+{ A background replace or find, and the user: a character typed ends it at its next turn
+  (cancelled, its one event); the start of a drag ends it at once in the same way, and nothing
+  changes the document or the selection under the drag after that - the drag goes on, the drop
+  is one step on top. A document still loading: no drag starts, the press is a click. }
+procedure TTyRichDragTest.TestADragEndsBackgroundWorkAsTypingDoes;
+var
+  s: string;
+  i: Integer;
+  p: TPoint;
+  st: TBytesStream;
+  depth: Integer;
+  t: TTyRichText;
+begin
+  s := '';
+  for i := 1 to 3000 do s := s + 'a cat sat here ' + IntToStr(i) + #13#10;
+  FRich.OnFindDone := @FindDone;
+  FRich.OnReplaceDone := @ReplaceDone;
+  // typing during a replace
+  LoadText(s);
+  FRich.SetFindSlice(1024);
+  FRich.ReplaceAllAsync('cat', 'dog');
+  i := 0;
+  while FRich.FindRunning and (Pos('dog', AllText) = 0) and (i < 10000) do
+  begin
+    FRich.Turn;
+    Inc(i);
+  end;
+  AssertTrue('the replace runs, some replaced', FRich.FindRunning and (Pos('dog', AllText) > 0));
+  FFindEnds := nil;
+  FRich.SelStart := 0;
+  FRich.TypeChar('x');
+  TurnSome(5);
+  AssertFalse('typing: the replace ended', FRich.FindRunning);
+  AssertEquals('typing: one event', 1, Length(FFindEnds));
+  AssertEquals('typing: cancelled', 'replace cancelled', FFindEnds[0]);
+  // a drag started during a replace
+  LoadText(s);
+  FRich.SetFindSlice(1024);
+  FRich.ReplaceAllAsync('cat', 'dog');
+  i := 0;
+  while FRich.FindRunning and (Pos('dog', AllText) = 0) and (i < 10000) do
+  begin
+    FRich.Turn;
+    Inc(i);
+  end;
+  AssertTrue('a replace running', FRich.FindRunning);
+  depth := FRich.Document.UndoDepth;
+  FFindEnds := nil;
+  Sel(2, 3);
+  p := Pt(15);
+  StartDrag(Mid(3), p);
+  AssertFalse('the drag''s start: the replace ended', FRich.FindRunning);
+  AssertEquals('the drag''s start: one event', 1, Length(FFindEnds));
+  AssertEquals('the drag''s start: cancelled', 'replace cancelled', FFindEnds[0]);
+  TurnSome(5);
+  AssertTrue('the drag goes on', FRich.OwnDrag);
+  AssertEquals('the selection under the drag', Int64(2), FRich.SelStart);
+  FRich.ReleaseAt(p.X, p.Y);
+  AssertEquals('the drop: one step on top', depth + 1, FRich.Document.UndoDepth);
+  AssertEquals('the drop: named Move', rsRichUndoMove, FRich.Document.UndoDescription);
+  AssertEquals('still one event', 1, Length(FFindEnds));
+  // a drag started during a find (its needle far down)
+  LoadText(s + 'needle'#13#10);
+  FRich.SetFindSlice(1024);
+  FFindEnds := nil;
+  FRich.FindNextAsync('needle', []);
+  FRich.Turn;
+  AssertTrue('a find running', FRich.FindRunning);
+  Sel(2, 3);
+  StartDrag(Mid(3), p);
+  AssertFalse('the drag''s start: the find ended', FRich.FindRunning);
+  AssertEquals('the find: one event', 1, Length(FFindEnds));
+  AssertEquals('the find: cancelled', 'find cancelled', FFindEnds[0]);
+  TurnSome(5);
+  AssertTrue('the drag goes on after the find', FRich.OwnDrag);
+  AssertEquals('the selection under it', Int64(2), FRich.SelStart);
+  FRich.ReleaseAt(p.X, p.Y);
+  AssertEquals('dropped', 1, FRich.Document.UndoDepth);
+  // typing during a find ends it the same way
+  FFindEnds := nil;
+  FRich.FindNextAsync('needle', []);
+  FRich.Turn;
+  FRich.TypeChar('y');
+  TurnSome(5);
+  AssertEquals('typing during a find: one event', 1, Length(FFindEnds));
+  AssertEquals('typing during a find: cancelled', 'find cancelled', FFindEnds[0]);
+  // a document still loading (the load's own state, as a reader sets it): the press is a click
+  LoadText('one two three four');
+  TDragLoadState.PutLoading(FRich.Document, True);
+  AssertTrue('loading', FRich.Loading);
+  Sel(4, 9);
+  FRich.PressAt(Mid(6).X, Mid(6).Y);
+  AssertFalse('loading: no drag', FRich.Pending);
+  AssertEquals('loading: a click', Int64(0), FRich.SelLength);
+  FRich.ReleaseAt(Mid(6).X, Mid(6).Y);
+  TDragLoadState.PutLoading(FRich.Document, False);
+  FRich.OnFindDone := nil;
+  FRich.OnReplaceDone := nil;
+end;
+
+{ After a scroll by the wheel or the scroll bar, a zoom or a new size during a drag, with no
+  move of the pointer: the mark and the verdict are the place now under the pointer, and the
+  release drops there. }
+procedure TTyRichDragTest.TestTheMarkFollowsTheViewUnderThePointer;
+var
+  s: string;
+  i, k: Integer;
+  p: TPoint;
+  q, q0: TTyRichPos;
+  m, pr: TRect;
+
+  procedure CheckMark(const AWhat: string);
+  begin
+    PaintAll;
+    q := FRich.PositionAtPoint(p.X, p.Y);
+    AssertTrue(AWhat + ': a mark', FRich.Mark(m));
+    pr := FRich.PositionRect(q);
+    AssertTrue(Format('%s: the mark at the place under the pointer (%d)', [AWhat, q]),
+      (m.Left <= pr.Left) and (m.Right > pr.Left) and (m.Top = pr.Top));
+    AssertTrue(AWhat + ': the verdict there', FRich.Effect = rdeMove);
+    AssertEquals(AWhat + ': the cursor', Ord(crDrag), Ord(FRich.CursorFor(p.X, p.Y)));
+  end;
+
+begin
+  s := '';
+  for i := 1 to 80 do s := s + 'Line number ' + IntToStr(i) + #13#10;
+  for k := 0 to 4 do
+  begin
+    LoadText(s);
+    Sel(0, 4);
+    p := Point(Mid(8).X, (FRich.Area.Top + FRich.Area.Bottom) div 2);
+    StartDrag(Mid(1), p);
+    PaintAll;
+    q0 := FRich.PositionAtPoint(p.X, p.Y);
+    case k of
+      0: FRich.Wheel(-120, [ssLeft]);
+      1: FRich.VBar.Position := FRich.VBar.Position + 40;
+      2: FRich.Zoom := 150;
+      3: FRich.ScrollY := FRich.ScrollY + 50;
+      4: FRich.SetBounds(0, 0, 300, 300);
+    end;
+    PaintAll;
+    if k < 4 then
+      AssertTrue(Format('case %d: another place under the pointer', [k]),
+        FRich.PositionAtPoint(p.X, p.Y) <> q0);
+    CheckMark(Format('case %d', [k]));
+    FRich.ReleaseWith(p.X, p.Y, []);
+    AssertEquals(Format('case %d: one step', [k]), 1, FRich.Document.UndoDepth);
+    AssertEquals(Format('case %d: dropped at the mark', [k]), q - 4, FRich.SelStart);
+    FRich.Zoom := 100;
+    FRich.SetBounds(0, 0, 400, 300);
+  end;
+end;
+
+{ The pointer outside the control: no mark, "not here", a release does nothing - one pixel
+  past each edge and far away. }
+procedure TTyRichDragTest.TestOutsideTheControlIsNoPlace;
+const
+  N = 6;
+var
+  pts: array[0..N - 1] of TPoint;
+  i: Integer;
+  m: TRect;
+begin
+  LoadText('one two three four');
+  pts[0] := Point(-1, Mid(5).Y);
+  pts[1] := Point(FRich.Width, Mid(5).Y);
+  pts[2] := Point(Mid(5).X, -1);
+  pts[3] := Point(Mid(5).X, FRich.Height);
+  pts[4] := Point(-200, 10);
+  pts[5] := Point(150, 900);
+  for i := 0 to N - 1 do
+  begin
+    Sel(4, 3);
+    StartDrag(Mid(5), pts[i]);
+    AssertTrue(Format('point %d: not here', [i]), FRich.Effect = rdeNone);
+    AssertFalse(Format('point %d: no mark', [i]), FRich.Mark(m));
+    AssertEquals(Format('point %d: the cursor', [i]), Ord(crNoDrop),
+      Ord(FRich.CursorFor(pts[i].X, pts[i].Y)));
+    FRich.ReleaseAt(pts[i].X, pts[i].Y);
+    AssertEquals(Format('point %d: the text', [i]), 'one two three four', AllText);
+    AssertEquals(Format('point %d: no step', [i]), 0, FRich.Document.UndoDepth);
+    AssertEquals(Format('point %d: the selection', [i]), Int64(4), FRich.SelStart);
+    AssertEquals(Format('point %d: its length', [i]), Int64(3), FRich.SelLength);
+  end;
+  // back inside: a place again
+  Sel(4, 3);
+  StartDrag(Mid(5), pts[4]);
+  FRich.MoveWith(Pt(18).X, Pt(18).Y, []);
+  AssertTrue('back inside: a move', FRich.Effect = rdeMove);
+  FRich.ReleaseAt(Pt(18).X, Pt(18).Y);
+  AssertEquals('dropped inside', 'one  three fourtwo', AllText);
+end;
+
+{ A copy whose second clone of an object fails: the document as it was, and no clone left alive
+  (the three objects in the text only), nothing after the document goes. }
+procedure TTyRichDragTest.TestACopyWhoseCloneFailsLeavesNothingAlive;
+var
+  d: TTyRichDocument;
+  b: string;
+  raised: Boolean;
+begin
+  TCloneCounted.Live := 0;
+  d := TTyRichDocument.Create;
+  try
+    d.Execute(TTyRichInsertText.Create(0, 'abcdef'));
+    d.Execute(TTyRichInsertObject.Create(1, TCloneCounted.Create('{\object one}')));
+    d.Execute(TTyRichInsertObject.Create(3, TCloneCounted.Create('{\object two}')));
+    d.Execute(TTyRichInsertObject.Create(5, TCloneCounted.Create('{\object three}')));
+    d.ClearUndo;
+    AssertEquals('three objects', 3, TCloneCounted.Live);
+    b := Dump(d);
+    TCloneCounted.Clones := 0;
+    TCloneCounted.CloneFailAt := 2;
+    raised := False;
+    try
+      d.Execute(TTyRichCopy.Create(0, d.Text.Length, d.Text.Length));
+    except
+      on EOutOfMemory do raised := True;
+    end;
+    AssertTrue('the copy failed', raised);
+    AssertEquals('the document as it was', b, Dump(d));
+    AssertEquals('no step', 0, d.UndoDepth);
+    AssertEquals('no clone alive', 3, TCloneCounted.Live);
+    TCloneCounted.CloneFailAt := 0;
+  finally
+    d.Free;
+  end;
+  AssertEquals('nothing alive after the document', 0, TCloneCounted.Live);
+end;
+
+{ The threshold is LCL's (Mouse.DragThreshold) at 96 PPI, scaled with the control's PPI: the
+  same distance on every screen. }
+procedure TTyRichDragTest.TestTheDragThresholdFollowsTheScreen;
+var
+  r: TDragProbe;
+  p: TPoint;
+begin
+  AssertEquals('at 96 PPI: LCL''s', Mouse.DragThreshold, FRich.Threshold);
+  r := TDragProbe.Create(nil);
+  try
+    r.Controller := FCtl;
+    r.Font.PixelsPerInch := 192;
+    r.SetBounds(0, 0, 400, 300);
+    r.Lines.Text := 'one two three four';
+    r.UpdateView;
+    PaintAll(r);
+    AssertEquals('at 192 PPI: twice', 2 * Mouse.DragThreshold, r.Threshold);
+    r.SelStart := 4;
+    r.SelLength := 3;
+    p := Point((r.PositionRect(5).Left + r.PositionRect(6).Left) div 2,
+      (r.PositionRect(5).Top + r.PositionRect(5).Bottom) div 2);
+    r.PressAt(p.X, p.Y);
+    AssertTrue('pending', r.Pending);
+    r.MoveWith(p.X, p.Y + Mouse.DragThreshold + 1, []);
+    AssertFalse('past the 96 PPI distance only: no drag yet', r.OwnDrag);
+    r.MoveWith(p.X, p.Y + 2 * Mouse.DragThreshold + 1, []);
+    AssertTrue('past the scaled distance: the drag', r.OwnDrag);
+    r.Press(VK_ESCAPE, [ssLeft]);
+    r.ReleaseAt(p.X, p.Y);
+  finally
+    r.Free;
+  end;
+end;
+
+{ A right press that ends a drag eats the menu of that press only: the next key or mouse event
+  lets the menu come again. }
+procedure TTyRichDragTest.TestTheEatenMenuIsOnlyThatPresss;
+var
+  p: TPoint;
+  menus: Integer;
+begin
+  LoadText('one two three four');
+  // a key after it
+  Sel(4, 3);
+  p := Pt(14);
+  StartDrag(Mid(5), p);
+  FRich.RightPressAt(p.X, p.Y);
+  AssertFalse('ended', FRich.OwnDrag);
+  menus := FRich.MenuShows;
+  FRich.Press(VK_APPS, [ssLeft]);
+  FRich.PopupAt(p.X, p.Y);
+  AssertEquals('after a key: the menu', menus + 1, FRich.MenuShows);
+  FRich.ReleaseAt(p.X, p.Y);
+  // a move of the mouse after it
+  Sel(4, 3);
+  StartDrag(Mid(5), p);
+  FRich.RightPressAt(p.X, p.Y);
+  FRich.MoveWith(p.X + 3, p.Y, []);
+  menus := FRich.MenuShows;
+  FRich.PopupAt(p.X, p.Y);
+  AssertEquals('after a move: the menu', menus + 1, FRich.MenuShows);
+  FRich.ReleaseAt(p.X, p.Y);
+  // the popup of that press itself: eaten
+  Sel(4, 3);
+  StartDrag(Mid(5), p);
+  FRich.RightPressAt(p.X, p.Y);
+  menus := FRich.MenuShows;
+  AssertTrue('that press''s popup: handled', FRich.PopupAt(p.X, p.Y));
+  AssertEquals('that press''s popup: no menu', menus, FRich.MenuShows);
+  FRich.PopupAt(p.X, p.Y);
+  AssertEquals('the next popup: the menu', menus + 1, FRich.MenuShows);
+  FRich.ReleaseAt(p.X, p.Y);
+end;
+
+{ What a move's step keeps: counted as it is held (100,000 paragraphs of one character, the
+  heap's own count), and no more than a cut's step and a paste's step of the same content keep
+  together (20,000 lines of 20 characters). }
+procedure TTyRichDragTest.TestAMoveKeepsNoMoreThanACutAndAPaste;
+var
+  d: TTyRichDocument;
+  st: TBytesStream;
+  s, txt: RawByteString;
+  i: Integer;
+  t: TTyRichText;
+  a, len, at: TTyRichPos;
+  h0, held, moveBytes, cutPaste: Int64;
+
+  function LoadLines(AParas, AChars: Integer): TTyRichDocument;
+  var
+    line: RawByteString;
+    k: Integer;
+  begin
+    line := StringOfChar('x', AChars) + #13#10;
+    s := '';
+    SetLength(s, AParas * Length(line));
+    for k := 0 to AParas - 1 do Move(line[1], s[k * Length(line) + 1], Length(line));
+    Result := TTyRichDocument.Create;
+    st := TBytesStream.Create(RawBytes(s));
+    try
+      TyRichLoadText(Result, st);
+    finally
+      st.Free;
+    end;
+  end;
+
+begin
+  d := LoadLines(200000, 1);
+  try
+    t := d.Text;
+    a := t.ParaStart(20000);
+    len := t.ParaStart(120000) - a;
+    at := t.ParaStart(180000);
+    h0 := GetFPCHeapStatus.CurrHeapUsed;
+    AssertTrue('a move', d.Execute(TTyRichMove.Create(a, len, at)));
+    held := GetFPCHeapStatus.CurrHeapUsed - h0;
+    WriteLn(Format('TTyRichDragTest: a move of 100,000 paragraphs: held %d bytes, counted %d',
+      [held, d.HistoryBytes]));
+    AssertTrue(Format('counted at least what it holds: %d of %d', [d.HistoryBytes, held]),
+      d.HistoryBytes >= held * 9 div 10);
+    AssertTrue(Format('counted no more than what it holds: %d of %d', [d.HistoryBytes, held]),
+      d.HistoryBytes <= held * 11 div 10);
+  finally
+    d.Free;
+  end;
+  // against a cut and a paste
+  d := LoadLines(40000, 20);
+  try
+    t := d.Text;
+    a := t.ParaStart(5000);
+    len := t.ParaStart(25000) - a;
+    at := t.ParaStart(35000);
+    AssertTrue('a move', d.Execute(TTyRichMove.Create(a, len, at)));
+    moveBytes := d.HistoryBytes;
+    d.Undo;
+    d.ClearUndo;
+    txt := t.GetText(a, len);
+    AssertTrue('a cut', d.Execute(TTyRichDelete.Create(a, len)));
+    AssertTrue('a paste', d.Execute(TTyRichInsertText.Create(at - len, txt, TyRichInheritFormat,
+      False)));
+    cutPaste := d.HistoryBytes;
+    WriteLn(Format('TTyRichDragTest: 20,000 lines of 20 characters: the move''s step %d bytes, ' +
+      'the cut''s and the paste''s %d', [moveBytes, cutPaste]));
+    AssertTrue(Format('the move keeps %d, the cut and the paste %d', [moveBytes, cutPaste]),
+      moveBytes <= cutPaste);
+  finally
+    d.Free;
+  end;
+end;
+
+{ What a drag does that no test held: a refused move or copy through the user's door tells its
+  reason once; a triple press on the selection selects the paragraph; the mark after a scroll
+  of the kept surface; a drop where a paragraph is too long to lay out; the horizontal edge
+  scrolling; the left and right Ctrl keys; no drop in the form designer. }
+procedure TTyRichDragTest.TestWhatHadNoTest;
+var
+  d: TTyRichDocument;
+  t: TTyRichText;
+  k, i, fixed: Integer;
+  c: TTyRichCell;
+  p, pOld: TPoint;
+  m, m2: TRect;
+  st: TTyRichPaintStyle;
+  px: TBGRAPixel;
+  s: string;
+  x0: Integer;
+  offer: TTestOffer;
+  r: TDragProbe;
+begin
+  // the reasons of a refused move or copy, through the user's door
+  LoadRtf(FRich, StrOfBytes(FixtureBytes('word-table-merged.rtf')));
+  d := FRich.Document;
+  t := d.Text;
+  fixed := -1;
+  for k := 0 to t.ParaCount - 1 do
+  begin
+    c := d.CellAt(k);
+    if (c <> nil) and c.Row.HoldsNestedTable and (t.ParaLength(k) > 1) then
+    begin
+      fixed := k;
+      Break;
+    end;
+  end;
+  AssertTrue('a row that holds a nested table', fixed >= 0);
+  FRich.Refused := 0;
+  AssertFalse('a copy into it', FRich.RunUser(TTyRichCopy.Create(0, 1, t.ParaStart(fixed) + 1)));
+  AssertEquals('told once', 1, FRich.Refused);
+  AssertEquals('its row', rsRichEditRefusedFixedRow, FRich.LastReason);
+  LoadRtf(FRich, TableRtf(2));
+  t := FRich.Document.Text;
+  FRich.Refused := 0;
+  AssertFalse('a move across cells', FRich.RunUser(TTyRichMove.Create(t.ParaStart(1) + 1, 6, 0)));
+  AssertEquals('across cells: told once', 1, FRich.Refused);
+  AssertEquals('across cells', rsRichEditRefusedCells, FRich.LastReason);
+  FRich.Refused := 0;
+  AssertFalse('a copy into its own range', FRich.RunUser(TTyRichCopy.Create(2, 6, 4)));
+  AssertEquals('inside: told once', 1, FRich.Refused);
+  AssertEquals('inside', rsRichEditRefusedRange, FRich.LastReason);
+  // a triple press on the selection: the paragraph, no drag
+  LoadText('one two three four'#13#10'next');
+  Sel(4, 3);
+  p := Mid(5);
+  FRich.PressAt(p.X, p.Y);
+  FRich.ReleaseAt(p.X, p.Y);
+  FRich.PressAt(p.X, p.Y, [ssDouble]);
+  FRich.ReleaseAt(p.X, p.Y);
+  FRich.PressAt(p.X, p.Y);
+  AssertFalse('a triple press: no drag', FRich.Pending);
+  FRich.ReleaseAt(p.X, p.Y);
+  AssertEquals('a triple press: the paragraph', Int64(0), FRich.SelStart);
+  AssertTrue('a triple press: all of it', FRich.SelLength >= 18);
+  // the mark after a scroll of the kept surface: no dot left where it was
+  s := '';
+  for i := 1 to 60 do s := s + 'Line number ' + IntToStr(i) + #13#10;
+  LoadText(s);
+  Sel(0, 4);
+  p := Point(Mid(8).X, 150);
+  StartDrag(Mid(1), p);
+  PaintAll;
+  AssertTrue('a mark', FRich.Mark(m));
+  st := FRich.Style;
+  FRich.Wheel(-120, [ssLeft]);
+  PaintAll;
+  AssertTrue('a mark after the scroll', FRich.Mark(m2));
+  px := FRich.Surf.GetPixel(m2.Left, m2.Top);
+  AssertTrue('the new mark drawn', (px.red = st.ObjectFrame.red) and (px.green = st.ObjectFrame.green) and
+    (px.blue = st.ObjectFrame.blue));
+  // where the old mark's pixels went with the text (the scroll moved the surface)
+  pOld := Point(m.Left, m.Top - (FRich.ScrollY));
+  if (pOld.Y >= FRich.Area.Top) and not ((pOld.X >= m2.Left) and (pOld.X < m2.Right) and
+    (pOld.Y >= m2.Top) and (pOld.Y < m2.Bottom)) then
+  begin
+    px := FRich.Surf.GetPixel(pOld.X, pOld.Y);
+    AssertFalse('no dot left where the old mark went', (px.red = st.ObjectFrame.red) and
+      (px.green = st.ObjectFrame.green) and (px.blue = st.ObjectFrame.blue));
+  end;
+  FRich.Press(VK_ESCAPE, [ssLeft]);
+  // a drop where a paragraph is too long to lay out: the paste's reason
+  LoadText(StringOfChar('a', CRichMaxParaLayoutChars) + #13#10 + 'b');
+  t := FRich.Document.Text;
+  Sel(CRichMaxParaLayoutChars + 1, 1);
+  PaintAll;
+  p := Pt(CRichMaxParaLayoutChars);
+  AssertEquals('the cut under the pointer', Int64(CRichMaxParaLayoutChars),
+    FRich.PositionAtPoint(p.X, p.Y));
+  FRich.Refused := 0;
+  StartDrag(Mid(CRichMaxParaLayoutChars + 1), p);
+  FRich.ReleaseAt(p.X, p.Y);
+  AssertEquals('too long: told once', 1, FRich.Refused);
+  AssertEquals('too long', rsRichEditRefusedLongPara, FRich.LastReason);
+  AssertEquals('too long: nothing changed', Int64(CRichMaxParaLayoutChars), t.ParaLength(0));
+  // the horizontal edge scrolling: a line wider than the view, nothing wrapped
+  FRich.WrapMode := rwmNone;
+  LoadText(StringOfChar('w', 400) + #13#10'second');
+  Sel(0, 3);
+  StartDrag(Mid(1), Point(FRich.Area.Right - 1, Mid(1).Y));
+  x0 := FRich.ScrollX;
+  FRich.DragTick;
+  AssertTrue('near the right edge: scrolled right', FRich.ScrollX > x0);
+  FRich.MoveWith(FRich.Width + 30, Mid(1).Y, []);
+  x0 := FRich.ScrollX;
+  FRich.DragTick;
+  AssertEquals('outside: no scroll', x0, FRich.ScrollX);
+  FRich.Press(VK_ESCAPE, [ssLeft]);
+  FRich.WrapMode := rwmWindow;
+  // the left and the right Ctrl keys
+  LoadText('one two three four');
+  for k := 0 to 1 do
+  begin
+    Sel(4, 3);
+    StartDrag(Mid(5), Pt(14));
+    if k = 0 then
+    begin
+      FRich.Press(VK_LCONTROL, [ssCtrl, ssLeft]);
+      AssertTrue('the left Ctrl: a copy', FRich.Effect = rdeCopy);
+      FRich.KeyUpOf(VK_LCONTROL, [ssLeft]);
+    end
+    else
+    begin
+      FRich.Press(VK_RCONTROL, [ssCtrl, ssLeft]);
+      AssertTrue('the right Ctrl: a copy', FRich.Effect = rdeCopy);
+      FRich.KeyUpOf(VK_RCONTROL, [ssLeft]);
+    end;
+    AssertTrue('let go: a move', FRich.Effect = rdeMove);
+    FRich.Press(VK_ESCAPE, [ssLeft]);
+  end;
+  // the form designer takes no drop
+  r := NewProbe;
+  try
+    r.Lines.Text := 'abc';
+    r.Designing;
+    offer := TTestOffer.Create;
+    try
+      offer.Text := 'x';
+      AssertTrue('in the designer: no drop', r.DropEnter(offer, 5, 5, []) = rdeNone);
+      AssertFalse('in the designer: no session', r.DropActive);
+    finally
+      offer.Free;
+    end;
+  finally
+    r.Free;
   end;
 end;
 

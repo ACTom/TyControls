@@ -741,6 +741,8 @@ type
     property CharCount: Int64 read FCharCount;
     { The text is held as text (a lazy paragraph is among it), not as pieces. }
     property HoldsText: Boolean read FUseText;
+    { The pieces of the characters taken (none when HoldsText). }
+    property TextPieces: TTyRichPieces read FPieces;
   end;
 
   { Content of a document of its own (what a reader made of a clipboard's RTF) made ready to
@@ -805,6 +807,9 @@ type
     FBodyPieces: TTyRichPieces;
     FLead: Boolean;
     FTrail: Integer;
+    // the marks the first run inserted, as their pieces (what a redo puts back)
+    FBodyRan: Boolean;
+    FLeadPieces, FTrailPieces: TTyRichPieces;
     FTabMin: array of Integer;
     procedure AddMark;
     procedure DropBody;
@@ -844,6 +849,9 @@ type
     property Flattened: Boolean read FFlat;
     { Characters inserted (separators counted). }
     function CharCount: Int64;
+    { Made of a document's own content: the pieces of its text, which it holds for every run
+      (none when it holds text). }
+    property BodyPieces: TTyRichPieces read FBodyPieces;
     { Its text and values (the objects they bring: GatherObjects). }
     function MemSize: Int64;
     procedure GatherObjects(var AList: TTyRichObjectList; var ACount: Integer);
@@ -885,7 +893,11 @@ type
       AFormat: TTyCharFormatId = TyRichInheritFormat): TTyRichChange;
     function InsertObject(ADoc: TTyRichDocument; APos: TTyRichPos; AObject: TTyRichObject;
       AFormat: TTyCharFormatId = TyRichInheritFormat): TTyRichChange;
-    function DeleteRange(ADoc: TTyRichDocument; APos, ALen: TTyRichPos): TTyRichChange;
+    function DeleteRange(ADoc: TTyRichDocument; APos, ALen: TTyRichPos): TTyRichChange; overload;
+    { The same, APieces being the snapshot of the range taken of the text as it is now (the
+      record keeps that very array - a command that holds it too keeps the pieces once). }
+    function DeleteRange(ADoc: TTyRichDocument; APos, ALen: TTyRichPos;
+      const APieces: TTyRichPieces): TTyRichChange; overload;
     function ApplyCharFormat(ADoc: TTyRichDocument; APos, ALen: TTyRichPos;
       AMask: TTyCharFormatMask; const AValue: TTyCharFormat;
       AKeepNone: TTyCharFormatMask = []): TTyRichChange;
@@ -1082,6 +1094,7 @@ type
     FSourceCodePage: Integer;
     FSourceHasBom: Boolean;
     FDominantLineBreak: TTyRichSeparator;
+    FKnownRemoved: TTyRichPieces;
     FLoadingContent: Boolean;
     FIncomplete: Boolean;
     FSaving: Integer;
@@ -1125,6 +1138,9 @@ type
     procedure CheckCharId(AId: TTyCharFormatId);
     procedure CheckParaId(AId: TTyParaFormatId);
     function DeleteCore(APos, ALen: TTyRichPos): TTyRichUndoData;
+    { (DeleteRange's snapshot of what it removes, when the caller has it already: the same
+      pieces, taken of the same text - a move keeps one array of them, not two) }
+    function DeleteKnownRange(APos, ALen: TTyRichPos; const APieces: TTyRichPieces): TTyRichUndoData;
     function FixedData(D: TTyRichParaData): Boolean; inline;
     function FixedRowAt(AIndex: Integer): TTyRichRow;
     function RowAt(AIndex: Integer): TTyRichRow;
@@ -4089,6 +4105,17 @@ begin
   end;
 end;
 
+function TTyRichDocument.DeleteKnownRange(APos, ALen: TTyRichPos;
+  const APieces: TTyRichPieces): TTyRichUndoData;
+begin
+  FKnownRemoved := APieces;
+  try
+    Result := DeleteRange(APos, ALen);
+  finally
+    FKnownRemoved := Default(TTyRichPieces);
+  end;
+end;
+
 function TTyRichDocument.DeleteCore(APos, ALen: TTyRichPos): TTyRichUndoData;
 var
   c: TTyRichChange;
@@ -4157,7 +4184,10 @@ begin
   end;
   Result := NewUndo(c);
   try
-    Result.FRemoved := FText.PieceSnapshot(APos, ALen);
+    if (Length(FKnownRemoved.Pieces) > 0) and (FKnownRemoved.CharCount = ALen) then
+      Result.FRemoved := FKnownRemoved
+    else
+      Result.FRemoved := FText.PieceSnapshot(APos, ALen);
     for i := 0 to High(Result.FRemoved.Pieces) do
       if (Result.FRemoved.Pieces[i].Separator <> rsNone) and
          (Result.FRemoved.Pieces[i].Data <> nil) then
@@ -5818,7 +5848,8 @@ var
 begin
   // the text: as it is, or what its first insert keeps alive in the add buffer
   Result := InstanceSize + Length(FText) + FTextBytes +
-    (Length(FPieces.Pieces) + Length(FBodyPieces.Pieces)) * SizeOf(TTyRichPiece) +
+    (Length(FPieces.Pieces) + Length(FBodyPieces.Pieces) + Length(FLeadPieces.Pieces) +
+    Length(FTrailPieces.Pieces)) * SizeOf(TTyRichPiece) +
     Length(FParts) * (SizeOf(Pointer) + SizeOf(Int64) + 1);
   // the values are this fragment's own (made for it), with their runs (the objects they
   // bring: GatherObjects)
@@ -6169,8 +6200,8 @@ constructor TTyRichRangeContent.Create(ADoc: TTyRichDocument; AFrom, ALen: TTyRi
 var
   t: TTyRichText;
   stop, tFrom, tTo: TTyRichPos;
-  first, last, i: Integer;
-  fromCh, toCh: Int64;
+  first, last, i, k: Integer;
+  fromCh, toCh, acc: Int64;
   lastSep, lastWhole: Boolean;
   c0, c1, c: TTyRichCell;
 begin
@@ -6259,6 +6290,24 @@ begin
     SetLength(FValues, FCount);
     SetLength(FLens, FCount);
     for i := 0 to FCount - 1 do FValues[i] := nil;
+    { The characters taken of each paragraph, from the pieces: a separator ends one (not a
+      lookup a paragraph). }
+    if not FUseText then
+    begin
+      k := 0;
+      acc := 0;
+      for i := 0 to High(FPieces.Pieces) do
+      begin
+        Inc(acc, FPieces.Pieces[i].CharCount);
+        if FPieces.Pieces[i].Separator <> rsNone then
+        begin
+          FLens[k] := acc - 1;
+          Inc(k);
+          acc := 0;
+        end;
+      end;
+      if k < FCount then FLens[k] := acc;
+    end;
     t.WalkParaTexts(first, last, @TakePara, False);
     if FUseText then SetLength(FText, FTextLen);
   finally
@@ -6295,12 +6344,13 @@ begin
   i := AIndex - FFirst;
   FDoc.AcquireData(v);
   FValues[i] := v;
+  // (taken from the pieces already)
+  if not FUseText then Exit;
   if i = 0 then a := FFirstFrom else a := 0;
   if AIndex = FLast then b := FLastTo
   else if i = 0 then b := FFirstLen
   else b := FDoc.FText.ParaLength(AIndex);
   FLens[i] := b - a;
-  if not FUseText then Exit;
   // the characters [a, b) of the paragraph's bytes
   p := 0;
   ch := 0;
@@ -6344,7 +6394,7 @@ constructor TTyRichFragment.CreateOfContent(ATarget: TTyRichDocument; APos: TTyR
   AContent: TTyRichRangeContent; AKeepObjects: Boolean);
 var
   t: TTyRichText;
-  k, i, j, n: Integer;
+  k, i, j, n, made: Integer;
   o, a, full: Int64;
   cell, c: TTyRichCell;
   v: TTyRichParaData;
@@ -6385,6 +6435,15 @@ begin
       for i := 0 to AContent.FCount - 1 do
       begin
         v := AContent.FValues[i];
+        if FFlat then c := FFlatCell
+        else if AContent.FInOneCell then c := nil
+        else c := MapOwnCell(ATarget.CellOfData(v));
+        // a plain paragraph (no format, run or object of its own) outside a table: the plain value
+        if ((v = nil) or (v = ATarget.FPlainParsed)) and (c = nil) then
+        begin
+          AddPart(ATarget.PlainValue, AContent.FLens[i], False);
+          Continue;
+        end;
         src := ATarget.RunsOfData(v);
         if i = 0 then a := AContent.FFirstFrom else a := 0;
         if i = 0 then full := AContent.FFirstLen
@@ -6397,11 +6456,26 @@ begin
         if n = 0 then AppendRun(runs, n, 0, src[RunIndexAt(src, a)].Format, nil);
         SetLength(runs, n);
         if not AKeepObjects then
-          for j := 0 to n - 1 do
-            if runs[j].Obj <> nil then runs[j].Obj := runs[j].Obj.Clone;
-        if FFlat then c := FFlatCell
-        else if AContent.FInOneCell then c := nil
-        else c := MapOwnCell(ATarget.CellOfData(v));
+        begin
+          made := 0;
+          try
+            for j := 0 to n - 1 do
+              if runs[j].Obj <> nil then
+              begin
+                runs[j].Obj := runs[j].Obj.Clone;
+                made := j + 1;
+              end;
+          except
+            // the clones made for this paragraph so far are no value's yet: they go
+            for j := 0 to made - 1 do
+              if runs[j].Obj <> nil then
+              begin
+                runs[j].Obj.AddRef;
+                runs[j].Obj.Release;
+              end;
+            raise;
+          end;
+        end;
         AddPart(ATarget.MakeData(ATarget.FormatOfData(v), runs, c), AContent.FLens[i], False);
       end;
       if AContent.FEnds then
@@ -6602,7 +6676,13 @@ begin
         p := APos;
         if AFragment.FLead then
         begin
-          FText.Insert(p, lb);
+          if AFragment.FBodyRan then
+            FText.RestorePieces(p, AFragment.FLeadPieces)
+          else
+          begin
+            FText.Insert(p, lb);
+            AFragment.FLeadPieces := FText.PieceSnapshot(p, 1);
+          end;
           Inc(p);
         end;
         if AFragment.FBodyPieces.CharCount > 0 then
@@ -6615,15 +6695,19 @@ begin
           if sb > 0 then FText.MapParaData(kb + 1, kb + sb, @NoDataMap);
           Inc(p, AFragment.FBodyPieces.CharCount);
         end;
-        for i := 1 to AFragment.FTrail do
+        if AFragment.FTrail > 0 then
         begin
-          FText.Insert(p, lb);
-          Inc(p);
+          if AFragment.FBodyRan then
+            FText.RestorePieces(p, AFragment.FTrailPieces)
+          else
+          begin
+            for i := 1 to AFragment.FTrail do FText.Insert(p + i - 1, lb);
+            AFragment.FTrailPieces := FText.PieceSnapshot(p, AFragment.FTrail);
+          end;
         end;
-        // (a redo puts these pieces back, as for a fragment's text)
-        AFragment.FPieces := FText.PieceSnapshot(APos, FText.Length - oldChars);
-        AFragment.FHavePieces := True;
-        AFragment.DropBody;
+        { The body stays the fragment's: a redo puts the same pieces in again (no snapshot of
+          what went in - the pieces are the body's, a move's delete keeps that very array). }
+        AFragment.FBodyRan := True;
       finally
         Dec(FEditing);
       end;
@@ -6892,6 +6976,13 @@ function TTyRichCommand.DeleteRange(ADoc: TTyRichDocument; APos, ALen: TTyRichPo
 begin
   CheckRunning(ADoc);
   Result := Keep(ADoc.DeleteRange(APos, ALen));
+end;
+
+function TTyRichCommand.DeleteRange(ADoc: TTyRichDocument; APos, ALen: TTyRichPos;
+  const APieces: TTyRichPieces): TTyRichChange;
+begin
+  CheckRunning(ADoc);
+  Result := Keep(ADoc.DeleteKnownRange(APos, ALen, APieces));
 end;
 
 function TTyRichCommand.ApplyCharFormat(ADoc: TTyRichDocument; APos, ALen: TTyRichPos;

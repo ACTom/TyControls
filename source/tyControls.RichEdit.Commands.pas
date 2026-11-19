@@ -736,7 +736,8 @@ begin
       at := FTo;
       if Moves then
       begin
-        DeleteRange(ADoc, FFrom, FCut);
+        // (the delete keeps the content's own array of the pieces: the pieces are kept once)
+        DeleteRange(ADoc, FFrom, FCut, content.TextPieces);
         if at > FFrom then Dec(at, FCut);
       end;
       FFragment := TTyRichFragment.CreateOfContent(ADoc, at, content, Moves);
@@ -746,7 +747,8 @@ begin
     end;
   end
   else if Moves then
-    DeleteRange(ADoc, FFrom, FCut);
+    // again (a redo), on the same text: the same pieces, the fragment's array
+    DeleteRange(ADoc, FFrom, FCut, FFragment.BodyPieces);
   InsertFragment(ADoc, FAt, FFragment);
   FPlaced := TyRichRange(FAt, FFragment.CharCount);
 end;
@@ -754,7 +756,12 @@ end;
 function TTyRichRangeTransfer.MemSize: Int64;
 begin
   Result := inherited MemSize;
-  if FFragment <> nil then Inc(Result, FFragment.MemSize);
+  if FFragment = nil then Exit;
+  Inc(Result, FFragment.MemSize);
+  { A move that ran: its delete's record and its fragment hold one array of the pieces
+    between them, counted once. }
+  if Moves and (RecordCount > 0) then
+    Dec(Result, Int64(Length(FFragment.BodyPieces.Pieces)) * SizeOf(TTyRichPiece));
 end;
 
 procedure TTyRichRangeTransfer.GatherObjects(var AList: TTyRichObjectList; var ACount: Integer);
