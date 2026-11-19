@@ -257,6 +257,7 @@ type
     procedure TestTheEffectIsWhatHappened;
     procedure TestARefusedOleDropReportsNothing;
     procedure TestDroppedFiles;
+    procedure TestADroppedIconFileGoesInAsAPicture;
     procedure TestRegistrationFollowsTheWindow;
     procedure TestTheControlGoesDuringAnOleDrag;
     procedure TestTheOleKeysAndAStreamedMedium;
@@ -314,6 +315,22 @@ begin
     st.Free;
     b.Free;
   end;
+end;
+
+{ A 2x2 32-bit icon file: one image, its mask after the pixels. }
+function IcoOf: TBytes;
+const
+  I: array[0..85] of Byte = (
+    0, 0, 1, 0, 1, 0,
+    2, 2, 0, 0, 1, 0, 32, 0, 64, 0, 0, 0, 22, 0, 0, 0,
+    40, 0, 0, 0, 2, 0, 0, 0, 4, 0, 0, 0, 1, 0, 32, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 255, 255, 0, 0, 255, 255, 0, 0, 255, 255, 0, 0, 255, 255,
+    0, 0, 0, 0, 0, 0, 0, 0);
+begin
+  Result := nil;
+  SetLength(Result, Length(I));
+  Move(I[0], Result[0], Length(I));
 end;
 
 { A 2x2 bottom-up 24-bit DIB (CF_DIB's bytes: the header and the pixels). }
@@ -2492,6 +2509,33 @@ begin
     di := nil;
   end;
   AssertEquals('every data object let go', 0, TTestData.Alive);
+end;
+
+{ An icon file in a dropped list goes in as InsertPictureFromFile takes it: a PNG of the
+  icon's size, nothing told. }
+procedure TTyRichDropAcrossTest.TestADroppedIconFileGoesInAsAPicture;
+var
+  d: TTestData;
+  di: IDataObject;
+  p: TPoint;
+  got: TTyRichPicture;
+begin
+  Load(FA, 'one two three');
+  p := Pt(FA, 4);
+  FA.Refused := 0;
+  d := TTestData.Create;
+  SetLength(d.FileNames, 1);
+  d.FileNames[0] := UTF8Decode(TempFile('i.ico', IcoOf));
+  di := d;
+  AssertEquals('a copy', DROPEFFECT_COPY, Enter(FA, d, p, MK_LBUTTON, DROPEFFECT_COPY));
+  AssertEquals('copied', DROPEFFECT_COPY, DropAt(FA, d, p, 0, DROPEFFECT_COPY));
+  AssertEquals('nothing told', 0, FA.Refused);
+  got := TTyRichPicture(FA.Document.ObjectAt(4));
+  AssertTrue('the picture went in', got <> nil);
+  AssertTrue('kept as PNG', got.PictureFormat = rpfPng);
+  AssertEquals('2 pixels wide', 30, got.WidthTwips);
+  AssertEquals('one step', 1, FA.Document.UndoDepth);
+  di := nil;
 end;
 
 { A list of files: OnDropFiles first, with the names in order (AHandled: taken, a copy,

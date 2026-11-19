@@ -289,6 +289,16 @@ begin
   Move(I[0], Result[0], Length(I));
 end;
 
+{ The same picture as a cursor file: type 2, the hot spot where an icon has its planes and
+  depth. }
+function CurBytes: TBytes;
+begin
+  Result := IcoBytes;
+  Result[2] := 2;
+  Result[10] := 0;
+  Result[12] := 0;
+end;
+
 { A metafile nothing here draws (a rectangle and a line: no bitmap), and an EMF header. }
 function WmfDrawing: TBytes;
 const
@@ -1876,7 +1886,7 @@ begin
   pic := PictureAt(0);
   AssertTrue('JPEG', pic.PictureFormat = rpfJpeg);
   AssertTrue('the file''s bytes', SameBytes(pic.Data, jpg));
-  // a BMP, a GIF, an icon: PNG
+  // a BMP, a GIF, an icon, a cursor: PNG
   FRich.SelStart := 0;
   AssertTrue('a BMP file', FRich.InsertPictureFromFile(TempFile('c.bmp', bmp)));
   AssertTrue('BMP kept as PNG', PictureAt(0).PictureFormat = rpfPng);
@@ -1889,6 +1899,10 @@ begin
   AssertTrue('an icon file', FRich.InsertPictureFromFile(TempFile('e.ico', IcoBytes)));
   AssertTrue('icon kept as PNG', PictureAt(0).PictureFormat = rpfPng);
   AssertEquals('icon: 2 pixels', 30, PictureAt(0).WidthTwips);
+  FRich.SelStart := 0;
+  AssertTrue('a cursor file', FRich.InsertPictureFromFile(TempFile('f.cur', CurBytes)));
+  AssertTrue('cursor kept as PNG', PictureAt(0).PictureFormat = rpfPng);
+  AssertEquals('cursor: 2 pixels', 30, PictureAt(0).WidthTwips);
   // a stream
   st := TBytesStream.Create(jpg);
   try
@@ -1940,7 +1954,7 @@ begin
   w := PictureAt(0).WidthTwips;
   AssertTrue('held to the room', w < 2000 * 15);
   AssertEquals('the shape kept', Round(w / 20), PictureAt(0).HeightTwips);
-  AssertEquals('one step a picture (the first undone)', 9, FRich.Document.UndoDepth);
+  AssertEquals('one step a picture (the first undone)', 10, FRich.Document.UndoDepth);
 end;
 
 { What is refused, and how it is told: a missing file (the system's words), a metafile by its
