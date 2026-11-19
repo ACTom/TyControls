@@ -427,7 +427,11 @@ begin
   if A is TTyRichOpaque then
     Exit(SameRaw(TTyRichOpaque(A).Bytes, TTyRichOpaque(B).Bytes) and
       SameRaw(TTyRichOpaque(A).DisplayText, TTyRichOpaque(B).DisplayText));
-  // the mark at either edge of a field shown as text: the open one keeps the field's bytes
+  { the mark at either edge of a field shown as text: of the same edge, the open one with the
+    same bytes (read back from what was written: its group stands elsewhere, another identity) }
+  if A is TTyRichFieldMark then
+    Exit((TTyRichFieldMark(A).Kind = TTyRichFieldMark(B).Kind) and
+      SameRaw(TTyRichFieldMark(A).Bytes, TTyRichFieldMark(B).Bytes));
   if not (A is TTyRichPicture) then Exit(A.DataBytes = B.DataBytes);
   pa := A as TTyRichPicture;
   pb := B as TTyRichPicture;

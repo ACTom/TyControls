@@ -38,7 +38,11 @@ type
     procedure TestAResultOfATabOrAParagraphEndAlone;
     procedure TestFieldsTouchingAndAtTheEndsOfTheDocument;
     procedure TestLazyEqualsWholeAcrossSnapshots;
+    procedure TestCharacterWordsOfTheFieldReachItsResult;
+    procedure TestAResultThatShowsNothingStaysOneObject;
+    procedure TestALargeFieldIsDecidedAlikeWhereverAParseBegins;
     // writing
+    procedure TestTheSlotFontsAroundAFieldHoldAfterAnEdit;
     procedure TestAnEditOutsideAFieldKeepsItsBytes;
     procedure TestACopyTakesAWholeFieldAsItsBytesAndHalfAsText;
     // what may change
@@ -48,9 +52,11 @@ type
     procedure TestReplaceAllLeavesResults;
     procedure TestTablesAndObjectsAroundFields;
     procedure TestPastesAndMovesTakeWholeFields;
+    procedure TestAReplaceOfMatchesInsideAResultLeavesThem;
     // the model's own word on fields
     procedure TestTheDepthOfEveryParagraphFollowsEveryEdit;
     procedure TestTheFieldAroundAPlaceAndAMarksPartner;
+    procedure TestTheFieldAroundAPlaceReadsOnlyItsMarksParagraphs;
     procedure TestARefusalSaysItIsAField;
     procedure TestTheOpenMarkKeepsTheFieldsBytes;
   end;
@@ -1401,6 +1407,7 @@ end;
   whole field is a second field with the same bytes, a copy of half of one is refused. }
 procedure TTyRichFieldsTest.TestPastesAndMovesTakeWholeFields;
 var
+  s: RawByteString;
   b, after: TBytes;
   d, src: TTyRichDocument;
   ends, raised: Boolean;
@@ -1437,6 +1444,28 @@ begin
       d.Text.ParaStart(1) + 2)));
     AssertEquals('moved', '/[]', AllObjects(d));
     AssertEquals('its bytes once', 1, CountRaw(FieldGroup(LinkRtf, 1), StrOfBytes(SaveOut(d))));
+  finally
+    d.Free;
+  end;
+  { Marks out of their order: "b]y[c" out of "x[ab]y[cd]z" holds as many open marks as close
+    ones, the close one first - the end of one field and the start of another. A copy of it
+    is refused: it would put a close mark before any open one. }
+  s := Rtf(H936 + '|pard x{|field{|*|fldinst A}{|fldrslt ab}}y{|field{|*|fldinst C}{|fldrslt cd}}z|par}');
+  b := BytesOf(s);
+  d := LoadDoc(b, False);
+  try
+    AssertRaw(Self, 'two fields', 'x' + OC + 'ab' + OC + 'y' + OC + 'cd' + OC + 'z', ParaText(d, 0));
+    raised := False;
+    try
+      d.Execute(TTyRichCopy.Create(3, 5, 11));
+    except
+      on ETyRichModel do raised := True;
+    end;
+    AssertTrue('the end of one and the start of another copied: refused', raised);
+    AssertEquals('no step', 0, d.UndoDepth);
+    AssertEquals('the marks as they were', '[][]', AllObjects(d));
+    AssertEquals('the paragraph as it was', 0, d.ParaFieldDepth(0));
+    AssertTrue('the file', SameBytes(b, SaveOut(d)));
   finally
     d.Free;
   end;
@@ -1761,6 +1790,336 @@ begin
     AssertFalse('a mark alone: refused', d.Execute(TTyRichInsertObject.Create(0, k)));
     AssertEquals('nothing kept', 0, d.UndoDepth);
     AssertTrue('the file', SameBytes(BytesOf(LinkRtf), SaveOut(d)));
+  finally
+    d.Free;
+  end;
+end;
+
+const
+  // Times New Roman and SimSun under code page 1252: a font's charset decides its bytes
+  H1252 = '{|rtf1|ansi|ansicpg1252|deff0{|fonttbl{|f0|froman Times New Roman;}' +
+    '{|f1|fnil|fcharset134 SimSun;}}|pard|f0 ';
+
+{ The character words the field's own group names before its instruction ({\field\f1 ...},
+  {\field\b ...}) are in effect in its result: \f1 a font whose charset reads the result's
+  \'xx as Chinese, \b a bold result. Not its paragraph words or its text words: those are no
+  field's. Lazily and whole alike, and the bytes written back are the file's. }
+procedure TTyRichFieldsTest.TestCharacterWordsOfTheFieldReachItsResult;
+var
+  s: RawByteString;
+  b: TBytes;
+  d: TTyRichDocument;
+  full: Boolean;
+begin
+  s := Rtf(H1252 + 'a{|field|f1{|*|fldinst HYPERLINK "x"}{|fldrslt |''c1|''b4}}b|par}');
+  b := BytesOf(s);
+  for full := False to True do
+  begin
+    d := LoadDoc(b, full);
+    try
+      AssertRaw(Self, 'in the font of the field''s group', 'a' + OC + '链' + OC + 'b', ParaText(d, 0));
+      AssertEquals('the result''s font', 'SimSun', CharFmt(d, 2).FontName);
+      AssertEquals('the text after it in its own', 'Times New Roman', CharFmt(d, 4).FontName);
+    finally
+      d.Free;
+    end;
+  end;
+  CheckRoundTrip(Self, 'a font', b);
+  CheckLazyIsWhole(Self, 'a font', b, 0, False);
+  CheckEditKeeps(Self, 'a font, typed before', b, TTyRichInsertText.Create(0, 'Q'), [FieldGroup(s, 1)]);
+  s := Rtf(H1252 + 'a{|field|b{|*|fldinst X}{|fldrslt xy}}b|par}');
+  b := BytesOf(s);
+  d := LoadDoc(b, False);
+  try
+    AssertRaw(Self, 'bold', 'a' + OC + 'xy' + OC + 'b', ParaText(d, 0));
+    AssertTrue('the result bold', fsBold in CharFmt(d, 2).Style);
+    AssertTrue('all of it', fsBold in CharFmt(d, 3).Style);
+    AssertFalse('the text before it not', fsBold in CharFmt(d, 0).Style);
+    AssertFalse('the text after it not', fsBold in CharFmt(d, 5).Style);
+  finally
+    d.Free;
+  end;
+  CheckRoundTrip(Self, 'bold', b);
+  CheckLazyIsWhole(Self, 'bold', b, 0, False);
+  // a paragraph word and a text word in the field's group are not the result's
+  s := Rtf(H1252 + 'a{|field|qc|tab{|*|fldinst X}{|fldrslt xy}}b|par}');
+  b := BytesOf(s);
+  d := LoadDoc(b, True);
+  try
+    AssertRaw(Self, 'no tab', 'a' + OC + 'xy' + OC + 'b', ParaText(d, 0));
+    AssertTrue('not centred', d.Formats.ParaFormat(d.ParaFormatOf(0)).Align = paraLeft);
+  finally
+    d.Free;
+  end;
+  CheckRoundTrip(Self, 'a paragraph word and a tab', b);
+end;
+
+{ A result the reader would make nothing visible of - an optional hyphen alone, bookmarks
+  alone, a destination it does not know, line ends - leaves the field one object of its bytes,
+  as an empty result does. A non-breaking space or hyphen alone is a character: shown. }
+procedure TTyRichFieldsTest.TestAResultThatShowsNothingStaysOneObject;
+const
+  Nothing: array[0..5] of RawByteString = (
+    '{|field{|*|fldinst X}{|fldrslt |-}}',
+    '{|field{|*|fldinst X}{|fldrslt {|*|bkmkstart b}}}',
+    '{|field{|*|fldinst X}{|fldrslt {|*|bkmkstart b}{|*|bkmkend b}}}',
+    '{|field{|*|fldinst X}{|fldrslt {|*|zzz some text}}}',
+    '{|field{|*|fldinst X}{|fldrslt |-'#13#10'}}',
+    '{|field{|*|fldinst X}{|fldrslt {|*|bkmkstart b}|-}}');
+  Something: array[0..2] of RawByteString = (
+    '{|field{|*|fldinst X}{|fldrslt |~}}',
+    '{|field{|*|fldinst X}{|fldrslt |_}}',
+    '{|field{|*|fldinst X}{|fldrslt {|*|bkmkstart b}x{|*|bkmkend b}}}');
+var
+  i: Integer;
+  s, g, objs: RawByteString;
+  b: TBytes;
+  d: TTyRichDocument;
+begin
+  for i := 0 to High(Nothing) do
+  begin
+    g := Rtf(Nothing[i]);
+    s := Rtf(H936 + '|pard a') + g + Rtf('b|par}');
+    b := BytesOf(s);
+    d := LoadDoc(b, True);
+    try
+      AssertEquals(Format('result %d: one object', [i]), 'O', AllObjects(d));
+      AssertRaw(Self, Format('result %d: the paragraph', [i]), 'a' + OC + 'b', ParaText(d, 0));
+      AssertRaw(Self, Format('result %d: its bytes', [i]), g, FirstOpaque(d).Bytes);
+    finally
+      d.Free;
+    end;
+    CheckRoundTrip(Self, Format('result %d', [i]), b);
+    CheckLazyIsWhole(Self, Format('result %d', [i]), b, 0, False);
+  end;
+  for i := 0 to High(Something) do
+  begin
+    s := Rtf(H936 + '|pard a' + Something[i] + 'b|par}');
+    b := BytesOf(s);
+    d := LoadDoc(b, True);
+    try
+      objs := AllObjects(d);
+      AssertTrue(Format('result %d: shown (%s)', [i, objs]), (objs <> '') and (objs[1] = '[') and
+        (objs[Length(objs)] = ']'));
+      AssertTrue(Format('result %d: a character between the marks', [i]),
+        Length(WithoutObjects(ParaText(d, 0))) > 2);
+    finally
+      d.Free;
+    end;
+    CheckRoundTrip(Self, Format('shown result %d', [i]), b);
+  end;
+end;
+
+{ A field larger than the reader's snapshot interval, holding one as large in its result: the
+  index scan decides both, and a parse that begins after the outer field's start - at a
+  snapshot inside its result - shows the inner one as the whole parse does: its marks, its
+  paragraphs. Read lazily one interval at a time it is the whole parse. }
+procedure TTyRichFieldsTest.TestALargeFieldIsDecidedAlikeWhereverAParseBegins;
+var
+  s: RawByteString;
+  b: TBytes;
+  d, full: TTyRichDocument;
+  i: Integer;
+begin
+  s := H936 + '|pard a{|field{|*|fldinst INCLUDETEXT "outer.rtf"}{|fldrslt ';
+  for i := 1 to 100 do
+    s := s + '|pard outer line ' + IntToStr(i) + ', with some words to give it length|par ';
+  s := s + '{|field{|*|fldinst INCLUDETEXT "inner.rtf"}{|fldrslt ';
+  for i := 1 to 6000 do
+    s := s + '|pard inner line ' + IntToStr(i) + ', with some words to give it length|par ';
+  s := s + '}}';
+  for i := 1 to 100 do
+    s := s + '|pard outer again ' + IntToStr(i) + ', with some words to give it length|par ';
+  s := Rtf(s + '}}z|par}');
+  b := BytesOf(s);
+  full := LoadDoc(b, True);
+  d := LoadDoc(b, False);
+  try
+    AssertTrue('a file of several intervals', TyRichRtfLoadOf(d).IntervalCount > 3);
+    TyRichRtfLoadOf(d).MaxResidentIntervals := 1;
+    // the inner field's start first: its interval parsed alone, from its snapshot
+    AssertEquals('the inner field opens: whole', '[', Copy(ObjectsOf(full, 100), 1, 1));
+    AssertEquals('the inner field opens: lazily', '[', Copy(ObjectsOf(d, 100), 1, 1));
+    AssertEquals('its depth', 2, d.FieldDepthAt(d.Text.ParaStart(100) + 1));
+    AssertEquals('it closes: whole', ']', Copy(ObjectsOf(full, 6100), 1, 1));
+    AssertEquals('it closes: lazily', ']', Copy(ObjectsOf(d, 6100), 1, 1));
+  finally
+    d.Free;
+    full.Free;
+  end;
+  CheckLazyIsWhole(Self, 'two large fields', b, 1, False);
+  CheckRoundTrip(Self, 'two large fields', b);
+end;
+
+{ Word's way with its three fonts: \hich\af0\dbch\af1\loch\f0 before a field, \dbch in its
+  result naming the double-byte font of the state around it. After an edit in that paragraph
+  the field's bytes go back as the file has them - and read again, its result's characters
+  are in the fonts they were: the slots in force before the field are in force before its
+  bytes. Where nothing names a slot, nothing more is written. }
+procedure TTyRichFieldsTest.TestTheSlotFontsAroundAFieldHoldAfterAnEdit;
+var
+  s: RawByteString;
+  b, o: TBytes;
+  d: TTyRichDocument;
+  pf: TTyParaFormat;
+begin
+  // a0 b1 _2 [3 链4 接5 x6 y7 ]8 _9 c10 d11
+  s := Rtf('{|rtf1|ansi|ansicpg1252|deff0{|fonttbl{|f0|froman Times New Roman;}' +
+    '{|f1|fnil|fcharset134 SimSun;}}|pard|plain|f0|hich|af0|dbch|af1|loch|f0 ab ' +
+    '{|field{|*|fldinst HYPERLINK "x"}{|fldrslt |dbch|u38142?|u25509?|loch xy}} cd|par next|par}');
+  b := BytesOf(s);
+  d := LoadDoc(b, True);
+  try
+    AssertRaw(Self, 'the paragraph', 'ab ' + OC + '链接xy' + OC + ' cd', ParaText(d, 0));
+    AssertEquals('the double-byte characters in the double-byte font', 'SimSun', CharFmt(d, 4).FontName);
+    AssertEquals('the rest in the low font', 'Times New Roman', CharFmt(d, 6).FontName);
+  finally
+    d.Free;
+  end;
+  CheckRoundTrip(Self, 'slots', b);
+  CheckEditKeeps(Self, 'slots, typed before the field', b, TTyRichInsertText.Create(0, 'Q'),
+    [FieldGroup(s, 1)]);
+  CheckEditKeeps(Self, 'slots, typed after the field', b, TTyRichInsertText.Create(11, 'Q'),
+    [FieldGroup(s, 1)]);
+  pf := TyDefaultParaFormat;
+  pf.Align := paraCenter;
+  CheckEditKeeps(Self, 'slots, the paragraph centred', b,
+    TTyRichSetParaFormat.Create(0, 0, [pffAlign], pf), [FieldGroup(s, 1)]);
+  // no slot named around the field: an edit writes no slot word
+  b := BytesOf(LinkRtf);
+  d := LoadDoc(b, False);
+  try
+    d.Execute(TTyRichInsertText.Create(0, 'Q'));
+    o := SaveOut(d);
+    AssertEquals('no \loch', 0, CountRaw(Rtf('|loch'), StrOfBytes(o)));
+    AssertEquals('no \hich', 0, CountRaw(Rtf('|hich'), StrOfBytes(o)));
+    AssertEquals('no \dbch', 0, CountRaw(Rtf('|dbch'), StrOfBytes(o)));
+    AssertEquals('no \af', 0, CountRaw(Rtf('|af'), StrOfBytes(o)));
+  finally
+    d.Free;
+  end;
+end;
+
+type
+  { Replaces the matches at At (each ALen long) by Text through the replace primitive itself -
+    what a replace of every match does, without the find's own choice of matches. }
+  TReplaceAtCommand = class(TTyRichCommand)
+  protected
+    procedure DoExecute(ADoc: TTyRichDocument); override;
+  public
+    At: array of TTyRichPos;
+    Len: TTyRichPos;
+    Text: UTF8String;
+    Skipped: Integer;
+  end;
+
+procedure TReplaceAtCommand.DoExecute(ADoc: TTyRichDocument);
+begin
+  ReplaceInParas(ADoc, At, 0, Length(At), Len, Text, Skipped);
+end;
+
+{ The replace primitive passes over a match inside a field's result whoever chose it (the
+  others are replaced), and counts it. }
+procedure TTyRichFieldsTest.TestAReplaceOfMatchesInsideAResultLeavesThem;
+var
+  b: TBytes;
+  d: TTyRichDocument;
+  cmd: TReplaceAtCommand;
+begin
+  b := BytesOf(LinkRtf);
+  d := LoadDoc(b, False);
+  try
+    cmd := TReplaceAtCommand.Create;
+    SetLength(cmd.At, 3);
+    cmd.At[0] := 0;
+    cmd.At[1] := LinkOpen + 1;
+    cmd.At[2] := LinkClose + 2;
+    cmd.Len := 1;
+    cmd.Text := 'X';
+    AssertTrue('two replaced', d.Execute(cmd));
+    AssertEquals('one passed over', 1, cmd.Skipped);
+    AssertRaw(Self, 'the result as it was', 'X里 ' + OC + '链接' + OC + ' X', ParaText(d, 0));
+    CheckDepths(Self, 'after the replace', d);
+    d.Undo;
+    AssertTrue('undone: the file', SameBytes(b, SaveOut(d)));
+  finally
+    d.Free;
+  end;
+end;
+
+{ The field around a place and a mark's partner, found by the paragraphs' depths: only the
+  paragraphs that hold the two marks (and the place's own) are read, however long the field.
+  A field that ends in the paragraph where the next one at its depth begins is not taken for
+  that one. }
+procedure TTyRichFieldsTest.TestTheFieldAroundAPlaceReadsOnlyItsMarksParagraphs;
+var
+  s: RawByteString;
+  b: TBytes;
+  d: TTyRichDocument;
+  full: Boolean;
+  a, z, p, open, close: TTyRichPos;
+  load: TTyRtfLoad;
+  parses, k: Integer;
+  bytes: Int64;
+begin
+  // x[a / b][c / d]y: the first field ends in the paragraph where the second begins
+  s := Rtf(H936 + '|pard x{|field{|*|fldinst A}{|fldrslt a|par b}}{|field{|*|fldinst B}{|fldrslt c|par d}}y|par}');
+  b := BytesOf(s);
+  for full := False to True do
+  begin
+    d := LoadDoc(b, full);
+    try
+      if full then AssertEquals('three paragraphs', '[/][/]', AllObjects(d));
+      p := d.Text.ParaStart(2);
+      AssertTrue('the second field around its last paragraph', d.FieldRangeAt(p, a, z));
+      AssertEquals('its open mark: in the middle paragraph', d.Text.ParaStart(1) + 2, a);
+      AssertEquals('its close mark', d.Text.ParaStart(2) + 1, z);
+      AssertEquals('the open mark''s partner', z, d.FieldPartner(a));
+      AssertEquals('the close mark''s partner', a, d.FieldPartner(z));
+      AssertTrue('the first field around the middle paragraph''s start',
+        d.FieldRangeAt(d.Text.ParaStart(1), a, z));
+      AssertEquals('its open mark', 1, a);
+      AssertEquals('its close mark', d.Text.ParaStart(1) + 1, z);
+      AssertEquals('the first one''s partner', z, d.FieldPartner(1));
+    finally
+      d.Free;
+    end;
+  end;
+  // the contents of 3,000 entries in a large file, read lazily: from its middle
+  s := TocRtf(3000, 6000);
+  b := BytesOf(s);
+  d := LoadDoc(b, False);
+  try
+    load := TyRichRtfLoadOf(d);
+    load.MaxResidentIntervals := MaxInt;
+    AssertTrue('a file of many intervals', load.IntervalCount > 10);
+    k := 6000 + 1500;
+    p := d.Text.ParaStart(k) + d.Text.ParaLength(k);
+    parses := load.ParseCount;
+    bytes := load.ParsedBytes;
+    AssertTrue('inside the contents', d.FieldRangeAt(p, open, close));
+    AssertEquals('it opens in its first paragraph', 6000, d.Text.ParaOfPos(open));
+    AssertEquals('it closes in its last', 6000 + 2999, d.Text.ParaOfPos(close));
+    AssertTrue(Format('the intervals of the place and the two marks parsed, no more: %d',
+      [load.ParseCount - parses]), load.ParseCount - parses <= 3);
+    AssertTrue(Format('their bytes: %d', [load.ParsedBytes - bytes]),
+      load.ParsedBytes - bytes <= 3 * 2 * 65536);
+    parses := load.ParseCount;
+    AssertEquals('the open mark''s partner', close, d.FieldPartner(open));
+    AssertEquals('the close mark''s partner', open, d.FieldPartner(close));
+    AssertEquals('nothing parsed again', parses, load.ParseCount);
+  finally
+    d.Free;
+  end;
+  // the same, the intervals let go of between the questions: each finds its marks' paragraphs
+  d := LoadDoc(b, False);
+  try
+    load := TyRichRtfLoadOf(d);
+    load.MaxResidentIntervals := 1;
+    parses := load.ParseCount;
+    AssertEquals('the partner of the contents'' close mark', open, d.FieldPartner(close));
+    AssertTrue(Format('two intervals parsed: %d', [load.ParseCount - parses]),
+      load.ParseCount - parses <= 2);
   finally
     d.Free;
   end;

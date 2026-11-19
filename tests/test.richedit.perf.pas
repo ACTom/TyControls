@@ -16,8 +16,13 @@ unit test.richedit.perf;
   The files (about 100 MB each) are made by the test under the system's temporary folder with
   names of their own, and deleted in TearDown whatever happened; making them is not timed.
   With less free room than they need the test is skipped with a message. The times and the
-  process's peak working set are printed (the gate's log keeps them); memory is not asserted
-  here. }
+  process's peak working set are printed (the gate's log keeps them). Memory is asserted once:
+  what reading the first screen of a file of deeply nested fields adds to the working set.
+
+  Large fields are held to the design's lines themselves, not three times them: the first
+  screen of one field around 100 MB, or of fields nested eight deep around 30 MB, within 1 s,
+  the first paragraphs read again after their interval went within 100 ms - what a field costs
+  is paid once, at the index, whatever its size and nesting. }
 
 {$mode objfpc}{$H+}
 
@@ -50,6 +55,9 @@ type
     procedure TestAPictureResizedInALargeDocument;
     procedure TestDraggingTheSelectionInALargeDocument;
     procedure TestDroppingALargeRtfFromAnotherProgram;
+    procedure TestOneFieldAroundA100MBRtf;
+    procedure TestFieldsEightDeepAround30MB;
+    procedure TestTheWholeParseOfFieldsEightDeepIsLinear;
   end;
 
 implementation
@@ -458,6 +466,61 @@ begin
     f.Free;
   end;
 end;
+
+{ About ABytes of RTF whose body is ANest fields, one in the other's result (INCLUDETEXT, as
+  Word writes a document included in another), around plain paragraphs; a paragraph before
+  them and one after. ANest 0: the same paragraphs without a field. }
+procedure MakeWrappedRtf(const APath: string; ABytes: Int64; ANest: Integer);
+var
+  f: TFileStream;
+  buf: TMemoryStream;
+  n, k: Integer;
+begin
+  f := TFileStream.Create(APath, fmCreate);
+  buf := TMemoryStream.Create;
+  try
+    WriteRaw(buf, '{\rtf1\ansi\ansicpg936\deff0{\fonttbl{\f0\fnil\fcharset134 SimSun;}}' + #13#10 +
+      '\pard intro\par' + #13#10);
+    for k := 1 to ANest do
+      WriteRaw(buf, '{\field{\*\fldinst INCLUDETEXT "part' + IntToStr(k) + '.rtf"}{\fldrslt ');
+    n := 0;
+    while f.Size + buf.Size < ABytes do
+    begin
+      Inc(n);
+      WriteRaw(buf, '\pard line ' + IntToStr(n) + ' of the included text, written to have some ' +
+        'length to it\par' + #13#10);
+      if buf.Size > 1024 * 1024 then
+      begin
+        f.WriteBuffer(buf.Memory^, buf.Size);
+        buf.Clear;
+      end;
+    end;
+    for k := 1 to ANest do WriteRaw(buf, '}}');
+    WriteRaw(buf, '\pard tail\par}' + #13#10);
+    f.WriteBuffer(buf.Memory^, buf.Size);
+  finally
+    buf.Free;
+    f.Free;
+  end;
+end;
+
+function WorkingSetMB: Double;
+{$IFDEF MSWINDOWS}
+var
+  m: TTyPerfMemCounters;
+begin
+  FillChar(m, SizeOf(m), 0);
+  m.cb := SizeOf(m);
+  if GetProcessMemoryInfo(GetCurrentProcess, m, SizeOf(m)) then
+    Result := m.WorkingSetSize / (1024 * 1024)
+  else
+    Result := 0;
+end;
+{$ELSE}
+begin
+  Result := 0;
+end;
+{$ENDIF}
 
 { The files of a run that was killed (the gate's time limit) are left behind; a run sweeps
   those older than a day at its start (a run going on at the same time keeps its own). }
@@ -1143,6 +1206,132 @@ begin
   Ignore('drops from other programs are the Windows widgetset''s');
 end;
 {$ENDIF}
+
+{ One field (INCLUDETEXT) around a 100 MB file: LoadFromFile to the end of the first paint
+  within 1 s; once the whole file is indexed and the first paragraphs' interval sent back to
+  unparsed (two intervals kept, two others read), the first paragraphs read again within
+  100 ms - the field's verdict and its bytes are not paid for again. }
+procedure TTyRichEditPerfTest.TestOneFieldAroundA100MBRtf;
+var
+  path: string;
+  bmp: TBitmap;
+  d: TTyRichDocument;
+  load: TTyRtfLoad;
+  t0, first, again: Double;
+  n, parses: Integer;
+begin
+  CheckRoom;
+  path := NewFile('.rtf');
+  MakeWrappedRtf(path, CFileBytes, 1);
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf32bit;
+    bmp.SetSize(FRich.Width, FRich.Height);
+    t0 := Clock;
+    FRich.LoadFromFile(path);
+    TPerfRich(FRich).PaintInto(bmp);
+    first := Clock - t0;
+    Report(Format('one field around %d MB: load (first slice) and first paint',
+      [SizeOfFile(path) div (1024 * 1024)]), first);
+    t0 := Clock;
+    FRich.FinishLoading;
+    Report(Format('one field: the rest indexed (%d paragraphs; not asserted)',
+      [FRich.Document.Text.ParaCount]), Clock - t0);
+    d := FRich.Document;
+    load := TyRichRtfLoadOf(d);
+    load.MaxResidentIntervals := 2;
+    n := d.Text.ParaCount;
+    d.RunsOf(n div 2);
+    d.RunsOf(n div 2 + 5000);
+    d.RunsOf(n div 2 + 10000);
+    parses := load.ParseCount;
+    t0 := Clock;
+    d.RunsOf(0);
+    d.RunsOf(1);
+    again := Clock - t0;
+    Report('one field: the first paragraphs read again, their interval parsed again', again);
+    AssertTrue('their interval was parsed again', load.ParseCount > parses);
+    AssertEquals('the next paragraph inside the field', 1, d.ParaFieldDepth(2));
+    AssertTrue(Format('the first screen in %.0f ms', [first]), first <= 1000);
+    AssertTrue(Format('the first paragraphs again in %.0f ms', [again]), again <= 100);
+  finally
+    bmp.Free;
+  end;
+end;
+
+{ Fields nested eight deep around 30 MB: LoadFromFile to the end of the first paint within
+  1 s, and what reading the first screen adds to the working set after the load's first slice
+  is a few MB (16 at most) - not a copy of each field's group. }
+procedure TTyRichEditPerfTest.TestFieldsEightDeepAround30MB;
+var
+  path: string;
+  bmp: TBitmap;
+  t0, first, before, after: Double;
+begin
+  CheckRoom;
+  path := NewFile('.rtf');
+  MakeWrappedRtf(path, 30 * 1024 * 1024, 8);
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf32bit;
+    bmp.SetSize(FRich.Width, FRich.Height);
+    t0 := Clock;
+    FRich.LoadFromFile(path);
+    before := WorkingSetMB;
+    TPerfRich(FRich).PaintInto(bmp);
+    first := Clock - t0;
+    after := WorkingSetMB;
+    Report(Format('eight fields deep around %d MB: load (first slice) and first paint',
+      [SizeOfFile(path) div (1024 * 1024)]), first);
+    WriteLn(Format('TTyRichEditPerfTest: eight deep: working set %.0f MB after the first slice, ' +
+      '%.0f MB after the first screen', [before, after]));
+    AssertEquals('eight fields open on the first screen', 8, FRich.Document.ParaFieldDepth(2));
+    AssertTrue(Format('the first screen in %.0f ms', [first]), first <= 1000);
+    AssertTrue(Format('the first screen added %.0f MB', [after - before]), after - before <= 16);
+  finally
+    bmp.Free;
+  end;
+end;
+
+{ The whole parse of 8 MB of paragraphs inside fields nested eight deep, against the same
+  paragraphs with no field: in time linear in the file, close to the other's - a quarter more
+  and 100 ms at most (each field's group is read once more, by the one pass that decides them
+  all). }
+procedure TTyRichEditPerfTest.TestTheWholeParseOfFieldsEightDeepIsLinear;
+var
+  paths: array[0..1] of string;
+  times: array[0..1] of Double;
+  i, k: Integer;
+  d: TTyRichDocument;
+  s: TFileStream;
+  t0, best: Double;
+begin
+  CheckRoom;
+  for i := 0 to 1 do
+  begin
+    paths[i] := NewFile('.rtf');
+    MakeWrappedRtf(paths[i], 8 * 1024 * 1024, 8 * i);
+    best := 1e12;
+    for k := 1 to 2 do
+    begin
+      d := TTyRichDocument.Create;
+      s := TFileStream.Create(paths[i], fmOpenRead or fmShareDenyWrite);
+      try
+        t0 := Clock;
+        TyRichLoadRtfFull(d, s);
+        if Clock - t0 < best then best := Clock - t0;
+      finally
+        s.Free;
+        d.Free;
+      end;
+    end;
+    times[i] := best;
+  end;
+  Report('8 MB of paragraphs, no field: the whole parse', times[0]);
+  Report('8 MB of paragraphs in fields eight deep: the whole parse', times[1]);
+  AssertTrue(Format('eight deep in %.0f ms, none in %.0f ms', [times[1], times[0]]),
+    times[1] <= 1.25 * times[0] + 100);
+end;
 
 initialization
   RegisterTest(TTyRichEditPerfTest);
