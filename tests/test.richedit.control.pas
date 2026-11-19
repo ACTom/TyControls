@@ -434,6 +434,10 @@ type
     procedure TestAFormFileHoldsNoContentAndItsSettingsRoundTrip;
   end;
 
+{ While on, a freed block is filled with $A5 before it goes: a later read of a freed object finds
+  no pointer it held (a call through it faults) - a touch of a freed control fails loudly. }
+procedure PoisonFreedMemory(AOn: Boolean);
+
 implementation
 
 uses

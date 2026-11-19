@@ -331,6 +331,10 @@ type
       nil when the offer is no file list. A file list is taken as pictures, or by the
       application (TTyCustomRichEdit.OnDropFiles), never as a paste of its flavours. }
     function Files: TStringArray; virtual;
+    { It comes from outside the application (another program's drag through the system): the
+      control's AcceptDrops governs it. False by default - an offer of the application's
+      own, fed in through DropEnter, is governed by DragDropEditing. }
+    function FromOtherProgram: Boolean; virtual;
     { The control whose selection this is; nil: another program's content. }
     function Source: TTyCustomRichEdit; virtual;
     function SourceRange(out AFrom, ALen: TTyRichPos): Boolean; virtual;
@@ -354,6 +358,10 @@ type
     FFrom, FLen: TTyRichPos;
     FMovable: Boolean;
     FTaken: TTyRichDropEffect;
+    // the source's content when the drag began (ContentState); what a drop takes it as
+    FState: Int64;
+    FDropAs: TTyRichDropEffect;
+    function ReadRange(out AFrom, ALen: TTyRichPos): Boolean;
   public
     constructor Create(AOwner: TTyCustomRichEdit; AFrom, ALen: TTyRichPos);
     function Flavours: TTyRichClipFlavours; override;
@@ -666,6 +674,8 @@ type
       selection - what TakeMade hands the door; nil once taken. }
     FMade: TTyRichCommand;
     FMadePlace: TTyRichEditPlace;
+    // RunMade's: set when the door took the command (TakeMade), which then owns it
+    FMadeTaken: PBoolean;
     { A table action (InsertTable .. DeleteTable, Tab's new row): which one MakeTableEdit makes
       (FTableKind, a CTableXxx of the implementation), with its size or side; and where it
       leaves the caret, worked out after it ran (TableEditCaret) from what it knew before:
@@ -750,6 +760,9 @@ type
       (FPeerFeeding while a call into it runs); its verdict is the one the cursor shows. }
     FDropPeer: TTyCustomRichEdit;
     FPeerFeeding: Boolean;
+    // the session's offer whose file list was looked at, and the answer (OfferedPictures)
+    FFilesOffer: TTyRichDropOffer;
+    FFilesPictures: Boolean;
     { Drops from other programs (the Windows widgetset: an OLE drop target for the window). }
     FAcceptDrops: Boolean;
     FOnDropFiles: TTyRichDropFilesEvent;
@@ -1229,8 +1242,10 @@ type
     function DropPlaceAt(X, Y: Integer; out AAtEnd: Boolean): TTyRichPos;
     function DropMarkRaster(out ARect: TRect): Boolean;
     procedure ShowDropCursor;
+    { The drop's work at APos. AWentIn: content from elsewhere went in (the caller gives the
+      control the focus). }
     function DropInto(AOffer: TTyRichDropOffer; APos: TTyRichPos; AEffect: TTyRichDropEffect;
-      AShift: TShiftState): TTyRichDropEffect;
+      AShift: TShiftState; out AWentIn: Boolean): TTyRichDropEffect;
     { The control's own drag outside its client area: the session of the rich edit under the
       pointer (DropTargetAt) is fed, the one it left ended; AInside: over the control itself
       (no other is). }
@@ -1244,9 +1259,9 @@ type
     procedure RemoveMovedAway(AFrom, ALen: TTyRichPos);
     { A file list's drop at APos: OnDropFiles first, then the pictures (one step). }
     function DropFileList(AOffer: TTyRichDropOffer; const AFiles: TStringArray;
-      APos: TTyRichPos; AEffect: TTyRichDropEffect): TTyRichDropEffect;
-    { The control takes every one of AFiles itself: each one's name is a picture's. }
-    function FilesArePictures(const AFiles: TStringArray): Boolean;
+      APos: TTyRichPos; AEffect: TTyRichDropEffect; out AWentIn: Boolean): TTyRichDropEffect;
+    { DropFilesArePictures for AOffer's AFiles, the answer kept for the session's offer. }
+    function OfferedPictures(AOffer: TTyRichDropOffer; const AFiles: TStringArray): Boolean;
     function InsertPictureFiles(const AFiles: TStringArray; APos: TTyRichPos): Boolean;
     procedure SetDragDropEditing(AValue: Boolean);
     procedure SetAcceptDrops(AValue: Boolean);
@@ -1397,6 +1412,9 @@ type
     function InsertOffer(AOffer: TTyRichDropOffer; AHave: TTyRichClipFlavours; AStart,
       ALen: TTyRichPos; AAs: TTyRichPasteAs; const AName: string;
       ASelect: Boolean = False): Boolean;
+    function InsertOfferIn(AOffer: TTyRichDropOffer; AHave: TTyRichClipFlavours; AStart,
+      ALen: TTyRichPos; AAs: TTyRichPasteAs; const AName: string; ASelect: Boolean;
+      var ALife: TTyRichLife): Boolean;
     { A clipboard's text made fit to insert (see PasteFromClipboard). }
     function PastedText(const AText: RawByteString): UTF8String;
     { The width a picture pasted at APos may take, in twips: the view's text width (0 when
@@ -1740,11 +1758,27 @@ type
       outside this control's client area), and that point in its client pixels; nil when
       there is none. By default the LCL's FindControlAtPosition at the point on the screen
       (any form of the application, any widgetset), the control found or the rich edit it is
-      inside. Never this control itself. }
+      inside, when DropTargetTakesInput says it can take input now. Never this control
+      itself. }
     function DropTargetAt(X, Y: Integer; out ATargetX, ATargetY: Integer): TTyCustomRichEdit; virtual;
+    { The rule DropTargetAt keeps for the control it found: it is enabled, and its form takes
+      input now - enabled, and no other form is the modal one (DropModalForm). A descendant's
+      DropTargetAt asks it too. }
+    function DropTargetTakesInput(ATarget: TTyCustomRichEdit): Boolean;
+    { The application's modal form now (Screen.GetCurrentModalForm), nil when none. }
+    function DropModalForm: TCustomForm; virtual;
     { The client point of a point on the screen where another program's drop is
       (ScreenToClient by default). }
     function DropPointOf(const AScreen: TPoint): TPoint; virtual;
+    { The control takes every one of AFiles itself: each one's name is a picture's (asked once
+      per offer). }
+    function DropFilesArePictures(const AFiles: TStringArray): Boolean; virtual;
+    { The fragment filter a drop's RTF goes in through: AInner (the reader's, MakeFragmentFilter)
+      or one of the drop's own around it - for another rich edit's selection one that gives the
+      pictures read back the source's very bytes. When it raises, AInner is not taken (the
+      caller frees it). }
+    function DropFragmentFilter(AOffer: TTyRichDropOffer;
+      AInner: TTyRichFragmentFilter): TTyRichFragmentFilter; virtual;
     { Raises OnDropFiles for a dropped file list (before the control's own handling). }
     procedure DoDropFiles(const AFileNames: array of string; var AHandled: Boolean); virtual;
     { After a drop from elsewhere went in (what went in selected): the control takes the
@@ -2287,11 +2321,15 @@ type
       selected and scrolled into view. What the place or the selection does not take is told
       once (OnEditRefused, the paste's and the cut's reasons); a drop inside the selection
       does nothing and tells nothing. A drop from elsewhere that went in leaves the control
-      focused (FocusAfterDrop). Disabled, in the designer or DragDropEditing False: no
-      session (DropEnter answers rdeNone); read-only: none either, except for the control's
-      own selection (it can be dragged out as a copy) and for a file list OnDropFiles takes.
-      A session ends with the content replaced, the window gone, the control disabled or
-      hidden, ReadOnly or DragDropEditing set. The control's own drag uses these - and feeds
+      focused (FocusAfterDrop). Disabled or in the designer: no session (DropEnter answers
+      rdeNone); nor for another program's offer (FromOtherProgram) with AcceptDrops False,
+      nor for any other with DragDropEditing False; read-only: none either, except for the
+      control's own selection (it can be dragged out as a copy) and for a file list
+      OnDropFiles takes. A session ends with the content replaced, the window gone, the
+      control disabled or hidden, ReadOnly set, and with the switch that governs its offer
+      set off. A handler a drop runs may free the control (or the other control of a drag
+      between two): nothing of a freed control is touched after it, and a drop whose target
+      went with what it took reports rdeNone. The control's own drag uses these - and feeds
       another rich edit's the same way when the pointer is over it (DropTargetAt); the
       platform's drag (Windows: tyControls.RichEdit.OleDrop) feeds them too. }
     function DropEnter(AOffer: TTyRichDropOffer; X, Y: Integer;
@@ -2692,22 +2730,25 @@ type
       takes no edit (loading, saving); with ReadOnly the selection can be dragged out as a
       copy, but nothing is taken here. DragMode dmAutomatic leaves the press to LCL's own drag
       (no drag of the selection begins). False: a press inside the selection is a plain
-      click, and no drop is taken, from another control or another program (DropEnter
-      answers rdeNone). }
+      click, no drag of another control of the application is taken, nor an offer the
+      application feeds in (DropEnter answers rdeNone). Drops from other programs are
+      AcceptDrops' alone: turning every kind of drop off takes both. }
     property DragDropEditing: Boolean read FDragDropEditing write SetDragDropEditing default True;
     { True (the default): the control takes drops from other programs - on the Windows
       widgetset, where its window is registered with the system as a drop target while it has
       one (never in the designer). What a paste would take, in the paste's order: rich text
-      (RTF), a picture (PNG, then a bitmap), plain text; a list of files when none of those
-      comes with it: OnDropFiles first, then - if every file is named as a picture - each
+      (RTF), a picture (PNG, then a bitmap with either header), plain text (Unicode, else ANSI
+      in its locale's code page); a list of files when none of the first two comes with it: OnDropFiles first, then - if every file is named as a picture - each
       file as InsertPictureFromFile takes it, in the order given, one step. Ctrl: a copy;
       otherwise a move when the program allows it (it then deletes its own content), else a
       copy; a drop that is refused or fails reports nothing done, so the program keeps its
-      data. With it True the control, not its form, receives what is dropped on it; False
+      data (a file list the application took in OnDropFiles reports a copy). With it True the control, not its form, receives what is dropped on it; False
       registers nothing, and the form's own file drop (AllowDropFiles, OnDropFiles) works
       over the control. Other widgetsets: no drop from other programs in this version (the
-      property is kept, and does nothing). Drags between two controls of the application are
-      DragDropEditing's. }
+      property is kept, and does nothing). It governs drops from other programs alone: the
+      control's own drag and drags between two controls of the application are
+      DragDropEditing's; turning every kind of drop off takes both. False ends a drop from
+      another program under way. }
     property AcceptDrops: Boolean read FAcceptDrops write SetAcceptDrops default True;
     { A list of files is dropped on the control (AcceptDrops): raised before the control
       handles it, with the names in the order given; AHandled True and the control does
@@ -2840,6 +2881,10 @@ type
   verified. }
 function TyRichClipboardRtfName: string;
 
+{ How many of a source's pictures were held against pictures read back by drops from another
+  rich edit so far (the whole run's count): what a test bounds. }
+function TyRichDropPictureCompares: Int64;
+
 { A picture object made from an image's bytes (what a paste makes of a clipboard's picture;
   inserting a picture from a file can make its own the same way). PNG and JPEG keep their
   bytes; a DIB, a BMP or a TIFF is decoded and stored as PNG (with its alpha when a pixel is
@@ -2899,6 +2944,7 @@ uses
   {$IFDEF LCLWin32}, tyControls.RichEdit.OleDrop{$ENDIF};
 
 function TyRichGonePasses(const ALife: TTyRichLife): Boolean; forward;
+procedure HandlerReturned(const ALife: TTyRichLife); forward;
 
 const
   { A table action's place for the caret (TTyRichEditPlace.Caret): worked out once it ran
@@ -3820,10 +3866,30 @@ begin
 end;
 
 procedure TTyCustomRichEdit.DoChange;
+var
+  life: TTyRichLife;
 begin
   // a form file's Lines while streaming, the document going with the control: no event
   if [csLoading, csDestroying] * ComponentState <> [] then Exit;
-  if Assigned(FOnChange) then FOnChange(Self);
+  if not Assigned(FOnChange) then Exit;
+  LifeEnter(life, True);
+  try
+    FOnChange(Self);
+  finally
+    if not life.Gone then LifeLeave(life);
+  end;
+  HandlerReturned(life);
+end;
+
+{ A handler of the application's (OnChange, OnSelectionChange, OnEditRefused,
+  OnModifiedChange) returned. If it freed the control and a frame of the control's own lies
+  below (a drop, a paste, an edit's door), nothing of it may be touched any more: ETyRichGone
+  unwinds to that frame. With no frame below the caller goes on. (No method: the control may
+  be gone.) }
+procedure HandlerReturned(const ALife: TTyRichLife);
+begin
+  if ALife.Gone and (ALife.Next <> nil) then
+    raise ETyRichGone.Create('The control was freed by its handler');
 end;
 
 procedure TTyCustomRichEdit.DoZoomChange;
@@ -4057,6 +4123,8 @@ begin
 end;
 
 procedure TTyCustomRichEdit.DoSelectionChange;
+var
+  life: TTyRichLife;
 begin
   // inside BeginEdit .. EndEdit: reported once, at EndEdit
   if FEditBlock > 0 then Exit;
@@ -4064,7 +4132,14 @@ begin
   FReportedCaret := FCaret;
   FReportedAnchor := FSelAnchor;
   if [csLoading, csDestroying] * ComponentState <> [] then Exit;
-  if Assigned(FOnSelectionChange) then FOnSelectionChange(Self);
+  if not Assigned(FOnSelectionChange) then Exit;
+  LifeEnter(life, True);
+  try
+    FOnSelectionChange(Self);
+  finally
+    if not life.Gone then LifeLeave(life);
+  end;
+  HandlerReturned(life);
 end;
 
 procedure TTyCustomRichEdit.EnsureParams;
@@ -5223,23 +5298,38 @@ begin
 end;
 
 procedure TTyCustomRichEdit.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
+var
+  life: TTyRichLife;
 begin
   inherited MouseUp(Button, Shift, X, Y);
   // (another button's release lets the menu come again; the right one's is its press's)
   if Button <> mbRight then FEatMenu := False;
   if Button <> mbLeft then Exit;
-  if FResizing then
-    FinishResize(X, Y, Shift)
-  else
-  begin
-    // a press inside the selection let go without a drag: the click it was
-    if FDragPending or FPressClickOwed then ReleasePending
-    else if OwnDragging then DropOn(X, Y, Shift);
-    StopDrag;
+  // (a handler the release runs - a drop's, a click's report - may free the control)
+  LifeEnter(life);
+  try
+    try
+      if FResizing then
+        FinishResize(X, Y, Shift)
+      else
+      begin
+        // a press inside the selection let go without a drag: the click it was
+        if FDragPending or FPressClickOwed then ReleasePending
+        else if OwnDragging then DropOn(X, Y, Shift);
+        if life.Gone then Exit;
+        StopDrag;
+      end;
+    except
+      on ETyRichGone do if TyRichGonePasses(life) then raise;
+    end;
+  finally
+    if not life.Gone then LifeLeave(life);
   end;
 end;
 
 procedure TTyCustomRichEdit.CaptureChanged;
+var
+  life: TTyRichLife;
 begin
   inherited CaptureChanged;
   { The capture went elsewhere (a menu, another window): the drag is over. A drag of a handle:
@@ -5260,8 +5350,22 @@ begin
       FPressClickOwed := False;
       CancelSelectionDrag;
     end
-    else if FDragPending or FPressClickOwed then ReleasePending
-    else DropOn(FDropPoint.X, FDropPoint.Y, FDropShift);
+    else
+    begin
+      // (a handler the release runs may free the control: nothing of it is touched after)
+      LifeEnter(life);
+      try
+        try
+          if FDragPending or FPressClickOwed then ReleasePending
+          else DropOn(FDropPoint.X, FDropPoint.Y, FDropShift);
+        except
+          on ETyRichGone do if TyRichGonePasses(life) then raise;
+        end;
+      finally
+        if not life.Gone then LifeLeave(life);
+      end;
+      if life.Gone then Exit;
+    end;
   if FDragging and not MouseCapture then StopDrag;
 end;
 
@@ -5311,6 +5415,11 @@ begin
   Result := nil;
 end;
 
+function TTyRichDropOffer.FromOtherProgram: Boolean;
+begin
+  Result := False;
+end;
+
 function TTyRichDropOffer.Source: TTyCustomRichEdit;
 begin
   Result := nil;
@@ -5347,14 +5456,36 @@ begin
   Result := [rcfRtf, rcfText];
 end;
 
-function TTyRichSelectionOffer.ReadRtf: RawByteString;
+{ What a drop reads: the range - for a move the range the source's cut takes (the paragraph
+  end kept before a table stays, and is not carried), as a cut and a paste would give it. }
+function TTyRichSelectionOffer.ReadRange(out AFrom, ALen: TTyRichPos): Boolean;
 begin
-  Result := FOwner.RangeRtf(FFrom, FLen);
+  AFrom := FFrom;
+  ALen := FLen;
+  if FDropAs = rdeMove then
+  begin
+    FOwner.FDoc.BeginRead;
+    try
+      if not FOwner.FDoc.UserRangeAllowed(AFrom, ALen) then ALen := 0;
+    finally
+      FOwner.FDoc.EndRead;
+    end;
+  end;
+  Result := ALen > 0;
+end;
+
+function TTyRichSelectionOffer.ReadRtf: RawByteString;
+var
+  f, n: TTyRichPos;
+begin
+  if ReadRange(f, n) then Result := FOwner.RangeRtf(f, n) else Result := '';
 end;
 
 function TTyRichSelectionOffer.ReadText: string;
+var
+  f, n: TTyRichPos;
 begin
-  Result := FOwner.RangeText(FFrom, FLen);
+  if ReadRange(f, n) then Result := FOwner.RangeText(f, n) else Result := '';
 end;
 
 function TTyRichSelectionOffer.Source: TTyCustomRichEdit;
@@ -5620,7 +5751,7 @@ begin
     if not (rdeCopy in al) then Exit;
     if Assigned(FOnDropFiles) then Exit(rdeCopy);
     if FReadOnly or (RefusalReason <> '') or PlainTextDocument or
-      not FilesArePictures(files) or not FDoc.CanChange(APos, 0) then Exit;
+      not OfferedPictures(AOffer, files) or not FDoc.CanChange(APos, 0) then Exit;
     Exit(rdeCopy);
   end;
   if FReadOnly or (RefusalReason <> '') then Exit;
@@ -5667,13 +5798,21 @@ begin
     // (a drag of the control's own is under way: it gives way)
     if FDropOwn then CancelSelectionDrag else DropLeave;
   end;
-  if (AOffer = nil) or not FDragDropEditing or not IsEnabled or
-    (csDesigning in ComponentState) then Exit;
+  if (AOffer = nil) or not IsEnabled or (csDesigning in ComponentState) then Exit;
+  { Another program's offer is AcceptDrops' to take; the control's own drag, another
+    control's and an offer the application feeds in are DragDropEditing's. }
+  if AOffer.FromOtherProgram then
+  begin
+    if not FAcceptDrops then Exit;
+  end
+  else if not FDragDropEditing then
+    Exit;
   { Read-only takes nothing - but its own selection may be dragged out (a session that feeds
     another control's), and a file list goes to the application when it asks for one. }
   if FReadOnly and (AOffer.Source <> Self) and
     not ((AOffer.Files <> nil) and Assigned(FOnDropFiles)) then Exit;
   FDropOffer := AOffer;
+  FFilesOffer := nil;
   FDropPos := -1;
   FDropEffect := rdeNone;
   { This control's own selection is moved by its cut's rule: one that crosses a cell's edge
@@ -5691,7 +5830,11 @@ begin
     end;
   end;
   if (AOffer.Source = Self) and (AOffer is TTyRichSelectionOffer) then
+  begin
     TTyRichSelectionOffer(AOffer).Movable := FDropCuttable and not FReadOnly;
+    // the content it is of (a move elsewhere removes it only from that very content)
+    TTyRichSelectionOffer(AOffer).FState := FDoc.ContentState;
+  end;
   Result := DropOver(X, Y, AShift);
 end;
 
@@ -5753,6 +5896,7 @@ begin
   o := FDropOffer;
   own := FDropOwn;
   FDropOffer := nil;
+  FFilesOffer := nil;
   FDropOwn := False;
   FDropEffect := rdeNone;
   FDropPos := -1;
@@ -5775,10 +5919,11 @@ end;
 function TTyCustomRichEdit.DropOn(X, Y: Integer; AShift: TShiftState): TTyRichDropEffect;
 var
   o: TTyRichDropOffer;
-  own: Boolean;
-  e: TTyRichDropEffect;
+  own, wentIn: Boolean;
+  e, r: TTyRichDropEffect;
   q, f, n: TTyRichPos;
   peer: TTyCustomRichEdit;
+  life: TTyRichLife;
 begin
   Result := rdeNone;
   if FDropOffer = nil then Exit;
@@ -5794,47 +5939,74 @@ begin
   // the session ends first: what the drop does is an edit like any other
   FDropOwn := False;
   DropLeave;
+  r := rdeNone;
+  wentIn := False;
+  { A handler the drop runs - this control's, the other control's, one the focus's move runs -
+    may free this control: nothing of it is touched after that, and the frame below (MouseUp's,
+    the capture's end, the system's drop target) hears of it. }
+  LifeEnter(life);
   try
-    if peer <> nil then
-    begin
-      if peer.FDropOffer = o then
-      begin
-        FPeerFeeding := True;
-        try
-          Result := peer.DropOn(peer.FDropPoint.X, peer.FDropPoint.Y, AShift);
-        finally
-          FPeerFeeding := False;
-        end;
-      end;
-      { A move there: the content leaves this document - one step of its own, after the
-        target's went in (a refused or failed drop there leaves it here). }
-      if (o is TTyRichSelectionOffer) and (TTyRichSelectionOffer(o).TakenAs = rdeMove) and
-        o.SourceRange(f, n) then
-        RemoveMovedAway(f, n);
-    end
-    else if q >= 0 then Result := DropInto(o, q, e, AShift);
-  finally
-    // (a target that raised: its session over the offer ends before the offer goes)
-    if peer <> nil then
-    begin
-      peer := FDropPeer;
-      FDropPeer := nil;
+    try
       if peer <> nil then
       begin
-        peer.RemoveFreeNotification(Self);
-        if peer.FDropOffer = o then peer.DropLeave;
+        if peer.FDropOffer = o then
+        begin
+          FPeerFeeding := True;
+          try
+            r := peer.DropOn(peer.FDropPoint.X, peer.FDropPoint.Y, AShift);
+          finally
+            if not life.Gone then FPeerFeeding := False;
+          end;
+        end;
+        { A move there: the content leaves this document - one step of its own, after the
+          target's went in (a refused or failed drop there leaves it here), and only while this
+          document is the content the drag began with: changed meanwhile (by a handler, a load,
+          code), nothing is removed - the content is then in both, never lost. }
+        if not life.Gone and (r = rdeMove) and (o is TTyRichSelectionOffer) and
+          (TTyRichSelectionOffer(o).TakenAs = rdeMove) and
+          (TTyRichSelectionOffer(o).FState = FDoc.ContentState) and o.SourceRange(f, n) then
+          RemoveMovedAway(f, n);
+      end
+      else if q >= 0 then
+      begin
+        r := DropInto(o, q, e, AShift, wentIn);
+        // what came from elsewhere went in: the control takes the focus (its handlers may run)
+        if wentIn and not life.Gone and (o.Source <> Self) then FocusAfterDrop;
+        // (the control gone with what went in: nothing of the drop is kept)
+        if wentIn and life.Gone then r := rdeNone;
+      end;
+    except
+      on ETyRichGone do
+      begin
+        r := rdeNone;
+        if TyRichGonePasses(life) then raise;
       end;
     end;
-    if own then
+  finally
+    if not life.Gone then
     begin
-      o.Free;
-      ShowDropCursor;
+      LifeLeave(life);
+      // (a target that raised: its session over the offer ends before the offer goes)
+      if peer <> nil then
+      begin
+        peer := FDropPeer;
+        FDropPeer := nil;
+        if peer <> nil then
+        begin
+          peer.RemoveFreeNotification(Self);
+          if peer.FDropOffer = o then peer.DropLeave;
+        end;
+      end;
+      if own then ShowDropCursor;
     end;
+    // (the control's own offer: no session holds it any more)
+    if own then o.Free;
   end;
+  Result := r;
 end;
 
 function TTyCustomRichEdit.DropInto(AOffer: TTyRichDropOffer; APos: TTyRichPos;
-  AEffect: TTyRichDropEffect; AShift: TShiftState): TTyRichDropEffect;
+  AEffect: TTyRichDropEffect; AShift: TShiftState; out AWentIn: Boolean): TTyRichDropEffect;
 var
   f, n, s, m: TTyRichPos;
   asCopy: Boolean;
@@ -5845,12 +6017,13 @@ var
   files: TStringArray;
 begin
   Result := rdeNone;
+  AWentIn := False;
   if not IsEnabled or ViewBehind then Exit;
   // a file list: the application's, then the control's pictures
   files := AOffer.Files;
   if files <> nil then
   begin
-    Result := DropFileList(AOffer, files, APos, AEffect);
+    Result := DropFileList(AOffer, files, APos, AEffect, AWentIn);
     Exit;
   end;
   if FReadOnly then Exit;
@@ -5894,11 +6067,13 @@ begin
     Exit;
   end;
   if AEffect = rdeMove then stepName := rsRichUndoMove else stepName := rsRichUndoCopy;
+  // (another rich edit's selection is read as what its cut takes, for a move)
+  if AOffer is TTyRichSelectionOffer then TTyRichSelectionOffer(AOffer).FDropAs := AEffect;
   if InsertOffer(AOffer, fl, APos, 0, rpaBest, stepName, True) then
   begin
     Result := AEffect;
     AOffer.Taken(AEffect);
-    FocusAfterDrop;
+    AWentIn := True;
   end;
 end;
 
@@ -5978,10 +6153,10 @@ begin
   if FDragDropEditing = AValue then Exit;
   FDragDropEditing := AValue;
   if AValue then Exit;
-  // off: a drag under way ends, and a drop from elsewhere is taken no more
+  // off: a drag under way ends, and another control's drop or an application's is taken no more
   if FDropOwn then CancelSelectionDrag;
   FDragPending := False;
-  DropLeave;
+  if (FDropOffer <> nil) and not FDropOffer.FromOtherProgram then DropLeave;
 end;
 
 procedure TTyCustomRichEdit.KeyUp(var Key: Word; Shift: TShiftState);
@@ -6010,10 +6185,34 @@ begin
   c := FindControlAtPosition(p, False);
   while (c <> nil) and not (c is TTyCustomRichEdit) do c := c.Parent;
   if (c = nil) or (c = Self) then Exit;
+  // (one on a form that takes no input now is no target)
+  if not DropTargetTakesInput(TTyCustomRichEdit(c)) then Exit;
   Result := TTyCustomRichEdit(c);
   p := Result.ScreenToClient(p);
   ATargetX := p.X;
   ATargetY := p.Y;
+end;
+
+function TTyCustomRichEdit.DropTargetTakesInput(ATarget: TTyCustomRichEdit): Boolean;
+var
+  f, m: TCustomForm;
+begin
+  { The LCL's own answer, the same on every widgetset: the form is disabled, or another form
+    is the modal one (ShowModal marks it on all of them; Windows also disables the others'
+    windows, GTK, Qt and Cocoa grab or run the modal loop - the LCL's Enabled of the forms
+    behind is not changed there). A control on no form answers for itself. }
+  Result := (ATarget <> nil) and ATarget.IsEnabled;
+  if not Result then Exit;
+  f := GetParentForm(ATarget);
+  if f = nil then Exit;
+  if not f.Enabled then Exit(False);
+  m := DropModalForm;
+  Result := (m = nil) or (m = f);
+end;
+
+function TTyCustomRichEdit.DropModalForm: TCustomForm;
+begin
+  Result := Screen.GetCurrentModalForm;
 end;
 
 procedure TTyCustomRichEdit.EndPeer;
@@ -6109,7 +6308,20 @@ begin
   RunMade(comp, place, True);
 end;
 
-function TTyCustomRichEdit.FilesArePictures(const AFiles: TStringArray): Boolean;
+function TTyCustomRichEdit.OfferedPictures(AOffer: TTyRichDropOffer;
+  const AFiles: TStringArray): Boolean;
+begin
+  // asked once per offer of the session, not at every move of the pointer
+  if (AOffer <> nil) and (AOffer = FFilesOffer) then Exit(FFilesPictures);
+  Result := DropFilesArePictures(AFiles);
+  if (AOffer <> nil) and (AOffer = FDropOffer) then
+  begin
+    FFilesOffer := AOffer;
+    FFilesPictures := Result;
+  end;
+end;
+
+function TTyCustomRichEdit.DropFilesArePictures(const AFiles: TStringArray): Boolean;
 var
   i: Integer;
   ext: string;
@@ -6138,6 +6350,7 @@ var
   comp: TTyRichCompositeCommand;
   place: TTyRichEditPlace;
   ok: Boolean;
+  made: TTyRichCompositeCommand;
 begin
   Result := False;
   Settle;
@@ -6163,7 +6376,8 @@ begin
         f.Free;
       end;
       if not ok then Exit;
-      if not PictureOfFileBytes(bytes, APos + i, picture) then Exit;
+      // (each sized for the room at the drop's place: the place they all go into)
+      if not PictureOfFileBytes(bytes, APos, picture) then Exit;
       bytes := nil;
       comp.Add(TTyRichInsertObject.Create(APos + i, picture, fmt));
     end;
@@ -6172,24 +6386,27 @@ begin
     place.Anchor := CRichPlaceChangeStart;
     place.Caret := APos;
     place.ByGrowth := True;
-    Result := RunMade(comp, place, True);
+    // (the door owns it from here, also when a handler it runs frees the control)
+    made := comp;
     comp := nil;
+    Result := RunMade(made, place, True);
   finally
     comp.Free;
   end;
 end;
 
 function TTyCustomRichEdit.DropFileList(AOffer: TTyRichDropOffer; const AFiles: TStringArray;
-  APos: TTyRichPos; AEffect: TTyRichDropEffect): TTyRichDropEffect;
+  APos: TTyRichPos; AEffect: TTyRichDropEffect; out AWentIn: Boolean): TTyRichDropEffect;
 var
   handled: Boolean;
   life: TTyRichLife;
 begin
   Result := rdeNone;
+  AWentIn := False;
   if AEffect = rdeNone then
   begin
     // (pictures into a plain text document: InsertPictureFromFile's reason)
-    if Assigned(FOnDropFiles) or FReadOnly or not FilesArePictures(AFiles) then Exit;
+    if Assigned(FOnDropFiles) or FReadOnly or not OfferedPictures(AOffer, AFiles) then Exit;
     if PlainTextDocument then EditRefused(rsRichEditRefusedPlainPicture);
     Exit;
   end;
@@ -6205,18 +6422,15 @@ begin
   finally
     if not life.Gone then LifeLeave(life);
   end;
-  if life.Gone then
-  begin
-    if handled then AOffer.Taken(rdeCopy);
-    Exit(rdeCopy);
-  end;
+  // (a handler that freed the control: what it said is what happened)
   if handled then
   begin
     AOffer.Taken(rdeCopy);
     Exit(rdeCopy);
   end;
+  if life.Gone then Exit;
   // the control's own: pictures, where a picture can go in now (the event may have changed it)
-  if FReadOnly or not IsEnabled or ViewBehind or not FilesArePictures(AFiles) then Exit;
+  if FReadOnly or not IsEnabled or ViewBehind or not OfferedPictures(AOffer, AFiles) then Exit;
   if PlainTextDocument then
   begin
     EditRefused(rsRichEditRefusedPlainPicture);
@@ -6228,7 +6442,7 @@ begin
   if not InsertPictureFiles(AFiles, APos) then Exit;
   Result := rdeCopy;
   AOffer.Taken(rdeCopy);
-  FocusAfterDrop;
+  AWentIn := True;
 end;
 
 procedure TTyCustomRichEdit.DoDropFiles(const AFileNames: array of string; var AHandled: Boolean);
@@ -6261,8 +6475,7 @@ begin
   if FAcceptDrops = AValue then Exit;
   FAcceptDrops := AValue;
   // off: a drop from another program under way ends, and the window is registered no more
-  if not AValue and (FDropOffer <> nil) and not FDropOwn and (FDropOffer.Source = nil) then
-    DropLeave;
+  if not AValue and (FDropOffer <> nil) and FDropOffer.FromOtherProgram then DropLeave;
   SyncDropRegistration;
 end;
 
@@ -7983,8 +8196,17 @@ begin
 end;
 
 procedure TTyCustomRichEdit.EditRefused(const AReason: string);
+var
+  life: TTyRichLife;
 begin
-  if Assigned(FOnEditRefused) then FOnEditRefused(Self, AReason);
+  if not Assigned(FOnEditRefused) then Exit;
+  LifeEnter(life, True);
+  try
+    FOnEditRefused(Self, AReason);
+  finally
+    if not life.Gone then LifeLeave(life);
+  end;
+  HandlerReturned(life);
 end;
 
 function TTyCustomRichEdit.EditAllowed(APos, ALen: TTyRichPos; AInsert, AUser: Boolean): Boolean;
@@ -8313,20 +8535,44 @@ function TTyCustomRichEdit.RunMade(ACmd: TTyRichCommand; const APlace: TTyRichEd
 var
   keep: TTyRichCommand;
   keepPlace: TTyRichEditPlace;
+  keepTaken: PBoolean;
+  taken: Boolean;
+  life: TTyRichLife;
 begin
+  Result := False;
   // (kept: an edit inside this one - the commit the door may cause - makes its own)
   keep := FMade;
   keepPlace := FMadePlace;
+  keepTaken := FMadeTaken;
+  taken := False;
   FMade := ACmd;
   FMadePlace := APlace;
+  FMadeTaken := @taken;
+  { A handler the edit runs (OnChange, OnSelectionChange, OnEditRefused) may free the control:
+    nothing of it is touched after that; a command the door had not taken yet goes with it. }
+  LifeEnter(life);
   try
-    if AUser then Result := RunUserEdit(@TakeMade)
-    else Result := EditWith(@TakeMade, False, False);
+    try
+      if AUser then Result := RunUserEdit(@TakeMade)
+      else Result := EditWith(@TakeMade, False, False);
+    except
+      on ETyRichGone do if TyRichGonePasses(life) then raise;
+    end;
   finally
-    // not taken (the door said no before it asked): it never reached the document
-    FreeAndNil(FMade);
-    FMade := keep;
-    FMadePlace := keepPlace;
+    if life.Gone then
+    begin
+      if not taken then ACmd.Free;
+      Result := False;
+    end
+    else
+    begin
+      LifeLeave(life);
+      // not taken (the door said no before it asked): it never reached the document
+      FreeAndNil(FMade);
+      FMade := keep;
+      FMadePlace := keepPlace;
+      FMadeTaken := keepTaken;
+    end;
   end;
 end;
 
@@ -8334,6 +8580,7 @@ function TTyCustomRichEdit.TakeMade(var APlace: TTyRichEditPlace): TTyRichComman
 begin
   Result := FMade;
   FMade := nil;
+  if FMadeTaken <> nil then FMadeTaken^ := True;
   { The control's own callers end a composition before they look at the text; one the door
     found open was committed after this command was made: it is not run on the new text. }
   if APlace.CompositionEnded then
@@ -9798,6 +10045,7 @@ type
     FInner: TTyRichFragmentFilter;
     FPics: array of TTyRichPicture;
     FNext: Integer;
+    FOwnsInner: Boolean;
   public
     constructor Create(AInner: TTyRichFragmentFilter; ASource: TTyRichDocument;
       AFrom, ALen: TTyRichPos);
@@ -9806,6 +10054,20 @@ type
     function RowFormat(const ARaw: RawByteString): RawByteString; override;
     function MapObject(AObj: TTyRichObject; out AText: UTF8String): TTyRichObject; override;
   end;
+
+const
+  { How many of the source's pictures after the last one matched a picture read back is held
+    against: in order they match at once; a picture the round trip changed finds none, and the
+    work stays a few comparisons a picture whatever their number. }
+  CRichSharedLookAhead = 8;
+
+var
+  GSharedPictureCompares: Int64 = 0;
+
+function TyRichDropPictureCompares: Int64;
+begin
+  Result := GSharedPictureCompares;
+end;
 
 constructor TTyRichSharedPictures.Create(AInner: TTyRichFragmentFilter;
   ASource: TTyRichDocument; AFrom, ALen: TTyRichPos);
@@ -9816,6 +10078,7 @@ var
   n: Integer;
 begin
   inherited Create;
+  // (the inner filter is this one's only once it is made: a failure leaves it its caller's)
   FInner := AInner;
   n := 0;
   ASource.BeginRead;
@@ -9844,6 +10107,7 @@ begin
     SetLength(FPics, n);
     ASource.EndRead;
   end;
+  FOwnsInner := True;
 end;
 
 destructor TTyRichSharedPictures.Destroy;
@@ -9851,7 +10115,7 @@ var
   i: Integer;
 begin
   for i := 0 to High(FPics) do FPics[i].Release;
-  FInner.Free;
+  if FOwnsInner then FInner.Free;
   inherited Destroy;
 end;
 
@@ -9875,9 +10139,10 @@ begin
   if FInner = nil then Result := AObj else Result := FInner.MapObject(AObj, AText);
   if not (Result is TTyRichPicture) then Exit;
   got := TTyRichPicture(Result);
-  for j := FNext to High(FPics) do
+  for j := FNext to Math.Min(High(FPics), FNext + CRichSharedLookAhead - 1) do
   begin
     src := FPics[j];
+    Inc(GSharedPictureCompares);
     if (src.PictureFormat <> got.PictureFormat) or (Length(src.Data) <> Length(got.Data)) or
       ((Length(src.Data) > 0) and not CompareMem(@src.Data[0], @got.Data[0], Length(src.Data))) then
       Continue;
@@ -9888,6 +10153,18 @@ begin
     if got <> AObj then got.Free;
     Exit;
   end;
+end;
+
+function TTyCustomRichEdit.DropFragmentFilter(AOffer: TTyRichDropOffer;
+  AInner: TTyRichFragmentFilter): TTyRichFragmentFilter;
+var
+  f, n: TTyRichPos;
+begin
+  Result := AInner;
+  // another rich edit's selection: its pictures' bytes are shared, not copied
+  if (AOffer <> nil) and (AOffer.Source <> nil) and (AOffer.Source <> Self) and
+    AOffer.SourceRange(f, n) then
+    Result := TTyRichSharedPictures.Create(AInner, AOffer.Source.FDoc, f, n);
 end;
 
 procedure TTyCustomRichEdit.PasteFromClipboard(AAs: TTyRichPasteAs);
@@ -9928,6 +10205,26 @@ function TTyCustomRichEdit.InsertOffer(AOffer: TTyRichDropOffer; AHave: TTyRichC
   AStart, ALen: TTyRichPos; AAs: TTyRichPasteAs; const AName: string;
   ASelect: Boolean): Boolean;
 var
+  life: TTyRichLife;
+begin
+  Result := False;
+  // (a handler that frees the control: nothing of it is touched any more - the wait cursor too)
+  LifeEnter(life);
+  try
+    try
+      Result := InsertOfferIn(AOffer, AHave, AStart, ALen, AAs, AName, ASelect, life);
+    except
+      on ETyRichGone do if TyRichGonePasses(life) then raise;
+    end;
+  finally
+    if life.Gone then Result := False else LifeLeave(life);
+  end;
+end;
+
+function TTyCustomRichEdit.InsertOfferIn(AOffer: TTyRichDropOffer; AHave: TTyRichClipFlavours;
+  AStart, ALen: TTyRichPos; AAs: TTyRichPasteAs; const AName: string; ASelect: Boolean;
+  var ALife: TTyRichLife): Boolean;
+var
   have: TTyRichClipFlavours;
   s, n: TTyRichPos;
   place: TTyRichEditPlace;
@@ -9943,8 +10240,7 @@ var
   comp: TTyRichCompositeCommand;
   fmt: TTyCharFormatId;
   i: Integer;
-  flt: TTyRichFragmentFilter;
-  sf, sn: TTyRichPos;
+  flt, flt2: TTyRichFragmentFilter;
 
   function Wanted(AFlavour: TTyRichClipFlavour): Boolean;
   begin
@@ -10054,14 +10350,19 @@ begin
             // made first: the command takes src over only once it exists
             try
               flt := MakeFragmentFilter(src);
-              // (another rich edit's selection: its pictures' bytes are shared, not copied)
-              if (AOffer.Source <> nil) and (AOffer.Source <> Self) and
-                AOffer.SourceRange(sf, sn) then
-                flt := TTyRichSharedPictures.Create(flt, AOffer.Source.FDoc, sf, sn);
             except
               FreeAndNil(src);
               raise;
             end;
+            // (the drop's own filter around it: when making that fails, it is not taken)
+            try
+              flt2 := DropFragmentFilter(AOffer, flt);
+            except
+              flt.Free;
+              FreeAndNil(src);
+              raise;
+            end;
+            flt := flt2;
             cmd := TTyRichInsertFragment.Create(s, src, ends, flat, flt);
           end
           else
@@ -10121,7 +10422,7 @@ begin
     Result := RunMade(comp, place, True);
   finally
     cmd.Free;
-    if waiting then EndWait;
+    if waiting and not ALife.Gone then EndWait;
   end;
 end;
 
@@ -10276,11 +10577,20 @@ begin
 end;
 
 procedure TTyCustomRichEdit.PayModifiedOwed;
+var
+  life: TTyRichLife;
 begin
   if not FModifiedOwed or (FEditing > 0) then Exit;
   FModifiedOwed := False;
   if [csLoading, csDestroying] * ComponentState <> [] then Exit;
-  if Assigned(FOnModifiedChange) then FOnModifiedChange(Self);
+  if not Assigned(FOnModifiedChange) then Exit;
+  LifeEnter(life, True);
+  try
+    FOnModifiedChange(Self);
+  finally
+    if not life.Gone then LifeLeave(life);
+  end;
+  HandlerReturned(life);
 end;
 
 procedure TTyCustomRichEdit.RunApiCommand(ACmd: TTyRichCommand; AChars: TTyRichPos);

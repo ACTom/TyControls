@@ -5,9 +5,12 @@ unit tyControls.RichEdit.OleDrop;
   registered with OLE as a drop target (RegisterDragDrop), and what the system's drag brings
   over it is handed to the control's receiving side (TTyCustomRichEdit.DropEnter .. DropOn) as
   an offer - the data object read in the flavours a paste takes, in the paste's order: rich
-  text (the "Rich Text Format" clipboard format), a picture (the "PNG" format, then CF_DIB),
-  plain text (CF_UNICODETEXT); a list of files (CF_HDROP) when none of the first two comes
-  with it. Nothing is read before the drop but what the formats are, and the file names.
+  text (the "Rich Text Format" clipboard format), a picture (the "PNG" format, then CF_DIB,
+  then CF_DIBV5), plain text (CF_UNICODETEXT, else CF_TEXT in the code page of its CF_LOCALE,
+  or the system's ANSI code page when none comes with it); a list of files (CF_HDROP) when
+  none of the first two comes with it. A data object is not the clipboard: nothing is made
+  from another format by the system, so each of these is asked for by name. Nothing is read
+  before the drop but what the formats are, and the file names.
 
   The whole unit is gated on the LCLWin32 define (the widgetset, not the system): under another
   widgetset - also on Windows, where a control's handle is then no window of the system's - it
@@ -18,7 +21,8 @@ unit tyControls.RichEdit.OleDrop;
   (Application.Initialize) and OleUninitialize in AppTerminate. A window made before that, or
   on a thread that never initialised OLE, cannot be registered (RegisterDragDrop answers
   CO_E_NOTINITIALIZED): the control then registers nothing and takes no drop from other
-  programs - nothing is raised, nothing is retried until its window is made again.
+  programs - nothing is raised; it tries again when its window is made again, or when
+  AcceptDrops is set off and on.
 
   The target object belongs to the control for its life (TTyCustomRichEdit.OleDropTarget); OLE
   holds a reference while the window is registered and while a drag is over it. When the
@@ -45,6 +49,9 @@ procedure TyRichOleDetach(const ATarget: IUnknown);
 { AWnd registered with ATarget (one of TyRichOleNewTarget's); False when the system refused. }
 function TyRichOleRegisterWindow(AWnd: HWND; const ATarget: IUnknown): Boolean;
 procedure TyRichOleRevokeWindow(AWnd: HWND);
+{ AStream read whole into ABytes, from its start (a stream may be handed over at its end): its
+  size as Stat tells it, else grown by doubling; a short read (S_FALSE) keeps what it gave. }
+function TyRichOleReadStream(const AStream: IStream; out ABytes: RawByteString): Boolean;
 { The keys of an OLE key state (MK_*) as the LCL's shift state. }
 function TyRichOleShift(AKeys: DWORD): TShiftState;
 { An effect as OLE says it (DROPEFFECT_*), and back. }
@@ -61,6 +68,10 @@ uses
 const
   // (MK_ALT is OLE's: the Windows unit does not declare it)
   CMkAlt = $20;
+  // a device-independent bitmap with a BITMAPV5HEADER (the Windows unit does not declare it)
+  CCfDibV5 = 17;
+  // DROPFILES: its size, where its names begin, whether they are wide
+  CDropFilesSize = 20;
 
 type
   ITyRichOleTarget = interface
@@ -88,8 +99,10 @@ type
     function ReadPicture(AIndex: Integer; out AKind: TTyRichImageKind;
       out ABytes: TBytes): Boolean; override;
     function ReadText: string; override;
+    function ReadAnsiText: string;
     function Files: TStringArray; override;
     function Allowed: TTyRichDropEffects; override;
+    function FromOtherProgram: Boolean; override;
   end;
 
   TTyRichOleTarget = class(TInterfacedObject, IDropTarget, ITyRichOleTarget)
@@ -164,8 +177,8 @@ begin
   FFlavours := [];
   if FData = nil then Exit;
   if Has(FRtfFormat) then Include(FFlavours, rcfRtf);
-  if Has(FPngFormat) or Has(CF_DIB) then Include(FFlavours, rcfPicture);
-  if Has(CF_UNICODETEXT) then Include(FFlavours, rcfText);
+  if Has(FPngFormat) or Has(CF_DIB) or Has(CCfDibV5) then Include(FFlavours, rcfPicture);
+  if Has(CF_UNICODETEXT) or Has(CF_TEXT) then Include(FFlavours, rcfText);
   // a file list where no rich text and no picture comes (what Explorer's drag is)
   if (FFlavours * [rcfRtf, rcfPicture] = []) and Has(CF_HDROP) then ReadFiles;
 end;
@@ -188,11 +201,8 @@ var
   fe: TFormatEtc;
   med: TStgMedium;
   p: Pointer;
-  n, got: PtrUInt;
+  n: PtrUInt;
   stm: IStream;
-  st: TStatStg;
-  k: LongWord;
-  buf: array[0..65535] of Byte;
 begin
   ABytes := '';
   Result := False;
@@ -218,32 +228,49 @@ begin
     else if med.Tymed = TYMED_ISTREAM then
     begin
       stm := IStream(med.pstm);
-      got := 0;
-      if stm.Stat(st, STATFLAG_NONAME) = S_OK then SetLength(ABytes, st.cbSize);
-      // (S_FALSE: fewer bytes than asked - the stream's end - but those it gave are good)
-      repeat
-        k := 0;
-        if got < PtrUInt(Length(ABytes)) then
-        begin
-          if Failed(stm.Read(@ABytes[got + 1], Length(ABytes) - got, @k)) then k := 0;
-        end
-        else
-        begin
-          if Failed(stm.Read(@buf[0], SizeOf(buf), @k)) then k := 0;
-          if k > 0 then
-          begin
-            SetLength(ABytes, got + k);
-            Move(buf[0], ABytes[got + 1], k);
-          end;
-        end;
-        Inc(got, k);
-      until k = 0;
-      SetLength(ABytes, got);
+      Result := TyRichOleReadStream(stm, ABytes);
       stm := nil;
-      Result := True;
     end;
   finally
     ReleaseStgMedium(med);
+  end;
+end;
+
+{ The block holds a DROPFILES whose names begin inside it and whose list ends inside it (two
+  zeros): what the shell then reads stays in the block. }
+function WholeDropFiles(H: HGLOBAL): Boolean;
+var
+  p: PByte;
+  size, at: PtrUInt;
+  wide: Boolean;
+begin
+  Result := False;
+  size := GlobalSize(H);
+  if size < CDropFilesSize then Exit;
+  p := GlobalLock(H);
+  if p = nil then Exit;
+  try
+    at := PLongWord(p)^;
+    wide := PLongWord(p + 16)^ <> 0;
+    if (at < CDropFilesSize) or (at >= size) then Exit;
+    if wide then
+    begin
+      while at + 3 < size do
+      begin
+        if (PWord(p + at)^ = 0) and (PWord(p + at + 2)^ = 0) then Exit(True);
+        Inc(at, 2);
+      end;
+      // (a list of no name is its two zeros alone)
+      Result := (at + 1 < size) and (at = PLongWord(p)^) and (PWord(p + at)^ = 0);
+    end
+    else
+      while at + 1 < size do
+      begin
+        if (p[at] = 0) and (p[at + 1] = 0) then Exit(True);
+        Inc(at);
+      end;
+  finally
+    GlobalUnlock(H);
   end;
 end;
 
@@ -259,8 +286,10 @@ begin
   FillChar(med, SizeOf(med), 0);
   if FData.GetData(fe, med) <> S_OK then Exit;
   try
-    if med.Tymed <> TYMED_HGLOBAL then Exit;
+    if (med.Tymed <> TYMED_HGLOBAL) or not WholeDropFiles(med.HGLOBAL) then Exit;
     cnt := DragQueryFileW(HDROP(med.HGLOBAL), $FFFFFFFF, nil, 0);
+    // (no name: nothing usable)
+    if cnt = 0 then Exit;
     SetLength(FFiles, cnt);
     for i := 0 to cnt - 1 do
     begin
@@ -293,15 +322,16 @@ var
 begin
   ABytes := nil;
   AKind := rikPng;
-  // the paste's order: PNG, then a device-independent bitmap
-  Result := (AIndex >= 0) and (AIndex <= 1);
+  // the paste's order: PNG, then a device-independent bitmap (with either header)
+  Result := (AIndex >= 0) and (AIndex <= 2);
   if not Result then Exit;
-  if AIndex = 0 then f := FPngFormat
+  case AIndex of
+    0: f := FPngFormat;
+    1: f := CF_DIB;
   else
-  begin
-    f := CF_DIB;
-    AKind := rikDib;
+    f := CCfDibV5;
   end;
+  if AIndex > 0 then AKind := rikDib;
   if not Has(f) or not ReadFormat(f, s) or (s = '') then Exit;
   SetLength(ABytes, Length(s));
   Move(s[1], ABytes[0], Length(s));
@@ -315,7 +345,11 @@ var
   p: PWideChar;
 begin
   Result := '';
-  if not ReadFormat(CF_UNICODETEXT, s) then Exit;
+  if not Has(CF_UNICODETEXT) or not ReadFormat(CF_UNICODETEXT, s) then
+  begin
+    Result := ReadAnsiText;
+    Exit;
+  end;
   // UTF-16 up to its terminating zero (the block may be longer)
   n := Length(s) div 2;
   if n = 0 then Exit;
@@ -323,6 +357,33 @@ begin
   i := 0;
   while (i < n) and (p[i] <> #0) do Inc(i);
   SetString(w, p, i);
+  Result := UTF8Encode(w);
+end;
+
+function TTyRichOleOffer.ReadAnsiText: string;
+var
+  s, loc: RawByteString;
+  cp: UINT;
+  i, k: Integer;
+  w: UnicodeString;
+  buf: array[0..15] of WideChar;
+begin
+  Result := '';
+  if not Has(CF_TEXT) or not ReadFormat(CF_TEXT, s) then Exit;
+  i := 0;
+  while (i < Length(s)) and (s[i + 1] <> #0) do Inc(i);
+  if i = 0 then Exit;
+  { the code page of the locale the text comes with (CF_LOCALE), else the system's ANSI one -
+    what the system's own conversion of CF_TEXT on the clipboard takes }
+  cp := CP_ACP;
+  if Has(CF_LOCALE) and ReadFormat(CF_LOCALE, loc) and (Length(loc) >= 4) then
+    if GetLocaleInfoW(PLongWord(@loc[1])^, LOCALE_IDEFAULTANSICODEPAGE, @buf[0],
+      Length(buf)) > 0 then
+      cp := StrToIntDef(UTF8Encode(UnicodeString(PWideChar(@buf[0]))), CP_ACP);
+  k := MultiByteToWideChar(cp, 0, @s[1], i, nil, 0);
+  if k <= 0 then Exit;
+  SetLength(w, k);
+  MultiByteToWideChar(cp, 0, @s[1], i, PWideChar(w), k);
   Result := UTF8Encode(w);
 end;
 
@@ -334,6 +395,54 @@ end;
 function TTyRichOleOffer.Allowed: TTyRichDropEffects;
 begin
   Result := FAllowed;
+end;
+
+function TTyRichOleOffer.FromOtherProgram: Boolean;
+begin
+  Result := True;
+end;
+
+function TyRichOleReadStream(const AStream: IStream; out ABytes: RawByteString): Boolean;
+var
+  st: TStatStg;
+  got, cap: PtrUInt;
+  k: LongWord;
+  at: LargeUInt;
+  more: array[0..4095] of Byte;
+begin
+  ABytes := '';
+  Result := False;
+  if AStream = nil then Exit;
+  // (a stream that cannot seek is read from where it is)
+  AStream.Seek(0, STREAM_SEEK_SET, at);
+  cap := 0;
+  FillChar(st, SizeOf(st), 0);
+  if AStream.Stat(st, STATFLAG_NONAME) = S_OK then cap := st.cbSize;
+  if cap = 0 then cap := 64 * 1024;
+  SetLength(ABytes, cap);
+  got := 0;
+  repeat
+    k := 0;
+    if got < cap then
+    begin
+      // (S_FALSE: fewer bytes than asked - the stream's end - but those it gave are good)
+      if Failed(AStream.Read(@ABytes[got + 1], cap - got, @k)) then k := 0;
+    end
+    else
+    begin
+      // full: asked for more in a small buffer first - a size told right costs no growth
+      if Failed(AStream.Read(@more[0], SizeOf(more), @k)) then k := 0;
+      if k > 0 then
+      begin
+        cap := cap * 2;
+        SetLength(ABytes, cap);
+        Move(more[0], ABytes[got + 1], k);
+      end;
+    end;
+    Inc(got, k);
+  until k = 0;
+  SetLength(ABytes, got);
+  Result := True;
 end;
 
 { ---- the target ---- }

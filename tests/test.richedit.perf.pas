@@ -873,7 +873,8 @@ end;
   the clipboard's is). Printed, not asserted: a paste of that much has no line of its own; the
   10 MB one is pasted too (from a stand-in clipboard), as the yardstick. The peak working set
   includes the data object's own copies (its string and the block it hands over: what the
-  other program holds). }
+  other program holds). The 100 MB drop (half a minute, more than a gigabyte at its peak)
+  runs only when the environment variable TY_PERF_LARGE_DROP is 1. }
 procedure TTyRichEditPerfTest.TestDroppingALargeRtfFromAnotherProgram;
 {$IFDEF LCLWin32}
 const
@@ -895,6 +896,7 @@ begin
     bmp.SetSize(FRich.Width, FRich.Height);
     for k := 0 to High(Sizes) do
     begin
+      if (k > 0) and (GetEnvironmentVariable('TY_PERF_LARGE_DROP') <> '1') then Break;
       FRich.Lines.Text := 'start';
       TPerfRich(FRich).PaintInto(bmp);
       ms := TMemoryStream.Create;
