@@ -139,6 +139,8 @@ type
     procedure TestTheEatenMenuIsOnlyThatPresss;
     procedure TestAMoveKeepsNoMoreThanACutAndAPaste;
     procedure TestWhatHadNoTest;
+    procedure TestAPressOnTheSelectionEndsBackgroundWork;
+    procedure TestTheMarkLeavesNoDotWhenTheSurfaceScrolls;
   end;
 
 implementation
@@ -2275,6 +2277,179 @@ begin
     end;
   finally
     r.Free;
+  end;
+end;
+
+{ A press on the selection takes the document in hand, as the first character typed does: a
+  background replace or find ends at the press (cancelled, its one event), so its next turn
+  changes nothing under the press; the move past the threshold drags, the drop is one step. A
+  press whose wait something else ended (a change made by code, the selection set by code) is
+  still the click it was at its release. }
+procedure TTyRichDragTest.TestAPressOnTheSelectionEndsBackgroundWork;
+var
+  s: string;
+  i, depth: Integer;
+  p, pr: TPoint;
+  q: TTyRichPos;
+begin
+  s := '';
+  for i := 1 to 3000 do s := s + 'a cat sat here ' + IntToStr(i) + #13#10;
+  FRich.OnFindDone := @FindDone;
+  FRich.OnReplaceDone := @ReplaceDone;
+  // a replace running: the press ends it, a turn changes nothing, the drag goes
+  LoadText(s);
+  FRich.SetFindSlice(1024);
+  FRich.ReplaceAllAsync('cat', 'dog');
+  FRich.Turn;
+  FRich.Turn;
+  AssertTrue('a replace running', FRich.FindRunning);
+  depth := FRich.Document.UndoDepth;
+  FFindEnds := nil;
+  Sel(2, 3);
+  pr := Mid(3);
+  FRich.PressAt(pr.X, pr.Y);
+  AssertTrue('the press waits', FRich.Pending);
+  AssertFalse('the press: the replace ended', FRich.FindRunning);
+  AssertEquals('the press: one event', 1, Length(FFindEnds));
+  AssertEquals('the press: cancelled', 'replace cancelled', FFindEnds[0]);
+  FRich.Turn;
+  AssertTrue('a turn: the press still waits', FRich.Pending);
+  FRich.MoveWith(pr.X, pr.Y + FRich.Threshold + 1, []);
+  AssertTrue('past the threshold: the drag', FRich.OwnDrag);
+  p := Pt(15);
+  FRich.MoveWith(p.X, p.Y, []);
+  FRich.ReleaseAt(p.X, p.Y);
+  AssertEquals('dropped: one step on top', depth + 1, FRich.Document.UndoDepth);
+  AssertEquals('dropped: a move', rsRichUndoMove, FRich.Document.UndoDescription);
+  AssertEquals('still one event', 1, Length(FFindEnds));
+  // a find whose needle a turn would reach
+  LoadText('one two three four'#13#10'a needle here'#13#10);
+  FRich.SetFindSlice(1024);
+  Sel(4, 3);
+  FFindEnds := nil;
+  FRich.FindNextAsync('needle', []);
+  AssertTrue('a find running', FRich.FindRunning);
+  pr := Mid(5);
+  FRich.PressAt(pr.X, pr.Y);
+  AssertFalse('the press: the find ended', FRich.FindRunning);
+  AssertEquals('the find: one event', 1, Length(FFindEnds));
+  AssertEquals('the find: cancelled', 'find cancelled', FFindEnds[0]);
+  FRich.Turn;
+  AssertTrue('a turn: the press still waits', FRich.Pending);
+  AssertEquals('the selection kept', Int64(4), FRich.SelStart);
+  FRich.MoveWith(pr.X, pr.Y + FRich.Threshold + 1, []);
+  AssertTrue('the find: the drag', FRich.OwnDrag);
+  p := Pt(18);
+  FRich.MoveWith(p.X, p.Y, []);
+  FRich.ReleaseAt(p.X, p.Y);
+  AssertEquals('the find: dropped', 'one  three fourtwo', Copy(AllText, 1, 18));
+  // a press on the selection, its wait ended by a change of code: the click at the release
+  LoadText('one two three four');
+  Sel(4, 9);
+  pr := Mid(6);
+  q := FRich.PositionAtPoint(pr.X, pr.Y);
+  FRich.PressAt(pr.X, pr.Y);
+  AssertTrue('waiting', FRich.Pending);
+  FRich.Document.Execute(TTyRichInsertText.Create(0, 'x'));
+  AssertFalse('a change ends the wait', FRich.Pending);
+  FRich.ReleaseAt(pr.X, pr.Y);
+  AssertEquals('the click: nothing selected', Int64(0), FRich.SelLength);
+  AssertEquals('the click: at the press''s place, after the change', q + 1, FRich.SelStart);
+  // ended by the selection set by code
+  LoadText('one two three four');
+  Sel(4, 9);
+  FRich.PressAt(pr.X, pr.Y);
+  FRich.SelStart := 1;
+  AssertFalse('the selection set: the wait ends', FRich.Pending);
+  FRich.ReleaseAt(pr.X, pr.Y);
+  AssertEquals('the click after it', q, FRich.SelStart);
+  AssertEquals('the click: nothing selected', Int64(0), FRich.SelLength);
+  // Esc while it waits: nothing at the release
+  Sel(4, 9);
+  FRich.PressAt(pr.X, pr.Y);
+  FRich.Press(VK_ESCAPE, [ssLeft]);
+  FRich.ReleaseAt(pr.X, pr.Y);
+  AssertEquals('Esc: the selection stays', Int64(9), FRich.SelLength);
+  FRich.OnFindDone := nil;
+  FRich.OnReplaceDone := nil;
+end;
+
+{ The window paints deferred, over the kept surface its scrolls move: after a scroll of a line
+  and a wheel notch during a drag, the mark's old dots are gone from where the surface's pixels
+  went - the surface is what a repaint of everything gives. Long and short lines alternate, the
+  pointer near a long line's end on a short line's row, so a line's scroll moves the place
+  aside. }
+procedure TTyRichDragTest.TestTheMarkLeavesNoDotWhenTheSurfaceScrolls;
+var
+  s: string;
+  i, lineH, k: Integer;
+  p: TPoint;
+  r: TRect;
+  t: TTyRichText;
+  kept: TBGRABitmap;
+  bmp: TBitmap;
+
+  procedure PaintDeferred;
+  begin
+    FRich.PaintPart(bmp.Canvas, Rect(0, 0, FRich.Width, FRich.Height), True);
+  end;
+
+  procedure CheckLikeARepaint(const AWhat: string);
+  var
+    n, j: Integer;
+    a, b: PBGRAPixel;
+  begin
+    PaintDeferred;
+    kept := FRich.Surf.Duplicate as TBGRABitmap;
+    try
+      FRich.RedrawAll;
+      PaintDeferred;
+      AssertEquals(AWhat + ': the surface''s size', kept.Width * kept.Height,
+        FRich.Surf.Width * FRich.Surf.Height);
+      n := 0;
+      a := kept.Data;
+      b := FRich.Surf.Data;
+      for j := 0 to kept.Width * kept.Height - 1 do
+      begin
+        if (a^.red <> b^.red) or (a^.green <> b^.green) or (a^.blue <> b^.blue) then Inc(n);
+        Inc(a);
+        Inc(b);
+      end;
+      AssertEquals(AWhat + ': pixels unlike a repaint of everything', 0, n);
+    finally
+      kept.Free;
+    end;
+  end;
+
+begin
+  s := '';
+  for i := 1 to 40 do
+    s := s + 'A long line number ' + IntToStr(i) + ' with some more words' + #13#10 + 'S' + #13#10;
+  LoadText(s);
+  t := FRich.Document.Text;
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf32bit;
+    bmp.SetSize(FRich.Width, FRich.Height);
+    PaintDeferred;
+    lineH := FRich.PositionRect(t.ParaStart(1)).Top - FRich.PositionRect(0).Top;
+    AssertTrue('a line''s height', lineH > 0);
+    // a short line's row in the middle of the view, the x just left of a long line's end
+    k := 9;
+    r := FRich.PositionRect(t.ParaStart(k - 1) + t.ParaLength(k - 1));
+    p := Point(r.Left - 3, (FRich.PositionRect(t.ParaStart(k)).Top +
+      FRich.PositionRect(t.ParaStart(k)).Bottom) div 2);
+    Sel(0, 6);
+    StartDrag(Mid(1), p);
+    PaintDeferred;
+    AssertTrue('a mark at the short line''s end', FRich.Mark(r));
+    FRich.ScrollY := FRich.ScrollY + lineH;
+    CheckLikeARepaint('a line''s scroll');
+    FRich.Wheel(-120, [ssLeft]);
+    CheckLikeARepaint('a wheel notch');
+    FRich.Press(VK_ESCAPE, [ssLeft]);
+  finally
+    bmp.Free;
   end;
 end;
 

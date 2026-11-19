@@ -721,6 +721,10 @@ type
     FDropRect: TRect;
     FEatMenu: Boolean;
     FDropFollowing: Boolean;
+    { A press on the selection waits for a drag (FDragPending) or was ended while waiting by
+      something not the user's (a change, the selection set by code): its release is the plain
+      click it was. Esc, another key, another press, a capture taken drop it. }
+    FPressClickOwed: Boolean;
     { The input method. A composition goes in at FCompPos (the caret when it began)
       and is not the document's: the layouter shows FCompText there (SetComposition), in
       FCompFormat (the typing format then), the input method's caret and clause in it
@@ -1177,6 +1181,7 @@ type
     procedure PlainClick(X, Y: Integer; AQ: TTyRichPos; AAtEnd: Boolean; AObj: TTyRichPos);
     procedure ReleasePending;
     function BeginSelectionDrag(X, Y: Integer; AShift: TShiftState): Boolean;
+    function EndBackgroundForUser: Boolean;
     { A view's move during a drop (a scroll, a zoom, a new size): the place, the mark and the
       verdict worked out again at the pointer's last place. }
     procedure DropFollowPointer;
@@ -2565,7 +2570,8 @@ type
     property ReadOnly: Boolean read FReadOnly write SetReadOnly default False;
     { True: the selection - text or an object - can be dragged to another place of the
       control: a left press inside it and a move past the drag threshold (DragThreshold)
-      begin the drag - a background find or replace then ends, cancelled, as typing ends it -,
+      begin the drag - a background find or replace ends at that press, cancelled, as typing
+      ends it; a press whose wait something else ends is a plain click at its release -,
       the drop mark shows where it would go (the place under the pointer, also after a scroll
       or a zoom during the drag; outside the control nothing is a place), the release moves it
       there, or copies it with Ctrl held (each one undo step; the clipboard is not used). Esc,
@@ -4704,7 +4710,7 @@ end;
 
 procedure TTyCustomRichEdit.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 var
-  q, a, b, o, q0: TTyRichPos;
+  q, a, b, o, q0, s0, n0: TTyRichPos;
   atEnd, pre: Boolean;
   clicks: Integer;
   h: TTyRichHandle;
@@ -4717,8 +4723,9 @@ begin
   { Another press during a drag of the selection (the right button): the drag ends and the
     press does nothing else - the selection stays, and its menu does not come. }
   FEatMenu := False;
-  if FDragPending or OwnDragging then
+  if FDragPending or FPressClickOwed or OwnDragging then
   begin
+    FPressClickOwed := False;
     CancelSelectionDrag;
     FEatMenu := Button = mbRight;
     inherited MouseDown(Button, Shift, X, Y);
@@ -4853,9 +4860,23 @@ begin
       { A press inside the selection (on its text, or on a selected object's body) may begin
         a drag of it: nothing changes until the pointer moves past the drag threshold, or the
         button comes up (the click it would have been). }
+      if DragStartOpen and PressInSelection(X, Y) and (FFindKind <> rfkNone) then
+      begin
+        // the press takes the document in hand: background work ends (its handler may move things)
+        s0 := GetSelStart;
+        n0 := GetSelLength;
+        if not EndBackgroundForUser then Exit;
+        if (GetSelStart <> s0) or (GetSelLength <> n0) or ViewBehind then
+        begin
+          q := Math.Min(HitClient(X, Y, atEnd), FDoc.Text.Length);
+          if q < 0 then Exit;
+          o := ObjectAt(X, Y, q);
+        end;
+      end;
       if DragStartOpen and PressInSelection(X, Y) then
       begin
         FDragPending := True;
+        FPressClickOwed := True;
         FPressPoint := Point(X, Y);
         FPressPlace := q;
         FPressAtEnd := atEnd;
@@ -4957,6 +4978,7 @@ end;
 procedure TTyCustomRichEdit.StopDrag;
 begin
   CancelResize;
+  FPressClickOwed := False;
   CancelSelectionDrag;
   FDragging := False;
   if FDragTimer <> nil then FDragTimer.Enabled := False;
@@ -5061,7 +5083,7 @@ begin
   else
   begin
     // a press inside the selection let go without a drag: the click it was
-    if FDragPending then ReleasePending
+    if FDragPending or FPressClickOwed then ReleasePending
     else if OwnDragging then DropOn(X, Y, Shift);
     StopDrag;
   end;
@@ -5082,9 +5104,13 @@ begin
     nothing done; let go by the release itself, the release is done here - the drop at the
     pointer's last place with the keys last known (or the click a press without a drag
     was) - and the button-up after it finds nothing to do. }
-  if (FDragPending or OwnDragging) and not MouseCapture then
-    if LeftButtonHeld then CancelSelectionDrag
-    else if FDragPending then ReleasePending
+  if (FDragPending or FPressClickOwed or OwnDragging) and not MouseCapture then
+    if LeftButtonHeld then
+    begin
+      FPressClickOwed := False;
+      CancelSelectionDrag;
+    end
+    else if FDragPending or FPressClickOwed then ReleasePending
     else DropOn(FDropPoint.X, FDropPoint.Y, FDropShift);
   if FDragging and not MouseCapture then StopDrag;
 end;
@@ -5279,8 +5305,10 @@ end;
 
 procedure TTyCustomRichEdit.ReleasePending;
 begin
-  if not FDragPending then Exit;
+  // (a press whose wait something else ended is still the click it was)
+  if not FDragPending and not FPressClickOwed then Exit;
   FDragPending := False;
+  FPressClickOwed := False;
   if ViewBehind then Exit;
   FDragUnit := 1;
   PlainClick(FPressPoint.X, FPressPoint.Y, FPressPlace, FPressAtEnd, FDragPressObj);
@@ -5299,34 +5327,45 @@ begin
   Result := FDropOffer <> nil;
 end;
 
+{ A press on the selection, or a drag of it beginning, is the user taking the document in
+  hand, as the first character typed is: a background find or replace ends - cancelled, its
+  event told - as an edit makes it end at its next turn; nothing changes the document or the
+  selection under the press after that. Its handler may change things (or free the control:
+  False, nothing to be touched any more). }
+function TTyCustomRichEdit.EndBackgroundForUser: Boolean;
+var
+  life: TTyRichLife;
+begin
+  Result := True;
+  if FFindKind = rfkNone then Exit;
+  LifeEnter(life);
+  try
+    try
+      EndFind(rfsCancelled, True);
+    except
+      on ETyRichGone do if TyRichGonePasses(life) then raise;
+    end;
+  finally
+    if not life.Gone then LifeLeave(life);
+  end;
+  Result := not life.Gone;
+end;
+
 function TTyCustomRichEdit.BeginSelectionDrag(X, Y: Integer; AShift: TShiftState): Boolean;
 var
   offer: TTyRichSelectionOffer;
   s, n: TTyRichPos;
-  life: TTyRichLife;
 begin
   Result := True;
   FDragPending := False;
-  { The drag's start is the user taking the document in hand, as the first character typed
-    is: a background find or replace ends - cancelled, its event told - as an edit makes it
-    end at its next turn; nothing changes the document or the selection under the drag after
-    that. Its handler may change things (or free the control: False, nothing touched): the drag
-    begins only on what is left. }
+  FPressClickOwed := False;
+  // (begun while a background find or replace runs that the press did not end: it ends now)
   if FFindKind <> rfkNone then
   begin
     s := GetSelStart;
     n := GetSelLength;
-    LifeEnter(life);
-    try
-      try
-        EndFind(rfsCancelled, True);
-      except
-        on ETyRichGone do if TyRichGonePasses(life) then raise;
-      end;
-    finally
-      if not life.Gone then LifeLeave(life);
-    end;
-    if life.Gone then Exit(False);
+    if not EndBackgroundForUser then Exit(False);
+    // the drag begins only on what the handler left
     if not DragStartOpen or (GetSelStart <> s) or (GetSelLength <> n) then Exit;
   end;
   if FDropOffer <> nil then DropLeave;
@@ -11965,6 +12004,13 @@ begin
   CancelResize;
   // so does a drag of the selection: its range and its place were of the text as it was
   CancelSelectionDrag;
+  { A press whose wait this ended is still a click at its release: its place follows the text,
+    as the caret does (an object it was on may be gone: a plain click there). }
+  if FPressClickOwed and (rckText in AChange.Kinds) and not loadOwn then
+  begin
+    ShiftForChange(FPressPlace, AChange);
+    FDragPressObj := -1;
+  end;
   // (a background replace's place to go on from follows an edit it did not make)
   if not loadOwn and ((FFindKind = rfkReplace) or (FOwedKind = rfkReplace)) then
     ReplaceResumeFollows(AChange);
@@ -16305,6 +16351,7 @@ begin
   begin
     if Key = VK_ESCAPE then
     begin
+      FPressClickOwed := False;
       CancelSelectionDrag;
       Key := 0;
       Exit;
@@ -16316,7 +16363,10 @@ begin
     end;
     if not (Key in [VK_SHIFT, VK_MENU, VK_LSHIFT, VK_RSHIFT, VK_LMENU, VK_RMENU, VK_LWIN,
       VK_RWIN]) then
+    begin
+      FPressClickOwed := False;
       CancelSelectionDrag;
+    end;
   end;
   { Inside the document's update a key that moves or copies does nothing: the view does not
     know the text yet. The viewer's keys are still taken - they never go on to the form. }
