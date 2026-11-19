@@ -4355,8 +4355,12 @@ end;
   Shown when all of these hold:
   - the group closes before the file ends, and its groups stay within the depth the reader
     keeps (MaxDepth);
-  - it has a result (its \fldrslt group) with something in it: text, a character, a picture
-    (the field's instruction and data, its \*\fldinst and \*\datafield groups, are not that);
+  - it has a result (its \fldrslt group) with something in it the reader shows: a character
+    (text, \'xx, \uN, a symbol that is one - \~ \_ \\ \{ \}), a tab or another character
+    word, a line or paragraph end, a picture, an object; not the field's instruction or data
+    (its \*\fldinst and \*\datafield groups), nor a {\*\...} group in the result (a bookmark,
+    a destination unknown here) but a picture's (\*\shppict) and a text's Unicode form
+    (\*\ud), nor an optional hyphen alone;
   - nothing in the group is of a table (\trowd \cell \row \nestcell \nestrow \intbl, \itap
     above 0), a section's (\sect, \sectd), or a header, footer, footnote or annotation group;
   - no paragraph end in it (\par) when the field stands in a table cell;
@@ -4404,7 +4408,7 @@ var
   depth, top, skipDepth, kw, p, pending, n, i: Integer;
   open: array[0..CRtfMaxShownFields + 1] of TOpenField;
   found: array of TTyRtfFieldVerdict;
-  first, inCell, closed, big: Boolean;
+  first, starred, inCell, closed, big: Boolean;
   braceAt: PtrInt;
 
   procedure Shows;
@@ -4431,6 +4435,7 @@ begin
   n := 0;
   found := nil;
   first := False;
+  starred := False;
   closed := False;
   braceAt := AStart;
   while lex.Next(t) do
@@ -4442,6 +4447,7 @@ begin
           // (the group the reader would only count: it could not read the field's end)
           if FS.Depth - 1 + depth >= MaxDepth then Break;
           first := True;
+          starred := False;
           braceAt := t.Start;
           Continue;
         end;
@@ -4507,7 +4513,8 @@ begin
               open[top - 1].ResultAt := depth;
               if not open[top - 1].Content then Inc(pending);
             end
-            else if (skipDepth = 0) and ((kw = kwDFldInst) or NameIs(FBuf, t, 'datafield')) then
+            else if (skipDepth = 0) and ((kw = kwDFldInst) or NameIs(FBuf, t, 'datafield') or
+              (starred and (kw <> kwDShpPict) and (kw <> kwDUd))) then
               skipDepth := depth;
           end;
           if (pending > 0) and (skipDepth = 0) then
@@ -4523,10 +4530,16 @@ begin
               Shows;
               Break;
             end;
-      rtkHex, rtkBin:
-        if (pending > 0) and (skipDepth = 0) then Shows;
+      rtkHex:
+        if (pending > 0) and (skipDepth = 0) and (t.Value >= 0) then Shows;
       rtkSymbol:
-        if (pending > 0) and (skipDepth = 0) and (t.Value <> Ord('*')) then Shows;
+        if t.Value = Ord('*') then
+        begin
+          if first then starred := True;
+        end
+        else if (pending > 0) and (skipDepth = 0) and (t.Value >= 0) and
+          (t.Value in [Ord('~'), Ord('_'), Ord('\'), Ord('{'), Ord('}'), 10, 13]) then
+          Shows;
     end;
     // (\* keeps a group's first word coming)
     if not ((t.Kind = rtkSymbol) and (t.Value = Ord('*'))) then first := False;
