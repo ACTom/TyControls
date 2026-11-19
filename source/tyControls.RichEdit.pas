@@ -593,6 +593,9 @@ type
       the table object (a reference held: it is not reused while kept) and content state it
       was found for: a move inside that table reads nothing again. }
     FAskTbl: TTyRichTable;
+    { CaretTablePara took the caret's own paragraph because the paragraphs that would tell
+      whether whole rows are selected are not read yet (an answer not to be kept). }
+    FCaretParaUnread: Boolean;
     FAskTblState: Int64;
     FAskTblRows, FAskTblColIns, FAskTblColDel, FAskTblDelete: Boolean;
     FOnEditRefused: TTyRichEditRefusedEvent;
@@ -1117,9 +1120,9 @@ type
     { The reason of a built-in table command the document refused (RunEdit keeps only its
       edit): CommandRefusal asked of a command like it. }
     function LateTableRefusal(const AEdit: TTyRichTableEdit): string;
-    { A table action (FTableKind) through the door of a user's edit, after what the door does
-      not tell: disabled or inside the document's update, nothing; ReadOnly and a plain text
-      document, refused (told). True: it ran. }
+    { A table action (FTableKind) through the door of a user's edit: disabled, ReadOnly or
+      inside the document's update, nothing (nothing told, as for the user's other actions);
+      a plain text document, refused (told). True: it ran. }
     function RunTableAction(AKind: Integer): Boolean;
     { The door's maker of a table action: the command for the caret's (the selection's) table
       as it is now, FAim... set for TableEditCaret; nil and told when the table or the place
@@ -1137,6 +1140,8 @@ type
     { What the Can... functions answer, found once for the content, the selection and the
       document's state as they are (FAsk...). }
     procedure AskTables;
+    // the table the answers keep, let go
+    procedure ReleaseAskedTable;
     { Can a table action be asked of the control now at all: not ReadOnly, enabled, not inside
       the document's update, the document taking edits, not a plain text document. }
     function TableActionsOpen: Boolean;
@@ -5932,18 +5937,73 @@ function TTyCustomRichEdit.CaretTablePara: Integer;
 var
   t: TTyRichText;
   q: TTyRichPos;
+  ka, m, i: Integer;
+  ca, cb, cl, cn: TTyRichCell;
+  run: Boolean;
+
+  // read already (a file read on demand gives its paragraphs only when asked)
+  function Known(AIndex: Integer): Boolean;
+  begin
+    Result := (AIndex < 0) or (AIndex >= t.ParaCount) or (FDoc.Loader = nil) or
+      (t.ParaData[AIndex] <> nil);
+  end;
+
 begin
+  FCaretParaUnread := False;
   t := FDoc.Text;
   q := Math.Min(FCaret, t.Length);
   Result := t.ParaOfPos(q);
-  if (FSelAnchor < q) and (Result > 0) and (q = t.ParaStart(Result)) then
+  if (FSelAnchor >= q) or (Result = 0) or (q <> t.ParaStart(Result)) or (q >= t.Length) then
+    Exit;
+  m := Result;
+  ka := t.ParaOfPos(FSelAnchor);
+  if FSelAnchor <> t.ParaStart(ka) then Exit;
+  { Whole rows are told by the anchor's paragraph and the one before it, and the caret's and
+    the one before it: when one of them is not read yet, nothing is read just to answer -
+    the caret's own paragraph, and the answer is not kept. }
+  if not (Known(ka) and Known(ka - 1) and Known(m) and Known(m - 1)) then
   begin
-    FDoc.BeginRead;
-    try
-      if FDoc.WholeRows(FSelAnchor, q) then Dec(Result);
-    finally
-      FDoc.EndRead;
+    FCaretParaUnread := True;
+    Exit;
+  end;
+  FDoc.BeginRead;
+  try
+    if FDoc.WholeRows(FSelAnchor, q) then
+      Dec(Result)
+    else
+    begin
+      { Whole rows of the table a person sees, whatever objects hold it (two that came to
+        touch): from a row's first paragraph to the end of a row, every paragraph between in
+        a table - walked only in this case, and only while read. }
+      ca := FDoc.CellAt(ka);
+      cl := FDoc.CellAt(m - 1);
+      if (ca = nil) or (cl = nil) or (ca.Row.Table = cl.Row.Table) then Exit;
+      if ka > 0 then
+      begin
+        cb := FDoc.CellAt(ka - 1);
+        if (cb <> nil) and (cb.Row = ca.Row) then Exit;
+      end;
+      cn := FDoc.CellAt(m);
+      if (cn <> nil) and (cn.Row = cl.Row) then Exit;
+      run := True;
+      for i := ka + 1 to m - 2 do
+      begin
+        if not Known(i) then
+        begin
+          FCaretParaUnread := True;
+          run := False;
+          Break;
+        end;
+        if FDoc.CellAt(i) = nil then
+        begin
+          run := False;
+          Break;
+        end;
+      end;
+      if run then Dec(Result);
     end;
+  finally
+    FDoc.EndRead;
   end;
 end;
 
@@ -6245,10 +6305,15 @@ begin
               Result := WholeTable(why)
             else
             begin
-              // right to left: the cell indexes of those still to go stay as they were
+              { Right to left: the cell indexes of those still to go stay as they were. Each
+                part names the table by the start of its first paragraph: a part deletes cells
+                of every row, so a place inside the table (the caret's) would move into the
+                rows below or past the table; nothing before the table changes, and the table
+                keeps a first paragraph there (all its columns go as WholeTable, never here),
+                also at the text's start and when its first cell's column is among them. }
               comp := TTyRichCompositeCommand.Create(rsRichUndoDeleteColumn);
               for m := High(cols) downto 0 do
-                if cols[m] then comp.Add(TTyRichDeleteColumn.Create(pos, m));
+                if cols[m] then comp.Add(TTyRichDeleteColumn.Create(t.ParaStart(info.First), m));
               Result := comp;
             end;
           end;
@@ -6442,6 +6507,7 @@ begin
   try
     ks := t.ParaOfPos(Math.Min(GetSelStart, t.Length));
     k := CaretTablePara;
+    if FCaretParaUnread then FAskValid := False;
     FDoc.BeginRead;
     try
       FAskInsTable := not Known(ks) or (FDoc.CellAt(ks) = nil);
@@ -9825,6 +9891,9 @@ begin
     end;
   end;
   FLayouter.DocumentChanged(AChange, loadOwn);
+  { The table kept for the Can... answers was found for the content as it was: let go (a
+    table of an old content is not held alive). A load's own slices change no content. }
+  if not loadOwn then ReleaseAskedTable;
   if FDoc.Text <> FText then
     ContentReplaced
   else
@@ -9926,10 +9995,17 @@ begin
   end;
 end;
 
+procedure TTyCustomRichEdit.ReleaseAskedTable;
+begin
+  if FAskTbl <> nil then FAskTbl.Release;
+  FAskTbl := nil;
+end;
+
 procedure TTyCustomRichEdit.ContentReplaced;
 var
   composed: Boolean;
 begin
+  ReleaseAskedTable;
   { A find of the old content stops: its finder read the old text. Its event is owed to the
     public call that replaced the content (it is raised there, before that call returns;
     CheckReplaceable ended one that ran before it began), never raised from in here. }

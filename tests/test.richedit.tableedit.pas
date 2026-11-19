@@ -79,6 +79,9 @@ type
     procedure TestDeleteColumnTakesTheColumnOfEveryCellCovered;
     procedure TestTheCaretStandsForOneParagraphForEveryAction;
     procedure TestTheTableKeysAndActionsAtTheEdges;
+    procedure TestSeveralColumnsGoFromTheirOwnTable;
+    procedure TestWholeRowsOfTablesThatTouch;
+    procedure TestTheAnswersHoldNoTableOfAnOldContent;
   end;
 
 implementation
@@ -389,6 +392,70 @@ function TouchRtf: RawByteString;
 begin
   Result := Head + RowRtf(['a0', 'a1'], []) + BS + 'pard mid' + BS + 'par' + #13#10 +
     RowRtf(['b0'], []) + BS + 'pard after' + BS + 'par' + #13#10 + '}';
+end;
+
+{ 'before', an ARows x ACols table with 'rRcC', a paragraph 'm', a 2 x 2 table with 'bRcC',
+  'after'. }
+function TwoTablesApartRtf(ARows, ACols: Integer): RawByteString;
+var
+  r, c: Integer;
+  texts: array of string;
+begin
+  Result := Head;
+  texts := nil;
+  SetLength(texts, ACols);
+  for r := 0 to ARows - 1 do
+  begin
+    for c := 0 to ACols - 1 do texts[c] := Format('r%dc%d', [r, c]);
+    Result := Result + RowRtf(texts, []);
+  end;
+  Result := Result + BS + 'pard m' + BS + 'par' + #13#10 + RowRtf(['b0c0', 'b0c1'], []) +
+    RowRtf(['b1c0', 'b1c1'], []) + BS + 'pard after' + BS + 'par' + #13#10 + '}';
+end;
+
+// An ARows x ACols table's shape ('rRcC' cells) without the columns of AGone.
+function ShapeWithout(ARows, ACols: Integer; const AGone: array of Integer): string;
+var
+  r, c, i: Integer;
+  gone, first: Boolean;
+begin
+  Result := '';
+  for r := 0 to ARows - 1 do
+  begin
+    if r > 0 then Result := Result + '/';
+    first := True;
+    for c := 0 to ACols - 1 do
+    begin
+      gone := False;
+      for i := 0 to High(AGone) do
+        if AGone[i] = c then gone := True;
+      if gone then Continue;
+      if not first then Result := Result + '|';
+      Result := Result + Format('r%dc%d', [r, c]);
+      first := False;
+    end;
+  end;
+end;
+
+type
+  // A table that counts the objects of its kind alive.
+  TCountedTable = class(TTyRichTable)
+  public
+    class var Live: Integer;
+    constructor Create(const AColBoundaries: array of Integer);
+    destructor Destroy; override;
+  end;
+
+constructor TCountedTable.Create(const AColBoundaries: array of Integer);
+begin
+  inherited Create(AColBoundaries);
+  Inc(Live);
+end;
+
+destructor TCountedTable.Destroy;
+begin
+  Dec(Live);
+  inherited Destroy;
 end;
 
 type
@@ -1662,7 +1729,7 @@ procedure TTyRichTableEditTest.TestTheCanFunctionsReadNoUnreadPartOfAFile;
 var
   b: TBytes;
   probe, d: TTyRichDocument;
-  k, i, parsed: Integer;
+  k, i, parsed, a, c: Integer;
   bytes: Int64;
 begin
   b := TablesRtf(1000, 3 shl 20);
@@ -1699,6 +1766,30 @@ begin
   AssertFalse('no table in it', FRich.CanInsertTable);
   AssertEquals('no paragraph read for them', parsed, ParsedParas(d));
   AssertEquals('no byte of the file parsed for them', bytes, TyRichRtfLoadOf(d).ParsedBytes);
+  { A selection put (inside an update) from a paragraph's start to another's, neither read
+    yet: whether it is whole rows is not read to answer either. }
+  a := d.Text.ParaCount - 60;
+  c := d.Text.ParaCount - 40;
+  for i := a - 1 to c do
+    AssertTrue(Format('paragraph %d not read yet', [i]), d.Text.ParaData[i] = nil);
+  parsed := ParsedParas(d);
+  bytes := TyRichRtfLoadOf(d).ParsedBytes;
+  d.BeginUpdate;
+  try
+    FRich.SelStart := d.Text.ParaStart(a);
+    FRich.SelLength := d.Text.ParaStart(c) - d.Text.ParaStart(a);
+    FRich.InTable;
+    FRich.CanInsertTable;
+    FRich.CanInsertRow;
+    FRich.CanInsertColumn;
+    FRich.CanDeleteRow;
+    FRich.CanDeleteColumn;
+    FRich.CanDeleteTable;
+    AssertEquals('the selection: no paragraph read', parsed, ParsedParas(d));
+    AssertEquals('the selection: no byte parsed', bytes, TyRichRtfLoadOf(d).ParsedBytes);
+  finally
+    d.EndUpdate;
+  end;
   // the caret put (inside an update: nothing laid out) in a paragraph not read yet
   k := d.Text.ParaCount - 20;
   AssertTrue('a paragraph not read yet', d.Text.ParaData[k] = nil);
@@ -2243,6 +2334,157 @@ begin
     AssertTrue('asked again: read again, yes', lp.CanInsertRow);
   finally
     lp.Free;
+  end;
+end;
+
+{ Several columns go as one step of column deletes, each of the same table - whatever the parts
+  before it took away of the rows above the caret's, and with another table after it. }
+procedure TTyRichTableEditTest.TestSeveralColumnsGoFromTheirOwnTable;
+var
+  d: TTyRichDocument;
+  t: TTyRichText;
+  f, r: Integer;
+  before: TBytes;
+  msg, shape0, other: string;
+
+  procedure Sel(AAnchor, ACaret: TTyRichPos);
+  begin
+    FRich.SelStart := AAnchor;
+    FRich.SelLength := ACaret - AAnchor;
+  end;
+
+  procedure Check(const AWhat, AShape: string);
+  var
+    after: string;
+  begin
+    before := SaveOf(FRich);
+    ResetEvents;
+    AssertTrue(AWhat + ': done', FRich.DeleteColumn);
+    AssertEquals(AWhat + ': nothing told', 0, FRich.Refused);
+    AssertEquals(AWhat + ': the columns left', AShape, Shape(d, f));
+    AssertEquals(AWhat + ': one step', rsRichUndoDeleteColumn, d.UndoDescription);
+    after := Shape(d, f);
+    FRich.Undo;
+    AssertTrue(AWhat + ': undone, the file''s bytes', SameBytes(before, SaveOf(FRich)));
+    FRich.Redo;
+    AssertEquals(AWhat + ': redone', after, Shape(d, f));
+    FRich.Undo;
+  end;
+
+begin
+  // two cells of row 1 of a 2 x 3 table
+  LoadRtf(TableRtf(2, 3, []));
+  d := FRich.Document;
+  t := d.Text;
+  f := FirstTablePara(d);
+  Sel(t.ParaStart(f + 4) + 1, t.ParaStart(f + 5) + 1);
+  Check('two cells of the lower row', ShapeWithout(2, 3, [1, 2]));
+  // 3 x 3, from row 1's last cell to row 2's first: columns 0 and 2
+  LoadRtf(TableRtf(3, 3, []));
+  t := d.Text;
+  f := FirstTablePara(d);
+  Sel(t.ParaStart(f + 5) + 1, t.ParaStart(f + 6) + 1);
+  Check('row 1''s last cell to row 2''s first', ShapeWithout(3, 3, [0, 2]));
+  // 3 x 4: two and three columns in each row, column 0 among them, one reversed
+  LoadRtf(TableRtf(3, 4, []));
+  t := d.Text;
+  f := FirstTablePara(d);
+  for r := 0 to 2 do
+  begin
+    msg := Format('row %d', [r]);
+    Sel(t.ParaStart(f + 4 * r + 1) + 1, t.ParaStart(f + 4 * r + 2) + 1);
+    Check(msg + ': columns 1 and 2', ShapeWithout(3, 4, [1, 2]));
+    Sel(t.ParaStart(f + 4 * r) + 1, t.ParaStart(f + 4 * r + 2) + 1);
+    Check(msg + ': columns 0 to 2', ShapeWithout(3, 4, [0, 1, 2]));
+    Sel(t.ParaStart(f + 4 * r + 3) + 1, t.ParaStart(f + 4 * r + 2) + 1);
+    Check(msg + ': columns 2 and 3, reversed', ShapeWithout(3, 4, [2, 3]));
+  end;
+  // a second table after a paragraph of one character: never touched
+  LoadRtf(TwoTablesApartRtf(2, 3));
+  t := d.Text;
+  f := FirstTablePara(d);
+  AssertEquals('the paragraph between', 'm', ParaText(d, f + 6));
+  other := Shape(d, f + 7);
+  AssertEquals('the second table', 'b0c0|b0c1/b1c0|b1c1', other);
+  shape0 := Shape(d, f);
+  Sel(t.ParaStart(f + 4) + 1, t.ParaStart(f + 5) + 1);
+  before := SaveOf(FRich);
+  AssertTrue('two cells of the first table''s last row', FRich.DeleteColumn);
+  AssertEquals('its columns 1 and 2 gone', ShapeWithout(2, 3, [1, 2]), Shape(d, f));
+  AssertEquals('the second table as it was', other, Shape(d, f + 3));
+  FRich.Undo;
+  AssertEquals('undone', shape0, Shape(d, f));
+  AssertTrue('undone: the file''s bytes', SameBytes(before, SaveOf(FRich)));
+  FRich.Redo;
+  AssertEquals('redone: the second table as it was', other, Shape(d, f + 3));
+end;
+
+{ Two tables that came to touch, every row of both selected down to the paragraph after them:
+  the caret stands for the last selected row, the second table's; DeleteRow takes the rows of
+  the caret's table. }
+procedure TTyRichTableEditTest.TestWholeRowsOfTablesThatTouch;
+var
+  d: TTyRichDocument;
+  t: TTyRichText;
+  f, m: Integer;
+begin
+  LoadRtf(TwoTablesRtf);
+  d := FRich.Document;
+  t := d.Text;
+  f := FirstTablePara(d);
+  m := f + 2;
+  AssertTrue('the paragraph between deleted', d.Execute(TTyRichDelete.Create(t.ParaStart(m),
+    t.ParaLength(m) + 1)));
+  FRich.UpdateView;
+  AssertEquals('the second table', 'b0|b1/b2|b3', Shape(d, f + 2));
+  FRich.SelStart := t.ParaStart(f);
+  FRich.SelLength := t.ParaStart(f + 6) - FRich.SelStart;
+  AssertTrue('in a table', FRich.InTable);
+  AssertTrue('a row: yes', FRich.CanDeleteRow);
+  AssertTrue('the rows', FRich.DeleteRow);
+  AssertEquals('nothing told', 0, FRich.Refused);
+  AssertEquals('the first table stays', 'a0|a1', Shape(d, f));
+  AssertEquals('the second table''s rows gone', 'after', ParaText(d, f + 2));
+  FRich.Undo;
+  AssertEquals('undone', 'b0|b1/b2|b3', Shape(d, f + 2));
+  FRich.SelStart := t.ParaStart(f);
+  FRich.SelLength := t.ParaStart(f + 6) - FRich.SelStart;
+  AssertTrue('a row below', FRich.InsertRow);
+  AssertEquals('below the second table''s last row', 'b0|b1/b2|b3/|', Shape(d, f + 2));
+end;
+
+{ The table found for the Can... answers is not kept alive by them once the content changed. }
+procedure TTyRichTableEditTest.TestTheAnswersHoldNoTableOfAnOldContent;
+var
+  d: TTyRichDocument;
+  t: TTyRichText;
+  tbl: TTyRichTable;
+  n: Integer;
+begin
+  for n := 0 to 1 do
+  begin
+    FRich.Lines.Text := 'a' + LineEnding + 'b' + LineEnding + 'c' + LineEnding + 'd' + LineEnding + 'x';
+    d := FRich.Document;
+    t := d.Text;
+    tbl := TCountedTable.Create([1500, 3000]);
+    tbl.AddRow(2);
+    tbl.AddRow(2);
+    AssertTrue('a table', d.Execute(TMarkTableCommand.Create(0, tbl, [1, 1, 1, 1])));
+    d.ClearUndo;
+    FRich.UpdateView;
+    FRich.SelStart := t.ParaStart(2);
+    AssertTrue('a row: yes', FRich.CanInsertRow);
+    AssertEquals('the table alive', 1, TCountedTable.Live);
+    if n = 0 then
+      // a new content
+      FRich.Lines.Text := 'y'
+    else
+    begin
+      // the table deleted, the history let go
+      AssertTrue('the table deleted', FRich.DeleteTable);
+      d.ClearUndo;
+    end;
+    AssertEquals(Format('%d: no table alive', [n]), 0, TCountedTable.Live);
   end;
 end;
 
