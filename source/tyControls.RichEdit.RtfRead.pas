@@ -4367,7 +4367,7 @@ end;
     a destination unknown here) but a picture's (\*\shppict) and a text's Unicode form
     (\*\ud), nor an optional hyphen alone;
   - nothing in the group is of a table (\trowd \cell \row \nestcell \nestrow \intbl, \itap
-    above 0), a section's (\sect, \sectd), or a header, footer, footnote or annotation group;
+    above 0), a section break (\sect), or a header, footer, footnote or annotation group;
   - no paragraph end in it (\par) when the field stands in a table cell;
   - it nests, with the fields shown around it, no deeper than CRtfMaxShownFields.
   A field's group is read once to decide it - by the index scan, and once more by a parse
@@ -4488,7 +4488,9 @@ begin
             kwItap: if t.HasParam and (t.Param > 0) then Break;
             kwPar: if inCell then Break;
           end;
-          if NameIs(FBuf, t, 'sect') or NameIs(FBuf, t, 'sectd') or
+          // (a section break; not \sectd, which Word writes in a table of contents' result
+          // before each entry: the section's properties, restated, as in the body)
+          if NameIs(FBuf, t, 'sect') or
              (first and (NameIs(FBuf, t, 'footnote') or NameIs(FBuf, t, 'annotation'))) then
             Break;
           if first then

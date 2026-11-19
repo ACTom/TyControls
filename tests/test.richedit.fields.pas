@@ -749,7 +749,7 @@ const
     '{|field{|*|fldinst X}{|fldrslt x{|footerl h}}}',
     '{|field{|*|fldinst X}{|fldrslt x{|footnote h}}}',
     '{|field{|*|fldinst X}{|fldrslt x{|*|annotation h}}}',
-    '{|field{|*|fldinst X}{|fldrslt x{|sectd y}}}',
+    '{|field{|*|fldinst X}{|fldrslt x{|sect y}}}',
     '{|field{|*|fldinst X}{|fldrslt |itap2 x}}');
   Shows: array[0..15] of RawByteString = ('', '', 'x', 'xy', 'x', 'xy', 'x', 'x', 'x', 'xy',
     'x', 'x', 'x', 'x', 'xy', 'x');
