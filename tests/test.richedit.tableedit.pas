@@ -1441,6 +1441,12 @@ begin
   AssertFalse('outside: no row', FRich.CanInsertRow);
   FRich.SelStart := t.ParaStart(k);
   AssertTrue('inside: a row', FRich.CanInsertRow);
+  // the caret end alone moves (the anchor stays in the table): asked again
+  FRich.SelLength := t.Length - FRich.SelStart;
+  AssertFalse('the caret end outside: no row', FRich.CanInsertRow);
+  FRich.SelLength := 1;
+  AssertTrue('the caret end back in a cell: a row', FRich.CanInsertRow);
+  FRich.SelStart := t.ParaStart(k);
   // a state of the document is part of the answer
   FRich.ReadOnly := True;
   AssertFalse('read-only', FRich.CanInsertRow);
