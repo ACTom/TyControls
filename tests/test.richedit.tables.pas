@@ -2229,10 +2229,10 @@ end;
 procedure TTyRichTablesTest.TestATableStepCountsWhatItKeeps;
 var
   d: TTyRichDocument;
-  small, large: Int64;
+  small, large, table: Int64;
   i: Integer;
 
-  function StepOf(ARows: Integer): Int64;
+  function StepOf(ARows: Integer; out ATable: Int64): Int64;
   var
     doc: TTyRichDocument;
   begin
@@ -2241,17 +2241,20 @@ var
       AssertTrue('a table', Exec(doc, TTyRichInsertTable.Create(0, ARows, 2)));
       AssertTrue('a row', Exec(doc, TTyRichInsertRow.Create(0, 1)));
       Result := doc.UndoStep.MemSize;
+      ATable := doc.TableAt(0).MemSize;
     finally
       doc.Free;
     end;
   end;
 
 begin
-  small := StepOf(100);
-  large := StepOf(1000);
-  // every paragraph's old value and the old table object are the step's to keep
+  small := StepOf(100, table);
+  large := StepOf(1000, table);
   AssertTrue(Format('a row in 1000 rows: %d bytes, in 100: %d', [large, small]),
     large - small >= 1800 * 40);
+  // the new table it keeps for a redo, the old table and every paragraph's old value
+  AssertTrue(Format('a row in 1000 rows: %d bytes, the table %d', [large, table]),
+    large >= 2 * table + 2000 * 40);
   // a history bound by its own count
   d := TTyRichDocument.Create;
   try
