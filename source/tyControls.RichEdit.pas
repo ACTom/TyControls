@@ -1450,6 +1450,12 @@ type
     { ABytes as a picture: PNG and JPEG kept, a bitmap or TIFF decoded to PNG, a metafile
       refused, anything else decoded by the LCL's graphic classes (InsertPicture). }
     function InsertPictureBytes(const ABytes: TBytes): Boolean;
+    { ABytes that are none of the kinds told by their first bytes, read by the LCL's graphic
+      classes and given back as a picture keeps them (GraphicBytes). An icon or a cursor is
+      told by its header here: the LCL of Lazarus 3.0 does not know either from a stream.
+      False: refused - told. }
+    function LclPictureBytes(const ABytes: TBytes; out AOut: TBytes;
+      out AKind: TTyRichImageKind): Boolean;
     { ABytes of AKind as the picture that replaces the selection: one undo step. }
     function InsertPictureMade(const ABytes: TBytes; AKind: TTyRichImageKind): Boolean;
     function InsertGraphicCore(AGraphic: TGraphic): Boolean;
@@ -7288,8 +7294,7 @@ function TTyCustomRichEdit.InsertPictureBytes(const ABytes: TBytes): Boolean;
 var
   kind: TTyRichImageKind;
   meta: Boolean;
-  pic: TPicture;
-  st: TBytesStream;
+  bytes: TBytes;
 begin
   Result := False;
   if SniffImage(ABytes, kind, meta) then Exit(InsertPictureMade(ABytes, kind));
@@ -7299,12 +7304,33 @@ begin
     Exit;
   end;
   // anything else the LCL's graphic classes can read (GIF, an icon, a portable pixmap ...)
+  Result := LclPictureBytes(ABytes, bytes, kind) and InsertPictureMade(bytes, kind);
+end;
+
+function TTyCustomRichEdit.LclPictureBytes(const ABytes: TBytes; out AOut: TBytes;
+  out AKind: TTyRichImageKind): Boolean;
+var
+  pic: TPicture;
+  own: TGraphic;
+  st: TBytesStream;
+begin
+  Result := False;
+  AOut := nil;
+  AKind := rikPng;
+  // an icon's or a cursor's header: reserved 0, then the type (1, 2), both words
+  own := nil;
+  if (Length(ABytes) >= 4) and (ABytes[0] = 0) and (ABytes[1] = 0) and (ABytes[3] = 0) then
+    case ABytes[2] of
+      1: own := TIcon.Create;
+      2: own := TCursorImage.Create;
+    end;
   pic := TPicture.Create;
   try
     st := TBytesStream.Create(ABytes);
     try
       try
-        pic.LoadFromStream(st);
+        if own <> nil then own.LoadFromStream(st)
+        else pic.LoadFromStream(st);
       except
         on EOutOfMemory do
         begin
@@ -7320,9 +7346,11 @@ begin
     finally
       st.Free;
     end;
-    Result := InsertGraphicCore(pic.Graphic);
+    if own <> nil then Result := GraphicBytes(own, AOut, AKind)
+    else Result := GraphicBytes(pic.Graphic, AOut, AKind);
   finally
     pic.Free;
+    own.Free;
   end;
 end;
 
@@ -7436,8 +7464,6 @@ function TTyCustomRichEdit.PictureOfFileBytes(const ABytes: TBytes; APos: TTyRic
 var
   kind: TTyRichImageKind;
   meta: Boolean;
-  pic: TPicture;
-  st: TBytesStream;
   bytes: TBytes;
 begin
   // as InsertPictureBytes takes them
@@ -7449,32 +7475,7 @@ begin
     EditRefused(rsRichEditRefusedMetafile);
     Exit;
   end;
-  pic := TPicture.Create;
-  try
-    st := TBytesStream.Create(ABytes);
-    try
-      try
-        pic.LoadFromStream(st);
-      except
-        on EOutOfMemory do
-        begin
-          EditRefused(rsRichEditRefusedMemory);
-          Exit;
-        end;
-        on Exception do
-        begin
-          EditRefused(rsRichEditRefusedNoPicture);
-          Exit;
-        end;
-      end;
-    finally
-      st.Free;
-    end;
-    if not GraphicBytes(pic.Graphic, bytes, kind) then Exit;
-  finally
-    pic.Free;
-  end;
-  Result := MakePictureFor(bytes, kind, APos, APicture);
+  Result := LclPictureBytes(ABytes, bytes, kind) and MakePictureFor(bytes, kind, APos, APicture);
 end;
 
 function TTyCustomRichEdit.InsertPictureMade(const ABytes: TBytes; AKind: TTyRichImageKind): Boolean;
