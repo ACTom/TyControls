@@ -1,15 +1,16 @@
-# Makes tests/fixtures/rtf/word-*.rtf: four documents built through Word's object model (Word
+# Makes tests/fixtures/rtf/word-*.rtf: five documents built through Word's object model (Word
 # stays invisible) and saved by Word as RTF. Needs Word; the files in the repository were made
 # with Word 16.0.17932 (word-zh, word-unknown, word-table-merged on 2026-11-11, word-list on
-# 2026-11-16) -- do not rerun it to "refresh" them, the bytes would change (revision ids,
-# dates). tests/fixtures/rtf/README.md says what each file is for.
+# 2026-11-16, word-toc on 2026-11-20) -- do not rerun it to "refresh" them, the bytes would
+# change (revision ids, dates). tests/fixtures/rtf/README.md says what each file is for.
 #
-#     pwsh scripts/gen-richedit-fixtures-word.ps1 -Out <folder> [-Only zh,unknown,table,list] [-CopyTable]
+#     pwsh scripts/gen-richedit-fixtures-word.ps1 -Out <folder> [-Only zh,unknown,table,list,toc] [-CopyTable]
 #
-# -Only makes just the files named (all four by default). -CopyTable also leaves a 2 x 3 table
-# on the clipboard (it was pasted into WordPad for wp-zh-table.rtf).
+# -Only makes just the files named (all five by default). -CopyTable also leaves a 2 x 3 table
+# on the clipboard (it was pasted into WordPad for wp-zh-table.rtf). The script reads Word's
+# user name (to take it out of the saved files); it writes no Word setting.
 param([Parameter(Mandatory)][string]$Out, [switch]$CopyTable,
-  [ValidateSet('zh', 'unknown', 'table', 'list')][string[]]$Only = @('zh', 'unknown', 'table', 'list'))
+  [ValidateSet('zh', 'unknown', 'table', 'list', 'toc')][string[]]$Only = @('zh', 'unknown', 'table', 'list', 'toc'))
 $ErrorActionPreference = 'Stop'
 $wdFormatRTF = 6
 $word = New-Object -ComObject Word.Application
@@ -156,6 +157,107 @@ try {
   $utf8 = New-Object Text.UTF8Encoding $false
   [IO.File]::WriteAllText("$Out\word-list.expected.txt", (($texts | ForEach-Object { "$_`n" }) -join ''), $utf8)
   [IO.File]::WriteAllText("$Out\word-list.markers.txt", (($marks | ForEach-Object { "$_`n" }) -join ''), $utf8)
+  }
+
+  # ---------------------------------------------------------------- word-toc.rtf
+  # A table of contents as Word's References > Table of Contents makes it (TOC \o "1-3" \h \z
+  # \u: a HYPERLINK per entry holding the entry's text, a tab and a PAGEREF), over twelve
+  # chapters of Heading 1 to 3 in Chinese and English; a paragraph with three links (an address
+  # with Chinese in it, a bookmark in the document alone, an address and a bookmark), a REF to
+  # that bookmark, and a 2 x 2 table with a link, PAGE and NUMPAGES in single-paragraph cells.
+  # Beside the file: word-toc.paragraphs.txt (each paragraph's Range.Text, the paragraph and cell
+  # marks taken off: a row's end is an empty line) and word-toc.fields.txt (each field: its
+  # type, its code, its result; a paragraph mark in a result as <P>).
+  if ($Only -contains 'toc') {
+  $doc = $word.Documents.Add()
+  $h1 = $doc.Styles.Item(-2); $h2 = $doc.Styles.Item(-3); $h3 = $doc.Styles.Item(-4); $body = $doc.Styles.Item(-1)
+  $chapters = @('概述', '安装', '主题', '控件', '表格', '富文本', '图表', '对话框', '国际化', '高分屏', '测试', '发布')
+  $paras = New-Object System.Collections.ArrayList
+  [void]$paras.Add(@($body, '目录样本 Contents sample'))
+  [void]$paras.Add(@($body, ''))                       # the contents go here
+  $n = 0
+  foreach ($c in $chapters) {
+    $n++
+    [void]$paras.Add(@($h1, "第 $n 章 $c Chapter $n"))
+    [void]$paras.Add(@($body, "这一章讲$c。Body text of chapter $n."))
+    [void]$paras.Add(@($h2, "$c：准备"))
+    [void]$paras.Add(@($body, '正文。'))
+    [void]$paras.Add(@($h2, "$c：用法 Usage"))
+    [void]$paras.Add(@($body, '正文。'))
+    if ($n % 2 -eq 0) {
+      [void]$paras.Add(@($h3, "$c：细节（第三级）"))
+      [void]$paras.Add(@($body, '正文。'))
+    }
+  }
+  [void]$paras.Add(@($body, '链接段：前面的字'))        # links are added to this one
+  [void]$paras.Add(@($body, '书签里的字'))              # a bookmark around this text
+  [void]$paras.Add(@($body, '引用：'))                  # a REF field at its end
+  [void]$paras.Add(@($body, ''))                        # the table goes here
+  [void]$paras.Add(@($body, '最后一段。The end.'))
+  $doc.Content.Text = (($paras | ForEach-Object { $_[1] }) -join "`r")
+  $doc.Content.Font.NameAscii = 'Calibri'; $doc.Content.Font.NameOther = 'Calibri'
+  $doc.Content.Font.NameFarEast = '宋体'
+  for ($k = 0; $k -lt $paras.Count; $k++) {
+    $pr = $doc.Paragraphs.Item($k + 1).Range
+    $pr.Style = $paras[$k][0]
+    if ($paras[$k][0] -eq $h1) { $pr.ParagraphFormat.PageBreakBefore = -1 }
+  }
+  $count = $paras.Count
+  # the table first (it is below everything else that is edited, so the numbers above stay)
+  $t = $doc.Tables.Add($doc.Paragraphs.Item($count - 1).Range, 2, 2)
+  $t.Borders.Enable = 1
+  $t.Cell(1, 1).Range.Text = '格里的'
+  $r = $t.Cell(1, 1).Range; $r.MoveEnd(1, -1) | Out-Null; $r.Collapse(0)
+  [void]$doc.Hyperlinks.Add($r, 'https://example.com/cell', [Type]::Missing, [Type]::Missing, '链接 link')
+  $t.Cell(1, 2).Range.Text = '页码：'
+  $r = $t.Cell(1, 2).Range; $r.MoveEnd(1, -1) | Out-Null; $r.Collapse(0)
+  [void]$doc.Fields.Add($r, 33)                         # wdFieldPage
+  $t.Cell(2, 1).Range.Text = '页数：'
+  $r = $t.Cell(2, 1).Range; $r.MoveEnd(1, -1) | Out-Null; $r.Collapse(0)
+  [void]$doc.Fields.Add($r, 26)                         # wdFieldNumPages
+  $t.Cell(2, 2).Range.Text = '没有域 plain'
+  # the bookmark and the REF to it
+  $p = $doc.Paragraphs.Item($count - 3).Range
+  [void]$doc.Bookmarks.Add('mark1', $doc.Range($p.Start, $p.End - 1))
+  $p = $doc.Paragraphs.Item($count - 2).Range
+  $r = $doc.Range($p.End - 1, $p.End - 1)
+  [void]$doc.Fields.Add($r, -1, 'REF mark1 \h', $true)  # wdFieldEmpty: the text is the code
+  # the links: a web address with Chinese in it, a place in the document, both
+  $p = $doc.Paragraphs.Item($count - 4).Range
+  $r = $doc.Range($p.End - 1, $p.End - 1)
+  [void]$doc.Hyperlinks.Add($r, 'https://example.com/文档?q=中文', [Type]::Missing, [Type]::Missing, '中文网址')
+  $p = $doc.Paragraphs.Item($count - 4).Range
+  $r = $doc.Range($p.End - 1, $p.End - 1); $r.InsertAfter('，然后是')
+  $p = $doc.Paragraphs.Item($count - 4).Range
+  $r = $doc.Range($p.End - 1, $p.End - 1)
+  [void]$doc.Hyperlinks.Add($r, '', 'mark1', [Type]::Missing, '到书签')
+  $p = $doc.Paragraphs.Item($count - 4).Range
+  $r = $doc.Range($p.End - 1, $p.End - 1); $r.InsertAfter('和')
+  $p = $doc.Paragraphs.Item($count - 4).Range
+  $r = $doc.Range($p.End - 1, $p.End - 1)
+  [void]$doc.Hyperlinks.Add($r, 'https://example.com/page', 'sec2', [Type]::Missing, 'page#sec2')
+  $p = $doc.Paragraphs.Item($count - 4).Range
+  $r = $doc.Range($p.End - 1, $p.End - 1); $r.InsertAfter('。')
+  # the contents: heading styles 1 to 3, links, page numbers (UseHeadingStyles, 1..3,
+  # UseFields, TableID, RightAlignPageNumbers, IncludePageNumbers, AddedStyles, UseHyperlinks,
+  # HidePageNumbersInWeb, UseOutlineLevels - Word's own defaults)
+  $doc.Repaginate()
+  $m = [Type]::Missing
+  $toc = $doc.TablesOfContents.Add($doc.Paragraphs.Item(2).Range, $true, 1, 3, $false, $m, $true, $true, $m, $true, $true, $true)
+  $doc.Repaginate()
+  $toc.Update()
+  [void]$doc.Fields.Update()
+  $texts = @()
+  for ($k = 1; $k -le $doc.Paragraphs.Count; $k++) {
+    $texts += $doc.Paragraphs.Item($k).Range.Text.TrimEnd([char]13, [char]7)
+  }
+  $codes = @()
+  foreach ($f in $doc.Fields) { $codes += "$($f.Type)`t$($f.Code.Text)`t$($f.Result.Text -replace "`r", '<P>')" }
+  $doc.SaveAs2([ref]"$Out\word-toc.rtf", [ref]$wdFormatRTF)
+  $doc.Close([ref]0)
+  $utf8 = New-Object Text.UTF8Encoding $false
+  [IO.File]::WriteAllText("$Out\word-toc.paragraphs.txt", (($texts | ForEach-Object { "$_`n" }) -join ''), $utf8)
+  [IO.File]::WriteAllText("$Out\word-toc.fields.txt", (($codes | ForEach-Object { "$_`n" }) -join ''), $utf8)
   }
 
   if ($CopyTable) {

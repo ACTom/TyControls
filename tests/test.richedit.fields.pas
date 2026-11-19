@@ -42,6 +42,7 @@ type
     procedure TestAResultThatShowsNothingStaysOneObject;
     procedure TestALargeFieldIsDecidedAlikeWhereverAParseBegins;
     procedure TestAFieldsGroupIsReadOnceToDecideIt;
+    procedure TestWordsOwnTableOfContents;
     // writing
     procedure TestTheSlotFontsAroundAFieldHoldAfterAnEdit;
     procedure TestAnEditOutsideAFieldKeepsItsBytes;
@@ -2241,6 +2242,140 @@ begin
   finally
     d.Free;
   end;
+end;
+
+{ The keyword of a field's instruction (what follows \fldinst, up to its result) for Word's type
+  number of it (word-toc.fields.txt), '' for one this file does not have. }
+function WordFieldName(AType: Integer): string;
+begin
+  case AType of
+    3: Result := 'REF';
+    13: Result := 'TOC';
+    26: Result := 'NUMPAGES';
+    33: Result := 'PAGE';
+    37: Result := 'PAGEREF';
+    88: Result := 'HYPERLINK';
+  else
+    Result := '';
+  end;
+end;
+
+{ A table of contents saved by Word itself (word-toc.rtf, Word 16): its 42 entries each a
+  paragraph - a link holding the entry's text, a tab and a page number field -, the headings
+  after it, three links in one paragraph, a REF, a table with a link, PAGE and NUMPAGES in its
+  cells. Every paragraph's visible text is Word's own (word-toc.paragraphs.txt: Word counts a
+  table row's end as a paragraph of its own, an empty line; the control does not - the cells
+  are its paragraphs); every one of the 92 fields is shown (none is in a table but in one
+  paragraph of a cell, none holds a section break), its marks pair, its instruction is Word's
+  and the text between its marks is Word's result (word-toc.fields.txt). Lazily and whole
+  alike, saved as read; an edit before the contents, in the paragraph after it and in the
+  links' paragraph keeps every field's bytes and reads back the same; inside the contents
+  nothing changes. }
+procedure TTyRichFieldsTest.TestWordsOwnTableOfContents;
+var
+  b: TBytes;
+  d: TTyRichDocument;
+  lines, codes: TStringList;
+  k, j, i, n, typ, last: Integer;
+  runs: TTyRunArray;
+  m: TTyRichFieldMark;
+  p, z: TTyRichPos;
+  t, w, g, instr: RawByteString;
+  groups: array of RawByteString;
+  c0, c1: TTyRichCell;
+begin
+  b := Fixture('word-toc.rtf');
+  lines := TStringList.Create;
+  codes := TStringList.Create;
+  groups := nil;
+  d := LoadDoc(b, True);
+  try
+    lines.LoadFromFile(FixtureDir + 'word-toc.paragraphs.txt');
+    codes.LoadFromFile(FixtureDir + 'word-toc.fields.txt');
+    AssertEquals('Word''s paragraphs', 137, lines.Count);
+    AssertEquals('Word''s fields', 92, codes.Count);
+    // the visible text, paragraph by paragraph
+    j := 0;
+    for k := 0 to d.Text.ParaCount - 1 do
+    begin
+      if k > 0 then
+      begin
+        c0 := d.CellAt(k - 1);
+        c1 := d.CellAt(k);
+        if (c0 <> nil) and ((c1 = nil) or (c1.Row <> c0.Row)) then
+        begin
+          AssertEquals(Format('Word''s row end before paragraph %d', [k]), '', lines[j]);
+          Inc(j);
+        end;
+      end;
+      AssertRaw(Self, Format('paragraph %d (Word''s %d)', [k, j + 1]), U(lines[j]),
+        WithoutObjects(ParaText(d, k)));
+      Inc(j);
+    end;
+    AssertEquals('every paragraph of Word''s', lines.Count, j);
+    // the fields, in order: shown, paired, Word's instruction and result
+    n := 0;
+    for k := 0 to d.Text.ParaCount - 1 do
+    begin
+      runs := d.RunsOf(k);
+      for i := 0 to High(runs) do
+        if (runs[i].Obj is TTyRichOpaque) and (Pos(Rtf('|field'), TTyRichOpaque(runs[i].Obj).Bytes) > 0) then
+          Fail(Format('paragraph %d: a field kept as one object', [k]))
+        else if IsOpenMark(runs[i].Obj) then
+        begin
+          AssertTrue(Format('field %d: one of Word''s', [n]), n < codes.Count);
+          m := TTyRichFieldMark(runs[i].Obj);
+          p := d.Text.ParaStart(k) + runs[i].Start;
+          z := d.FieldPartner(p);
+          AssertTrue(Format('field %d: its close mark', [n]), IsCloseMark(d.ObjectAt(z)));
+          AssertEquals(Format('field %d: and back', [n]), p, d.FieldPartner(z));
+          w := codes[n];
+          typ := StrToInt(Copy(w, 1, Pos(#9, w) - 1));
+          Delete(w, 1, Pos(#9, w));
+          Delete(w, 1, Pos(#9, w));
+          g := m.Bytes;
+          instr := Copy(g, Pos('fldinst', g), MaxInt);
+          instr := Copy(instr, 1, Pos('fldrslt', instr));
+          AssertTrue(Format('field %d: its instruction is Word''s %s', [n, WordFieldName(typ)]),
+            (WordFieldName(typ) <> '') and (Pos(' ' + WordFieldName(typ) + ' ', instr) > 0));
+          t := WithoutObjects(d.Text.GetText(p + 1, z - p - 1));
+          t := StringReplace(t, #13#10, '<P>', [rfReplaceAll]);
+          t := StringReplace(t, #13, '<P>', [rfReplaceAll]);
+          t := StringReplace(t, #10, '<P>', [rfReplaceAll]);
+          AssertRaw(Self, Format('field %d: Word''s result', [n]), U(w), t);
+          SetLength(groups, n + 1);
+          groups[n] := g;
+          Inc(n);
+        end;
+    end;
+    AssertEquals('every field shown', codes.Count, n);
+    CheckDepths(Self, 'Word''s contents', d);
+    // inside the contents: nothing changes
+    p := d.Text.ParaStart(10) + 3;
+    AssertTrue('inside an entry', d.FieldDepthAt(p) >= 1);
+    AssertTrue('a field''s result', d.ChangeRefusal(p, 0) = rcrField);
+    AssertFalse('a key refused', d.Execute(TTyRichInsertText.Create(p, 'Q')));
+    // the paragraph after the contents (its close mark first), and the links' one
+    last := -1;
+    for k := 0 to d.Text.ParaCount - 1 do
+      if Pos('[][][]', ObjectsOf(d, k)) > 0 then last := k;
+    AssertTrue('the links'' paragraph', last > 43);
+    k := 43;
+    AssertEquals('the contents close in the paragraph after them', ']', Copy(ObjectsOf(d, k), 1, 1));
+    p := d.Text.ParaStart(k) + d.Text.ParaLength(k);
+    z := d.Text.ParaStart(last);
+  finally
+    d.Free;
+    codes.Free;
+    lines.Free;
+  end;
+  CheckRoundTrip(Self, 'Word''s contents', b);
+  CheckLazyIsWhole(Self, 'Word''s contents', b, 1, True);
+  CheckEditKeeps(Self, 'Word''s contents, typed before them', b, TTyRichInsertText.Create(0, 'Q'), groups);
+  CheckEditKeeps(Self, 'Word''s contents, typed in the paragraph after them', b,
+    TTyRichInsertText.Create(p, 'Q'), groups);
+  CheckEditKeeps(Self, 'Word''s contents, typed in the links'' paragraph', b,
+    TTyRichInsertText.Create(z, 'Q'), groups);
 end;
 
 initialization
