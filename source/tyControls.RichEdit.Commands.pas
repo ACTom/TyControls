@@ -659,19 +659,11 @@ end;
 
 function TTyRichTableCommand.MemSize: Int64;
 var
-  i, r: Integer;
-  t: TTyRichTable;
+  i: Integer;
 begin
+  // its records (the old values and tables they keep), and the table it keeps for a redo
   Result := inherited MemSize + Length(FTables) * SizeOf(Pointer);
-  for i := 0 to High(FTables) do
-  begin
-    t := FTables[i];
-    Inc(Result, t.InstanceSize + t.ColBoundaryCount * SizeOf(Integer));
-    for r := 0 to t.RowCount - 1 do
-      Inc(Result, t.Rows[r].InstanceSize + Length(t.Rows[r].RawFormat) +
-        t.Rows[r].BoundaryCount * SizeOf(Integer) +
-        t.Rows[r].CellCount * (TTyRichCell.InstanceSize + SizeOf(Pointer)));
-  end;
+  for i := 0 to High(FTables) do Inc(Result, FTables[i].MemSize);
 end;
 
 constructor TTyRichInsertTable.Create(APos: TTyRichPos; ARows, ACols: Integer; AWidth: Integer);

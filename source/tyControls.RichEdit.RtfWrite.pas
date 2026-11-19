@@ -1851,23 +1851,15 @@ procedure TRtfWriter.WriteRowDef(ARow: TTyRichRow);
 var
   def: RawByteString;
   s: string;
-  i, n, edge: Integer;
+  i: Integer;
+  edges: TTyRichEdges;
 begin
   def := ARow.RawFormat;
   if def = '' then
   begin
     s := '\trowd\trgaph108';
-    edge := 0;
-    n := ARow.CellCount;
-    for i := 0 to n - 1 do
-    begin
-      if i < ARow.BoundaryCount then edge := ARow.Boundaries[i]
-      else if (ARow.BoundaryCount = 0) and (i < ARow.Table.ColBoundaryCount) then
-        edge := ARow.Table.ColBoundaries[i]
-      else
-        Inc(edge, 1440);
-      s := s + '\cellx' + IntToStr(edge);
-    end;
+    edges := ARow.CellEdges;
+    for i := 0 to High(edges) do s := s + '\cellx' + IntToStr(edges[i]);
     def := s;
     SetCodePage(def, CP_NONE, False);
   end

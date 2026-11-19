@@ -60,6 +60,25 @@ type
     procedure TestChineseTextSurvivesEveryEdit;
     procedure TestTheReadersForAView;
     procedure TestWrittenTablesOpenInWindowsRichEdit;
+    // the row below a row, and what a row edit leaves laid out
+    procedure TestTheNewLastRowAfterAPlainDeleteClosesTheTable;
+    procedure TestTheRowBelowIsTheNextRowThatHasParagraphs;
+    procedure TestTheLayoutFollowsARowEditAfterAPlainDelete;
+    // costs and what a step keeps
+    procedure TestEditsAreLinearInTheTable;
+    procedure TestATableStepCountsWhatItKeeps;
+    procedure TestASourceOnlyWhereAFileIs;
+    procedure TestTableEditsLetGoOfEveryValue;
+    procedure TestTheTableCommandCountsItsTable;
+    // formats
+    procedure TestAColumnOfARowFormatThatCannotBeSplit;
+    procedure TestTheParagraphBetweenTwoTablesIsNoListItem;
+    procedure TestANewRowDoesNotRepeatTheRowNumbering;
+    procedure TestNarrowCellsGetASmallerGap;
+    // the paths left
+    procedure TestANeighbourPartWithNoUnreadParagraphIsNotWhole;
+    procedure TestALoadersRangeWithAParagraphOutsideATable;
+    procedure TestARowWithTheTablesEdges;
   end;
 
 implementation
@@ -104,6 +123,17 @@ end;
 function SameBytes(const A, B: TBytes): Boolean;
 begin
   Result := (Length(A) = Length(B)) and ((Length(A) = 0) or CompareMem(@A[0], @B[0], Length(A)));
+end;
+
+// The bytes as text for a message (a code page of no text would show as nothing).
+function Txt(const R: RawByteString): string;
+var
+  s: RawByteString;
+begin
+  s := R;
+  UniqueString(s);
+  SetCodePage(s, CP_UTF8, False);
+  Result := s;
 end;
 
 function SameRaw(const A, B: RawByteString): Boolean;
@@ -306,28 +336,40 @@ end;
 procedure CheckClean(const AMsg: string; ADoc: TTyRichDocument; APara: Integer);
 var
   info: TTyRichTableInfo;
-  r, c, f, l: Integer;
+  r, k, e, ci: Integer;
   t: TTyRichTable;
-  cell: TTyRichCell;
+  row: TTyRichRow;
+  seen: array of Boolean;
 begin
   TAssert.AssertEquals(AMsg + ': the text''s integrity', '', ADoc.Text.CheckIntegrity);
   if not ADoc.TableInfoAt(APara, info) then Exit;
+  // (one walk of the table's paragraphs, by the cells themselves)
   ADoc.BeginRead;
   try
     t := ADoc.TableAt(APara);
     TAssert.AssertEquals(AMsg + ': the table object''s rows are those with paragraphs',
       info.RowCount, t.RowCount);
-    for r := 0 to info.RowCount - 1 do
+    k := info.First;
+    r := 0;
+    while k <= info.Last do
     begin
-      TAssert.AssertTrue(AMsg + Format(': row %d has its first cell', [r]),
-        ADoc.TableCellParas(APara, r, 0, f, l));
-      cell := ADoc.CellAt(f);
+      row := ADoc.CellAt(k).Row;
       TAssert.AssertTrue(AMsg + Format(': row %d is the table''s row %d', [r, r]),
-        (cell.Table = t) and (cell.Row.Index = r));
-      for c := 0 to cell.Row.CellCount - 1 do
-        TAssert.AssertTrue(AMsg + Format(': cell %d, %d has a paragraph', [r, c]),
-          ADoc.TableCellParas(APara, r, c, f, l));
+        (row.Table = t) and (row.Index = r));
+      seen := nil;
+      SetLength(seen, row.CellCount);
+      e := k;
+      while (e <= info.Last) and (ADoc.CellAt(e).Row = row) do
+      begin
+        seen[ADoc.CellAt(e).Index] := True;
+        Inc(e);
+      end;
+      for ci := 0 to High(seen) do
+        TAssert.AssertTrue(AMsg + Format(': cell %d, %d has a paragraph', [r, ci]), seen[ci]);
+      k := e;
+      Inc(r);
     end;
+    TAssert.AssertEquals(AMsg + ': rows', info.RowCount, r);
   finally
     ADoc.EndRead;
   end;
@@ -1077,7 +1119,7 @@ begin
   try
     k := FirstTablePara(d);
     oldRaw := d.CellAt(k).Row.RawFormat;
-    AssertTrue('Word''s row splits', TyRtfSplitRowFormat(oldRaw, 3, rowWords, cells));
+    AssertTrue('WordPad''s row splits', TyRtfSplitRowFormat(oldRaw, 3, rowWords, cells));
     AssertTrue('it has cell borders', Pos('\clbrdrl\brdrw10\brdrs', cells[1]) = 1);
     AssertTrue('and row borders', Pos('\trbrdrl\brdrs\brdrw10 ', rowWords) > 0);
     AssertTrue('insert column', Exec(d, TTyRichInsertColumn.Create(TablePos(d), 1)));
@@ -1144,6 +1186,21 @@ begin
   AssertFalse('no \trowd', TyRtfSplitRowFormat('\cellx100', 1, rowWords, cells));
   AssertTrue('line breaks between words', TyRtfSplitRowFormat('\trowd' + #13#10 + '\cellx100', 1,
     rowWords, cells));
+  // a diagonal's line words are its cell's
+  AssertTrue('a diagonal', TyRtfSplitRowFormat('\trowd\cldglu\brdrs\brdrw10 \cellx1000', 1,
+    rowWords, cells));
+  AssertEquals('the diagonal and its line', '\cldglu\brdrs\brdrw10 ', cells[0]);
+  AssertEquals('nothing of it the row''s', '\trowd', rowWords);
+  AssertTrue('the other diagonal', TyRtfSplitRowFormat('\trowd\trgaph108\cldgll\brdrdb\brdrcf2' +
+    '\clbrdrt\brdrs\cellx1000', 1, rowWords, cells));
+  AssertEquals('its line words', '\cldgll\brdrdb\brdrcf2\clbrdrt\brdrs', cells[0]);
+  // the numbering words of Word's rows go, and only they
+  AssertEquals('numbering left out', '\trowd \ltrrow\trgaph108\cellx1000',
+    Txt(TyRtfRowFormatUnnumbered('\trowd \irow3\irowband3\ltrrow\lastrow\trgaph108\cellx1000')));
+  AssertEquals('a word that only starts the same stays', '\trowd\irowx\cellx1',
+    Txt(TyRtfRowFormatUnnumbered('\trowd\irowx\cellx1')));
+  AssertEquals('inside a group it stays', '\trowd{\*\x\irow2}\cellx1',
+    Txt(TyRtfRowFormatUnnumbered('\trowd{\*\x\irow2}\cellx1')));
   // the grid looks as a row with no format of its own
   disp := TyRtfRowDisplay(TyRtfGridRowFormat([1000, 2500]));
   grid := TyDefaultRowDisplay(2);
@@ -1950,6 +2007,635 @@ begin
   Ignore('needs the system''s RichEdit (msftedit.dll): Windows only');
 end;
 {$ENDIF}
+
+{ ---- the row below a row, and what a row edit leaves laid out ---- }
+
+type
+  TTyIntArrayT = array of Integer;
+
+// RowBoxes with the row's height.
+function RowLook(ALayouter: TTyRichLayouter; ADoc: TTyRichDocument; APara: Integer): string;
+var
+  b: TTyBlockLayout;
+begin
+  b := ALayouter.LayoutBlock(ADoc, APara, 600, 96, 1.0);
+  try
+    Result := RowBoxes(ALayouter, ADoc, APara) + Format(' h%d', [b.Height]);
+  finally
+    b.Release;
+  end;
+end;
+
+// The first paragraph of each row of the table paragraph APara is in.
+function RowFirsts(ADoc: TTyRichDocument; APara: Integer): TTyIntArrayT;
+var
+  info: TTyRichTableInfo;
+  r, f, l: Integer;
+begin
+  Result := nil;
+  if not ADoc.TableInfoAt(APara, info) then Exit;
+  SetLength(Result, info.RowCount);
+  for r := 0 to info.RowCount - 1 do
+  begin
+    ADoc.TableInfoAt(info.First, info);
+    ADoc.TableCellParas(info.First, r, 0, f, l);
+    if f < 0 then
+    begin
+      // (a row whose first cell has no paragraph: its first paragraph is another cell's)
+      f := info.First;
+    end;
+    Result[r] := f;
+  end;
+end;
+
+// Plain delete of row ARow's paragraphs (the table object keeps the row).
+procedure PlainDeleteRow(ADoc: TTyRichDocument; ATablePara, ARow: Integer);
+var
+  info: TTyRichTableInfo;
+  f, l: Integer;
+begin
+  ADoc.TableCellParas(ATablePara, ARow, 0, f, l);
+  ADoc.TableInfoAt(f, info);
+  if not ADoc.Execute(TTyRichDelete.Create(ADoc.Text.ParaStart(info.RowFirst),
+    ADoc.Text.ParaStart(info.RowLast + 1) - ADoc.Text.ParaStart(info.RowFirst))) then
+    raise Exception.Create('the rows refused a plain delete');
+end;
+
+procedure TTyRichTablesTest.TestTheNewLastRowAfterAPlainDeleteClosesTheTable;
+var
+  d, two: TTyRichDocument;
+  lo: TTyRichLayouter;
+begin
+  d := TableDoc(3, 2);
+  two := TableDoc(2, 2);
+  lo := Layouter;
+  try
+    PlainDeleteRow(d, 1, 2);
+    AssertEquals('the object keeps its third row', 3, d.TableAt(1).RowCount);
+    // row 1 is the last now: its bottom line and the height of a last row, as in a table of two
+    AssertEquals('the new last row', RowLook(lo, two, 3), RowLook(lo, d, 3));
+    AssertTrue('its bottom line', Pos('3:1', RowBoxes(lo, d, 3)) > 0);
+  finally
+    lo.Free;
+    two.Free;
+    d.Free;
+  end;
+end;
+
+procedure TTyRichTablesTest.TestTheRowBelowIsTheNextRowThatHasParagraphs;
+const
+  // rows a and b with lines on all sides, row c with a bottom line only: the line between a
+  // row and c is the upper row's to draw
+  Rtf = '{\rtf1\ansi\pard first\par' + #13#10 +
+    '\trowd\clbrdrt\brdrs\clbrdrl\brdrs\clbrdrb\brdrs\clbrdrr\brdrs\cellx2000\pard\intbl a\cell\row' + #13#10 +
+    '\trowd\clbrdrt\brdrs\clbrdrl\brdrs\clbrdrb\brdrs\clbrdrr\brdrs\cellx2000\pard\intbl b\cell\row' + #13#10 +
+    '\trowd\clbrdrb\brdrs\cellx2000\pard\intbl c\cell\row' + #13#10 +
+    '\pard last\par}';
+  RtfTwo = '{\rtf1\ansi\pard first\par' + #13#10 +
+    '\trowd\clbrdrt\brdrs\clbrdrl\brdrs\clbrdrb\brdrs\clbrdrr\brdrs\cellx2000\pard\intbl a\cell\row' + #13#10 +
+    '\trowd\clbrdrb\brdrs\cellx2000\pard\intbl c\cell\row' + #13#10 +
+    '\pard last\par}';
+var
+  d, two: TTyRichDocument;
+  lo: TTyRichLayouter;
+begin
+  d := LoadDoc(BytesOf(Rtf));
+  two := LoadDoc(BytesOf(RtfTwo));
+  lo := Layouter;
+  try
+    AssertFalse('above a row with a top line: no bottom line', Pos('3:', RowBoxes(lo, d, 1)) > 0);
+    PlainDeleteRow(d, 1, 1);
+    lo.Clear;
+    AssertTrue('above the row with none: its bottom line', Pos('3:', RowBoxes(lo, d, 1)) > 0);
+    AssertEquals('as in a table of the two rows', RowLook(lo, two, 1), RowLook(lo, d, 1));
+  finally
+    lo.Free;
+    two.Free;
+    d.Free;
+  end;
+end;
+
+type
+  // forwards a document's changes to a layouter, as the control does
+  TLayoutListener = class
+  public
+    Lo: TTyRichLayouter;
+    procedure Changed(Sender: TObject; const AChange: TTyRichChange);
+  end;
+
+procedure TLayoutListener.Changed(Sender: TObject; const AChange: TTyRichChange);
+begin
+  Lo.DocumentChanged(AChange);
+end;
+
+procedure TTyRichTablesTest.TestTheLayoutFollowsARowEditAfterAPlainDelete;
+var
+  n: Integer;
+  d: TTyRichDocument;
+  lo, fresh: TTyRichLayouter;
+  listen: TLayoutListener;
+  msg: string;
+
+  procedure LayAll;
+  var
+    f: TTyIntArrayT;
+    i: Integer;
+  begin
+    f := RowFirsts(d, FirstTablePara(d));
+    for i := 0 to High(f) do RowLook(lo, d, f[i]);
+  end;
+
+  procedure Compare(const AWhen: string);
+  var
+    f: TTyIntArrayT;
+    i: Integer;
+  begin
+    fresh.Clear;
+    f := RowFirsts(d, FirstTablePara(d));
+    for i := 0 to High(f) do
+      AssertEquals(Format('%s, %s: row %d as a new layout has it', [msg, AWhen, i]),
+        RowLook(fresh, d, f[i]), RowLook(lo, d, f[i]));
+    AssertEquals(msg + ': integrity', '', d.Text.CheckIntegrity);
+  end;
+
+begin
+  for n := 0 to 2 do
+  begin
+    case n of
+      0: d := TableDoc(3, 2);
+      1: d := LoadDoc(FixtureBytes('re-zh-table.rtf'));
+    else
+      d := LoadDoc(FixtureBytes('wp-zh-table.rtf'));
+    end;
+    msg := Format('document %d', [n]);
+    lo := Layouter;
+    fresh := Layouter;
+    listen := TLayoutListener.Create;
+    try
+      listen.Lo := lo;
+      d.OnChange := @listen.Changed;
+      LayAll;
+      PlainDeleteRow(d, FirstTablePara(d), Length(RowFirsts(d, FirstTablePara(d))) - 1);
+      Compare('the last row deleted');
+      LayAll;
+      AssertTrue(msg + ': a row', Exec(d, TTyRichInsertRow.Create(TablePos(d), 0)));
+      Compare('a row inserted');
+      LayAll;
+      d.Undo;
+      Compare('undone');
+      LayAll;
+      d.Redo;
+      Compare('redone');
+      LayAll;
+      AssertTrue(msg + ': a row deleted', Exec(d, TTyRichDeleteRow.Create(TablePos(d), 1)));
+      Compare('a row deleted');
+    finally
+      d.OnChange := nil;
+      listen.Free;
+      fresh.Free;
+      lo.Free;
+      d.Free;
+    end;
+  end;
+end;
+
+{ ---- costs and what a step keeps ---- }
+
+procedure TTyRichTablesTest.TestEditsAreLinearInTheTable;
+const
+  Rows = 10000;
+var
+  kind: TTyRichTableEditKind;
+  d: TTyRichDocument;
+  paras: Int64;
+begin
+  for kind := rtkInsertRow to rtkDeleteColumn do
+  begin
+    d := NewDoc('before' + #13#10 + 'after');
+    try
+      AssertTrue('a long table', Exec(d, TTyRichInsertTable.Create(d.Text.ParaStart(1), Rows, 2)));
+      paras := 2 * Rows;
+      d.TableEditSteps := 0;
+      AssertTrue(Format('edit %d', [Ord(kind)]), Exec(d, TableCommand(kind, TablePos(d), 1)));
+      AssertTrue(Format('edit %d: %d steps for %d paragraphs', [Ord(kind), d.TableEditSteps, paras]),
+        d.TableEditSteps <= 6 * paras);
+      AssertTrue(Format('edit %d: steps counted', [Ord(kind)]), d.TableEditSteps >= paras);
+    finally
+      d.Free;
+    end;
+  end;
+end;
+
+procedure TTyRichTablesTest.TestATableStepCountsWhatItKeeps;
+var
+  d: TTyRichDocument;
+  small, large: Int64;
+  i: Integer;
+
+  function StepOf(ARows: Integer): Int64;
+  var
+    doc: TTyRichDocument;
+  begin
+    doc := NewDoc('x');
+    try
+      AssertTrue('a table', Exec(doc, TTyRichInsertTable.Create(0, ARows, 2)));
+      AssertTrue('a row', Exec(doc, TTyRichInsertRow.Create(0, 1)));
+      Result := doc.UndoStep.MemSize;
+    finally
+      doc.Free;
+    end;
+  end;
+
+begin
+  small := StepOf(100);
+  large := StepOf(1000);
+  // every paragraph's old value and the old table object are the step's to keep
+  AssertTrue(Format('a row in 1000 rows: %d bytes, in 100: %d', [large, small]),
+    large - small >= 1800 * 40);
+  // a history bound by its own count
+  d := TTyRichDocument.Create;
+  try
+    AssertTrue('a table', Exec(d, TTyRichInsertTable.Create(0, 1000, 2)));
+    d.MaxUndoBytes := 4 * 1024 * 1024;
+    for i := 1 to 200 do
+      AssertTrue('a row', Exec(d, TTyRichInsertRow.Create(0, 500)));
+    AssertTrue(Format('%d bytes held under %d', [d.HistoryBytes, d.MaxUndoBytes]),
+      d.HistoryBytes <= d.MaxUndoBytes);
+    AssertTrue(Format('the oldest steps went (%d kept)', [d.UndoDepth]),
+      (d.UndoDepth >= 1) and (d.UndoDepth < 200));
+  finally
+    d.Free;
+  end;
+end;
+
+procedure TTyRichTablesTest.TestASourceOnlyWhereAFileIs;
+var
+  d: TTyRichDocument;
+  i, n: Integer;
+begin
+  d := TableDoc(3, 2);
+  try
+    AssertTrue('a row', Exec(d, TTyRichInsertRow.Create(TablePos(d), 1)));
+    for i := 0 to d.Text.ParaCount - 1 do
+      AssertTrue(Format('a document made here: paragraph %d has no source', [i]),
+        d.ValueSource(d.Text.ParaData[i]) = nil);
+  finally
+    d.Free;
+  end;
+  d := LoadDoc(FixtureBytes('re-zh-table.rtf'));
+  try
+    AssertTrue('a row', Exec(d, TTyRichInsertRow.Create(TablePos(d), 1)));
+    n := 0;
+    for i := 0 to d.Text.ParaCount - 1 do
+      if d.ValueSource(d.Text.ParaData[i]) <> nil then Inc(n);
+    AssertEquals('a file''s rows: each of their paragraphs has one', 9, n);
+  finally
+    d.Free;
+  end;
+end;
+
+procedure TTyRichTablesTest.TestTableEditsLetGoOfEveryValue;
+var
+  d: TTyRichDocument;
+  before, loaded: Int64;
+  i: Integer;
+begin
+  before := TyRichLiveParaValues;
+  d := LoadDoc(FixtureBytes('re-zh-table.rtf'));
+  try
+    for i := 1 to 50 do
+      AssertTrue('a row', Exec(d, TTyRichInsertRow.Create(TablePos(d), 1)));
+    d.ClearUndo;
+  finally
+    d.Free;
+  end;
+  AssertEquals('every value went with the document', before, TyRichLiveParaValues);
+  d := LoadDoc(FixtureBytes('re-zh-table.rtf'));
+  try
+    Dump(d);
+    loaded := TyRichLiveParaValues;
+    for i := 1 to 50 do
+      AssertTrue('a row', Exec(d, TTyRichInsertRow.Create(TablePos(d), 1)));
+    for i := 1 to 50 do d.Undo;
+    d.ClearUndo;
+    Dump(d);
+    AssertEquals('undone and the history cleared: the values of the file again', loaded,
+      TyRichLiveParaValues);
+  finally
+    d.Free;
+  end;
+  AssertEquals('and none left', before, TyRichLiveParaValues);
+end;
+
+procedure TTyRichTablesTest.TestTheTableCommandCountsItsTable;
+var
+  small, large: Int64;
+
+  function StepOf(ARows: Integer): Int64;
+  var
+    d: TTyRichDocument;
+  begin
+    d := NewDoc('x');
+    try
+      AssertTrue('a table', Exec(d, TTyRichInsertTable.Create(0, ARows, 1)));
+      Result := d.UndoStep.MemSize;
+    finally
+      d.Free;
+    end;
+  end;
+
+begin
+  // an insert of a table keeps no old value: what grows is the table it keeps for a redo
+  small := StepOf(2);
+  large := StepOf(202);
+  AssertTrue(Format('200 rows more: %d bytes more', [large - small]),
+    large - small >= 200 * (TTyRichRow.InstanceSize + TTyRichCell.InstanceSize));
+end;
+
+{ ---- formats ---- }
+
+procedure TTyRichTablesTest.TestAColumnOfARowFormatThatCannotBeSplit;
+var
+  d: TTyRichDocument;
+  t: TTyRichTable;
+begin
+  d := LoadDoc(BytesOf('{\rtf1\ansi\pard first\par' + #13#10 +
+    '\trowd\trleft500{\*\x}\cellx1000\cellx2000\pard\intbl a\cell b\cell\row' + #13#10 +
+    '\pard last\par}'));
+  try
+    AssertTrue('a column', Exec(d, TTyRichInsertColumn.Create(TablePos(d), 1)));
+    t := d.TableAt(1);
+    // cell 0 is 500 wide (from \trleft500): the new one too, the next edge moved by that
+    AssertEquals('the edges', '1000,1500,2500', RowEdgesOf(t.Rows[0]));
+    AssertTrue('the plain grid of the new edges', SameRaw(TyRtfGridRowFormat([1000, 1500, 2500]),
+      t.Rows[0].RawFormat));
+    CheckReadBack('a format that cannot be split', d);
+  finally
+    d.Free;
+  end;
+end;
+
+procedure TTyRichTablesTest.TestTheParagraphBetweenTwoTablesIsNoListItem;
+var
+  d: TTyRichDocument;
+  p, got: TTyParaFormat;
+  k: Integer;
+begin
+  d := NewDoc('item');
+  try
+    p := TyDefaultParaFormat;
+    p.List.Kind := lkBullet;
+    p.LeftIndent := 720;
+    p.FirstIndent := -360;
+    AssertTrue('a bullet item', Exec(d, TTyRichSetParaFormat.Create(0, 0, [pffList, pffLeftIndent,
+      pffFirstIndent], p)));
+    AssertTrue('a table before it', Exec(d, TTyRichInsertTable.Create(0, 1, 1)));
+    k := d.Text.ParaCount - 1;
+    AssertTrue('the item follows the table', d.CellAt(k) = nil);
+    AssertTrue('a table at the item''s start', Exec(d, TTyRichInsertTable.Create(d.Text.ParaStart(k),
+      1, 1)));
+    AssertTrue('a paragraph between', d.CellAt(1) = nil);
+    got := d.Formats.ParaFormat(d.ParaFormatOf(1));
+    AssertTrue('it is no list item', got.List.Kind = lkNone);
+    AssertEquals('no indent', 0, got.LeftIndent);
+    AssertEquals('no first indent', 0, got.FirstIndent);
+    got := d.Formats.ParaFormat(d.ParaFormatOf(d.Text.ParaCount - 1));
+    AssertTrue('the item after the tables is one still', got.List.Kind = lkBullet);
+  finally
+    d.Free;
+  end;
+end;
+
+procedure TTyRichTablesTest.TestANewRowDoesNotRepeatTheRowNumbering;
+const
+  R0 = '\trowd \irow0\irowband0\ltrrow\trgaph108\trleft-108\clbrdrt\brdrs\brdrw10 \cellx2000';
+  R1 = '\trowd \irow1\irowband1\lastrow \ltrrow\trgaph108\trleft-108\clbrdrt\brdrs\brdrw10 \cellx2000';
+var
+  b: TBytes;
+  d: TTyRichDocument;
+  t: TTyRichTable;
+  info: TTyRtfWriteInfo;
+  o: RawByteString;
+begin
+  b := BytesOf('{\rtf1\ansi\pard first\par' + #13#10 + R0 + #13#10 + '\pard\intbl a\cell\row' +
+    #13#10 + R1 + #13#10 + '\pard\intbl b\cell\row' + #13#10 + '\pard last\par}');
+  d := LoadDoc(b);
+  try
+    AssertTrue('a row above', Exec(d, TTyRichInsertRow.Create(TablePos(d), 0)));
+    AssertTrue('a row below', Exec(d, TTyRichInsertRow.Create(TablePos(d), 3)));
+    t := d.TableAt(1);
+    AssertEquals('rows', 4, t.RowCount);
+    AssertEquals('the new first row: the format of the row below it, not its number',
+      '\trowd \ltrrow\trgaph108\trleft-108\clbrdrt\brdrs\brdrw10 \cellx2000', Txt(t.Rows[0].RawFormat));
+    AssertEquals('the new last row: the format of the row above it, not its number',
+      '\trowd \ltrrow\trgaph108\trleft-108\clbrdrt\brdrs\brdrw10 \cellx2000', Txt(t.Rows[3].RawFormat));
+    AssertTrue('the rows of the file keep their format', SameRaw(R0, t.Rows[1].RawFormat) and
+      SameRaw(R1, t.Rows[2].RawFormat));
+    o := StrOf(SaveBytes(d, info));
+    AssertEquals('only the new rows written from the model', 2, info.RewrittenParas);
+    AssertTrue('the file''s first row as its bytes', Pos(R0 + #13#10 + '\pard\intbl a\cell\row', o) > 0);
+    AssertTrue('the file''s last row as its bytes', Pos(R1 + #13#10 + '\pard\intbl b\cell\row', o) > 0);
+    CheckReadBack('rows beside numbered ones', d);
+  finally
+    d.Free;
+  end;
+end;
+
+procedure TTyRichTablesTest.TestNarrowCellsGetASmallerGap;
+var
+  d, back, two: TTyRichDocument;
+  t: TTyRichTable;
+  raw: RawByteString;
+  lo: TTyRichLayouter;
+  b: TTyBlockLayout;
+  row: TTyRowLayout;
+  i, gapPx: Integer;
+begin
+  d := NewDoc('x');
+  lo := Layouter;
+  try
+    // A4 less the margins: 8306 twips, 63 cells of 131 or 132
+    AssertEquals('the text width', 8306, d.TextWidthTwips);
+    AssertTrue('63 columns', Exec(d, TTyRichInsertTable.Create(0, 2, 63)));
+    t := d.TableAt(0);
+    raw := t.Rows[0].RawFormat;
+    // the largest g with 2g + 20 <= 131
+    AssertEquals('the half gap', 1, Pos('\trowd\trgaph55\clbrdrt', raw));
+    AssertTrue('the grid of these edges', SameRaw(TyRtfGridRowFormat(t.Rows[0].CellEdges), raw));
+    gapPx := TyRichTwipsToPx(55, 96, 1.0);
+    b := lo.LayoutBlock(d, 0, 600, 96, 1.0);
+    try
+      row := TTyRowLayout(b);
+      for i := 0 to row.CellCount - 1 do
+        AssertTrue(Format('cell %d: room for text', [i]),
+          row.Cells[i].Right - row.Cells[i].Left - 2 * gapPx >= 0);
+    finally
+      b.Release;
+    end;
+    back := LoadDoc(SaveBytes(d));
+    try
+      AssertTrue('read back: the format', SameRaw(raw, back.CellAt(FirstTablePara(back)).Row.RawFormat));
+      AssertEquals('read back: the boxes', RowBoxes(lo, d, 0), RowBoxes(lo, back, FirstTablePara(back)));
+    finally
+      back.Free;
+    end;
+    // a column less: the grid made again for the new edges
+    AssertTrue('a column less', Exec(d, TTyRichDeleteColumn.Create(0, 0)));
+    t := d.TableAt(0);
+    AssertTrue('the grid of the new edges', SameRaw(TyRtfGridRowFormat(t.Rows[0].CellEdges),
+      t.Rows[0].RawFormat));
+    // a grid made here follows its narrowest cell through a column edit; a file's own format
+    // keeps its gap
+    two := LoadDoc(BytesOf('{\rtf1\ansi\pard first\par' + #13#10 + Txt(TyRtfGridRowFormat([1000, 1150])) +
+      '\pard\intbl a\cell b\cell\row' + #13#10 + '\trowd\trgaph65\cellx1000\cellx1150' +
+      '\pard\intbl c\cell d\cell\row' + #13#10 + '\pard last\par}'));
+    try
+      AssertEquals('a cell of 150 twips: a gap of 65', '\trowd\trgaph65\clbrdrt',
+        Copy(Txt(two.TableAt(1).Rows[0].RawFormat), 1, 23));
+      AssertTrue('the narrow column goes', Exec(two, TTyRichDeleteColumn.Create(two.Text.ParaStart(1), 1)));
+      AssertTrue('the grid: Word''s gap again', SameRaw(TyRtfGridRowFormat([1000]),
+        two.TableAt(1).Rows[0].RawFormat));
+      AssertEquals('the file''s own format: its gap as it was', '\trowd\trgaph65\cellx1000',
+        Txt(two.TableAt(1).Rows[1].RawFormat));
+    finally
+      two.Free;
+    end;
+    // wide cells keep Word's gap
+    AssertEquals('wide cells', 1, Pos('\trowd\trgaph108\', TyRtfGridRowFormat([1000, 2000])));
+    AssertEquals('a cell of 236 twips', 1, Pos('\trowd\trgaph108\', TyRtfGridRowFormat([236])));
+    AssertEquals('a cell of 235 twips', 1, Pos('\trowd\trgaph107\', TyRtfGridRowFormat([235])));
+    AssertEquals('a cell narrower than its lines', 1, Pos('\trowd\trgaph0\', TyRtfGridRowFormat([10])));
+  finally
+    lo.Free;
+    d.Free;
+  end;
+end;
+
+{ ---- the paths left ---- }
+
+procedure TTyRichTablesTest.TestANeighbourPartWithNoUnreadParagraphIsNotWhole;
+var
+  d: TTyRichDocument;
+  k, f, l, f2, l2: Integer;
+  cmd: TTyRichReplaceAllCommand;
+  before: RawByteString;
+  tally: TTyRichReplaceTally;
+begin
+  d := LoadDoc(TablesRtf(1000, 3 shl 20));
+  try
+    k := CutPara(d);
+    AssertTrue('a cut table', k >= 0);
+    d.TableParas(k, f, l);
+    // the part next to it
+    if (l + 1 < d.Text.ParaCount) and (d.CellAt(l + 1) <> nil) and d.TableAt(l + 1).Cut then
+      d.TableParas(l + 1, f2, l2)
+    else
+    begin
+      AssertTrue('a part before it', (f > 0) and (d.CellAt(f - 1) <> nil) and d.TableAt(f - 1).Cut);
+      d.TableParas(f - 1, f2, l2);
+    end;
+    AssertTrue('editable while the parts are unread', Refusal(d, rtkInsertRow, d.Text.ParaStart(k), 0) = rtrNone);
+    // every paragraph of that part edited: none of it says any more whose bytes it is
+    tally := Default(TTyRichReplaceTally);
+    cmd := TTyRichReplaceAllCommand.Create(d, ' ', '_', [], d.Text.ParaStart(f2),
+      d.Text.ParaStart(l2) + d.Text.ParaLength(l2) - d.Text.ParaStart(f2));
+    cmd.AllAtOnce := True;
+    cmd.Tally := @tally;
+    AssertTrue('the part edited', d.Execute(cmd));
+    AssertTrue('every paragraph of it', tally.Replaced >= l2 - f2 + 1);
+    // (a document that parses on demand makes its objects again when it reads again: what
+    // is compared is what a save writes)
+    before := StrOf(SaveBytes(d));
+    AssertTrue('refused: not whole', Refusal(d, rtkInsertRow, d.Text.ParaStart(k), 0) = rtrNotWhole);
+    AssertTrue('refused from the edited part too', Refusal(d, rtkDeleteRow, d.Text.ParaStart(f2), 0) = rtrNotWhole);
+    AssertFalse('not executed', Exec(d, TTyRichInsertRow.Create(d.Text.ParaStart(k), 0)));
+    AssertTrue('nothing changed', SameRaw(before, StrOf(SaveBytes(d))));
+  finally
+    d.Free;
+  end;
+end;
+
+type
+  // gives a cut table "whole" as a range that reaches past it
+  TReachingLoader = class(TTyRichParaLoader)
+  public
+    procedure LoadParagraph(ADoc: TTyRichDocument; AIndex: Integer); override;
+    function WholeTable(ADoc: TTyRichDocument; AIndex: Integer;
+      out AFirst, ALast: Integer): Boolean; override;
+  end;
+
+  TTableDocAccess = class(TTyRichDocument)
+  public
+    procedure Mark(AFirstPara: Integer; ATable: TTyRichTable; const ACellParas: array of Integer);
+  end;
+
+procedure TReachingLoader.LoadParagraph(ADoc: TTyRichDocument; AIndex: Integer);
+begin
+end;
+
+function TReachingLoader.WholeTable(ADoc: TTyRichDocument; AIndex: Integer;
+  out AFirst, ALast: Integer): Boolean;
+begin
+  AFirst := 0;
+  ALast := ADoc.Text.ParaCount - 1;
+  Result := True;
+end;
+
+procedure TTableDocAccess.Mark(AFirstPara: Integer; ATable: TTyRichTable;
+  const ACellParas: array of Integer);
+var
+  u: TTyRichUndoData;
+begin
+  u := MarkTable(AFirstPara, ATable, ACellParas);
+  u.Free;
+end;
+
+procedure TTyRichTablesTest.TestALoadersRangeWithAParagraphOutsideATable;
+var
+  d: TTyRichDocument;
+  t: TTyRichTable;
+  before: string;
+begin
+  d := NewDoc('a' + #13#10 + 'b' + #13#10 + 'c' + #13#10 + 'd');
+  try
+    d.InstallLoader(TReachingLoader.Create, True);
+    t := TTyRichTable.Create([1000], False, True);
+    t.AddRow(1);
+    t.AddRow(1);
+    TTableDocAccess(d).Mark(1, t, [1, 1]);
+    AssertTrue('a part', d.TableAt(1).Cut);
+    before := Dump(d);
+    AssertTrue('a range with paragraphs in no table: not whole',
+      Refusal(d, rtkInsertRow, d.Text.ParaStart(1), 0) = rtrNotWhole);
+    AssertFalse('not executed', Exec(d, TTyRichDeleteRow.Create(d.Text.ParaStart(1), 0)));
+    AssertEquals('nothing changed', before, Dump(d));
+  finally
+    d.Free;
+  end;
+end;
+
+procedure TTyRichTablesTest.TestARowWithTheTablesEdges;
+var
+  d: TTyRichDocument;
+  t: TTyRichTable;
+begin
+  d := NewDoc('a' + #13#10 + 'b' + #13#10 + 'c' + #13#10 + 'd' + #13#10 + 'e');
+  try
+    // rows with no edges of their own: the table's
+    t := TTyRichTable.Create([1000, 2500]);
+    t.AddRow(2);
+    t.AddRow(2);
+    TTableDocAccess(d).Mark(0, t, [1, 1, 1, 1]);
+    AssertEquals('no edges of their own', 0, d.TableAt(0).Rows[0].BoundaryCount);
+    AssertTrue('a column at the end', Exec(d, TTyRichInsertColumn.Create(0, 2)));
+    // as wide as the one left of it, 1500
+    AssertEquals('the new edges', '1000,2500,4000', RowEdgesOf(d.TableAt(0).Rows[0]));
+    AssertEquals('every row', '1000,2500,4000', RowEdgesOf(d.TableAt(0).Rows[1]));
+    AssertEquals('the shape', 'a|b|/c|d|', TableShape(d, 0));
+  finally
+    d.Free;
+  end;
+end;
 
 initialization
   RegisterTest(TTyRichTablesTest);

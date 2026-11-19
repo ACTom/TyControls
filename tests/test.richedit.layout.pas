@@ -2177,7 +2177,7 @@ begin
   ld.CharFmt := d.DefaultCharFormatId;
   d.InstallLoader(ld, True);
   R := TTyRowLayout(Block(d, 1001, 1000));
-  AssertEquals('row 500', 500, R.RowIndex);
+  AssertEquals('row 500', 500, d.CellAt(R.FirstPara).Row.Index);
   AssertEquals('from paragraph 1000', 1000, R.FirstPara);
   AssertEquals('to 1001', 1001, R.LastPara);
   AssertTrue(Format('parsed %d paragraphs', [ld.Calls]), ld.Calls <= 4);
@@ -2208,7 +2208,7 @@ begin
   f := FirstCellPara;
   AssertEquals('the table starts at paragraph 1', 1, f);
   R0 := TTyRowLayout(Block(d, f, 1000));
-  AssertEquals('row 0', 0, R0.RowIndex);
+  AssertEquals('row 0', 0, d.CellAt(R0.FirstPara).Row.Index);
   AssertEquals('three cells', 3, R0.CellCount);
   AssertEquals('three paragraphs', 3, R0.ItemCount);
   AssertTrue('the second merged into the first', R0.Cells[1].Hidden);
@@ -2236,18 +2236,18 @@ begin
   AssertEquals('it selects nothing', 0, Length(R0.SelectionRects(R0.Items[hid].Pos,
     R0.Items[hid].Pos + 1)));
   R1 := TTyRowLayout(Block(d, R0.LastPara + 1, 1000));
-  AssertEquals('row 1', 1, R1.RowIndex);
+  AssertEquals('row 1', 1, d.CellAt(R1.FirstPara).Row.Index);
   AssertTrue('a vertical merge''s first cell has its top line', rcsTop in R1.Cells[0].Sides);
   AssertFalse('a row above the last does not close the table', rcsBottom in R1.Cells[1].Sides);
   R2 := TTyRowLayout(Block(d, R1.LastPara + 1, 1000));
-  AssertEquals('row 2', 2, R2.RowIndex);
+  AssertEquals('row 2', 2, d.CellAt(R2.FirstPara).Row.Index);
   AssertFalse('the cell that continues it: no line toward the cell above',
     rcsTop in R2.Cells[0].Sides);
   AssertTrue('its neighbour has one', rcsTop in R2.Cells[1].Sides);
   AssertTrue('the last row closes the table', rcsBottom in R2.Cells[1].Sides);
   AssertTrue('the last cell closes the row', rcsRight in R2.Cells[2].Sides);
   AssertFalse('a cell before it does not', rcsRight in R2.Cells[1].Sides);
-  AssertTrue('a row with a nested table', R2.Table.Rows[R2.RowIndex].HoldsNestedTable);
+  AssertTrue('a row with a nested table', d.CellAt(R2.FirstPara).Row.HoldsNestedTable);
   AssertEquals('its paragraphs stacked in the outer cell', 3, R2.Cells[2].ItemCount);
   k := R2.Cells[2].FirstItem;
   AssertTrue('one below the other', R2.Items[k + 1].Y > R2.Items[k].Y);
@@ -2268,9 +2268,9 @@ begin
   AssertFalse('and continues without one', rcsTop in R2.Cells[0].Sides);
 end;
 
-{ A row read from a document that parses on demand keeps its table: after the interval it
-  came from was sent back to unparsed (and its table let go of by the document), the row,
-  its table and its paragraphs' layouts still answer. Freed memory is poisoned meanwhile. }
+{ A row read from a document that parses on demand keeps what it shows: after the interval it
+  came from was sent back to unparsed (and its table let go of by the document), the row and
+  its paragraphs' layouts still answer. Freed memory is poisoned meanwhile. }
 procedure TTyRichLayoutTest.TestARowInALazyDocumentSurvivesEviction;
 var
   d: TTyRichDocument;
@@ -2293,8 +2293,8 @@ begin
   R := TTyRowLayout(FLayouter.LayoutBlock(d, q, 1000, 96, 1));
   try
     AssertTrue('a row', TTyBlockLayout(R) is TTyRowLayout);
-    rows := R.Table.RowCount;
-    cells := R.Table.Rows[R.RowIndex].CellCount;
+    rows := d.TableAt(q).RowCount;
+    cells := d.CellAt(q).Row.CellCount;
     text0 := R.Items[0].Layout.Text;
     h := R.Height;
     AssertEquals('three by three', 3, rows);
@@ -2304,8 +2304,7 @@ begin
       for i := 3 to 5 do d.EnsureParsed(load.IntervalFirstPara(i) + 1);
       AssertTrue('the row''s paragraph went back to unparsed',
         TBuilderAccess.Value(d, R.FirstPara) = nil);
-      AssertEquals('its table, still', rows, R.Table.RowCount);
-      AssertEquals('its row', cells, R.Table.Rows[R.RowIndex].CellCount);
+      AssertEquals('its cells, still', cells, R.CellCount);
       AssertEquals('its first paragraph', text0, R.Items[0].Layout.Text);
       AssertEquals('its height', h, R.Height);
       AssertEquals('it answers', R.Items[1].Pos, R.PosAtPoint(R.Items[1].X, 3));
@@ -2939,7 +2938,7 @@ begin
   R := TTyRowLayout(Block(d, 1, 1000));
   R := TTyRowLayout(Block(d, R.LastPara + 1, 1000));
   R := TTyRowLayout(Block(d, R.LastPara + 1, 1000));
-  AssertEquals('the last row', 2, R.RowIndex);
+  AssertEquals('the last row', 2, d.CellAt(R.FirstPara).Row.Index);
   bmp := TBGRABitmap.Create(R.Width + 40, R.Height + 20, Sentinel);
   try
     R.Paint(bmp, 20, 10, Rect(0, 0, bmp.Width, bmp.Height), st, 0, 0);
@@ -5062,7 +5061,7 @@ begin
   TDocAccess(d).MarkTable(2, t2, [1, 1]).Free;
   R0 := TTyRowLayout(Block(d, 0, 1000));
   R1 := TTyRowLayout(Block(d, 2, 1000));
-  AssertTrue('two table objects', R0.Table <> R1.Table);
+  AssertTrue('two table objects', d.TableAt(0) <> d.TableAt(2));
   AssertFalse('the upper does not close itself', rcsBottom in R0.Cells[0].Sides);
   AssertTrue('the lower draws the line', rcsTop in R1.Cells[0].Sides);
   AssertTrue('the last row closes the table', rcsBottom in R1.Cells[0].Sides);

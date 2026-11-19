@@ -71,10 +71,17 @@ type
   TTyRtfCellWords = array of RawByteString;
 
 { The format of a row made here (a table edit's new table): Word's plain grid -
-  \trowd\trgaph108, then for each cell a single line 10 twips wide on its four sides and its
-  right edge, AEdges[i] twips. What TyRtfRowDisplay reads of it is TyDefaultRowDisplay's
-  look, and Word, WordPad and RichEdit draw the same lines. }
+  \trowd\trgaphG, then for each cell a single line 10 twips wide on its four sides and its
+  right edge, AEdges[i] twips (the first cell starts at 0). G is Word's 108, or less when a
+  cell is narrower than the two gaps and the two lines: the largest G with 2G + 20 no more
+  than the narrowest cell's width (0 at least) - Word widens a cell to that, and the table
+  would be wider in Word than here. What TyRtfRowDisplay reads of it is TyDefaultRowDisplay's
+  look (with that gap), and Word, WordPad and RichEdit draw the same lines. }
 function TyRtfGridRowFormat(const AEdges: array of Integer): RawByteString;
+{ ARaw without the words that number a row among its table's (\irowN, \irowbandN,
+  \lastrow), every other byte as it is: the format of a row made again beside it. Words
+  inside groups are left. }
+function TyRtfRowFormatUnnumbered(const ARaw: RawByteString): RawByteString;
 { A row's format cut into the row's words and each cell's, so that cells can come and go
   while every word stays with what it belongs to: ARowWords is \trowd with the row's own
   words (\trgaph, \trleft, \trbrdr* and their line words, ...) in their order; ACells[i] the
@@ -303,12 +310,79 @@ end;
 
 function TyRtfGridRowFormat(const AEdges: array of Integer): RawByteString;
 var
-  i: Integer;
+  i, gap, w, prev: Integer;
 begin
-  Result := AsRaw('\trowd\trgaph' + IntToStr(CDefaultHalfGap));
+  gap := CDefaultHalfGap;
+  prev := 0;
+  for i := 0 to High(AEdges) do
+  begin
+    w := AEdges[i] - prev;
+    if 2 * gap + 2 * CDefaultBorder > w then gap := (w - 2 * CDefaultBorder) div 2;
+    prev := AEdges[i];
+  end;
+  if gap < 0 then gap := 0;
+  Result := AsRaw('\trowd\trgaph' + IntToStr(gap));
   for i := 0 to High(AEdges) do
     AddRaw(Result, AsRaw(Format('\clbrdrt\brdrs\brdrw%0:d \clbrdrl\brdrs\brdrw%0:d ' +
       '\clbrdrb\brdrs\brdrw%0:d \clbrdrr\brdrs\brdrw%0:d \cellx%1:d', [CDefaultBorder, AEdges[i]])));
+end;
+
+function TyRtfRowFormatUnnumbered(const ARaw: RawByteString): RawByteString;
+var
+  i, n, depth, start, wordStart: Integer;
+  word: string;
+  param: Int64;
+begin
+  Result := '';
+  n := Length(ARaw);
+  depth := 0;
+  i := 1;
+  start := 1;     // the bytes from here on are not copied yet
+  while i <= n do
+  begin
+    case ARaw[i] of
+      '{': begin Inc(depth); Inc(i); Continue; end;
+      '}': begin if depth > 0 then Dec(depth); Inc(i); Continue; end;
+      '\': ;
+    else
+      begin
+        Inc(i);
+        Continue;
+      end;
+    end;
+    wordStart := i;
+    Inc(i);
+    if (i <= n) and not (ARaw[i] in ['a'..'z', 'A'..'Z']) then
+    begin
+      // a control symbol: \'xx's digits are bytes like any
+      Inc(i);
+      Continue;
+    end;
+    while (i <= n) and (ARaw[i] in ['a'..'z', 'A'..'Z']) do Inc(i);
+    word := Copy(ARaw, wordStart + 1, i - wordStart - 1);
+    if (i <= n) and (ARaw[i] = '-') then Inc(i);
+    param := 0;
+    while (i <= n) and (ARaw[i] in ['0'..'9']) do
+    begin
+      if param < High(Integer) then param := param * 10 + (Ord(ARaw[i]) - Ord('0'));
+      Inc(i);
+    end;
+    if (i <= n) and (ARaw[i] = ' ') then Inc(i);
+    if word = 'bin' then
+    begin
+      // N bytes of data, whatever they are
+      if param > n - i + 1 then param := n - i + 1;
+      Inc(i, Integer(param));
+      Continue;
+    end;
+    if (depth = 0) and ((word = 'irow') or (word = 'irowband') or (word = 'lastrow')) then
+    begin
+      AddRaw(Result, Copy(ARaw, start, wordStart - start));
+      start := i;
+    end;
+  end;
+  AddRaw(Result, Copy(ARaw, start, n - start + 1));
+  SetCodePage(Result, CP_NONE, False);
 end;
 
 function TyRtfSplitRowFormat(const ARaw: RawByteString; ACellCount: Integer;
@@ -372,7 +446,8 @@ begin
     if Copy(word, 1, 2) = 'cl' then
     begin
       // a cell's word; a border of the cell takes the line words after it
-      cellLine := Copy(word, 1, 6) = 'clbrdr';
+      // (a diagonal's line words are the cell's too)
+      cellLine := (Copy(word, 1, 6) = 'clbrdr') or (word = 'cldglu') or (word = 'cldgll');
       AddRaw(cur, Copy(ARaw, wordStart, i - wordStart));
     end
     else if ((Copy(word, 1, 4) = 'brdr') or (word = 'brsp')) and cellLine then

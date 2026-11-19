@@ -708,12 +708,11 @@ type
     the colour table), border styles other than a solid line, row-level borders, the content
     of a vertically merged cell centred over all its rows, dragging column edges.
 
-    The row holds a counted reference to its table (so Table and Table.Rows[RowIndex] stay
-    readable when the document lets the table go) and one to each paragraph's layout. }
+    The row holds a counted reference to each paragraph's layout; what it shows it took from
+    the document while it was built (it keeps no table object: a table edit gives the
+    paragraphs the cells of another object without changing what a row shows). }
   TTyRowLayout = class(TTyBlockLayout)
   private
-    FTable: TTyRichTable;
-    FRowIndex: Integer;
     FDisplay: TTyRowDisplay;
     FCells: array of TTyRichCellBox;
     FItems: array of TTyRichRowItem;
@@ -745,8 +744,6 @@ type
     property Cells[AIndex: Integer]: TTyRichCellBox read GetCell;
     function ItemCount: Integer;
     property Items[AIndex: Integer]: TTyRichRowItem read GetItem;
-    property Table: TTyRichTable read FTable;
-    property RowIndex: Integer read FRowIndex;
     { What the row's format says (TyRtfRowDisplay of its RawFormat; TyDefaultRowDisplay for a
       row with none). }
     property Display: TTyRowDisplay read FDisplay;
@@ -1387,8 +1384,7 @@ function TyRichLayoutWidth(AMode: TTyRichWrapMode; AAvailWidth: Integer;
 begin
   case AMode of
     rwmWindow: Result := Max(1, AAvailWidth);
-    rwmPage: Result := Max(1, TyRichTwipsToPx(Int64(ADoc.PaperWidth) - ADoc.MarginLeft -
-      ADoc.MarginRight, APPI, AZoom));
+    rwmPage: Result := Max(1, TyRichTwipsToPx(ADoc.TextWidthTwips, APPI, AZoom));
   else
     Result := CRichNoWrap;
   end;
@@ -2630,7 +2626,6 @@ var
   i: Integer;
 begin
   for i := 0 to High(FItems) do FItems[i].Layout.Release;
-  if FTable <> nil then FTable.Release;
   inherited Destroy;
 end;
 
@@ -6032,6 +6027,22 @@ begin
   b.Free;
 end;
 
+{ The row below the row whose last paragraph is ALast: the row of the paragraph after it, when
+  that paragraph is in a table - the same table, or the next part of a long table that a
+  document parsed on demand gives as a table object per parsed stretch: one visual table for
+  the layout. A table object's own list of rows is never asked: it may hold rows that have
+  no paragraph any more (a plain delete of whole rows leaves them). Call it inside a read
+  scope (LayoutBlock has read that paragraph already). }
+function NextRowOf(ADoc: TTyRichDocument; ALast: Integer; ARow: TTyRichRow): TTyRichRow;
+var
+  cell: TTyRichCell;
+begin
+  Result := nil;
+  if ALast + 1 >= ADoc.Text.ParaCount then Exit;
+  cell := ADoc.CellAt(ALast + 1);
+  if (cell <> nil) and (cell.Row <> ARow) then Result := cell.Row;
+end;
+
 function TTyRichLayouter.BuildRow(ADoc: TTyRichDocument; AFirst, ALast: Integer;
   ARow: TTyRichRow; AWidth, APPI: Integer; AZoom: Single): TTyRowLayout;
 var
@@ -6096,9 +6107,6 @@ begin
   R := TTyRowLayout.Create(Self);
   try
     tbl := ARow.Table;
-    tbl.AddRef;
-    R.FTable := tbl;
-    R.FRowIndex := ARow.Index;
     R.FFirstPara := AFirst;
     R.FLastPara := ALast;
     R.FLayoutWidth := AWidth;
@@ -6107,17 +6115,7 @@ begin
     nc := Max(1, ARow.CellCount);
     if ARow.RawFormat <> '' then R.FDisplay := TyRtfRowDisplay(ARow.RawFormat)
     else R.FDisplay := TyDefaultRowDisplay(nc);
-    { The row below: the table's next row, or - after the table's last - a row that the next
-      paragraph is in (a long table of a document parsed on demand is a table object per
-      parsed stretch; LayoutBlock has read that paragraph already, in this read scope). }
-    nextRow := nil;
-    if ARow.Index < tbl.RowCount - 1 then
-      nextRow := tbl.Rows[ARow.Index + 1]
-    else if ALast + 1 < ADoc.Text.ParaCount then
-    begin
-      cell := ADoc.CellAt(ALast + 1);
-      if (cell <> nil) and (cell.Row <> ARow) then nextRow := cell.Row;
-    end;
+    nextRow := NextRowOf(ADoc, ALast, ARow);
     lastRow := nextRow = nil;
     haveNext := False;
     // the cells' boxes, left to right
