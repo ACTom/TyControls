@@ -5413,8 +5413,25 @@ begin
         if k <= 0 then Break;
         Inc(got, k);
       end;
+      { All it said it holds: it may hold more than it said (a size it does not know is told
+        as 0 by some streams, a pipe's seek fails) - read on in pieces until it gives nothing,
+        a byte past the limit refused (and nothing more read). }
+      if got = n then
+        repeat
+          if got > CRichPictureMaxBytes then
+          begin
+            ABytes := nil;
+            EditRefused(rsRichEditRefusedPicture);
+            Exit;
+          end;
+          if got = Length(ABytes) then
+            SetLength(ABytes, Math.Min(got + Math.Max(Int64(64 * 1024), got div 2),
+              Int64(CRichPictureMaxBytes) + 1));
+          k := AStream.Read(ABytes[got], Length(ABytes) - got);
+          if k > 0 then Inc(got, k);
+        until k <= 0;
       // (a stream shorter than it said: what it gave)
-      if got < n then SetLength(ABytes, got);
+      SetLength(ABytes, got);
     except
       on EOutOfMemory do
       begin

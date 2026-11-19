@@ -48,6 +48,23 @@ type
   end;
 
   { A stream that says it holds ASize bytes and counts the reads asked of it (it gives none). }
+  { A stream that gives AData, then filler bytes up to ATotal, and answers ASize for its size -
+    or, with ASeekFails, -1 to every seek (a pipe's handle); it counts the bytes it gave. }
+  TLyingStream = class(TStream)
+  private
+    FData: TBytes;
+    FTotal, FPos, FSize: Int64;
+    FSeekFails: Boolean;
+  protected
+    function GetSize: Int64; override;
+  public
+    BytesGiven: Int64;
+    constructor Create(const AData: TBytes; ASize: Int64; ASeekFails: Boolean;
+      ATotal: Int64 = -1);
+    function Read(var Buffer; Count: Longint): Longint; override;
+    function Seek(const Offset: Int64; Origin: TSeekOrigin): Int64; override;
+  end;
+
   TSizedStream = class(TStream)
   private
     FSize: Int64;
@@ -383,6 +400,45 @@ procedure TObjProbe.MouseUp(Button: TMouseButton; Shift: TShiftState; X, Y: Inte
 begin
   if CaptureInsideUp and (Button = mbLeft) then CaptureChanged;
   inherited MouseUp(Button, Shift, X, Y);
+end;
+
+constructor TLyingStream.Create(const AData: TBytes; ASize: Int64; ASeekFails: Boolean;
+  ATotal: Int64);
+begin
+  inherited Create;
+  FData := AData;
+  FSize := ASize;
+  FSeekFails := ASeekFails;
+  if ATotal < 0 then FTotal := Length(AData) else FTotal := ATotal;
+end;
+
+function TLyingStream.GetSize: Int64;
+begin
+  if FSeekFails then Result := inherited GetSize else Result := FSize;
+end;
+
+function TLyingStream.Read(var Buffer; Count: Longint): Longint;
+var
+  p: PByte;
+  i: Integer;
+begin
+  if Count > FTotal - FPos then Count := FTotal - FPos;
+  if Count < 0 then Count := 0;
+  p := @Buffer;
+  for i := 0 to Count - 1 do
+  begin
+    if FPos < Length(FData) then p[i] := FData[FPos] else p[i] := Ord('x');
+    Inc(FPos);
+  end;
+  Inc(BytesGiven, Count);
+  Result := Count;
+end;
+
+function TLyingStream.Seek(const Offset: Int64; Origin: TSeekOrigin): Int64;
+begin
+  if FSeekFails then Exit(-1);
+  if (Origin = soCurrent) and (Offset = 0) then Exit(FPos);
+  Result := FPos;
 end;
 
 constructor TSizedStream.Create(ASize: Int64);
@@ -1537,8 +1593,9 @@ begin
     AssertTrue('under the limit', after <= d.MaxUndoBytes);
     // undone all the way, then let go: back to nothing
     for i := 1 to 20 do d.Undo;
+    AssertEquals('every resize undone: the width of the picture there', 1500,
+      TTyRichPicture(d.ObjectAt(1)).WidthTwips);
     AssertTrue('every resize undone: the first picture itself', d.ObjectAt(1) = pic);
-    AssertEquals('every resize undone: its width', 1500, pic.WidthTwips);
     d.Undo;
     d.ClearUndo;
     AssertEquals('nothing held', 0, d.HistoryBytes);
@@ -1814,6 +1871,8 @@ end;
 procedure TTyRichObjectsTest.TestInsertRefusals;
 var
   sized: TSizedStream;
+  lying: TLyingStream;
+  k: Integer;
   big: TBytes;
   b: TBitmap;
   missing: string;
@@ -1851,6 +1910,37 @@ begin
     b.Free;
   end;
   CheckRefused('no stream', FRich.InsertPictureFromStream(nil), rsRichEditRefusedNoPicture);
+  // a stream that says less than it holds: all it holds is read
+  for k := 0 to 2 do
+  begin
+    case k of
+      0: lying := TLyingStream.Create(PngOf(12, 6), 0, False);
+      1: lying := TLyingStream.Create(PngOf(12, 6), 10, False);
+    else
+      lying := TLyingStream.Create(PngOf(12, 6), 0, True);
+    end;
+    try
+      FRich.SelStart := 0;
+      AssertTrue(Format('a PNG from a stream that says too little (%d)', [k]),
+        FRich.InsertPictureFromStream(lying));
+      AssertEquals(Format('its width (%d)', [k]), 180, PictureAt(0).WidthTwips);
+      AssertTrue(Format('its bytes (%d)', [k]), SameBytes(PngOf(12, 6), PictureAt(0).Data));
+    finally
+      lying.Free;
+    end;
+    FRich.Undo;
+  end;
+  AssertEquals('nothing refused', 0, FRich.Refused);
+  // ... and one that is in fact over the bound: refused, not read to its end
+  lying := TLyingStream.Create(PngOf(12, 6), 0, False, Int64(CRichPictureMaxBytes) * 2);
+  try
+    CheckRefused('a stream that says nothing of its size, over the bound',
+      FRich.InsertPictureFromStream(lying), rsRichEditRefusedPicture);
+    AssertTrue(Format('read only to the bound (%d bytes)', [lying.BytesGiven]),
+      lying.BytesGiven <= Int64(CRichPictureMaxBytes) + 1);
+  finally
+    lying.Free;
+  end;
   // a stream over the bound: refused from its size, nothing of it read
   sized := TSizedStream.Create(Int64(CRichPictureMaxBytes) + 1);
   try
