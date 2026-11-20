@@ -3632,6 +3632,9 @@ type
     CFont: array of Integer;
     CFmt: array of Integer;
     CObj: array of TTyRichObject;
+    { For a character in a run of objects with no width: the run's resting place (FindBreaks);
+      nil when the paragraph has none. }
+    RunRest: array of Integer;
     Pieces: array of TPiece;
     PieceCount: Integer;
     Items: array of TItem;
@@ -3818,12 +3821,45 @@ begin
   end;
 end;
 
+{ An object the layout gives no width (MakePieces' rule): a field's marks, a bookmark's ends, a
+  kept block with nothing to show. }
+function NoWidthObject(AObj: TTyRichObject): Boolean;
+begin
+  Result := (AObj <> nil) and (TyRichShownPicture(AObj) = nil) and
+    not ((AObj is TTyRichOpaque) and (TTyRichOpaque(AObj).DisplayText <> ''));
+end;
+
 procedure TParaBuilder.FindBreaks;
 var
-  i, p: Integer;
-  pk, ck: Byte;
-  pc, cc: Cardinal;
-  b: Byte;
+  i, p, rs, re, q, hi, c: Integer;
+
+  // may a line break between the cluster starting at AP and the one starting at AI?
+  function Between(AP, AI: Integer): Byte;
+  var
+    pk, ck: Byte;
+    pc, cc: Cardinal;
+  begin
+    pk := Kind[AP];
+    pc := Cp[AP];
+    ck := Kind[AI];
+    cc := Cp[AI];
+    if pk = ckBreak then Result := 1
+    // between two text clusters: the rule a fragment cut into segments applies too
+    else if (pk = ckText) and (ck = ckText) then Result := Ord(TextBreakBetween(pc, cc))
+    else if ck in [ckSpace, ckBreak, ckTab] then Result := 0
+    else if (ck = ckText) and TyRichIsKinsokuNoLineStart(cc) then Result := 0
+    else if (pk = ckText) and TyRichIsKinsokuNoLineEnd(pc) then Result := 0
+    else if pk in [ckSpace, ckTab] then Result := 1
+    else if (pk in [ckObject, ckInvalid]) or (ck in [ckObject, ckInvalid]) then Result := 1
+    else if IsIdeographic(pc) or IsIdeographic(cc) then Result := 1
+    else Result := 0;
+  end;
+
+  function Unseen(AI: Integer): Boolean;
+  begin
+    Result := (Kind[AI] = ckObject) and NoWidthObject(CObj[AI]);
+  end;
+
 begin
   SetLength(Brk, N + 1);
   if N = 0 then Exit;
@@ -3836,22 +3872,46 @@ begin
       Brk[i] := 0;
       Continue;
     end;
-    pk := Kind[p];
-    pc := Cp[p];
-    ck := Kind[i];
-    cc := Cp[i];
-    if pk = ckBreak then b := 1
-    // between two text clusters: the rule a fragment cut into segments applies too
-    else if (pk = ckText) and (ck = ckText) then b := Ord(TextBreakBetween(pc, cc))
-    else if ck in [ckSpace, ckBreak, ckTab] then b := 0
-    else if (ck = ckText) and TyRichIsKinsokuNoLineStart(cc) then b := 0
-    else if (pk = ckText) and TyRichIsKinsokuNoLineEnd(pc) then b := 0
-    else if pk in [ckSpace, ckTab] then b := 1
-    else if (pk in [ckObject, ckInvalid]) or (ck in [ckObject, ckInvalid]) then b := 1
-    else if IsIdeographic(pc) or IsIdeographic(cc) then b := 1
-    else b := 0;
-    Brk[i] := b;
+    Brk[i] := Between(p, i);
     p := i;
+  end;
+  Brk[N] := 0;
+  { A run of objects with no width is one place (the caret's rule, TTyBlockLayout.RestPos): a
+    line breaks inside it only where the caret rests - never between an open mark and what it
+    opens, nor between what a close mark closes and the mark - and only where the text around
+    the run would break by itself; inside a word the marks add no break. }
+  i := 0;
+  while i < N do
+  begin
+    if not Unseen(i) then
+    begin
+      Inc(i);
+      Continue;
+    end;
+    rs := i;
+    while (i < N) and Unseen(i) do Inc(i);
+    re := i;
+    q := rs;
+    hi := re;
+    for c := rs to re - 1 do
+      if CObj[c] is TTyRichFieldMark then
+        if TTyRichFieldMark(CObj[c]).Kind = rfmClose then q := c + 1
+        else if c < hi then hi := c;
+    if q > hi then q := rs;
+    for c := rs to re do Brk[c] := 0;
+    if RunRest = nil then
+    begin
+      SetLength(RunRest, N);
+      for c := 0 to N - 1 do RunRest[c] := -1;
+    end;
+    for c := rs to re - 1 do RunRest[c] := q;
+    // the text's own verdict between what is seen before the run and after it
+    if (rs > 0) and (re < N) then
+    begin
+      p := rs - 1;
+      while (p > 0) and not ClStart[p] do Dec(p);
+      if q > 0 then Brk[q] := Between(p, re);
+    end;
   end;
 end;
 
@@ -4710,7 +4770,7 @@ end;
 
 procedure TParaBuilder.Run;
 var
-  s, e, k, top, left, firstLeft: Integer;
+  s, e, k, top, left, firstLeft, q: Integer;
   i, k0: Integer;
   tabs: TTyTabStops;
   ta: TTyTabAlign;
@@ -4781,6 +4841,15 @@ begin
       FirstLine := s = 0;
       k0 := k;
       e := FindLineEnd(s, k, left);
+      { An end inside a run of objects with no width (a line cut where nothing fits) moves to
+        the run's resting place: the marks stay with what they open and close. }
+      if (RunRest <> nil) and (e < N) and (e > s) then
+      begin
+        if RunRest[e] >= 0 then q := RunRest[e]
+        else if RunRest[e - 1] >= 0 then q := RunRest[e - 1]
+        else q := e;
+        if q > s then e := q;
+      end;
       if e <= s then e := ClusterEnd(s);
       EmitLine(s, e, k0, left, top, Kind[e - 1] = ckBreak, e >= N, CFmt[e - 1]);
       s := e;
