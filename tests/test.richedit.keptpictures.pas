@@ -869,6 +869,8 @@ var
   block, rtf: RawByteString;
   other, keep: TObjProbe;
   o: TTyRichObject;
+  saved: RawByteString;
+  d: TTyRichDocument;
 begin
   for k := 0 to 3 do
   begin
@@ -913,6 +915,16 @@ begin
       Settle;
       h := BoxRect(1).Right - BoxRect(1).Left;
       AssertEquals(KindNames[k] + ': into another document: it shows', 40, h);
+      // a document of no file: the block is written from the model, as its bytes
+      saved := SaveRtf;
+      AssertTrue(KindNames[k] + ': into another document: saved as its bytes',
+        Pos(block, saved) > 0);
+      d := Doc(saved);
+      AssertTrue(KindNames[k] + ': read back: the block', (d.ObjectAt(1) is TTyRichOpaque) and
+        (TTyRichOpaque(d.ObjectAt(1)).Bytes = block));
+      AssertTrue(KindNames[k] + ': read back: nothing beside it',
+        d.Text.GetText(0, d.Text.ParaLength(0)) = FRich.Document.Text.GetText(0,
+        FRich.Document.Text.ParaLength(0)));
     finally
       FRich := keep;
       other.Free;
