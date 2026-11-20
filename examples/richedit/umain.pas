@@ -11,6 +11,9 @@ unit umain;
   - File opens and saves RTF and plain text through the package's file dialogs; Samples opens
     a few documents kept in samples/ (Chinese text and its formats, a table, pictures, Word's
     table of contents with its links) - read from a stream, so Save asks for a new name;
+  - a click on a link (Word's table of contents has many) shows its address in the status bar;
+    a web or mail address opens in the system's handler, a place in the document (#name) is
+    only shown;
   - View > Skin follows the skins the package has, View > Dark their dark mode.
   The window, the menus, the toolbar and the actions are in umain.lfm; the code here is the
   application's part: files, the status bar, the skin menu. }
@@ -20,7 +23,7 @@ unit umain;
 interface
 
 uses
-  Classes, SysUtils, Forms, Controls, Graphics, Dialogs, Menus, ActnList,
+  Classes, SysUtils, StrUtils, LCLIntf, Forms, Controls, Graphics, Dialogs, Menus, ActnList,
   tyControls.Controller, tyControls.Form, tyControls.BuiltinThemes, tyControls.Menu,
   tyControls.ToolBar, tyControls.GlyphButtons, tyControls.IconFont, tyControls.Icons.Lucide,
   tyControls.StatusBar, tyControls.Dialogs, tyControls.Dialogs.FileDialog,
@@ -166,6 +169,7 @@ type
     procedure DarkClick(Sender: TObject);
     procedure SkinClick(Sender: TObject);
     procedure EditorEditRefused(Sender: TObject; const AReason: string);
+    procedure EditorLinkClick(Sender: TObject; const AURL: string; AButton: TMouseButton);
     procedure EditorLoadProgress(Sender: TObject; ADone, ATotal: Int64; var ACancel: Boolean);
     procedure EditorModifiedChange(Sender: TObject);
     procedure EditorSelectionChange(Sender: TObject);
@@ -292,6 +296,17 @@ procedure TMainForm.EditorEditRefused(Sender: TObject; const AReason: string);
 begin
   // a refusal is the status bar's, never a dialog: the user goes on typing
   Tell(AReason);
+end;
+
+procedure TMainForm.EditorLinkClick(Sender: TObject; const AURL: string; AButton: TMouseButton);
+begin
+  // the control opens nothing itself: the address is shown, and the program decides
+  Tell(AURL);
+  if AButton <> mbLeft then Exit;
+  // a place in the document (Word's contents point at its headings): only shown here
+  if (AURL <> '') and (AURL[1] = '#') then Exit;
+  if StartsText('http://', AURL) or StartsText('https://', AURL) or StartsText('mailto:', AURL) then
+    OpenURL(AURL);
 end;
 
 procedure TMainForm.EditorLoadProgress(Sender: TObject; ADone, ATotal: Int64;

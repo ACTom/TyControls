@@ -458,6 +458,7 @@ object MainForm: TMainForm
       TabOrder = 0
       WrapMode = rwmWindow
       OnEditRefused = EditorEditRefused
+      OnLinkClick = EditorLinkClick
       OnLoadProgress = EditorLoadProgress
       OnModifiedChange = EditorModifiedChange
       OnSelectionChange = EditorSelectionChange
