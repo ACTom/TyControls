@@ -1,11 +1,20 @@
 unit umain;
 
 { TTyRichEdit as a small word processor (a self-drawn TTyForm with its title bar and menu bar):
-  - the menus and the toolbar are made of tyControls.RichEdit.Actions: the character styles,
-    alignment, lists, indent, a picture, a table, find and replace, undo and redo, zoom - each
-    action's Enabled and Checked are the rich edit's own answers, its run one undo step;
-  - a TTyRichEditRuler above the text shows the caret paragraph's indents and tab stops, and
+  - two tool bars and the menus are made of tyControls.RichEdit.Actions - the clipboard, undo
+    and redo, find and replace, a picture and a table, zoom; the font, its size and its
+    colours, the character styles, clearing them; alignment, lists, indent, line spacing; the
+    table's rows and columns - each action's Enabled and Checked are the rich edit's own
+    answers, its run one undo step through the rich edit's door for the user;
+  - the font box and the size box show the selection's font and size (empty when it has
+    several) and apply what is chosen or typed; they are refreshed when the application is
+    idle after the rich edit changed (the record the actions read), never per key;
+  - the colour buttons apply their colour with a click; the swatch beside each opens the
+    package's colour dialog;
+  - a TTyRichEditRuler above the text shows the paragraph's indents and tab stops, and
     dragging them formats the paragraphs;
+  - the editor's context menu: cut, copy, paste, select all, and the table's operations when
+    the caret is in a table;
   - the status bar shows what the rich edit refused (OnEditRefused: never a dialog), what was
     not found, the line and column of the caret, the zoom, and a large file's load;
   - File opens and saves RTF and plain text through the package's file dialogs; Samples opens
@@ -14,60 +23,78 @@ unit umain;
   - a click on a link (Word's table of contents has many) shows its address in the status bar;
     a web or mail address opens in the system's handler, a place in the document (#name) is
     only shown;
-  - View > Skin follows the skins the package has, View > Dark their dark mode.
-  The window, the menus, the toolbar and the actions are in umain.lfm; the code here is the
-  application's part: files, the status bar, the skin menu. }
+  - View: zoom, wrap mode, read only, plain text, the ruler, the skins and their dark mode.
+  The window, the menus, the tool bars and the actions are in umain.lfm; the code here is the
+  application's part: files, the boxes and swatches, the status bar, the skin menu. }
 
 {$mode objfpc}{$H+}
 
 interface
 
 uses
-  Classes, SysUtils, StrUtils, LCLIntf, Forms, Controls, Graphics, Dialogs, Menus, ActnList,
-  tyControls.Controller, tyControls.Form, tyControls.BuiltinThemes, tyControls.Menu,
+  Classes, SysUtils, StrUtils, LCLIntf, LCLType, Forms, Controls, Graphics, Dialogs, Menus,
+  ActnList, tyControls.Controller, tyControls.Form, tyControls.BuiltinThemes, tyControls.Menu,
   tyControls.ToolBar, tyControls.GlyphButtons, tyControls.IconFont, tyControls.Icons.Lucide,
-  tyControls.StatusBar, tyControls.Dialogs, tyControls.Dialogs.FileDialog,
-  tyControls.RichEdit.Layout, tyControls.RichEdit, tyControls.RichEdit.Ruler,
-  tyControls.RichEdit.Actions;
+  tyControls.ComboBox, tyControls.FontComboBox, tyControls.FontSizeComboBox,
+  tyControls.ColorButton, tyControls.StatusBar, tyControls.Dialogs, tyControls.Dialogs.Color,
+  tyControls.Dialogs.FileDialog, tyControls.RichEdit.Model, tyControls.RichEdit.Attrs,
+  tyControls.RichEdit.Layout,
+  tyControls.RichEdit, tyControls.RichEdit.Ruler, tyControls.RichEdit.Actions;
 
 type
   TMainForm = class(TTyForm)
     Surface: TTyFormSurface;
     Bar: TTyTitleBar;
     MainMenuBar: TTyMenuBar;
-    Tools: TTyToolBar;
+    ToolsStd: TTyToolBar;
     BtnNew: TTySpeedButton;
     BtnOpen: TTySpeedButton;
     BtnSave: TTySpeedButton;
     Sep1: TTyToolSeparator;
+    BtnCut: TTySpeedButton;
+    BtnCopy: TTySpeedButton;
+    BtnPaste: TTySpeedButton;
+    Sep2: TTyToolSeparator;
     BtnUndo: TTySpeedButton;
     BtnRedo: TTySpeedButton;
-    Sep2: TTyToolSeparator;
+    Sep3: TTyToolSeparator;
+    BtnFind: TTySpeedButton;
+    BtnReplace: TTySpeedButton;
+    Sep4: TTyToolSeparator;
+    BtnInsertPicture: TTySpeedButton;
+    BtnInsertTable: TTySpeedButton;
+    Sep5: TTyToolSeparator;
+    BtnZoomOut: TTySpeedButton;
+    BtnZoomIn: TTySpeedButton;
+    ToolsFmt: TTyToolBar;
+    FontBox: TTyFontComboBox;
+    SizeBox: TTyFontSizeComboBox;
+    Sep6: TTyToolSeparator;
     BtnBold: TTySpeedButton;
     BtnItalic: TTySpeedButton;
     BtnUnderline: TTySpeedButton;
     BtnStrikeOut: TTySpeedButton;
     BtnSuperscript: TTySpeedButton;
     BtnSubscript: TTySpeedButton;
-    Sep3: TTyToolSeparator;
+    Sep7: TTyToolSeparator;
+    BtnTextColor: TTySpeedButton;
+    TextSwatch: TTyColorButton;
+    BtnHighlight: TTySpeedButton;
+    HighlightSwatch: TTyColorButton;
+    Sep8: TTyToolSeparator;
     BtnAlignLeft: TTySpeedButton;
     BtnAlignCenter: TTySpeedButton;
     BtnAlignRight: TTySpeedButton;
     BtnJustify: TTySpeedButton;
-    Sep4: TTyToolSeparator;
+    Sep9: TTyToolSeparator;
     BtnBullets: TTySpeedButton;
     BtnNumbering: TTySpeedButton;
     BtnIndentDecrease: TTySpeedButton;
     BtnIndentIncrease: TTySpeedButton;
-    Sep5: TTyToolSeparator;
-    BtnInsertPicture: TTySpeedButton;
-    BtnInsertTable: TTySpeedButton;
-    Sep6: TTyToolSeparator;
-    BtnFind: TTySpeedButton;
-    BtnReplace: TTySpeedButton;
-    Sep7: TTyToolSeparator;
-    BtnZoomOut: TTySpeedButton;
-    BtnZoomIn: TTySpeedButton;
+    Sep10: TTyToolSeparator;
+    BtnSpacing: TTyToolButton;
+    Sep11: TTyToolSeparator;
+    BtnClearFormat: TTySpeedButton;
     Ruler: TTyRichEditRuler;
     Status: TTyStatusBar;
     Editor: TTyRichEdit;
@@ -80,12 +107,38 @@ type
     ActSave: TAction;
     ActSaveAs: TAction;
     ActExit: TAction;
+    ActTextAuto: TAction;
+    ActTextChoose: TAction;
+    ActHighlightNone: TAction;
+    ActHighlightChoose: TAction;
+    ActReadOnly: TAction;
+    ActPlainText: TAction;
+    ActShowRuler: TAction;
+    ActCut: TTyRichEditCut;
+    ActCopy: TTyRichEditCopy;
+    ActPaste: TTyRichEditPaste;
+    ActSelectAll: TTyRichEditSelectAll;
+    ActDelete: TTyRichEditDelete;
+    ActUndo: TTyRichEditUndo;
+    ActRedo: TTyRichEditRedo;
+    ActFind: TTyRichEditFind;
+    ActReplace: TTyRichEditReplace;
+    ActInsertPicture: TTyRichEditInsertPicture;
+    ActInsertTable: TTyRichEditInsertTable;
+    ActZoomIn: TTyRichEditZoomIn;
+    ActZoomOut: TTyRichEditZoomOut;
+    ActZoomReset: TTyRichEditZoomReset;
     ActBold: TTyRichEditBold;
     ActItalic: TTyRichEditItalic;
     ActUnderline: TTyRichEditUnderline;
     ActStrikeOut: TTyRichEditStrikeOut;
     ActSuperscript: TTyRichEditSuperscript;
     ActSubscript: TTyRichEditSubscript;
+    ActTextColor: TTyRichEditTextColor;
+    ActHighlight: TTyRichEditHighlightColor;
+    ActFontGrow: TTyRichEditFontGrow;
+    ActFontShrink: TTyRichEditFontShrink;
+    ActClearFormat: TTyRichEditClearFormat;
     ActAlignLeft: TTyRichEditAlignLeft;
     ActAlignCenter: TTyRichEditAlignCenter;
     ActAlignRight: TTyRichEditAlignRight;
@@ -94,15 +147,23 @@ type
     ActNumbering: TTyRichEditNumbering;
     ActIndentIncrease: TTyRichEditIndentIncrease;
     ActIndentDecrease: TTyRichEditIndentDecrease;
-    ActInsertPicture: TTyRichEditInsertPicture;
-    ActInsertTable: TTyRichEditInsertTable;
-    ActFind: TTyRichEditFind;
-    ActReplace: TTyRichEditReplace;
-    ActUndo: TTyRichEditUndo;
-    ActRedo: TTyRichEditRedo;
-    ActZoomIn: TTyRichEditZoomIn;
-    ActZoomOut: TTyRichEditZoomOut;
-    ActZoomReset: TTyRichEditZoomReset;
+    ActSpacing1: TTyRichEditLineSpacing;
+    ActSpacing15: TTyRichEditLineSpacing;
+    ActSpacing2: TTyRichEditLineSpacing;
+    ActSize8: TTyRichEditFontSize;
+    ActSize10: TTyRichEditFontSize;
+    ActSize12: TTyRichEditFontSize;
+    ActSize14: TTyRichEditFontSize;
+    ActSize18: TTyRichEditFontSize;
+    ActSize24: TTyRichEditFontSize;
+    ActSize36: TTyRichEditFontSize;
+    ActRowAbove: TTyRichEditInsertRowAbove;
+    ActRowBelow: TTyRichEditInsertRowBelow;
+    ActColumnLeft: TTyRichEditInsertColumnLeft;
+    ActColumnRight: TTyRichEditInsertColumnRight;
+    ActDeleteRow: TTyRichEditDeleteRow;
+    ActDeleteColumn: TTyRichEditDeleteColumn;
+    ActDeleteTable: TTyRichEditDeleteTable;
     MainMenu1: TMainMenu;
     MnuFile: TMenuItem;
     MnuNew: TMenuItem;
@@ -121,53 +182,131 @@ type
     MnuUndo: TMenuItem;
     MnuRedo: TMenuItem;
     MnuSep3: TMenuItem;
+    MnuCut: TMenuItem;
+    MnuCopy: TMenuItem;
+    MnuPaste: TMenuItem;
+    MnuDelete: TMenuItem;
+    MnuSep4: TMenuItem;
+    MnuSelectAll: TMenuItem;
+    MnuSep5: TMenuItem;
     MnuFind: TMenuItem;
     MnuReplace: TMenuItem;
     MnuFormat: TMenuItem;
+    MnuFontSize: TMenuItem;
+    MnuSize8: TMenuItem;
+    MnuSize10: TMenuItem;
+    MnuSize12: TMenuItem;
+    MnuSize14: TMenuItem;
+    MnuSize18: TMenuItem;
+    MnuSize24: TMenuItem;
+    MnuSize36: TMenuItem;
+    MnuFontGrow: TMenuItem;
+    MnuFontShrink: TMenuItem;
+    MnuSep6: TMenuItem;
     MnuBold: TMenuItem;
     MnuItalic: TMenuItem;
     MnuUnderline: TMenuItem;
     MnuStrikeOut: TMenuItem;
     MnuSuperscript: TMenuItem;
     MnuSubscript: TMenuItem;
-    MnuSep4: TMenuItem;
+    MnuSep7: TMenuItem;
+    MnuTextColorMenu: TMenuItem;
+    MnuTextColor: TMenuItem;
+    MnuTextAuto: TMenuItem;
+    MnuTextChoose: TMenuItem;
+    MnuHighlightMenu: TMenuItem;
+    MnuHighlight: TMenuItem;
+    MnuHighlightNone: TMenuItem;
+    MnuHighlightChoose: TMenuItem;
+    MnuClearFormat: TMenuItem;
+    MnuSep8: TMenuItem;
     MnuAlignLeft: TMenuItem;
     MnuAlignCenter: TMenuItem;
     MnuAlignRight: TMenuItem;
     MnuJustify: TMenuItem;
-    MnuSep5: TMenuItem;
+    MnuSep9: TMenuItem;
     MnuBullets: TMenuItem;
     MnuNumbering: TMenuItem;
     MnuIndentIncrease: TMenuItem;
     MnuIndentDecrease: TMenuItem;
+    MnuSep10: TMenuItem;
+    MnuLineSpacing: TMenuItem;
+    MnuSpacing1: TMenuItem;
+    MnuSpacing15: TMenuItem;
+    MnuSpacing2: TMenuItem;
     MnuInsert: TMenuItem;
     MnuInsertPicture: TMenuItem;
     MnuInsertTable: TMenuItem;
+    MnuTable: TMenuItem;
+    MnuRowAbove: TMenuItem;
+    MnuRowBelow: TMenuItem;
+    MnuColumnLeft: TMenuItem;
+    MnuColumnRight: TMenuItem;
+    MnuSep11: TMenuItem;
+    MnuDeleteRow: TMenuItem;
+    MnuDeleteColumn: TMenuItem;
+    MnuDeleteTable: TMenuItem;
     MnuView: TMenuItem;
     MnuZoomIn: TMenuItem;
     MnuZoomOut: TMenuItem;
     MnuZoomReset: TMenuItem;
-    MnuSep6: TMenuItem;
+    MnuSep12: TMenuItem;
     MnuWrap: TMenuItem;
     MnuWrapWindow: TMenuItem;
     MnuWrapPage: TMenuItem;
     MnuWrapNone: TMenuItem;
     MnuReadOnly: TMenuItem;
-    MnuSep7: TMenuItem;
+    MnuPlainText: TMenuItem;
+    MnuShowRuler: TMenuItem;
+    MnuSep13: TMenuItem;
     MnuSkin: TMenuItem;
     MnuDark: TMenuItem;
+    PopSpacing: TTyPopupMenu;
+    PopItemSpacing1: TMenuItem;
+    PopItemSpacing15: TMenuItem;
+    PopItemSpacing2: TMenuItem;
+    PopEditor: TTyPopupMenu;
+    PopCut: TMenuItem;
+    PopCopy: TMenuItem;
+    PopPaste: TMenuItem;
+    MnuSep14: TMenuItem;
+    PopSelectAll: TMenuItem;
+    PopSepTable: TMenuItem;
+    PopRowAbove: TMenuItem;
+    PopRowBelow: TMenuItem;
+    PopColumnLeft: TMenuItem;
+    PopColumnRight: TMenuItem;
+    PopDeleteRow: TMenuItem;
+    PopDeleteColumn: TMenuItem;
+    PopDeleteTable: TMenuItem;
     procedure FormCreate(Sender: TObject);
+    procedure FormDestroy(Sender: TObject);
     procedure FormCloseQuery(Sender: TObject; var CanClose: Boolean);
     procedure ActNewExecute(Sender: TObject);
     procedure ActOpenExecute(Sender: TObject);
     procedure ActSaveExecute(Sender: TObject);
     procedure ActSaveAsExecute(Sender: TObject);
     procedure ActExitExecute(Sender: TObject);
+    procedure ActTextAutoExecute(Sender: TObject);
+    procedure ActTextChooseExecute(Sender: TObject);
+    procedure ActHighlightNoneExecute(Sender: TObject);
+    procedure ActHighlightChooseExecute(Sender: TObject);
+    procedure ActReadOnlyExecute(Sender: TObject);
+    procedure ActReadOnlyUpdate(Sender: TObject);
+    procedure ActPlainTextExecute(Sender: TObject);
+    procedure ActPlainTextUpdate(Sender: TObject);
+    procedure ActShowRulerExecute(Sender: TObject);
+    procedure ActShowRulerUpdate(Sender: TObject);
     procedure SampleClick(Sender: TObject);
     procedure WrapClick(Sender: TObject);
-    procedure ReadOnlyClick(Sender: TObject);
     procedure DarkClick(Sender: TObject);
     procedure SkinClick(Sender: TObject);
+    procedure FontBoxSelect(Sender: TObject);
+    procedure FontBoxKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+    procedure SizeBoxSelect(Sender: TObject);
+    procedure SizeBoxKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+    procedure SwatchColorChanged(Sender: TObject);
+    procedure PopEditorPopup(Sender: TObject);
     procedure EditorEditRefused(Sender: TObject; const AReason: string);
     procedure EditorLinkClick(Sender: TObject; const AURL: string; AButton: TMouseButton);
     procedure EditorLoadProgress(Sender: TObject; ADone, ATotal: Int64; var ACancel: Boolean);
@@ -179,6 +318,14 @@ type
     procedure TableChooseSize(Sender: TObject; var ARows, AColumns: Integer;
       var AInsert: Boolean);
   private
+    { The actions' record of the rich edit, and how many times it had asked when the boxes
+      were last filled from it. }
+    FBoxesAt: Integer;
+    procedure AppIdle(Sender: TObject; var Done: Boolean);
+    procedure ShowFormatInBoxes;
+    procedure ApplyFontName(const AName: string);
+    procedure ApplyFontSize(const AText: string);
+    procedure ShowSwatches;
     procedure Tell(const AText: string);
     procedure ShowCaret;
     procedure ShowZoom;
@@ -214,6 +361,9 @@ resourcestring
   rsTableBadSize = 'Give the size as rows x columns, for example 3 x 4.';
   rsOpenFilter   = 'Documents (*.rtf;*.txt)|*.rtf;*.txt|Rich text (*.rtf)|*.rtf|Text (*.txt)|*.txt|All files|*';
   rsSaveFilter   = 'Rich text (*.rtf)|*.rtf|Text (*.txt)|*.txt';
+  rsTextColorTitle = 'Text color';
+  rsHighlightTitle = 'Highlight color';
+  rsBadSize      = 'Give the size in points, for example 11 or 10.5.';
 
 procedure TMainForm.FormCreate(Sender: TObject);
 var
@@ -235,11 +385,238 @@ begin
   end;
   DlgOpen.Filter := rsOpenFilter;
   DlgSave.Filter := rsSaveFilter;
+  TextSwatch.DialogCaption := rsTextColorTitle;
+  HighlightSwatch.DialogCaption := rsHighlightTitle;
   SetSkin('default');
   MnuWrapWindow.Checked := True;
+  FBoxesAt := -1;
+  ShowSwatches;
+  Application.AddOnIdleHandler(@AppIdle);
   ShowCaret;
   ShowZoom;
   ShowTitle;
+end;
+
+procedure TMainForm.FormDestroy(Sender: TObject);
+begin
+  Application.RemoveOnIdleHandler(@AppIdle);
+end;
+
+{ ---- the font box and the size box ---- }
+
+procedure TMainForm.AppIdle(Sender: TObject; var Done: Boolean);
+begin
+  ShowFormatInBoxes;
+end;
+
+{ Filled from the record the actions read (asked of the rich edit once per change of its
+  selection or content, never per idle), and only when it asked again since the last time; not
+  while the user types in a box. }
+procedure TMainForm.ShowFormatInBoxes;
+var
+  st: TTyRichEditActionState;
+begin
+  if FontBox.Focused or SizeBox.Focused then Exit;
+  st := TTyRichEditActionState.Find(Editor);
+  st.Check;
+  if st.Refreshes = FBoxesAt then Exit;
+  FBoxesAt := st.Refreshes;
+  FontBox.Enabled := st.CanFormatCharacters;
+  SizeBox.Enabled := st.CanFormatCharacters;
+  // several fonts (sizes) in the selection: an empty box
+  if st.Readable and (caFace in st.CharConsistent) then FontBox.Text := st.FontName
+  else FontBox.Text := '';
+  if st.Readable and (caSize in st.CharConsistent) and (st.FontSize > 0) then
+    SizeBox.Text := IntToStr(st.FontSize)
+  else
+    SizeBox.Text := '';
+end;
+
+procedure TMainForm.ApplyFontName(const AName: string);
+var
+  f: TTyCharFormat;
+begin
+  if Trim(AName) = '' then Exit;
+  f := TyDefaultCharFormat;
+  f.FontName := Trim(AName);
+  Editor.ApplyCharacterFormat([cffFontName], f);
+  if Editor.CanFocus then Editor.SetFocus;
+end;
+
+procedure TMainForm.ApplyFontSize(const AText: string);
+var
+  f: TTyCharFormat;
+  v: Double;
+  fs: TFormatSettings;
+begin
+  fs := DefaultFormatSettings;
+  fs.DecimalSeparator := '.';
+  // half points: the rich edit keeps sizes in half points (10.5 is 21)
+  if not TryStrToFloat(Trim(StringReplace(AText, ',', '.', [])), v, fs) or (v < 1) or (v > 1638) then
+  begin
+    Tell(rsBadSize);
+    Exit;
+  end;
+  f := TyDefaultCharFormat;
+  f.SizeHalfPt := Round(v * 2);
+  Editor.ApplyCharacterFormat([cffSize], f);
+  if Editor.CanFocus then Editor.SetFocus;
+end;
+
+procedure TMainForm.FontBoxSelect(Sender: TObject);
+begin
+  ApplyFontName(FontBox.Text);
+end;
+
+procedure TMainForm.FontBoxKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+begin
+  if Key = VK_RETURN then
+  begin
+    Key := 0;
+    ApplyFontName(FontBox.Text);
+  end
+  else if Key = VK_ESCAPE then
+  begin
+    Key := 0;
+    FBoxesAt := -1;
+    if Editor.CanFocus then Editor.SetFocus;
+  end;
+end;
+
+procedure TMainForm.SizeBoxSelect(Sender: TObject);
+begin
+  ApplyFontSize(SizeBox.Text);
+end;
+
+procedure TMainForm.SizeBoxKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+begin
+  if Key = VK_RETURN then
+  begin
+    Key := 0;
+    ApplyFontSize(SizeBox.Text);
+  end
+  else if Key = VK_ESCAPE then
+  begin
+    Key := 0;
+    FBoxesAt := -1;
+    if Editor.CanFocus then Editor.SetFocus;
+  end;
+end;
+
+{ ---- the colours ---- }
+
+{ Each swatch shows the colour its button applies (automatic shown as the text's colour, no
+  highlight as the window's). }
+procedure TMainForm.ShowSwatches;
+begin
+  if ActTextColor.Color = clDefault then TextSwatch.ButtonColor := clWindowText
+  else TextSwatch.ButtonColor := ActTextColor.Color;
+  if ActHighlight.Color = clNone then HighlightSwatch.ButtonColor := clWindow
+  else HighlightSwatch.ButtonColor := ActHighlight.Color;
+end;
+
+{ The swatch's own dialog chose a colour: it is its button's colour now, and applied. }
+procedure TMainForm.SwatchColorChanged(Sender: TObject);
+begin
+  if Sender = TextSwatch then
+  begin
+    ActTextColor.Color := TextSwatch.ButtonColor;
+    ActTextColor.Execute;
+  end
+  else
+  begin
+    ActHighlight.Color := HighlightSwatch.ButtonColor;
+    ActHighlight.Execute;
+  end;
+end;
+
+procedure TMainForm.ActTextAutoExecute(Sender: TObject);
+begin
+  ActTextColor.Color := clDefault;
+  ActTextColor.Execute;
+  ShowSwatches;
+end;
+
+procedure TMainForm.ActTextChooseExecute(Sender: TObject);
+var
+  c: TColor;
+  alpha: Byte;
+begin
+  c := TextSwatch.ButtonColor;
+  alpha := 255;
+  if not TySelectColor(rsTextColorTitle, c, alpha) then Exit;
+  ActTextColor.Color := c;
+  ActTextColor.Execute;
+  ShowSwatches;
+end;
+
+procedure TMainForm.ActHighlightNoneExecute(Sender: TObject);
+begin
+  ActHighlight.Color := clNone;
+  ActHighlight.Execute;
+  ShowSwatches;
+end;
+
+procedure TMainForm.ActHighlightChooseExecute(Sender: TObject);
+var
+  c: TColor;
+  alpha: Byte;
+begin
+  c := HighlightSwatch.ButtonColor;
+  alpha := 255;
+  if not TySelectColor(rsHighlightTitle, c, alpha) then Exit;
+  ActHighlight.Color := c;
+  ActHighlight.Execute;
+  ShowSwatches;
+end;
+
+{ ---- View ---- }
+
+procedure TMainForm.ActReadOnlyExecute(Sender: TObject);
+begin
+  Editor.ReadOnly := not Editor.ReadOnly;
+end;
+
+procedure TMainForm.ActReadOnlyUpdate(Sender: TObject);
+begin
+  ActReadOnly.Checked := Editor.ReadOnly;
+end;
+
+procedure TMainForm.ActPlainTextExecute(Sender: TObject);
+begin
+  // the document's state: a plain text document is saved as text, a paste takes text only
+  Editor.PlainText := not Editor.PlainText;
+end;
+
+procedure TMainForm.ActPlainTextUpdate(Sender: TObject);
+begin
+  ActPlainText.Checked := Editor.PlainText;
+end;
+
+procedure TMainForm.ActShowRulerExecute(Sender: TObject);
+begin
+  Ruler.Visible := not Ruler.Visible;
+end;
+
+procedure TMainForm.ActShowRulerUpdate(Sender: TObject);
+begin
+  ActShowRuler.Checked := Ruler.Visible;
+end;
+
+{ The context menu: the table's operations only when the caret is in a table. }
+procedure TMainForm.PopEditorPopup(Sender: TObject);
+var
+  t: Boolean;
+begin
+  t := Editor.InTable;
+  PopSepTable.Visible := t;
+  PopRowAbove.Visible := t;
+  PopRowBelow.Visible := t;
+  PopColumnLeft.Visible := t;
+  PopColumnRight.Visible := t;
+  PopDeleteRow.Visible := t;
+  PopDeleteColumn.Visible := t;
+  PopDeleteTable.Visible := t;
 end;
 
 procedure TMainForm.SetSkin(const AName: string);
@@ -480,7 +857,7 @@ begin
   else sample := 'word-toc.rtf';
   if not MaySetAside then Exit;
   try
-    // read from a stream: the sample is not the document's file, so Save asks for a sample
+    // read from a stream: the sample is not the document's file, so Save asks for a name
     f := TFileStream.Create(SamplesDir + sample, fmOpenRead or fmShareDenyWrite);
     try
       Editor.LoadFromStream(f, rfRtf);
@@ -500,12 +877,6 @@ begin
   if Sender = MnuWrapPage then Editor.WrapMode := rwmPage
   else if Sender = MnuWrapNone then Editor.WrapMode := rwmNone
   else Editor.WrapMode := rwmWindow;
-end;
-
-procedure TMainForm.ReadOnlyClick(Sender: TObject);
-begin
-  MnuReadOnly.Checked := not MnuReadOnly.Checked;
-  Editor.ReadOnly := MnuReadOnly.Checked;
 end;
 
 end.

@@ -10,6 +10,7 @@ object MainForm: TMainForm
   LCLVersion = '4.4.0.0'
   OnCloseQuery = FormCloseQuery
   OnCreate = FormCreate
+  OnDestroy = FormDestroy
   TitleBar = Bar
   MenuBar = MainMenuBar
   ActiveControl = Editor
@@ -40,7 +41,7 @@ object MainForm: TMainForm
         Align = alLeft
       end
     end
-    object Tools: TTyToolBar
+    object ToolsStd: TTyToolBar
       Left = 0
       Height = 36
       Top = 34
@@ -95,8 +96,53 @@ object MainForm: TMainForm
         Top = 4
         Width = 8
       end
-      object BtnUndo: TTySpeedButton
+      object BtnCut: TTySpeedButton
         Left = 106
+        Height = 28
+        Top = 4
+        Width = 28
+        Action = ActCut
+        ShowHint = True
+        StyleClass = 'ghost'
+        IconFont = LucideFont
+        GlyphName = 'scissors'
+        GlyphSize = 16
+        ShowCaption = False
+      end
+      object BtnCopy: TTySpeedButton
+        Left = 136
+        Height = 28
+        Top = 4
+        Width = 28
+        Action = ActCopy
+        ShowHint = True
+        StyleClass = 'ghost'
+        IconFont = LucideFont
+        GlyphName = 'copy'
+        GlyphSize = 16
+        ShowCaption = False
+      end
+      object BtnPaste: TTySpeedButton
+        Left = 166
+        Height = 28
+        Top = 4
+        Width = 28
+        Action = ActPaste
+        ShowHint = True
+        StyleClass = 'ghost'
+        IconFont = LucideFont
+        GlyphName = 'clipboard-paste'
+        GlyphSize = 16
+        ShowCaption = False
+      end
+      object Sep2: TTyToolSeparator
+        Left = 196
+        Height = 28
+        Top = 4
+        Width = 8
+      end
+      object BtnUndo: TTySpeedButton
+        Left = 206
         Height = 28
         Top = 4
         Width = 28
@@ -109,7 +155,7 @@ object MainForm: TMainForm
         ShowCaption = False
       end
       object BtnRedo: TTySpeedButton
-        Left = 136
+        Left = 236
         Height = 28
         Top = 4
         Width = 28
@@ -121,14 +167,144 @@ object MainForm: TMainForm
         GlyphSize = 16
         ShowCaption = False
       end
-      object Sep2: TTyToolSeparator
-        Left = 166
+      object Sep3: TTyToolSeparator
+        Left = 266
+        Height = 28
+        Top = 4
+        Width = 8
+      end
+      object BtnFind: TTySpeedButton
+        Left = 276
+        Height = 28
+        Top = 4
+        Width = 28
+        Action = ActFind
+        ShowHint = True
+        StyleClass = 'ghost'
+        IconFont = LucideFont
+        GlyphName = 'search'
+        GlyphSize = 16
+        ShowCaption = False
+      end
+      object BtnReplace: TTySpeedButton
+        Left = 306
+        Height = 28
+        Top = 4
+        Width = 28
+        Action = ActReplace
+        ShowHint = True
+        StyleClass = 'ghost'
+        IconFont = LucideFont
+        GlyphName = 'replace'
+        GlyphSize = 16
+        ShowCaption = False
+      end
+      object Sep4: TTyToolSeparator
+        Left = 336
+        Height = 28
+        Top = 4
+        Width = 8
+      end
+      object BtnInsertPicture: TTySpeedButton
+        Left = 346
+        Height = 28
+        Top = 4
+        Width = 28
+        Action = ActInsertPicture
+        ShowHint = True
+        StyleClass = 'ghost'
+        IconFont = LucideFont
+        GlyphName = 'image'
+        GlyphSize = 16
+        ShowCaption = False
+      end
+      object BtnInsertTable: TTySpeedButton
+        Left = 376
+        Height = 28
+        Top = 4
+        Width = 28
+        Action = ActInsertTable
+        ShowHint = True
+        StyleClass = 'ghost'
+        IconFont = LucideFont
+        GlyphName = 'table'
+        GlyphSize = 16
+        ShowCaption = False
+      end
+      object Sep5: TTyToolSeparator
+        Left = 406
+        Height = 28
+        Top = 4
+        Width = 8
+      end
+      object BtnZoomOut: TTySpeedButton
+        Left = 416
+        Height = 28
+        Top = 4
+        Width = 28
+        Action = ActZoomOut
+        ShowHint = True
+        StyleClass = 'ghost'
+        IconFont = LucideFont
+        GlyphName = 'zoom-out'
+        GlyphSize = 16
+        ShowCaption = False
+      end
+      object BtnZoomIn: TTySpeedButton
+        Left = 446
+        Height = 28
+        Top = 4
+        Width = 28
+        Action = ActZoomIn
+        ShowHint = True
+        StyleClass = 'ghost'
+        IconFont = LucideFont
+        GlyphName = 'zoom-in'
+        GlyphSize = 16
+        ShowCaption = False
+      end
+    end
+    object ToolsFmt: TTyToolBar
+      Left = 0
+      Height = 36
+      Top = 70
+      Width = 960
+      Align = alTop
+      ButtonHeight = 28
+      ButtonSpacing = 2
+      Indent = 6
+      ShowHint = True
+      object FontBox: TTyFontComboBox
+        Left = 6
+        Height = 28
+        Top = 4
+        Width = 150
+        Hint = 'Font'
+        ShowHint = True
+        Style = csDropDown
+        TabStop = False
+        OnKeyDown = FontBoxKeyDown
+        OnSelect = FontBoxSelect
+      end
+      object SizeBox: TTyFontSizeComboBox
+        Left = 158
+        Height = 28
+        Top = 4
+        Width = 64
+        Hint = 'Font size'
+        ShowHint = True
+        TabStop = False
+        OnKeyDown = SizeBoxKeyDown
+        OnSelect = SizeBoxSelect
+      end
+      object Sep6: TTyToolSeparator
+        Left = 224
         Height = 28
         Top = 4
         Width = 8
       end
       object BtnBold: TTySpeedButton
-        Left = 176
+        Left = 234
         Height = 28
         Top = 4
         Width = 28
@@ -142,7 +318,7 @@ object MainForm: TMainForm
         ShowCaption = False
       end
       object BtnItalic: TTySpeedButton
-        Left = 206
+        Left = 264
         Height = 28
         Top = 4
         Width = 28
@@ -156,7 +332,7 @@ object MainForm: TMainForm
         ShowCaption = False
       end
       object BtnUnderline: TTySpeedButton
-        Left = 236
+        Left = 294
         Height = 28
         Top = 4
         Width = 28
@@ -170,7 +346,7 @@ object MainForm: TMainForm
         ShowCaption = False
       end
       object BtnStrikeOut: TTySpeedButton
-        Left = 266
+        Left = 324
         Height = 28
         Top = 4
         Width = 28
@@ -184,7 +360,7 @@ object MainForm: TMainForm
         ShowCaption = False
       end
       object BtnSuperscript: TTySpeedButton
-        Left = 296
+        Left = 354
         Height = 28
         Top = 4
         Width = 28
@@ -198,7 +374,7 @@ object MainForm: TMainForm
         ShowCaption = False
       end
       object BtnSubscript: TTySpeedButton
-        Left = 326
+        Left = 384
         Height = 28
         Top = 4
         Width = 28
@@ -211,14 +387,68 @@ object MainForm: TMainForm
         GlyphSize = 16
         ShowCaption = False
       end
-      object Sep3: TTyToolSeparator
-        Left = 356
+      object Sep7: TTyToolSeparator
+        Left = 414
+        Height = 28
+        Top = 4
+        Width = 8
+      end
+      object BtnTextColor: TTySpeedButton
+        Left = 424
+        Height = 28
+        Top = 4
+        Width = 28
+        Action = ActTextColor
+        ShowHint = True
+        StyleClass = 'ghost'
+        IconFont = LucideFont
+        GlyphName = 'baseline'
+        GlyphSize = 16
+        ShowCaption = False
+      end
+      object TextSwatch: TTyColorButton
+        Left = 454
+        Height = 28
+        Top = 4
+        Width = 16
+        Hint = 'Choose the text color'
+        ShowHint = True
+        TabStop = False
+        StyleClass = 'ghost'
+        OnColorChanged = SwatchColorChanged
+      end
+      object BtnHighlight: TTySpeedButton
+        Left = 472
+        Height = 28
+        Top = 4
+        Width = 28
+        Action = ActHighlight
+        ShowHint = True
+        StyleClass = 'ghost'
+        IconFont = LucideFont
+        GlyphName = 'highlighter'
+        GlyphSize = 16
+        ShowCaption = False
+      end
+      object HighlightSwatch: TTyColorButton
+        Left = 502
+        Height = 28
+        Top = 4
+        Width = 16
+        Hint = 'Choose the highlight color'
+        ShowHint = True
+        TabStop = False
+        StyleClass = 'ghost'
+        OnColorChanged = SwatchColorChanged
+      end
+      object Sep8: TTyToolSeparator
+        Left = 520
         Height = 28
         Top = 4
         Width = 8
       end
       object BtnAlignLeft: TTySpeedButton
-        Left = 366
+        Left = 530
         Height = 28
         Top = 4
         Width = 28
@@ -232,7 +462,7 @@ object MainForm: TMainForm
         ShowCaption = False
       end
       object BtnAlignCenter: TTySpeedButton
-        Left = 396
+        Left = 560
         Height = 28
         Top = 4
         Width = 28
@@ -246,7 +476,7 @@ object MainForm: TMainForm
         ShowCaption = False
       end
       object BtnAlignRight: TTySpeedButton
-        Left = 426
+        Left = 590
         Height = 28
         Top = 4
         Width = 28
@@ -260,7 +490,7 @@ object MainForm: TMainForm
         ShowCaption = False
       end
       object BtnJustify: TTySpeedButton
-        Left = 456
+        Left = 620
         Height = 28
         Top = 4
         Width = 28
@@ -273,14 +503,14 @@ object MainForm: TMainForm
         GlyphSize = 16
         ShowCaption = False
       end
-      object Sep4: TTyToolSeparator
-        Left = 486
+      object Sep9: TTyToolSeparator
+        Left = 650
         Height = 28
         Top = 4
         Width = 8
       end
       object BtnBullets: TTySpeedButton
-        Left = 496
+        Left = 660
         Height = 28
         Top = 4
         Width = 28
@@ -294,7 +524,7 @@ object MainForm: TMainForm
         ShowCaption = False
       end
       object BtnNumbering: TTySpeedButton
-        Left = 526
+        Left = 690
         Height = 28
         Top = 4
         Width = 28
@@ -308,7 +538,7 @@ object MainForm: TMainForm
         ShowCaption = False
       end
       object BtnIndentDecrease: TTySpeedButton
-        Left = 556
+        Left = 720
         Height = 28
         Top = 4
         Width = 28
@@ -321,7 +551,7 @@ object MainForm: TMainForm
         ShowCaption = False
       end
       object BtnIndentIncrease: TTySpeedButton
-        Left = 586
+        Left = 750
         Height = 28
         Top = 4
         Width = 28
@@ -333,99 +563,42 @@ object MainForm: TMainForm
         GlyphSize = 16
         ShowCaption = False
       end
-      object Sep5: TTyToolSeparator
-        Left = 616
+      object Sep10: TTyToolSeparator
+        Left = 780
         Height = 28
         Top = 4
         Width = 8
       end
-      object BtnInsertPicture: TTySpeedButton
-        Left = 626
+      object BtnSpacing: TTyToolButton
+        Left = 790
         Height = 28
         Top = 4
-        Width = 28
-        Action = ActInsertPicture
+        Width = 40
+        Hint = 'Line spacing'
         ShowHint = True
-        StyleClass = 'ghost'
+        Style = tbsButtonDrop
+        DropdownMenu = PopSpacing
         IconFont = LucideFont
-        GlyphName = 'image'
+        GlyphName = 'unfold-vertical'
         GlyphSize = 16
         ShowCaption = False
       end
-      object BtnInsertTable: TTySpeedButton
-        Left = 656
-        Height = 28
-        Top = 4
-        Width = 28
-        Action = ActInsertTable
-        ShowHint = True
-        StyleClass = 'ghost'
-        IconFont = LucideFont
-        GlyphName = 'table'
-        GlyphSize = 16
-        ShowCaption = False
-      end
-      object Sep6: TTyToolSeparator
-        Left = 686
+      object Sep11: TTyToolSeparator
+        Left = 832
         Height = 28
         Top = 4
         Width = 8
       end
-      object BtnFind: TTySpeedButton
-        Left = 696
+      object BtnClearFormat: TTySpeedButton
+        Left = 842
         Height = 28
         Top = 4
         Width = 28
-        Action = ActFind
+        Action = ActClearFormat
         ShowHint = True
         StyleClass = 'ghost'
         IconFont = LucideFont
-        GlyphName = 'search'
-        GlyphSize = 16
-        ShowCaption = False
-      end
-      object BtnReplace: TTySpeedButton
-        Left = 726
-        Height = 28
-        Top = 4
-        Width = 28
-        Action = ActReplace
-        ShowHint = True
-        StyleClass = 'ghost'
-        IconFont = LucideFont
-        GlyphName = 'replace'
-        GlyphSize = 16
-        ShowCaption = False
-      end
-      object Sep7: TTyToolSeparator
-        Left = 756
-        Height = 28
-        Top = 4
-        Width = 8
-      end
-      object BtnZoomOut: TTySpeedButton
-        Left = 766
-        Height = 28
-        Top = 4
-        Width = 28
-        Action = ActZoomOut
-        ShowHint = True
-        StyleClass = 'ghost'
-        IconFont = LucideFont
-        GlyphName = 'zoom-out'
-        GlyphSize = 16
-        ShowCaption = False
-      end
-      object BtnZoomIn: TTySpeedButton
-        Left = 796
-        Height = 28
-        Top = 4
-        Width = 28
-        Action = ActZoomIn
-        ShowHint = True
-        StyleClass = 'ghost'
-        IconFont = LucideFont
-        GlyphName = 'zoom-in'
+        GlyphName = 'remove-formatting'
         GlyphSize = 16
         ShowCaption = False
       end
@@ -433,7 +606,7 @@ object MainForm: TMainForm
     object Ruler: TTyRichEditRuler
       Left = 0
       Height = 33
-      Top = 70
+      Top = 106
       Width = 960
       Align = alTop
       RichEdit = Editor
@@ -463,10 +636,11 @@ object MainForm: TMainForm
     end
     object Editor: TTyRichEdit
       Left = 0
-      Height = 553
-      Top = 103
+      Height = 517
+      Top = 139
       Width = 960
       Align = alClient
+      PopupMenu = PopEditor
       TabOrder = 0
       WrapMode = rwmWindow
       OnEditRefused = EditorEditRefused
@@ -528,6 +702,111 @@ object MainForm: TMainForm
       Hint = 'Close the window'
       OnExecute = ActExitExecute
     end
+    object ActTextAuto: TAction
+      Category = 'View'
+      Caption = '&Automatic'
+      Hint = 'Text in the theme''s color'
+      OnExecute = ActTextAutoExecute
+    end
+    object ActTextChoose: TAction
+      Category = 'View'
+      Caption = '&More Colors...'
+      Hint = 'Choose the text color'
+      OnExecute = ActTextChooseExecute
+    end
+    object ActHighlightNone: TAction
+      Category = 'View'
+      Caption = '&No Highlight'
+      Hint = 'Take the highlight away'
+      OnExecute = ActHighlightNoneExecute
+    end
+    object ActHighlightChoose: TAction
+      Category = 'View'
+      Caption = 'M&ore Colors...'
+      Hint = 'Choose the highlight color'
+      OnExecute = ActHighlightChooseExecute
+    end
+    object ActReadOnly: TAction
+      Category = 'View'
+      Caption = '&Read Only'
+      Hint = 'Read only'
+      OnExecute = ActReadOnlyExecute
+      OnUpdate = ActReadOnlyUpdate
+    end
+    object ActPlainText: TAction
+      Category = 'View'
+      Caption = '&Plain Text'
+      Hint = 'A plain text document'
+      OnExecute = ActPlainTextExecute
+      OnUpdate = ActPlainTextUpdate
+    end
+    object ActShowRuler: TAction
+      Category = 'View'
+      Caption = 'R&uler'
+      Hint = 'Show the ruler'
+      OnExecute = ActShowRulerExecute
+      OnUpdate = ActShowRulerUpdate
+    end
+    object ActCut: TTyRichEditCut
+      Category = 'Rich edit'
+      RichEdit = Editor
+    end
+    object ActCopy: TTyRichEditCopy
+      Category = 'Rich edit'
+      RichEdit = Editor
+    end
+    object ActPaste: TTyRichEditPaste
+      Category = 'Rich edit'
+      RichEdit = Editor
+    end
+    object ActSelectAll: TTyRichEditSelectAll
+      Category = 'Rich edit'
+      RichEdit = Editor
+    end
+    object ActDelete: TTyRichEditDelete
+      Category = 'Rich edit'
+      RichEdit = Editor
+    end
+    object ActUndo: TTyRichEditUndo
+      Category = 'Rich edit'
+      RichEdit = Editor
+    end
+    object ActRedo: TTyRichEditRedo
+      Category = 'Rich edit'
+      RichEdit = Editor
+    end
+    object ActFind: TTyRichEditFind
+      Category = 'Rich edit'
+      OnNotFound = FindNotFound
+      RichEdit = Editor
+    end
+    object ActReplace: TTyRichEditReplace
+      Category = 'Rich edit'
+      OnNotFound = FindNotFound
+      OnReplaced = ReplaceReplaced
+      RichEdit = Editor
+    end
+    object ActInsertPicture: TTyRichEditInsertPicture
+      Category = 'Rich edit'
+      RichEdit = Editor
+    end
+    object ActInsertTable: TTyRichEditInsertTable
+      Category = 'Rich edit'
+      OnChooseSize = TableChooseSize
+      RichEdit = Editor
+    end
+    object ActZoomIn: TTyRichEditZoomIn
+      Category = 'Rich edit'
+      RichEdit = Editor
+    end
+    object ActZoomOut: TTyRichEditZoomOut
+      Category = 'Rich edit'
+      RichEdit = Editor
+    end
+    object ActZoomReset: TTyRichEditZoomReset
+      Category = 'Rich edit'
+      RichEdit = Editor
+    end
     object ActBold: TTyRichEditBold
       Category = 'Rich edit'
       GroupIndex = 101
@@ -556,6 +835,26 @@ object MainForm: TMainForm
     object ActSubscript: TTyRichEditSubscript
       Category = 'Rich edit'
       GroupIndex = 106
+      RichEdit = Editor
+    end
+    object ActTextColor: TTyRichEditTextColor
+      Category = 'Rich edit'
+      RichEdit = Editor
+    end
+    object ActHighlight: TTyRichEditHighlightColor
+      Category = 'Rich edit'
+      RichEdit = Editor
+    end
+    object ActFontGrow: TTyRichEditFontGrow
+      Category = 'Rich edit'
+      RichEdit = Editor
+    end
+    object ActFontShrink: TTyRichEditFontShrink
+      Category = 'Rich edit'
+      RichEdit = Editor
+    end
+    object ActClearFormat: TTyRichEditClearFormat
+      Category = 'Rich edit'
       RichEdit = Editor
     end
     object ActAlignLeft: TTyRichEditAlignLeft
@@ -596,43 +895,96 @@ object MainForm: TMainForm
       Category = 'Rich edit'
       RichEdit = Editor
     end
-    object ActInsertPicture: TTyRichEditInsertPicture
+    object ActSpacing1: TTyRichEditLineSpacing
+      Category = 'Rich edit'
+      Caption = 'Single'
+      Hint = 'Single line spacing'
+      GroupIndex = 113
+      RichEdit = Editor
+    end
+    object ActSpacing15: TTyRichEditLineSpacing
+      Category = 'Rich edit'
+      Caption = '1.5 Lines'
+      Hint = 'One and a half line spacing'
+      Spacing = ls15
+      GroupIndex = 114
+      RichEdit = Editor
+    end
+    object ActSpacing2: TTyRichEditLineSpacing
+      Category = 'Rich edit'
+      Caption = 'Double'
+      Hint = 'Double line spacing'
+      Spacing = lsDouble
+      GroupIndex = 115
+      RichEdit = Editor
+    end
+    object ActSize8: TTyRichEditFontSize
+      Category = 'Rich edit'
+      Caption = '8'
+      Size = 8
+      RichEdit = Editor
+    end
+    object ActSize10: TTyRichEditFontSize
+      Category = 'Rich edit'
+      Caption = '10'
+      Size = 10
+      RichEdit = Editor
+    end
+    object ActSize12: TTyRichEditFontSize
+      Category = 'Rich edit'
+      Caption = '12'
+      Size = 12
+      RichEdit = Editor
+    end
+    object ActSize14: TTyRichEditFontSize
+      Category = 'Rich edit'
+      Caption = '14'
+      Size = 14
+      RichEdit = Editor
+    end
+    object ActSize18: TTyRichEditFontSize
+      Category = 'Rich edit'
+      Caption = '18'
+      Size = 18
+      RichEdit = Editor
+    end
+    object ActSize24: TTyRichEditFontSize
+      Category = 'Rich edit'
+      Caption = '24'
+      Size = 24
+      RichEdit = Editor
+    end
+    object ActSize36: TTyRichEditFontSize
+      Category = 'Rich edit'
+      Caption = '36'
+      Size = 36
+      RichEdit = Editor
+    end
+    object ActRowAbove: TTyRichEditInsertRowAbove
       Category = 'Rich edit'
       RichEdit = Editor
     end
-    object ActInsertTable: TTyRichEditInsertTable
-      Category = 'Rich edit'
-      RichEdit = Editor
-      OnChooseSize = TableChooseSize
-    end
-    object ActFind: TTyRichEditFind
-      Category = 'Rich edit'
-      RichEdit = Editor
-      OnNotFound = FindNotFound
-    end
-    object ActReplace: TTyRichEditReplace
-      Category = 'Rich edit'
-      RichEdit = Editor
-      OnNotFound = FindNotFound
-      OnReplaced = ReplaceReplaced
-    end
-    object ActUndo: TTyRichEditUndo
+    object ActRowBelow: TTyRichEditInsertRowBelow
       Category = 'Rich edit'
       RichEdit = Editor
     end
-    object ActRedo: TTyRichEditRedo
+    object ActColumnLeft: TTyRichEditInsertColumnLeft
       Category = 'Rich edit'
       RichEdit = Editor
     end
-    object ActZoomIn: TTyRichEditZoomIn
+    object ActColumnRight: TTyRichEditInsertColumnRight
       Category = 'Rich edit'
       RichEdit = Editor
     end
-    object ActZoomOut: TTyRichEditZoomOut
+    object ActDeleteRow: TTyRichEditDeleteRow
       Category = 'Rich edit'
       RichEdit = Editor
     end
-    object ActZoomReset: TTyRichEditZoomReset
+    object ActDeleteColumn: TTyRichEditDeleteColumn
+      Category = 'Rich edit'
+      RichEdit = Editor
+    end
+    object ActDeleteTable: TTyRichEditDeleteTable
       Category = 'Rich edit'
       RichEdit = Editor
     end
@@ -694,6 +1046,27 @@ object MainForm: TMainForm
       object MnuSep3: TMenuItem
         Caption = '-'
       end
+      object MnuCut: TMenuItem
+        Action = ActCut
+      end
+      object MnuCopy: TMenuItem
+        Action = ActCopy
+      end
+      object MnuPaste: TMenuItem
+        Action = ActPaste
+      end
+      object MnuDelete: TMenuItem
+        Action = ActDelete
+      end
+      object MnuSep4: TMenuItem
+        Caption = '-'
+      end
+      object MnuSelectAll: TMenuItem
+        Action = ActSelectAll
+      end
+      object MnuSep5: TMenuItem
+        Caption = '-'
+      end
       object MnuFind: TMenuItem
         Action = ActFind
       end
@@ -703,6 +1076,39 @@ object MainForm: TMainForm
     end
     object MnuFormat: TMenuItem
       Caption = 'F&ormat'
+      object MnuFontSize: TMenuItem
+        Caption = 'Font &Size'
+        object MnuSize8: TMenuItem
+          Action = ActSize8
+        end
+        object MnuSize10: TMenuItem
+          Action = ActSize10
+        end
+        object MnuSize12: TMenuItem
+          Action = ActSize12
+        end
+        object MnuSize14: TMenuItem
+          Action = ActSize14
+        end
+        object MnuSize18: TMenuItem
+          Action = ActSize18
+        end
+        object MnuSize24: TMenuItem
+          Action = ActSize24
+        end
+        object MnuSize36: TMenuItem
+          Action = ActSize36
+        end
+      end
+      object MnuFontGrow: TMenuItem
+        Action = ActFontGrow
+      end
+      object MnuFontShrink: TMenuItem
+        Action = ActFontShrink
+      end
+      object MnuSep6: TMenuItem
+        Caption = '-'
+      end
       object MnuBold: TMenuItem
         Action = ActBold
       end
@@ -721,7 +1127,37 @@ object MainForm: TMainForm
       object MnuSubscript: TMenuItem
         Action = ActSubscript
       end
-      object MnuSep4: TMenuItem
+      object MnuSep7: TMenuItem
+        Caption = '-'
+      end
+      object MnuTextColorMenu: TMenuItem
+        Caption = 'Text &Color'
+        object MnuTextColor: TMenuItem
+          Action = ActTextColor
+        end
+        object MnuTextAuto: TMenuItem
+          Action = ActTextAuto
+        end
+        object MnuTextChoose: TMenuItem
+          Action = ActTextChoose
+        end
+      end
+      object MnuHighlightMenu: TMenuItem
+        Caption = '&Highlight'
+        object MnuHighlight: TMenuItem
+          Action = ActHighlight
+        end
+        object MnuHighlightNone: TMenuItem
+          Action = ActHighlightNone
+        end
+        object MnuHighlightChoose: TMenuItem
+          Action = ActHighlightChoose
+        end
+      end
+      object MnuClearFormat: TMenuItem
+        Action = ActClearFormat
+      end
+      object MnuSep8: TMenuItem
         Caption = '-'
       end
       object MnuAlignLeft: TMenuItem
@@ -736,7 +1172,7 @@ object MainForm: TMainForm
       object MnuJustify: TMenuItem
         Action = ActJustify
       end
-      object MnuSep5: TMenuItem
+      object MnuSep9: TMenuItem
         Caption = '-'
       end
       object MnuBullets: TMenuItem
@@ -751,6 +1187,21 @@ object MainForm: TMainForm
       object MnuIndentDecrease: TMenuItem
         Action = ActIndentDecrease
       end
+      object MnuSep10: TMenuItem
+        Caption = '-'
+      end
+      object MnuLineSpacing: TMenuItem
+        Caption = 'Line &Spacing'
+        object MnuSpacing1: TMenuItem
+          Action = ActSpacing1
+        end
+        object MnuSpacing15: TMenuItem
+          Action = ActSpacing15
+        end
+        object MnuSpacing2: TMenuItem
+          Action = ActSpacing2
+        end
+      end
     end
     object MnuInsert: TMenuItem
       Caption = '&Insert'
@@ -759,6 +1210,33 @@ object MainForm: TMainForm
       end
       object MnuInsertTable: TMenuItem
         Action = ActInsertTable
+      end
+    end
+    object MnuTable: TMenuItem
+      Caption = '&Table'
+      object MnuRowAbove: TMenuItem
+        Action = ActRowAbove
+      end
+      object MnuRowBelow: TMenuItem
+        Action = ActRowBelow
+      end
+      object MnuColumnLeft: TMenuItem
+        Action = ActColumnLeft
+      end
+      object MnuColumnRight: TMenuItem
+        Action = ActColumnRight
+      end
+      object MnuSep11: TMenuItem
+        Caption = '-'
+      end
+      object MnuDeleteRow: TMenuItem
+        Action = ActDeleteRow
+      end
+      object MnuDeleteColumn: TMenuItem
+        Action = ActDeleteColumn
+      end
+      object MnuDeleteTable: TMenuItem
+        Action = ActDeleteTable
       end
     end
     object MnuView: TMenuItem
@@ -772,35 +1250,40 @@ object MainForm: TMainForm
       object MnuZoomReset: TMenuItem
         Action = ActZoomReset
       end
-      object MnuSep6: TMenuItem
+      object MnuSep12: TMenuItem
         Caption = '-'
       end
       object MnuWrap: TMenuItem
         Caption = '&Wrap'
         object MnuWrapWindow: TMenuItem
-          Caption = 'To the &window'
+          Caption = 'To the &Window'
           GroupIndex = 2
           RadioItem = True
           OnClick = WrapClick
         end
         object MnuWrapPage: TMenuItem
-          Caption = 'To the &page'
+          Caption = 'To the &Page'
           GroupIndex = 2
           RadioItem = True
           OnClick = WrapClick
         end
         object MnuWrapNone: TMenuItem
-          Caption = '&No wrap'
+          Caption = '&No Wrap'
           GroupIndex = 2
           RadioItem = True
           OnClick = WrapClick
         end
       end
       object MnuReadOnly: TMenuItem
-        Caption = '&Read Only'
-        OnClick = ReadOnlyClick
+        Action = ActReadOnly
       end
-      object MnuSep7: TMenuItem
+      object MnuPlainText: TMenuItem
+        Action = ActPlainText
+      end
+      object MnuShowRuler: TMenuItem
+        Action = ActShowRuler
+      end
+      object MnuSep13: TMenuItem
         Caption = '-'
       end
       object MnuSkin: TMenuItem
@@ -810,6 +1293,63 @@ object MainForm: TMainForm
         Caption = '&Dark'
         OnClick = DarkClick
       end
+    end
+  end
+  object PopSpacing: TTyPopupMenu
+    Left = 440
+    Top = 160
+    object PopItemSpacing1: TMenuItem
+      Action = ActSpacing1
+    end
+    object PopItemSpacing15: TMenuItem
+      Action = ActSpacing15
+    end
+    object PopItemSpacing2: TMenuItem
+      Action = ActSpacing2
+    end
+  end
+  object PopEditor: TTyPopupMenu
+    Left = 520
+    Top = 160
+    OnPopup = PopEditorPopup
+    object PopCut: TMenuItem
+      Action = ActCut
+    end
+    object PopCopy: TMenuItem
+      Action = ActCopy
+    end
+    object PopPaste: TMenuItem
+      Action = ActPaste
+    end
+    object MnuSep14: TMenuItem
+      Caption = '-'
+    end
+    object PopSelectAll: TMenuItem
+      Action = ActSelectAll
+    end
+    object PopSepTable: TMenuItem
+      Caption = '-'
+    end
+    object PopRowAbove: TMenuItem
+      Action = ActRowAbove
+    end
+    object PopRowBelow: TMenuItem
+      Action = ActRowBelow
+    end
+    object PopColumnLeft: TMenuItem
+      Action = ActColumnLeft
+    end
+    object PopColumnRight: TMenuItem
+      Action = ActColumnRight
+    end
+    object PopDeleteRow: TMenuItem
+      Action = ActDeleteRow
+    end
+    object PopDeleteColumn: TMenuItem
+      Action = ActDeleteColumn
+    end
+    object PopDeleteTable: TMenuItem
+      Action = ActDeleteTable
     end
   end
 end

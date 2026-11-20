@@ -19,6 +19,26 @@ msgstr "TTyRichEdit 示例"
 msgid "Rich edit  · TyControls"
 msgstr "富文本编辑  · TyControls"
 
+#: tmainform.fontbox.hint
+msgid "Font"
+msgstr "字体"
+
+#: tmainform.sizebox.hint
+msgid "Font size"
+msgstr "字号"
+
+#: tmainform.textswatch.hint
+msgid "Choose the text color"
+msgstr "选择文字颜色"
+
+#: tmainform.highlightswatch.hint
+msgid "Choose the highlight color"
+msgstr "选择突出显示颜色"
+
+#: tmainform.btnspacing.hint
+msgid "Line spacing"
+msgstr "行距"
+
 #: tmainform.dlgopen.title
 msgid "Open a document"
 msgstr "打开文档"
@@ -67,6 +87,114 @@ msgstr "退出(&X)"
 msgid "Close the window"
 msgstr "关闭窗口"
 
+#: tmainform.acttextauto.caption
+msgid "&Automatic"
+msgstr "自动(&A)"
+
+#: tmainform.acttextauto.hint
+msgid "Text in the theme's color"
+msgstr "主题的文字颜色"
+
+#: tmainform.acttextchoose.caption
+msgid "&More Colors..."
+msgstr "更多颜色(&M)..."
+
+#: tmainform.acttextchoose.hint
+msgid "Choose the text color"
+msgstr "选择文字颜色"
+
+#: tmainform.acthighlightnone.caption
+msgid "&No Highlight"
+msgstr "无突出显示(&N)"
+
+#: tmainform.acthighlightnone.hint
+msgid "Take the highlight away"
+msgstr "去掉突出显示"
+
+#: tmainform.acthighlightchoose.caption
+msgid "M&ore Colors..."
+msgstr "更多颜色(&O)..."
+
+#: tmainform.acthighlightchoose.hint
+msgid "Choose the highlight color"
+msgstr "选择突出显示颜色"
+
+#: tmainform.actreadonly.caption
+msgid "&Read Only"
+msgstr "只读(&R)"
+
+#: tmainform.actreadonly.hint
+msgid "Read only"
+msgstr "只读"
+
+#: tmainform.actplaintext.caption
+msgid "&Plain Text"
+msgstr "纯文本(&P)"
+
+#: tmainform.actplaintext.hint
+msgid "A plain text document"
+msgstr "纯文本文档"
+
+#: tmainform.actshowruler.caption
+msgid "R&uler"
+msgstr "标尺(&U)"
+
+#: tmainform.actshowruler.hint
+msgid "Show the ruler"
+msgstr "显示标尺"
+
+#: tmainform.actspacing1.caption
+msgid "Single"
+msgstr "单倍"
+
+#: tmainform.actspacing1.hint
+msgid "Single line spacing"
+msgstr "单倍行距"
+
+#: tmainform.actspacing15.caption
+msgid "1.5 Lines"
+msgstr "1.5 倍"
+
+#: tmainform.actspacing15.hint
+msgid "One and a half line spacing"
+msgstr "1.5 倍行距"
+
+#: tmainform.actspacing2.caption
+msgid "Double"
+msgstr "双倍"
+
+#: tmainform.actspacing2.hint
+msgid "Double line spacing"
+msgstr "双倍行距"
+
+#: tmainform.actsize8.caption
+msgid "8"
+msgstr "8"
+
+#: tmainform.actsize10.caption
+msgid "10"
+msgstr "10"
+
+#: tmainform.actsize12.caption
+msgid "12"
+msgstr "12"
+
+#: tmainform.actsize14.caption
+msgid "14"
+msgstr "14"
+
+#: tmainform.actsize18.caption
+msgid "18"
+msgstr "18"
+
+#: tmainform.actsize24.caption
+msgid "24"
+msgstr "24"
+
+#: tmainform.actsize36.caption
+msgid "36"
+msgstr "36"
+
 #: tmainform.mnufile.caption
 msgid "&File"
 msgstr "文件(&F)"
@@ -99,9 +227,29 @@ msgstr "编辑(&E)"
 msgid "F&ormat"
 msgstr "格式(&O)"
 
+#: tmainform.mnufontsize.caption
+msgid "Font &Size"
+msgstr "字号(&S)"
+
+#: tmainform.mnutextcolormenu.caption
+msgid "Text &Color"
+msgstr "文字颜色(&C)"
+
+#: tmainform.mnuhighlightmenu.caption
+msgid "&Highlight"
+msgstr "突出显示(&H)"
+
+#: tmainform.mnulinespacing.caption
+msgid "Line &Spacing"
+msgstr "行距(&S)"
+
 #: tmainform.mnuinsert.caption
 msgid "&Insert"
 msgstr "插入(&I)"
+
+#: tmainform.mnutable.caption
+msgid "&Table"
+msgstr "表格(&T)"
 
 #: tmainform.mnuview.caption
 msgid "&View"
@@ -112,20 +260,16 @@ msgid "&Wrap"
 msgstr "折行(&W)"
 
 #: tmainform.mnuwrapwindow.caption
-msgid "To the &window"
+msgid "To the &Window"
 msgstr "按窗口宽度(&W)"
 
 #: tmainform.mnuwrappage.caption
-msgid "To the &page"
+msgid "To the &Page"
 msgstr "按页宽(&P)"
 
 #: tmainform.mnuwrapnone.caption
-msgid "&No wrap"
+msgid "&No Wrap"
 msgstr "不折行(&N)"
-
-#: tmainform.mnureadonly.caption
-msgid "&Read Only"
-msgstr "只读(&R)"
 
 #: tmainform.mnuskin.caption
 msgid "&Skin"
@@ -208,3 +352,15 @@ msgstr "文档 (*.rtf;*.txt)|*.rtf;*.txt|RTF 文档 (*.rtf)|*.rtf|纯文本 (*.t
 #: umain.rssavefilter
 msgid "Rich text (*.rtf)|*.rtf|Text (*.txt)|*.txt"
 msgstr "RTF 文档 (*.rtf)|*.rtf|纯文本 (*.txt)|*.txt"
+
+#: umain.rstextcolortitle
+msgid "Text color"
+msgstr "文字颜色"
+
+#: umain.rshighlighttitle
+msgid "Highlight color"
+msgstr "突出显示颜色"
+
+#: umain.rsbadsize
+msgid "Give the size in points, for example 11 or 10.5."
+msgstr "请用磅数填写字号，例如 11 或 10.5。"
