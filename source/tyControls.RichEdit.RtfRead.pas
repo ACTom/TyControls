@@ -3855,9 +3855,22 @@ begin
       begin
         if p > FFontNumMax then FFontNumMax := p;
         case FS.Props.Slot of
-          sloLoch: FS.Props.LochNum := p;
-          sloHich: FS.Props.HichNum := p;
-          sloDbch: FS.Props.DbchNum := p;
+          // (a slot's font is the font of the characters of its class from here on)
+          sloLoch:
+            begin
+              FS.Props.LochNum := p;
+              CharChanged;
+            end;
+          sloHich:
+            begin
+              FS.Props.HichNum := p;
+              CharChanged;
+            end;
+          sloDbch:
+            begin
+              FS.Props.DbchNum := p;
+              CharChanged;
+            end;
         else
           // the font of right-to-left text: not modelled
           if normal then AddCharExtra(FTok.Start, FTok.Stop);

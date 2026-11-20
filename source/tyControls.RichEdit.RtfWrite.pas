@@ -364,7 +364,7 @@ type
     procedure Raw(const S: RawByteString);
     procedure RawUnder(const S: RawByteString; AUc: Integer);
     procedure RawMark(AMark: TTyRichFieldMark);
-    procedure WriteMarkSlots(AMark: TTyRichFieldMark);
+    procedure WriteMarkSlots(AMark: TTyRichFieldMark; AFormat: Integer);
     procedure Fragment(const S: RawByteString);
     procedure RawText(const S: RawByteString);
     procedure NewLine;
@@ -911,12 +911,16 @@ end;
 
 // Word's three slot fonts in force where a field's group was read (TTyRichFieldMark.SlotName),
 // by this writer's numbers - a font the table here does not have is not named -, then the slot
-// named last: what the group's own \loch \hich \dbch fall back on.
-procedure TRtfWriter.WriteMarkSlots(AMark: TTyRichFieldMark);
+// named last: what the group's own \loch \hich \dbch fall back on. When that was \rtlch or
+// \ltrch, the one the mark's run keeps among its words (AFormat's Extra, which the reader put
+// there) is written again: the slot is that one's, as it was.
+procedure TRtfWriter.WriteMarkSlots(AMark: TTyRichFieldMark; AFormat: Integer);
 const
   Names: array[0..2] of string = ('loch', 'hich', 'dbch');
 var
   i, k, j: Integer;
+  ci: PCharInfo;
+  w: RawByteString;
 begin
   for i := 0 to 2 do
   begin
@@ -933,7 +937,20 @@ begin
     Word(Names[i]);
     WordN('af', FFonts[k].Num);
   end;
-  if AMark.Slot in [1..3] then Word(Names[AMark.Slot - 1]);
+  if AMark.Slot in [1..3] then Word(Names[AMark.Slot - 1])
+  else if AMark.Slot = 4 then
+  begin
+    w := '';
+    ci := CharInfo(AFormat);
+    for i := ci^.Fmt.Extra.Count - 1 downto 0 do
+      if TyRtfFragmentIsWord(ci^.Fmt.Extra.Item(i), 'rtlch') or
+         TyRtfFragmentIsWord(ci^.Fmt.Extra.Item(i), 'ltrch') then
+      begin
+        w := ci^.Fmt.Extra.Item(i);
+        Break;
+      end;
+    if w <> '' then Fragment(w) else Word('ltrch');
+  end;
 end;
 
 // A fragment of a format's Extra. The format does not say under which \uc a group among
@@ -2035,7 +2052,7 @@ begin
         { the slot fonts in force where it was read, which its own \loch \hich \dbch fall back
           on (a format of ours names none); the text after it is written in its format again,
           whose \plain clears them (FCurChar, at the skip's end) }
-        if m.HasSlots then WriteMarkSlots(m);
+        if m.HasSlots then WriteMarkSlots(m, ARuns[r].Format);
         RawMark(m);
         FSkip := 1;
         FSkipPara := AIndex;
