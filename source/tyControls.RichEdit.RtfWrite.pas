@@ -339,6 +339,8 @@ type
     FSkip: Integer;
     FSkipPara: Integer;      // the paragraph that field began in
     FPrevInField: Boolean;
+    FBreakInFields: Boolean; // a walk stops after a paragraph that ends inside such a field
+    FLastWalked: Integer;    // ... the paragraph it wrote last
     FPrevCell: TTyRichCell;  // its cell
     // a range (TyRichSaveRtfRange): its paragraphs, what of its end paragraphs goes out
     FRange: Boolean;
@@ -365,6 +367,11 @@ type
     procedure RawUnder(const S: RawByteString; AUc: Integer);
     procedure RawMark(AMark: TTyRichFieldMark);
     procedure WriteMarkSlots(AMark: TTyRichFieldMark; AFormat: Integer);
+    function InsideField(AIndex: Integer): Boolean;
+    function FieldStartDepth(AIndex: Integer): Integer;
+    function PastFieldFrom(AIndex, ALimit: Integer): Integer;
+    function BackOverField(AIndex, ALimit: Integer): Integer;
+    procedure WalkStretch(AFirst, ALast: Integer);
     procedure Fragment(const S: RawByteString);
     procedure RawText(const S: RawByteString);
     procedure NewLine;
@@ -907,6 +914,107 @@ begin
   FNeedDelim := False;
   FRawOpen := False;
   if uc then Word('uc1');
+end;
+
+// Paragraph AIndex lies wholly inside a field's result (fields open at its start and nowhere
+// fewer than one in it): a whole document's save writes that field as its open mark's bytes,
+// so the paragraph is neither noted nor written (nor parsed, nor walked). A range is written
+// from the model: there a field may be cut, and its result goes as text.
+function TRtfWriter.InsideField(AIndex: Integer): Boolean;
+var
+  s, low: Integer;
+begin
+  if FRange then Exit(False);
+  FDoc.ParaFieldDepths(AIndex, s, low);
+  Result := (s > 0) and (low > 0);
+end;
+
+function TRtfWriter.FieldStartDepth(AIndex: Integer): Integer;
+var
+  low: Integer;
+begin
+  FDoc.ParaFieldDepths(AIndex, Result, low);
+end;
+
+{ The first paragraph from AIndex (at most ALimit) that does not lie wholly inside a field's
+  result. A run of the file's own paragraphs alike in their fields (the load's index) is
+  passed at once: one look-up a run, not one a paragraph - a result can only hold the file's
+  paragraphs as they are (nothing in it changes). }
+function TRtfWriter.PastFieldFrom(AIndex, ALimit: Integer): Integer;
+var
+  src, n, next, s: Int64;
+  lo, hi, mid: Integer;
+begin
+  Result := AIndex;
+  while (Result < ALimit) and InsideField(Result) do
+  begin
+    if (FLoad = nil) or not FDoc.Text.ParaLazySource(Result, src, n) then
+    begin
+      Inc(Result);
+      Continue;
+    end;
+    if not FLoad.NextDepthChange(src, next) then next := High(Int64);
+    // the run's paragraphs are the file's own, one after the other: the first one at or past
+    // the change (or not the file's) ends it - found by halves
+    lo := Result + 1;
+    hi := ALimit;
+    while lo < hi do
+    begin
+      mid := (lo + hi) shr 1;
+      if FDoc.Text.ParaLazySource(mid, s, n) and (s > src) and (s < next) then lo := mid + 1
+      else hi := mid;
+    end;
+    Result := lo;
+  end;
+end;
+
+{ From paragraph AIndex, which starts inside a field, back to the first one of the run of the
+  file's paragraphs alike in their fields it is in (the load's index; AIndex itself when that is
+  not known), not before ALimit. }
+function TRtfWriter.BackOverField(AIndex, ALimit: Integer): Integer;
+var
+  src, n, first, s: Int64;
+  lo, hi, mid: Integer;
+begin
+  Result := AIndex;
+  if (FLoad = nil) or not FDoc.Text.ParaLazySource(AIndex, src, n) then Exit;
+  first := FLoad.DepthRunStart(src);
+  if first < 0 then Exit;
+  // the first of the file's own paragraphs before AIndex, one after the other, that are in
+  // the run: found by halves
+  lo := ALimit;
+  hi := AIndex;
+  while lo < hi do
+  begin
+    mid := (lo + hi) shr 1;
+    if FDoc.Text.ParaLazySource(mid, s, n) and (s >= first) and (s < src) then hi := mid
+    else lo := mid + 1;
+  end;
+  Result := lo;
+end;
+
+{ Paragraphs AFirst .. ALast written (StretchPara), in one walk of the text - but where a
+  paragraph ends inside a field written as its bytes (a whole document's save: not a range),
+  the walk stops there: the paragraphs wholly inside that field are passed over (counted as
+  done), neither parsed nor walked, and the walk goes on from the next one, as deep in the
+  field as it starts (FSkip). }
+procedure TRtfWriter.WalkStretch(AFirst, ALast: Integer);
+var
+  k, m: Integer;
+begin
+  FBreakInFields := not FRange;
+  k := AFirst;
+  while k <= ALast do
+  begin
+    FLastWalked := -1;
+    FDoc.Text.WalkParaTexts(k, ALast, @StretchPara);
+    if (FLastWalked < 0) or (FLastWalked >= ALast) or (FSkip = 0) then Break;
+    m := PastFieldFrom(FLastWalked + 1, ALast + 1);
+    Inc(FDone, m - FLastWalked - 1);
+    if m <= ALast then FSkip := FieldStartDepth(m);
+    k := m;
+  end;
+  FBreakInFields := False;
 end;
 
 // Word's three slot fonts in force where a field's group was read (TTyRichFieldMark.SlotName),
@@ -1733,7 +1841,13 @@ begin
   x := FFilePos;
   while a > FBlockFirst do
   begin
-    if CleanAt(x) and (((a = AIndex) and AGap) or RowStartsAt(a, False)) then Break;
+    // (a paragraph that starts inside a field is no clean place: no state is asked for it,
+    // and the field's paragraphs are passed by runs)
+    if FieldStartDepth(a) > 0 then
+      a := BackOverField(a, FBlockFirst)
+    else if CleanAt(x) and (((a = AIndex) and AGap) or RowStartsAt(a, False)) then
+      Break;
+    if a <= FBlockFirst then Break;
     Dec(a);
     FDoc.Text.ParaLazySource(a, s, n);
     x := s;
@@ -1745,8 +1859,16 @@ begin
   FStretchLook := False;
   FStretchFirst := a;
   FStretchX := x;
-  // (paragraphs of the file the walk has passed: read by their index)
-  for k := a to AIndex - 1 do NotePara(k, nil);
+  // (paragraphs of the file the walk has passed: read by their index - not those a field's
+  // bytes write)
+  k := a;
+  while k < AIndex do
+  begin
+    k := PastFieldFrom(k, AIndex);
+    if k >= AIndex then Break;
+    NotePara(k, nil);
+    Inc(k);
+  end;
 end;
 
 procedure TRtfWriter.CloseStretch(AIndex: Integer; AStop: Int64);
@@ -1760,6 +1882,7 @@ procedure TRtfWriter.PlanPara(AIndex: Integer; AData: Pointer; ASrcOffset, ASrcB
   var AContinue: Boolean);
 var
   own: Boolean;
+  ds, dl: Integer;
 begin
   PlanTick(AIndex);
   // the file's own: its text is the unedited lazy paragraph and its formats are the file's.
@@ -1776,8 +1899,12 @@ begin
     end;
     OpenStretch(AIndex, own);
   end;
-  // the stretch ends before a paragraph of the file that starts at a clean place
-  if own and CleanAt(ASrcOffset) and
+  // the stretch ends before a paragraph of the file that starts at a clean place (never one
+  // inside a field: no state is asked for it, and one wholly inside is not noted either)
+  // (a paragraph not parsed: the load's index by its offset, no look-up of the paragraph)
+  if (AData = nil) and (ASrcOffset >= 0) then FLoad.ParaFieldDepths(ASrcOffset, ds, dl)
+  else FDoc.ValueFieldDepths(AData, AIndex, ds, dl);
+  if own and (ds = 0) and CleanAt(ASrcOffset) and
      ((FStretchFirst = AIndex) or RowStartsAt(AIndex, True)) then
   begin
     CloseStretch(AIndex, ASrcOffset);
@@ -1785,7 +1912,7 @@ begin
     FBlockStart := ASrcOffset;
     FFilePos := ASrcOffset + ASrcBytes;
   end
-  else
+  else if (ds = 0) or (dl = 0) then
     NotePara(AIndex, AData);
 end;
 
@@ -1846,7 +1973,7 @@ begin
   FPrevCell := nil;
   FSkip := 0;
   FPrevInField := False;
-  FDoc.Text.WalkParaTexts(AFirst, AFirst + ACount - 1, @StretchPara);
+  WalkStretch(AFirst, AFirst + ACount - 1);
   // (one that ended inside a field written as its bytes: they ended it)
   if FPrevInField then Exit;
   { A range's last paragraph taken in part, without its separator: no \par (pasted, it adds
@@ -1889,6 +2016,9 @@ begin
   FPrevCell := cell;
   FHavePrev := True;
   Inc(FDone);
+  FLastWalked := AIndex;
+  // (the paragraphs wholly inside the field written as its bytes are passed over: WalkStretch)
+  if FBreakInFields and (FSkip > 0) then AContinue := False;
 end;
 
 // A row begins: its definition. A row is all its cells, each in its place, and the model

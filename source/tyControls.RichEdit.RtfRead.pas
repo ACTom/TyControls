@@ -819,6 +819,13 @@ type
       them, without parsing it: how many are open at its start, and the fewest open anywhere
       in it. A binary search of the places they change. }
     procedure ParaFieldDepths(ASrcOffset: Int64; out AStart, ALow: Integer);
+    { The file's paragraphs after the one at ASrcOffset that are alike in their fields (as
+      ParaFieldDepths tells) end where the next one begins whose depths differ: its offset
+      (False: none - they go on to the file's end). A writer passes a field's paragraphs by
+      these, not one by one. }
+    function NextDepthChange(ASrcOffset: Int64; out ANextOffset: Int64): Boolean;
+    // ... and where the run of them that the one at ASrcOffset is in begins (-1: none known)
+    function DepthRunStart(ASrcOffset: Int64): Int64;
     // What the pre-scan read to decide fields: the index scan's, and every parse's since.
     function PreScannedBytes: Int64;
     // The verdicts the scan kept on large fields, and their bytes.
@@ -6572,6 +6579,36 @@ begin
     AStart := FDepthStart[hi];
     ALow := FDepthLow[hi];
   end;
+end;
+
+function TTyRtfLoad.NextDepthChange(ASrcOffset: Int64; out ANextOffset: Int64): Boolean;
+var
+  lo, hi, m: Integer;
+begin
+  // the first place of change after ASrcOffset
+  lo := 0;
+  hi := FDepthN - 1;
+  while lo <= hi do
+  begin
+    m := (lo + hi) shr 1;
+    if FDepthSrc[m] <= ASrcOffset then lo := m + 1 else hi := m - 1;
+  end;
+  Result := lo < FDepthN;
+  if Result then ANextOffset := FDepthSrc[lo] else ANextOffset := -1;
+end;
+
+function TTyRtfLoad.DepthRunStart(ASrcOffset: Int64): Int64;
+var
+  lo, hi, m: Integer;
+begin
+  lo := 0;
+  hi := FDepthN - 1;
+  while lo <= hi do
+  begin
+    m := (lo + hi) shr 1;
+    if FDepthSrc[m] <= ASrcOffset then lo := m + 1 else hi := m - 1;
+  end;
+  if hi < 0 then Result := -1 else Result := FDepthSrc[hi];
 end;
 
 function TTyRtfLoad.PreScannedBytes: Int64;

@@ -1514,6 +1514,14 @@ type
     function FieldDepthAt(APos: TTyRichPos): Integer;
     { The fields open at paragraph AIndex's start (its value's; parses it). }
     function ParaFieldDepth(AIndex: Integer): Integer;
+    { Paragraph AIndex's fields without parsing it: how many are open at its start, and the
+      fewest open anywhere in it (its start and its end included) - from its value when it
+      has one, else from the loader's index. A paragraph with both above 0 lies wholly inside
+      a field's result: a writer that writes that field as its bytes need not read it. }
+    procedure ParaFieldDepths(AIndex: Integer; out AStart, ALow: Integer);
+    { The same of paragraph AIndex whose value (as a walk of the paragraphs hands it out,
+      nil: not parsed) is AData - no look-up of the paragraph for a value. }
+    procedure ValueFieldDepths(AData: Pointer; AIndex: Integer; out AStart, ALow: Integer);
     { The innermost field whose result APos is inside: the positions of its open mark and its
       close mark. False outside every field. The cost: APos's paragraph and the two marks'
       paragraphs are read (parsed when the document is read on demand); the paragraphs between
@@ -3495,11 +3503,17 @@ begin
 end;
 
 procedure TTyRichDocument.ParaDepths(AIndex: Integer; out AStart, ALow: Integer);
+begin
+  ValueFieldDepths(SlotData(AIndex), AIndex, AStart, ALow);
+end;
+
+procedure TTyRichDocument.ValueFieldDepths(AData: Pointer; AIndex: Integer; out AStart,
+  ALow: Integer);
 var
   d: TTyRichParaData;
   i, depth: Integer;
 begin
-  d := SlotData(AIndex);
+  d := TTyRichParaData(AData);
   if (d = nil) and (FLoader <> nil) then
   begin
     if FLoader.ParaFieldDepths(Self, AIndex, AStart, ALow) then Exit;
@@ -3517,6 +3531,11 @@ begin
         Dec(depth);
         if depth < ALow then ALow := depth;
       end;
+end;
+
+procedure TTyRichDocument.ParaFieldDepths(AIndex: Integer; out AStart, ALow: Integer);
+begin
+  ParaDepths(AIndex, AStart, ALow);
 end;
 
 function TTyRichDocument.DepthAt(APos: TTyRichPos): Integer;
