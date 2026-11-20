@@ -975,6 +975,18 @@ begin
     'TyRichEditPlaceholder     { background: var(--surface-sunk); border-color: var(--border); }' + LineEnding +
     '/* 输入法正在组的字(还没进文档):画在光标处,下面一条下划线(border-color,默认是正文的颜色);输入法正在转换的那一段下划线加粗一倍。 */' + LineEnding +
     'TyRichEditComposition     { border-color: var(--on-surface); }' + LineEnding +
+    '/* 富文本的标尺(TTyRichEditRuler)。整条是 TyRichEditRuler:底色就是"用不到"的那部分(页边以外、表格' + LineEnding +
+    '   单元格两边),字号是刻度数字的。当前段落能用的那段宽度画成 TyRulerTick 的底,刻度和数字用它的' + LineEnding +
+    '   color;用不到的那部分里的刻度用 :disabled 那份。标记(首行缩进、悬挂缩进、下面那个一起挪的方块、' + LineEnding +
+    '   右缩进、制表位)是 TyRulerMarker:background 填、border-color 描边(制表位只用 border-color);' + LineEnding +
+    '   :hover 指着的、:active 正在拖的、:disabled 拖不了的时候(只读、禁用、载入中)。 */' + LineEnding +
+    'TyRichEditRuler           { background: var(--surface-chrome); color: var(--muted); font-size: var(--font-size-base); }' + LineEnding +
+    'TyRulerTick               { background: var(--input-bg); color: var(--muted); }' + LineEnding +
+    'TyRulerTick:disabled      { color: var(--border); }' + LineEnding +
+    'TyRulerMarker             { background: var(--surface); border-color: var(--on-surface); }' + LineEnding +
+    'TyRulerMarker:hover       { border-color: var(--accent); }' + LineEnding +
+    'TyRulerMarker:active      { background: var(--accent); border-color: var(--accent); }' + LineEnding +
+    'TyRulerMarker:disabled    { border-color: var(--border); }' + LineEnding +
     'TyTabClose      { background: var(--overlay-hover); border-radius: var(--radius); }' + LineEnding +
     '' + LineEnding +
     'TyScrollThumb { background: var(--scroll-handle); border-radius: var(--radius-scroll); }' + LineEnding +

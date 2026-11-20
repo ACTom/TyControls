@@ -1204,6 +1204,9 @@ TyLColorPicker, TyHSColorPicker, TyMeterTick, TyAnalogClockHand, TyGearDialTeeth
 | `TyRichEditObject` | 选中图片的框(`border-color`)和手柄(`background`) | `TTyRichEdit` | 无状态 |
 | `TyRichEditPlaceholder` | 显示不了的图片(WMF/EMF 等)的占位:`background` 填底,`border-color` 画框 | `TTyRichEdit` | 无状态 |
 | `TyRichEditComposition` | 输入法正在组的字(还没进文档)下面那条下划线的颜色(`border-color`;默认 `--on-surface`,正文的颜色),正在转换的那一段加粗一倍 | `TTyRichEdit` | 无状态 |
+| `TyRichEditRuler` | 富文本的标尺整条:`background` 是用不到的那部分(页边以外、表格单元格两边)的底,`font-size` 是刻度数字的字号 | `TTyRichEditRuler` | 无状态 |
+| `TyRulerTick` | 标尺上当前段落能用的那段宽度:`background` 填底,`color` 画刻度和数字 | `TTyRichEditRuler` | `:disabled` 是用不到的那部分里的刻度和数字 |
+| `TyRulerMarker` | 标尺上的标记(首行缩进、悬挂缩进、一起挪的方块、右缩进、制表位):`background` 填、`border-color` 描边,制表位只用 `border-color` | `TTyRichEditRuler` | `:hover` 指着的、`:active` 正在拖的、`:disabled` 拖不了的时候 |
 
 #### 8.2.5 勾选、开关、滑杆、进度
 

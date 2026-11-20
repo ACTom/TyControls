@@ -46,16 +46,16 @@ uses
   tyControls.Popover, tyControls.PreviewBox, tyControls.ProgressBar, tyControls.PropertyGrid,
   tyControls.RadioGroup, tyControls.Rating, tyControls.RelativePanel, tyControls.Ribbon,
   tyControls.RibbonAppMenu, tyControls.RibbonBackstage, tyControls.RibbonGallery,
-  tyControls.RibbonQuickAccess, tyControls.RichEdit, tyControls.ScrollBar, tyControls.ScrollBox,
-  tyControls.ScrollContent, tyControls.ScrollPanel, tyControls.Segmented, tyControls.ShadowLabel,
-  tyControls.Shape, tyControls.ShellComboBox, tyControls.ShellListView, tyControls.ShellTreeView,
-  tyControls.SizeBox, tyControls.Sparkline, tyControls.SpinEdit, tyControls.Splitter,
-  tyControls.StarShape, tyControls.StatusBar, tyControls.Steps, tyControls.TabSet,
-  tyControls.TabSheet, tyControls.Tag, tyControls.Terminal, tyControls.ToggleSwitch,
-  tyControls.ToolBar, tyControls.ToolBarEx, tyControls.ToolGroupPanel, tyControls.ToolWindows,
-  tyControls.TrackBar, tyControls.TrackEdit, tyControls.Transfer, tyControls.TreeSelect,
-  tyControls.TreeView, tyControls.TyLabel, tyControls.URLEdit, tyControls.UpDown,
-  tyControls.ValueListEditor;
+  tyControls.RibbonQuickAccess, tyControls.RichEdit, tyControls.RichEdit.Ruler,
+  tyControls.ScrollBar, tyControls.ScrollBox, tyControls.ScrollContent, tyControls.ScrollPanel,
+  tyControls.Segmented, tyControls.ShadowLabel, tyControls.Shape, tyControls.ShellComboBox,
+  tyControls.ShellListView, tyControls.ShellTreeView, tyControls.SizeBox, tyControls.Sparkline,
+  tyControls.SpinEdit, tyControls.Splitter, tyControls.StarShape, tyControls.StatusBar,
+  tyControls.Steps, tyControls.TabSet, tyControls.TabSheet, tyControls.Tag, tyControls.Terminal,
+  tyControls.ToggleSwitch, tyControls.ToolBar, tyControls.ToolBarEx, tyControls.ToolGroupPanel,
+  tyControls.ToolWindows, tyControls.TrackBar, tyControls.TrackEdit, tyControls.Transfer,
+  tyControls.TreeSelect, tyControls.TreeView, tyControls.TyLabel, tyControls.URLEdit,
+  tyControls.UpDown, tyControls.ValueListEditor;
 
 type
   TGenAboutDialog = class(TTyCustomAboutDialog)
@@ -8631,6 +8631,43 @@ type
     property OnEndDrag;
   end;
 
+  TGenRichEditRuler = class(TTyCustomRichEditRuler)
+  published
+    property Version;
+    property Align;
+    property Anchors;
+    property AutoSize;
+    property BorderSpacing;
+    property Constraints;
+    property Enabled;
+    property Visible;
+    property Font;
+    property ShowHint;
+    property ParentShowHint;
+    property PopupMenu;
+    property TabOrder;
+    property TabStop;
+    property StyleClass;
+    property StyleOverride;
+    property Controller;
+    property RichEdit;
+    property MeasureUnit;
+    property OnMarkerChanging;
+    property OnMarkerChanged;
+    property OnClick;
+    property OnDblClick;
+    property OnMouseDown;
+    property OnMouseUp;
+    property OnMouseMove;
+    property OnMouseEnter;
+    property OnMouseLeave;
+    property OnContextPopup;
+    property OnResize;
+    property OnChangeBounds;
+    property OnShowHint;
+    property OnPaint;
+  end;
+
   TGenScrollBar = class(TTyCustomScrollBar)
   published
     property Version;
@@ -11566,7 +11603,7 @@ type
 
 const
   { (mimic, final class) }
-  CGenMimics: array[0..186, 0..1] of TClass = (
+  CGenMimics: array[0..187, 0..1] of TClass = (
     (TGenAboutDialog, TTyAboutDialog),
     (TGenAccordion, TTyAccordion),
     (TGenActivityBar, TTyActivityBar),
@@ -11709,6 +11746,7 @@ const
     (TGenRibbonPage, TTyRibbonPage),
     (TGenRibbonQuickAccess, TTyRibbonQuickAccess),
     (TGenRichEdit, TTyRichEdit),
+    (TGenRichEditRuler, TTyRichEditRuler),
     (TGenScrollBar, TTyScrollBar),
     (TGenScrollBox, TTyScrollBox),
     (TGenScrollContent, TTyScrollContent),

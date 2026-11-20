@@ -30,7 +30,7 @@ uses
   tyControls.PageControl, tyControls.TabSet, tyControls.ToolWindows,
   tyControls.Calendar, tyControls.DateTimePicker, tyControls.Dial, tyControls.GearDial,
   tyControls.Rating, tyControls.TrackBar, tyControls.MultiTrackBar, tyControls.Pagination,
-  tyControls.Memo, tyControls.RichEdit, tyControls.Terminal,
+  tyControls.Memo, tyControls.RichEdit, tyControls.RichEdit.Ruler, tyControls.Terminal,
   tyControls.TreeSelect, tyControls.Cascader, tyControls.RibbonGallery,
   tyControls.ListGroupPanel, tyControls.RibbonAppMenu,
   { non-focusable side }
@@ -408,6 +408,10 @@ begin
     TTyAccordion,
     { TTyDBRadioGroup is a radio group: its buttons take the focus, as TTyRadioGroup's do. }
     TTyDBRadioGroup,
+    { TTyRichEditRuler acts on the rich edit it is linked to, as a tool button acts on what the
+      user edits: a click on it would pull the caret out of the text it formats. It never takes
+      the focus (CanFocus, as the scroll bars); TabStop is published and has no effect. }
+    TTyRichEditRuler,
     { TTyDBNavigator's buttons are painted rects, not windows, and a record command acts on the
       record the user is editing -- the tool-button rule above: taking focus would pull the
       caret out of the field the command is about (plan D9; LCL's own navigator is not

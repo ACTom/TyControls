@@ -277,6 +277,15 @@ begin
   Line(b,14,7.5,18,7.5,Ink); Line(b,14,11.5,18,11.5,Ink);
   Line(b,6,16.5,18,16.5,Ink);
 end;
+{ TTyRichEditRuler: a ruler's strip with its ticks, the first-line indent's accent triangle
+  above it and the hanging indent's below it, at the same place }
+procedure GRichEditRuler(b: TBGRABitmap);
+begin
+  RRect(b,2,8,22,16,1.5,Ink);
+  Line(b,10,8,10,12.5,Ink,1); Line(b,14,8,14,11,Ink,1); Line(b,18,8,18,12.5,Ink,1);
+  FillPolyG(b,[PointF(3.4,3),PointF(8.6,3),PointF(6,7)],Acc);
+  FillPolyG(b,[PointF(3.4,21),PointF(8.6,21),PointF(6,17)],Acc);
+end;
 { terminal: a window with a title strip, a > prompt and an underscore cursor, two short output lines }
 procedure GTerminal(b: TBGRABitmap); begin RRect(b,3,4,21,20,2,Ink); Line(b,3,8,21,8,Ink); Line(b,6,11,8,13,Acc); Line(b,8,13,6,15,Acc); Line(b,10,15,13,15,Acc); Line(b,6,18,11,18,Ink); Line(b,13,18,18,18,Ink); end;
 procedure GTitleBar(b: TBGRABitmap); begin RRect(b,3,4,21,20,2,Ink); Line(b,3,9,21,9,Ink); FillCirc(b,15,6.5,0.9,Ink); FillCirc(b,17,6.5,0.9,Ink); FillCirc(b,19,6.5,0.9,Acc); end;
@@ -1032,7 +1041,7 @@ begin
 end;
 
 const
-  Glyphs: array[0..196] of TGlyph = (
+  Glyphs: array[0..197] of TGlyph = (
     (Name:'TTyButton';          Draw:@GButton),
     (Name:'TTyLabel';           Draw:@GLabel),
     (Name:'TTyEdit';            Draw:@GEdit),
@@ -1123,6 +1132,7 @@ const
     (Name:'TTyFloatSpinEdit';   Draw:@GFloatSpinEdit),
     (Name:'TTyMemo';            Draw:@GMemo),
     (Name:'TTyRichEdit';        Draw:@GRichEdit),
+    (Name:'TTyRichEditRuler';   Draw:@GRichEditRuler),
     (Name:'TTyTerminalView';    Draw:@GTerminal),
     (Name:'TTyTitleBar';        Draw:@GTitleBar),
     (Name:'TTyMenuBar';         Draw:@GMenuBar),

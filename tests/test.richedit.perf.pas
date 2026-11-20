@@ -61,6 +61,7 @@ type
     procedure TestASaveBesideOneFieldAround100MB;
     procedure TestASaveBesideFieldsEightDeepAround30MB;
     procedure TestA100MBRtfOfEquations;
+    procedure TestAKeyWithARulerLinked;
   private
     procedure SaveBesideFields(ABytes: Int64; ANest: Integer);
   end;
@@ -70,7 +71,7 @@ implementation
 uses
   Math, LCLType, Controls, BGRABitmap, BGRABitmapTypes, tyControls.RichEdit.Text,
   tyControls.RichEdit.RtfRead, tyControls.RichEdit.RtfWrite, tyControls.RichEdit.Model,
-  tyControls.RichEdit.Commands, tyControls.RichEdit.Find
+  tyControls.RichEdit.Commands, tyControls.RichEdit.Find, tyControls.RichEdit.Ruler
   {$IFDEF LCLWin32}, test.richedit.dropacross{$ENDIF};
 
 {$IFDEF MSWINDOWS}
@@ -1657,6 +1658,62 @@ begin
       w1 <= 3 * SizeOfFile(path) / (1024 * 1024));
     {$ENDIF}
   finally
+    bmp.Free;
+  end;
+end;
+
+{ A 100 MB txt, the view in its middle: a character typed there and the paint after it, the best
+  of three without a ruler and the best of three with a TTyRichEditRuler linked (what it hears
+  and asks inside the key is in the figure; its own paint, a window of its own, is timed apart).
+  Held to the keystroke's line, both; printed, the three figures. }
+procedure TTyRichEditPerfTest.TestAKeyWithARulerLinked;
+var
+  path: string;
+  bmp, rb: TBitmap;
+  ruler: TTyRichEditRuler;
+  i: Integer;
+  without, withRuler, rulerPaint, t0: Double;
+begin
+  CheckRoom;
+  path := NewFile('.txt');
+  MakeText(path, CFileBytes);
+  bmp := TBitmap.Create;
+  rb := TBitmap.Create;
+  ruler := nil;
+  try
+    bmp.PixelFormat := pf32bit;
+    bmp.SetSize(FRich.Width, FRich.Height);
+    FRich.LoadFromFile(path);
+    TPerfRich(FRich).PaintInto(bmp);
+    FRich.ScrollY := FRich.Document.Text.TotalHeight div 2;
+    TPerfRich(FRich).PaintInto(bmp);
+    without := MaxDouble;
+    for i := 1 to 3 do without := Min(without, Keystroke(bmp, False));
+    ruler := TTyRichEditRuler.Create(nil);
+    ruler.Controller := FCtl;
+    ruler.Font.PixelsPerInch := 96;
+    ruler.SetBounds(0, 0, FRich.Width, 40);
+    ruler.RichEdit := FRich;
+    rb.PixelFormat := pf32bit;
+    rb.SetSize(ruler.Width, ruler.Height);
+    withRuler := MaxDouble;
+    for i := 1 to 3 do withRuler := Min(withRuler, Keystroke(bmp, False));
+    rulerPaint := MaxDouble;
+    for i := 1 to 3 do
+    begin
+      t0 := Clock;
+      ruler.RenderTo(rb.Canvas, Rect(0, 0, ruler.Width, ruler.Height), 96);
+      rulerPaint := Min(rulerPaint, Clock - t0);
+    end;
+    Report('txt: a key in the middle and its paint, no ruler (best of 3)', without);
+    Report('txt: a key in the middle and its paint, a ruler linked (best of 3)', withRuler);
+    Report('the ruler''s own paint (best of 3)', rulerPaint);
+    AssertTrue(Format('a key with a ruler linked in %.1f ms', [withRuler]),
+      withRuler <= CKeystrokeMs);
+    AssertTrue(Format('the ruler painted in %.1f ms', [rulerPaint]), rulerPaint <= CKeystrokeMs);
+  finally
+    ruler.Free;
+    rb.Free;
     bmp.Free;
   end;
 end;

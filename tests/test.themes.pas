@@ -588,7 +588,7 @@ begin
 end;
 
 const
-  GGRID: array[0..254] of string = (
+  GGRID: array[0..257] of string = (
     'TyForm|', 'TyButton|', 'TyButton|primary', 'TyButton|danger', 'TyLabel|',
     'TyEdit|', 'TyCheckBox|', 'TyRadioButton|', 'TyPanel|', 'TyComboBox|',
     'TyScrollBar|', 'TyScrollThumb|', 'TyTitleBar|', 'TyCaptionButton|',
@@ -604,6 +604,8 @@ const
     { the rich text control's own parts (its box is TyMemo's: TyRichEdit is registered under it) }
     'TyRichEditSelection|', 'TyRichEditObject|', 'TyRichEditPlaceholder|',
     'TyRichEditComposition|',
+    { the ruler linked to a rich edit: its box, the active span with its ticks, the markers }
+    'TyRichEditRuler|', 'TyRulerTick|', 'TyRulerMarker|',
     { the terminal (phase 3): its own box, the cursor, the selection, the 16 colours, links,
       the input method's marked text }
     'TyTerminal|', 'TyTerminalCursor|', 'TyTerminalSelection|',

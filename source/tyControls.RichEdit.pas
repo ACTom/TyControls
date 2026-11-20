@@ -70,7 +70,7 @@ interface
 
 uses
   Classes, SysUtils, Types, Math, Controls, Graphics, Forms, ExtCtrls, LCLType, LCLIntf,
-  LMessages, LCLPlatformDef, BGRABitmap, BGRABitmapTypes,
+  LMessages, LCLPlatformDef, LazMethodList, BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.StyleModel, tyControls.Painter, tyControls.Base,
   tyControls.ScrollBar, tyControls.TextMenu, tyControls.Controller,
   tyControls.RichEdit.Text, tyControls.RichEdit.Model, tyControls.RichEdit.Commands,
@@ -504,6 +504,33 @@ type
     LastPara: Integer;
     Top: Int64;
     Height: Integer;
+  end;
+
+  { What a ruler shows of the paragraph the caret is in (TTyCustomRichEdit.CaretParagraphView):
+    the paragraph, its format (twips) and where its text lies on the screen. Its text's left
+    edge is the zero its indents and tab stops count from: the page's or the window's text edge,
+    or - in a table - its cell's text edge (InCell). The x of a length L of twips from that zero
+    in the control's client pixels is Origin + FloorDiv(ZeroRaster + TyRichTwipsToPx(L, PPI,
+    Zoom), Scale): the layout's own rounding, so a marker put there stands over the text that
+    length places. Raster pixels are client pixels times Scale (the device scale).
+    TextWidthRaster: the width the text wraps at, from the zero (CRichNoWrap when it does not
+    wrap); ViewRaster: the text area's width. ClipLeft .. ClipRight, ClipTop .. ClipBottom: the
+    text clip (client pixels). Editable: a user's paragraph format action would be taken now
+    (ApplyParagraphFormat: not ReadOnly, enabled, the document taking edits, not in its update,
+    not in the designer) - a range it refuses (a field's result) is told at the action. }
+  TTyRichParaView = record
+    Para: Integer;
+    Format: TTyParaFormat;
+    InCell: Boolean;
+    Origin: Integer;
+    ZeroRaster: Int64;
+    TextWidthRaster: Integer;
+    ViewRaster: Integer;
+    PPI: Integer;
+    Zoom: Single;
+    Scale: Integer;
+    ClipLeft, ClipTop, ClipRight, ClipBottom: Integer;
+    Editable: Boolean;
   end;
 
   { A picture waiting to be decoded or scaled: the size it is to be drawn at and the paragraphs
@@ -1644,6 +1671,18 @@ type
       way): the one the constructor made. }
     procedure CocoaImComposition(var Message: TLMessage); message LM_IM_COMPOSITION;
     {$ENDIF}
+  private
+    { The paragraph view (see the public part): who hears that it may have changed (made when
+      the first one is added), and the guide line a ruler's drag asks for (client x; drawn
+      only while FGuideOn). }
+    FParaViewHandlers: TMethodList;
+    FGuideOn: Boolean;
+    FGuideX: Integer;
+    procedure ParagraphViewChanged;
+    function GetGuideLine: Integer;
+    procedure SetGuideLine(AValue: Integer);
+    function GuideLineRect: TRect;
+    procedure DrawGuideLine(ACanvas: TCanvas);
   protected
     function GetStyleTypeKey: string; override;
     { Caption IS Text, as on LCL's TCustomMemo and the package's Memo: code holding the
@@ -2949,6 +2988,41 @@ type
     { ITyScrollBarFrameHost }
     function ScrollBarFrameStyle: TTyStyleSet;
     function EmbedsScrollBar(ABar: TTyScrollBar): Boolean;
+
+    { ---- the paragraph view: what a ruler (TTyRichEditRuler, or an application's own) needs,
+      in public calls only ----
+      CaretParagraphView: the paragraph the caret is in and where its text is on the screen
+      (TTyRichParaView), as the view was last laid out - it lays nothing out and reads only that
+      paragraph's format, so it costs the same in any document. False when there is nothing to
+      show: the view was never laid out, the document is in its update, or the caret's
+      paragraph is in a table cell whose row is not laid out (scrolled away). Markers follow the
+      caret's paragraph also when the selection holds several. }
+    function CaretParagraphView(out AView: TTyRichParaView): Boolean;
+    { Who hears that the paragraph view may have changed - the caret or the selection moved,
+      the content or a format changed, the view was laid out (a zoom, a scroll, a resize, the
+      wrap mode, the theme, the PPI), ReadOnly or Enabled changed: AHandler(Sender = this
+      control), not the application's OnChange or OnSelectionChange. It may come when nothing
+      that is shown changed: the hearer asks CaretParagraphView and compares. A handler must not
+      free the control or change the document. }
+    procedure AddHandlerOnParagraphView(const AHandler: TNotifyEvent);
+    procedure RemoveHandlerOnParagraphView(const AHandler: TNotifyEvent);
+    { A vertical line through the text at client x GuideLine, over what is shown, in the text
+      colour (the caret's: no token of its own), one pixel of 96 PPI wide, inside the text clip -
+      where a ruler's drag would put what it moves. -1 (the default): none. Not part of the
+      document or the kept surface: setting it blits again its old place and its new one. }
+    property GuideLine: Integer read GetGuideLine write SetGuideLine;
+    { The user's paragraph format action (a ruler's drag, a toolbar's indent button): AMask's
+      fields of AValue (TyMergeParaFormat's meanings) to every paragraph the selection touches
+      (the caret's when nothing is selected), in one command - TTyRichSetParaFormat, one undo
+      step named as the format API's -, the selection kept where it is and the view not
+      scrolled, one OnChange. As the user's other actions: an open composition ends first; a
+      read-only or disabled control, one in the designer or inside the document's update does
+      nothing and tells nothing (False); a refusal - the document loading, incomplete or being
+      saved, a range of fields' results only - is told once through EditRefused
+      (OnEditRefused), never raised, and nothing changes. A plain-text document is formatted as
+      the format API formats it (a text save leaves the formats out). True: the formats
+      changed. A handler the action runs may free the control: False then. }
+    function ApplyParagraphFormat(AMask: TTyParaFormatMask; const AValue: TTyParaFormat): Boolean;
   published
     { TControl publishes Cursor and a redeclaration cannot unpublish it (the memo's #108). }
     property Cursor default crIBeam;
@@ -3845,6 +3919,7 @@ begin
   FreeAndNil(FLayouter);
   FreeAndNil(FDoc);
   FreeAndNil(FLines);
+  FreeAndNil(FParaViewHandlers);
   inherited Destroy;
 end;
 
@@ -4015,6 +4090,7 @@ begin
     else ImeSetContextDefault(1, FImeContextL and not ISC_SHOWUICOMPOSITIONWINDOW);
   // a plain click on a link is its click now, or no more: the hand where the pointer is
   PointerKeysChanged(FPointerShift);
+  ParagraphViewChanged;
 end;
 
 procedure TTyCustomRichEdit.SetScrollBarAutoHide(AValue: TTyScrollBarAutoHide);
@@ -4073,6 +4149,7 @@ procedure TTyCustomRichEdit.DoChange;
 begin
   // a form file's Lines while streaming, the document going with the control: no event
   if [csLoading, csDestroying] * ComponentState <> [] then Exit;
+  ParagraphViewChanged;
   if Assigned(FOnChange) then CallHandler(@Fire);
 end;
 
@@ -4371,6 +4448,7 @@ begin
   if (FCaret = FReportedCaret) and (FSelAnchor = FReportedAnchor) then Exit;
   FReportedCaret := FCaret;
   FReportedAnchor := FSelAnchor;
+  ParagraphViewChanged;
   if [csLoading, csDestroying] * ComponentState <> [] then Exit;
   if Assigned(FOnSelectionChange) then CallHandler(@Fire);
 end;
@@ -6199,6 +6277,7 @@ begin
   if not IsEnabled then EndComposition(False);
   // a disabled control's selected object shows no handles
   SyncObjectOverlay;
+  ParagraphViewChanged;
 end;
 
 procedure TTyCustomRichEdit.VisibleChanged;
@@ -14899,6 +14978,7 @@ begin
     FLatchV := 0;
     FLatchH := 0;
   end;
+  ParagraphViewChanged;
 end;
 
 procedure TTyCustomRichEdit.ClampScrollX;
@@ -15168,6 +15248,7 @@ begin
   PaintArea(Canvas, Rect(0, 0, Width, Height), Canvas.ClipRect, Font.PixelsPerInch, True);
   // over the blit: never on the surface, so a blink or a click costs no text drawn
   DrawCaret(Canvas);
+  DrawGuideLine(Canvas);
 end;
 
 procedure TTyCustomRichEdit.PointerStateChanged;
@@ -18668,6 +18749,162 @@ begin
   inherited MouseLeave;
   if FVBar <> nil then FVBar.SetHostHovered(False);
   if FHBar <> nil then FHBar.SetHostHovered(False);
+end;
+
+{ ---- the paragraph view ---- }
+
+{ Who hears it (a ruler) asks CaretParagraphView again; inside the document's update the view
+  has not heard of the change yet, and the update's end tells. }
+procedure TTyCustomRichEdit.ParagraphViewChanged;
+begin
+  if (FParaViewHandlers = nil) or (csDestroying in ComponentState) or ViewBehind then Exit;
+  FParaViewHandlers.CallNotifyEvents(Self);
+end;
+
+function TTyCustomRichEdit.CaretParagraphView(out AView: TTyRichParaView): Boolean;
+var
+  t: TTyRichText;
+  area, clip: TRect;
+  k, i: Integer;
+  row: TTyRowLayout;
+  item: TTyRichRowItem;
+  caret: TTyRichPos;
+begin
+  AView := Default(TTyRichParaView);
+  Result := False;
+  // (never laid out, or the view has not heard of the document's update yet)
+  if (FLayoutPPI <= 0) or ViewBehind then Exit;
+  t := FDoc.Text;
+  caret := Math.Max(0, Math.Min(FCaret, t.Length));
+  AView.Para := t.ParaOfPos(caret);
+  AView.Format := FDoc.Formats.ParaFormat(FDoc.ParaFormatOf(AView.Para));
+  area := TextArea(Rect(0, 0, Width, Height), ViewPPI);
+  clip := TextWindowRect;
+  AView.Origin := area.Left;
+  AView.Scale := Math.Max(1, FScale);
+  AView.PPI := FLayoutPPI;
+  AView.Zoom := FLayoutZoom;
+  AView.ViewRaster := FViewW;
+  AView.ZeroRaster := -FScrollX;
+  AView.TextWidthRaster := FLayoutWidth;
+  AView.ClipLeft := clip.Left;
+  AView.ClipTop := clip.Top;
+  AView.ClipRight := clip.Right;
+  AView.ClipBottom := clip.Bottom;
+  AView.InCell := FDoc.CellAt(AView.Para) <> nil;
+  if AView.InCell then
+  begin
+    { The cell's paragraph is laid out in its row at the cell's text width, its left edge at
+      the item's place in the row (the row's own indent and the cell's half gap in it). A row
+      that is not held (scrolled away) cannot tell: nothing to show. }
+    k := HeldBlockOf(caret);
+    if (k < 0) or not (FBlocks[k].Layout is TTyRowLayout) then Exit;
+    row := TTyRowLayout(FBlocks[k].Layout);
+    if row.ItemCount = 0 then Exit;
+    i := row.ItemAt(caret - t.ParaStart(FBlocks[k].FirstPara));
+    item := row.Items[i];
+    if item.Layout = nil then Exit;
+    AView.ZeroRaster := Int64(item.X) - FScrollX;
+    AView.TextWidthRaster := item.Layout.LayoutWidth;
+  end;
+  // what ApplyParagraphFormat asks before it makes its command
+  AView.Editable := not FReadOnly and IsEnabled and (RefusalReason = '') and
+    not (csDesigning in ComponentState);
+  Result := True;
+end;
+
+procedure TTyCustomRichEdit.AddHandlerOnParagraphView(const AHandler: TNotifyEvent);
+begin
+  if FParaViewHandlers = nil then FParaViewHandlers := TMethodList.Create;
+  FParaViewHandlers.Add(TMethod(AHandler));
+end;
+
+procedure TTyCustomRichEdit.RemoveHandlerOnParagraphView(const AHandler: TNotifyEvent);
+begin
+  if FParaViewHandlers <> nil then FParaViewHandlers.Remove(TMethod(AHandler));
+end;
+
+function TTyCustomRichEdit.GetGuideLine: Integer;
+begin
+  if FGuideOn then Result := FGuideX else Result := -1;
+end;
+
+procedure TTyCustomRichEdit.SetGuideLine(AValue: Integer);
+var
+  r: TRect;
+begin
+  if AValue < 0 then
+  begin
+    if not FGuideOn then Exit;
+  end
+  else if FGuideOn and (AValue = FGuideX) then Exit;
+  // the old place blitted again (the line is not on the surface), then the new one
+  r := GuideLineRect;
+  if not IsRectEmpty(r) then InvalidateArea(r);
+  FGuideOn := AValue >= 0;
+  if FGuideOn then FGuideX := AValue;
+  r := GuideLineRect;
+  if not IsRectEmpty(r) then InvalidateArea(r);
+end;
+
+function TTyCustomRichEdit.GuideLineRect: TRect;
+var
+  tw: TRect;
+begin
+  Result := Rect(0, 0, 0, 0);
+  if not FGuideOn then Exit;
+  tw := TextWindowRect;
+  Result := Rect(FGuideX, tw.Top, FGuideX + Math.Max(1, MulDiv(1, ViewPPI, 96)), tw.Bottom);
+  if not IntersectRect(Result, Result, tw) then Result := Rect(0, 0, 0, 0);
+end;
+
+procedure TTyCustomRichEdit.DrawGuideLine(ACanvas: TCanvas);
+var
+  r: TRect;
+begin
+  // over the blit, as the caret: the theme's text colour
+  r := GuideLineRect;
+  if IsRectEmpty(r) then Exit;
+  ACanvas.Brush.Style := bsSolid;
+  ACanvas.Brush.Color := TyColorToLCL(CurrentStyle.TextColor);
+  ACanvas.FillRect(r);
+end;
+
+function TTyCustomRichEdit.ApplyParagraphFormat(AMask: TTyParaFormatMask;
+  const AValue: TTyParaFormat): Boolean;
+var
+  life: TTyRichLife;
+  r: Boolean;
+  first, last: Integer;
+  place: TTyRichEditPlace;
+
+  procedure Work;
+  begin
+    // as the façades' writes: the selection kept (with a pending format), no scroll
+    Inc(FApiWrite);
+    try
+      r := RunMade(TTyRichSetParaFormat.Create(first, last, AMask, AValue), place, True);
+    finally
+      if not life.Gone then Dec(FApiWrite);
+    end;
+  end;
+
+begin
+  Result := False;
+  if (AMask = []) or (csDesigning in ComponentState) then Exit;
+  // a user's action: a viewer, a disabled control and an update take nothing and tell nothing
+  if FReadOnly or not IsEnabled or ViewBehind then Exit;
+  // the paragraphs of the selection as it is once what is being composed went in
+  EndCompositionForUser;
+  if FReadOnly or not IsEnabled or ViewBehind then Exit;
+  ParasOfRange(GetSelStart, GetSelLength, first, last);
+  place := Default(TTyRichEditPlace);
+  place.Anchor := CRichPlaceStays;
+  place.Caret := CRichPlaceStays;
+  place.AtLineEnd := FCaretAtEnd;
+  r := False;
+  Guard(life, @Work);
+  Result := r and not life.Gone;
 end;
 
 initialization

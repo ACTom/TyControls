@@ -1238,6 +1238,9 @@ States: `:disabled` only (`opacity`).
 | `TyRichEditObject` | A selected picture's frame (`border-color`) and handles (`background`) | `TTyRichEdit` | none |
 | `TyRichEditPlaceholder` | A picture that cannot be shown (WMF/EMF and the like): `background` fills it, `border-color` frames it | `TTyRichEdit` | none |
 | `TyRichEditComposition` | The underline under what an input method is composing (not in the document yet): `border-color` (default `--on-surface`, the text's colour); the clause being converted is underlined twice as thick | `TTyRichEdit` | none |
+| `TyRichEditRuler` | The rich text ruler as a whole: `background` is the ground of what the text cannot use (outside the page's text, either side of a table cell), `font-size` the scale's figures' size | `TTyRichEditRuler` | none |
+| `TyRulerTick` | The width the caret's paragraph can use, on the ruler: `background` fills it, `color` draws the ticks and figures | `TTyRichEditRuler` | `:disabled` is the ticks and figures outside it |
+| `TyRulerMarker` | The ruler's markers (first-line indent, hanging indent, the box that moves both, right indent, tab stops): `background` fills, `border-color` outlines; a tab stop uses `border-color` alone | `TTyRichEditRuler` | `:hover` the one pointed at, `:active` the one dragged, `:disabled` while nothing may be dragged |
 
 #### 8.2.5 Checks, switches, sliders, progress
 

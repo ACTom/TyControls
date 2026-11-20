@@ -1171,7 +1171,8 @@ initialization
     'TTyEdit', 'TTyNumericEdit', 'TTyCurrencyEdit', 'TTyMaskEdit', 'TTyURLEdit', 'TTyComboEdit',
     'TTyTrackEdit', 'TTyCalcEdit', 'TTyCalcCurrencyEdit',
     // T5 edits II
-    'TTyCalculator', 'TTyMemo', 'TTyRichEdit', 'TTySpinEdit', 'TTyFloatSpinEdit', 'TTyUpDown',
+    'TTyCalculator', 'TTyMemo', 'TTyRichEdit', 'TTyRichEditRuler', 'TTySpinEdit', 'TTyFloatSpinEdit',
+    'TTyUpDown',
     // T6 choice
     'TTyCheckBox', 'TTyRadioButton', 'TTyToggleSwitch', 'TTySegmented',
     // T7 combo boxes I

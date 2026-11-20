@@ -133,6 +133,10 @@ begin
     AssertBg('TyRichEditSelection', [tysFocused]);
     AssertBg('TyRichEditObject', []);
     AssertBg('TyRichEditPlaceholder', []);
+    AssertBg('TyRichEditRuler', []);
+    AssertBg('TyRulerTick', []);
+    AssertBg('TyRulerMarker', []);
+    AssertBg('TyRulerMarker', [tysActive]);
   finally
     m.Free;
   end;
