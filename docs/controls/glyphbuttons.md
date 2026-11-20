@@ -49,7 +49,7 @@ uses tyControls.IconFont, tyControls.GlyphButtons;
 |------|------|--------|------|
 | `IconFont` | `TTyIconFont` | `nil` | 字形来源。用 `FreeNotification`/`Notification` 挂钩：所指字体被释放时自动置 `nil`，不留悬垂引用。 |
 | `GlyphName` | `string` | `''` | 要绘制的字形名（对应 IconFont 的 `Glyphs` 映射，如 `save`）。为空或未映射 → 不画字形，标题占满内容区（退化为普通按钮）。 |
-| `GlyphSize` | `Integer` | `0` | 字形边长（**逻辑像素**，随 PPI 经 `TTyPainter.Scale` 缩放）。`0` = 自动：堆叠布局（`glTop` / `glBottom`）取内容区短边，并排布局（`glLeft` / `glRight`）取内容区高度。 |
+| `GlyphSize` | `Integer` | `0` | 字形边长（**逻辑像素**，随 PPI 经 `TTyPainter.Scale` 缩放）。`0` = 自动：按钮在 `TTyToolBar` 上、工具条又设了 `--toolbar-icon-size` 时用那个值（3.0.5，见 [toolbar.md](toolbar.md#313-显示方式只显示图标图标配文字大图标)）；否则按内容区算——并排布局（`glLeft` / `glRight`）取内容区高度，堆叠布局（`glTop` / `glBottom`）取内容区短边，画着标题时先让出标题那一行和间隔，最小 16（3.0.5 以前不让，标题没地方画）。 |
 | `GlyphColor` | `TTyColor` | `TyGlyphButtonColorDefault` | 字形填充色。默认哨兵值 `TyGlyphButtonColorDefault`（即全透明 `$00000000`，表示“**用主题**”）→ 取 `TextColor`，与标题同色；设为其他值则覆盖。 |
 | `Images` | `TTyImageCollection` | `nil` | **跨平台图像**字形源（一组 BGRA 图标）。同样用 `FreeNotification` 置 `nil`。 |
 | `ImageName` | `string` | `''` | 要画的图标名。`Images` + `ImageName` **同时**设定时**优先于** `IconFont`/`GlyphName`（图标按 `GlyphColor`/`TextColor` 染色）；与系统图标字体不同，它在每个 OS 上渲染一致。为空则回落到图标字体。 |

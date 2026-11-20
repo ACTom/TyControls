@@ -346,7 +346,7 @@ type
     use, so the LCL-ported handler works unchanged. }
   TTyToolBarOnPaintButton = procedure(Sender: TTyToolButton; AState: Integer) of object;
 
-  TTyToolBar = class(TTyCustomControl, ITyChromeHost)
+  TTyToolBar = class(TTyCustomControl, ITyChromeHost, ITyGlyphSizeHost)
   private
     FButtonHeight: Integer;
     FButtonHeightExplicit: Boolean;
@@ -373,6 +373,9 @@ type
     FHotImages: TTyImageCollection;
     FDisabledImages: TTyImageCollection;
     FInLayout: Boolean;
+    { #231: the icon size last told to the tools (HostGlyphSize), so that a change -- the
+      theme, the controller's or this bar's own StyleOverride -- is noticed and passed on. }
+    FSeenGlyphSize: Integer;
     function GetButtonHeight: Integer;
     function GetButtonWidth: Integer;
     function GetButtonCount: Integer;
@@ -438,6 +441,15 @@ type
     function ChromeFreeRect: TRect; virtual;
     procedure PaintChromeLayer(APainter: TTyPainter; const AOrigin: TPoint); virtual;
     function ChromeSignature: string; virtual;
+    { #231, ITyGlyphSizeHost: the icon size of every icon button on this bar that has no
+      GlyphSize of its own -- the token --toolbar-icon-size, in logical px, as this bar reads
+      it (its own StyleOverride, then the theme). 0 while the token is unset: an icon is
+      then sized from its button, as it always was. AFor is the button that asks; a
+      descendant answers 0 for a part of its own (TTyToolBarEx, for its overflow chevron). }
+    function HostGlyphSize(AFor: TControl): Integer; virtual;
+    { Every repaint is where a changed --toolbar-icon-size is noticed: the tools measure by
+      it, and a measurement they remember has to be taken again. }
+    procedure Invalidate; override;
     { The bar's TTyToolButton children, in child order — LCL's TToolBar.ButtonCount /
       Buttons[] (comctrls.pp:2367), and the index space TTyToolButton.Index, Grouped and
       GetGroupBounds all speak in.
@@ -502,15 +514,14 @@ type
       its FButtons list holds nothing else), through AdoptGlyphLayout: a tool whose
       GlyphLayout the host wrote itself is never touched, the AdoptShowCaption contract.
 
-      THE DEFAULT IS INVERTED from LCL's False, deliberately (the combo's inverted
-      pick-only default is the precedent). In this library an auto-sized glyph takes the box
-      it is given — MeasureGlyphSlot derives it FROM the content box — so the stacked layout
-      with an auto GlyphSize fills the row height and collapses the caption to nothing:
-      a False default would make ShowCaptions=True paint NO caption on every icon tool,
-      which is a lying property by construction. List=True (icon beside caption) is the
-      library's resting look and every caption stays visible. Use List=False WITH an
-      explicit GlyphSize: the height floor (MeasureContentHeight) then grows the row so the
-      stacked caption has room, which is also how the ribbon tile has always done it.
+      THE DEFAULT IS INVERTED from LCL's False, and stays so: a `default` directive decides
+      how every existing .lfm that omitted the value is read, so changing it would stack the
+      icons of every tool bar already out there. It was inverted because a stacked glyph
+      with no GlyphSize took the whole content box and left the caption nothing to be drawn
+      in -- a False default would have made ShowCaptions=True paint no caption on any icon
+      tool. That reason is gone (#229): such a glyph now takes what the caption's line and
+      the gap leave, never under TyGlyphStackedMin, and the height floor grows the row for
+      both, so List=False needs no explicit GlyphSize any more.
 
       A second divergence rides on the existing ShowCaption machinery: LCL honours a
       per-button ShowCaption=False only in List mode ("allow hide caption only in list
@@ -1732,6 +1743,35 @@ begin
     Controls[i].Invalidate;
 end;
 
+function TTyToolBar.HostGlyphSize(AFor: TControl): Integer;
+begin
+  Result := StyleMetric('--toolbar-icon-size', 0);
+  if Result < 0 then Result := 0;
+end;
+
+procedure TTyToolBar.Invalidate;
+var
+  i, cur: Integer;
+begin
+  inherited Invalidate;
+  if [csDestroying, csLoading] * ComponentState <> [] then Exit;
+  cur := HostGlyphSize(nil);
+  if cur = FSeenGlyphSize then Exit;
+  { Recorded BEFORE the tools are told: a tool that re-fits invalidates its surroundings,
+    and coming back in here must find nothing left to do. }
+  FSeenGlyphSize := cur;
+  { A glyph button's Invalidate is where it re-fits and moves its height floor
+    (TTyButton.Invalidate), which is exactly what a new icon size calls for. It forgets a
+    remembered preferred size only when it is auto-sized, so that is said here for all. }
+  for i := 0 to ControlCount - 1 do
+    if Controls[i] is TTyGlyphButtonBase then
+    begin
+      Controls[i].InvalidatePreferredSize;
+      Controls[i].Invalidate;
+    end;
+  Realign;
+end;
+
 procedure TTyToolBar.ApplyToButton(B: TTyButton);
 begin
   { A tbsSeparator / tbsDivider tool button is a SPACE HOLDER, not a button: it resolves the
@@ -1930,11 +1970,19 @@ begin
 
     for i := 0 to n - 1 do
     begin
-      { Centre each child in the row. A child SHORTER than the row (a separator, a combo that
+      { Centre each child in the row. A child SHORTER than the row (an edit, a combo that
         is happy at 24 while a CJK caption needs 29) must sit on the row's centre line, or the
         bar reads as ragged -- which is the second half of the same report. }
-      ih := kids[i].Height;
-      if ih > bh then ih := bh;
+      { #230: a BUTTON and a SEPARATOR take the row's height -- that is what ButtonHeight
+        says it sets, and what LCL's bar does. Every child used to keep its own, so a taller
+        ButtonHeight moved the rows apart and left the buttons as they were. }
+      if (kids[i] is TTyButton) or (kids[i] is TTyToolSeparator) then
+        ih := bh
+      else
+      begin
+        ih := kids[i].Height;
+        if ih > bh then ih := bh;
+      end;
       if kids[i].Constraints.MinHeight > ih then ih := kids[i].Constraints.MinHeight;
       // The FLOORED width the slot was solved for, not kids[i].Width — with no floor the
       // two are the same number, so nothing moves until ButtonWidth is actually set.

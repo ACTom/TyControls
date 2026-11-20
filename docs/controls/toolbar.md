@@ -59,14 +59,14 @@ uses tyControls.ToolBar, tyControls.Button;
 
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| `ButtonHeight` | `Integer` | 跟随密度轴 | 所有子按钮的统一逻辑高度；排布时每个子控件的高度被强制设为此值（`AlignControls` 中 `SetBounds(..., bh)`）。**未显式赋值时跟随主题的 `--control-height`**（经典 24 / 现代 38），一经写入即固定并写进 `.lfm`。改值触发 `Relayout`。 |
+| `ButtonHeight` | `Integer` | 跟随密度轴 | 工具条的行高，也是按钮的统一逻辑高度：按钮（`TTyButton` 一族，含 `TTyToolButton`）和 `TTyToolSeparator` 排布时取这个高度；编辑框、下拉框等别的子控件保持自己的高度，在行里垂直居中。哪个工具需要的高度超过它（字号大、图标叠在标题上方、`--toolbar-icon-size` 给了大图标），整行按最高的那个算。3.0.5 以前这个值只决定行距，按钮保持各自的高度（#230）。**未显式赋值时跟随主题的 `--control-height`**（经典 24 / 现代 38），一经写入即固定并写进 `.lfm`。改值触发 `Relayout`。 |
 | `ButtonWidth` | `Integer` | 未设 = 无下限 | LCL 语义的**宽度下限**，不是统一宽度：比它窄的**真按钮**（`tbsButton` / `tbsCheck` / `tbsDropDown`——LCL 自己的样式集合，**不含** `tbsButtonDrop`）按此宽度排布，比它宽的保留自己的宽度。`AutoSize` 的按钮、占位样式、非 `TTyToolButton` 子控件一概不碰——四条豁免全是 LCL 的（`toolbar.inc` `CalculatePosition`）。**调低下限会还原各按钮自己的宽度**：工具条记着自己"借"出去的宽度（`FLentImages` 模式的宽度版），所以设计器里试一个值不会把 `.lfm` 里的宽度棘轮掉。与 `ButtonHeight` 同单位、同 `stored` 机制（写过才存）。**与 LCL 的差异**：LCL 未设时是主题化的 ~23px 下限（它的按钮宽度本来就逐次从内容推导）；这里按钮宽度是 `.lfm` 拥有的**设计值**，默认下限会悄悄改宽现存的每一条工具条，故未设 = 完全没有下限（读回 0）。 |
 | `ButtonSpacing` | `Integer` | `2` | 相邻工具项之间的水平间距（换行时也用作行间距）。改值触发 `Relayout`。 |
 | `DropDownWidth` | `Integer` | `0`（跟随令牌） | 两种下拉样式箭头区的**逻辑宽度**。`0`（默认）跟随主题令牌 `--drop-arrow-width`（全库尾随箭头共用的那一个）；正值则**钉住本条工具按钮**的箭头区——画出来的箭头区、`tbsDropDown` 的命中测试、首选宽度三者读的是**同一个**仲裁值（`DropArrowLogicalWidth`），一起动。这是标签条 `ImagesWidth` 的既有约定：0 = 跟令牌，非零 = 钉住。LCL 把 `tbsButtonDrop` 的箭头也钥在同一属性上（其 `ButtonDropWidth` 推导），这里两种样式读同一个值，有测试钉住。**碰不到**恰好摆在工具条上的 `TTyDropDownButton` / `TTyMenuButton`——那些不是工具按钮，箭头仍跟令牌。负值按 0 处理。 |
-| `List` | `Boolean` | `True`（**与 LCL 反向**） | LCL 的列表模式：`True` 图标在标题**旁边**（`glLeft`），`False` 图标叠在标题**上方**（`glTop`）。只下发给 `TTyToolButton`（LCL 的 `List` 也只够得着它的 `FButtons`），走 `AdoptGlyphLayout`——宿主自己写过 `GlyphLayout` 的工具项永远不碰（`AdoptShowCaption` 的同一契约）。**默认值反向是有意的**（先例：组合框反向的 pick-only 默认）：本库自动尺寸的图标按内容盒推导（`MeasureGlyphSlot`），叠放布局 + 自动 `GlyphSize` 会占满行高、把标题挤成零高——若默认 `False`，`ShowCaptions=True` 会在每个图标工具上**一个标题都画不出来**，按构造就是说谎属性。要用 `False`（叠放）请**同时设显式 `GlyphSize`**：高度下限（`MeasureContentHeight`）会把行撑高给标题留位，与 ribbon 大按钮一直以来的做法相同。另一处差异顺带记录：LCL 只在列表模式下承认逐按钮的 `ShowCaption=False`（"allow hide caption only in list mode"），这里**两种模式都承认**——既有机制本来就更强。 |
+| `List` | `Boolean` | `True`（**与 LCL 反向**） | LCL 的列表模式：`True` 图标在标题**旁边**（`glLeft`），`False` 图标叠在标题**上方**（`glTop`）。只下发给 `TTyToolButton`（LCL 的 `List` 也只够得着它的 `FButtons`），走 `AdoptGlyphLayout`——宿主自己写过 `GlyphLayout` 的工具项永远不碰（`AdoptShowCaption` 的同一契约）。**默认值与 LCL 反向，现在仍然保留**：`default` 指令决定省略了这个值的既有 `.lfm` 怎么读回，改掉它等于把现有的工具条全换成叠放。当初反向是因为叠放时没指定大小的图标会占满行高，标题没地方画；这一点 3.0.5 修了（#229）：这样的图标现在取行里除去标题那一行之后剩下的高度，最小 16，行高跟着长，所以 `List := False` 不必再配显式 `GlyphSize`。几种显示方式怎么搭配见 [第 3.1.3 节](#313-显示方式只显示图标图标配文字大图标)。另一处差异顺带记录：LCL 只在列表模式下承认逐按钮的 `ShowCaption=False`（"allow hide caption only in list mode"），这里**两种模式都承认**——既有机制本来就更强。 |
 | `Indent` | `Integer` | `4` | 工具条**前缘**（每行第一项之前）的留白，仅此而已。改值触发 `Relayout`。**曾经它还兼任上下内边距**，工具条自动增高时算的是 `Indent*2 + rows`，于是 `Indent := 24`（在 LCL 里是再普通不过的取值，用来给一个 logo 或前置标签让位）会静悄悄地把工具条撑高 48px、把所有工具往下推 24px——那不是任何 LCL 窗体设这个值时想要的。纵向留白现在是它自己的值（主题令牌 `--toolbar-pad-y`，缺省 4 = 原来 `Indent` 的缺省），两个旋钮各走各的。与 LCL 仍有一处不同：`TToolBar.Indent` 的缺省是 1，这里是 4。这一点是**有意保留**的——`default` 指令决定的是所有省略了该值的既有 `.lfm` 怎么被读回，改掉它等于给现存的每一条工具条重新缩进。从 LCL 移植、依赖缺省 1 的窗体请显式写 `Indent := 1`。 |
 | `Wrapable` | `Boolean` | `True` | 为 `True` 时，一行放不下的工具项自动折到下一行；`Align in [alTop, alBottom]` 时工具条随行数自动增高。改值触发 `Relayout`。**这只管"宽度不够时自动换行"这一条规则**，与"某一项强制另起一行"是两回事——后者走排布函数的 `ABreakBefore` 参数（见 [第 5.1 节](#51-排布函数-tytoolbarlayout)），且**两种模式下都生效**。 |
-| `ShowCaptions` | `Boolean` | `False` | 与 LCL 一致：`False`（默认）让工具项**只显示图标**，`True` 才画标题。它下发到每个**能画图标**的子控件（`TTyGlyphButtonBase` 一族：`TTyGlyphButton` / `TTySpeedButton` / `TTyGlyphContainerButton`），走 `AdoptShowCaption`——对已被宿主自己写过 `ShowCaption` 的工具项是空操作。普通 `TTyButton` 没有图标模型，不受影响；**解析不出图标的工具项保留标题**（否则画出来是个空盒子），所以 `False` 这个默认值不会把现有的纯文字工具条抹白。改值触发 `Relayout`。 |
+| `ShowCaptions` | `Boolean` | `False` | 与 LCL 一致：`False`（默认）让工具项**只显示图标**，`True` 才画标题。它下发到每个**能画图标**的子控件（`TTyGlyphButtonBase` 一族：`TTyGlyphButton` / `TTySpeedButton` / `TTyGlyphContainerButton`），走 `AdoptShowCaption`——对已被宿主自己写过 `ShowCaption` 的工具项是空操作。普通 `TTyButton` 没有图标模型，不受影响；**解析不出图标的工具项保留标题**（否则画出来是个空盒子），所以 `False` 这个默认值不会把现有的纯文字工具条抹白。`AutoSize` 的工具宽度跟着变：只显示图标时是图标加内边距（3.0.5 以前仍按带标题算，#228）。标题没画出来的工具，`Hint` 留空时拿标题当提示（#232）。改值触发 `Relayout`。 |
 | `Flat` | `Boolean` | `True` | 为 `True` 时，工具条把子 `TTyButton` 的 `StyleClass` 设为 `'ghost'`（平面外观）——但**只在它还是空串时**；为 `False` 时只把 `'ghost'` 改回 `''`。宿主自己写的 `StyleClass := 'primary'` 会保留下来。改值触发 `Relayout`。 |
 | `Images` | `TTyImageCollection` | `nil` | 工具项的图标来源：**没有自己 `Images` 的子图标按钮由工具条把这个集合借给它**，于是工具项只需设 `ImageName`。已经自带集合的工具项不受影响——工具条只管自己借出去的那一份引用（重新指向或收回）。用 `FreeNotification` 挂钩，集合被释放时连同"借出标记"一起置 `nil`。改值触发 `Relayout`。 |
 | `HotImages` | `TTyImageCollection` | `nil` | **悬停时的替换图**，用**同一个 `ImageName`** 去这份集合里取。运行时换掉它（或 `DisabledImages`）会重画每个工具按钮。见下方 [3.1.2 节](#312-hotimages--disabledimages按状态换形状不换颜色)。 |
@@ -131,6 +131,43 @@ uses tyControls.ToolBar, tyControls.Button;
 > "备选集合里没有这个名字"就不是静默失败，而是写明了的答案。钉住的测试见
 > `TToolBarStateImagesTest`（其中 `TestHoverReallyDrawsTheHotArt` 从像素里读回换过的图，
 > 保证这不是两个"绘制路径根本不看"的属性）与 `TToolBarMembersApiParityTest.TestHotAndDisabledImagesArePublishedAndHonoured`。
+
+### 3.1.3 显示方式：只显示图标、图标配文字、大图标
+
+常见的"工具栏显示方式"在这里由三样东西搭出来：标题显不显示、图标在标题的哪一边、图标多大。
+
+| 要的效果 | 怎么设 |
+|---|---|
+| 只显示图标（默认） | `ShowCaptions := False` |
+| 图标在左、文字在右 | `ShowCaptions := True`，`List := True`（默认） |
+| 图标在上、文字在下 | `ShowCaptions := True`，`List := False` |
+| 小图标 / 大图标 | 令牌 `--toolbar-icon-size`，比如 `16px` / `24px` / `32px` |
+| 只显示文字 | 3.0 没有这个开关；没有图标的工具本来就只显示标题 |
+
+**图标大小。** `--toolbar-icon-size` 是工具条上图标按钮的图标边长（逻辑像素，3.0.5 新增，#231）。写在主题或控制器的 `StyleOverride` 里管所有工具条，写进某一条工具条自己的 `StyleOverride` 只管这一条：
+
+```pascal
+TyDefaultController.StyleOverride := ':root { --toolbar-icon-size: 24px; }';  // 所有工具条
+MainBar.StyleOverride := '--toolbar-icon-size: 32px;';                        // 只有这一条
+```
+
+工具自己设了 `GlyphSize` 的不受它影响。令牌没设时和以前一样，图标按按钮的高度算。运行时改这个令牌，工具条会让上面的按钮重新量一遍。`TTyToolBarEx` 的溢出箭头不算工具，大小不变；溢出到弹出层里的工具仍用工具条的图标大小。
+
+**按钮跟着变。** 行高取 `ButtonHeight` 和各工具所需高度里最大的那个：`--toolbar-icon-size` 给的图标变大，或者图标叠到标题上方，行自己长高，不用再去改 `ButtonHeight`；工具条 `Align` 为 `alTop` / `alBottom` 时条的高度也跟着变。宽度要跟着变，工具得是 `AutoSize := True`：只显示图标时宽度是图标加内边距，显示标题时再加上标题。没开 `AutoSize` 的工具保持你给的宽度，只是不会窄于内容。
+
+**图标在上、文字在下**时，没指定大小的图标取行里除去标题那一行之后剩下的高度，最小 16。想要更大的图标，设 `--toolbar-icon-size`，或者把 `ButtonHeight` 调高。
+
+**个别工具例外。** 工具自己写过的 `ShowCaption` / `GlyphLayout` / `GlyphSize` 优先于工具条。比如整条只显示图标，给其中一个 `ShowCaption := True`，它就带着文字。有一点不同：工具自己的 `GlyphSize` 在图标与标题并排或只显示图标时不撑高按钮，图标放不下就按按钮的盒子缩小（一直如此）；要大图标并让行跟着长，用工具条的令牌。
+
+**提示。** 标题没画出来的图标按钮，`Hint` 留空时拿标题当提示（去掉助记符的 `&`）；写了 `Hint` 的用写的。和别的提示一样，要 `ShowHint` 为 `True` 才显示。
+
+**松紧。** 工具之间的间距是 `ButtonSpacing`，行首留白是 `Indent`，按钮高度是 `ButtonHeight`，条的上下留白是主题令牌 `--toolbar-pad-y`（只认主题和控制器里的值）。`ButtonHeight` 调不到比内容还矮：只显示图标、图标大小又由 `--toolbar-icon-size` 给出时，下限是图标加按钮的上下内边距；其余情况是一行文字加内边距。按钮内部的留白来自按钮规则的 `padding`（内置主题里是 `--pad-button`，所有按钮共用）；只想收紧某一个工具，在它的 `StyleOverride` 里写 `padding: 2px 4px;`。
+
+没设图标大小时，图标按按钮的高度算，所以把 `ButtonHeight` 调高图标也跟着变大。想让按钮高而图标不变，同时设 `--toolbar-icon-size`。
+
+**大图标要有大图。** 图标字体任何尺寸都清楚。位图集合里一个名字只有一张小图的话，放大了会糊，请给它加上对应尺寸的母版（见 [imagecollection.md](imagecollection.md) 的多分辨率母版）。
+
+密度（经典 / 现代）改的是按钮的高度。没设图标大小时图标跟着按钮的高度走，也就跟着密度变；设了 `--toolbar-icon-size` 就不受密度影响。
 
 ### 3.2 TTyToolButton（工具按钮）
 
@@ -305,7 +342,7 @@ function TyToolWrapToBreakBefore(const AWrapAfter: array of Boolean): TBooleanDy
 
 ### 3.4 TTyToolSeparator（分隔线）
 
-`TTyToolSeparator` 是一条平凡的竖线控件，把它 `Parent := ToolBar` 即可作为普通工具项参与排布（占据一个 8px 宽的格位，在中央绘制 1px 竖线）。它自身**没有专有 published 属性**，仅 published 继承来的三项：
+`TTyToolSeparator` 是一条平凡的竖线控件，把它 `Parent := ToolBar` 即可作为普通工具项参与排布（占据一个 8px 宽的格位，在中央绘制 1px 竖线；高度取所在行的行高，3.0.5 以前保持自己的高度，#230）。它自身**没有专有 published 属性**，仅 published 继承来的三项：
 
 | 属性 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|

@@ -54,7 +54,7 @@ unit tyControls.GlyphButtons;
 interface
 
 uses
-  Classes, SysUtils, Types, Controls, Graphics, LCLType,
+  Classes, SysUtils, Types, Controls, Graphics, LCLType, LMessages,
   BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.Painter, tyControls.Button, tyControls.Controller, tyControls.IconFont,
   tyControls.ImageCollection, tyControls.Base;
@@ -69,6 +69,10 @@ const
   { Default logical gap (px) between the glyph and the caption. Scaled by PPI at
     paint time. }
   TyGlyphButtonGap = 6;
+
+  { #229. The least an icon STACKED above or below a drawn caption is, in logical px, when
+    nothing gave it a size. An icon sized from its box alone left the caption no room. }
+  TyGlyphStackedMin = 16;
 
 type
   { Glyph placement relative to the caption — LCL's TButtonLayout, four ways
@@ -92,6 +96,18 @@ type
     ImageName: string;
     IconFont: TTyIconFont;
     GlyphName: string;
+  end;
+
+  { #231. A container that gives the icon buttons on it one icon size: TTyToolBar, from the
+    token --toolbar-icon-size. A glyph button asks its Parent for this whenever it measures or
+    paints, so the answer is always the current one; a button's own GlyphSize wins over it. }
+  ITyGlyphSizeHost = interface
+    ['{28B011DC-BF00-4A95-BC85-E00BB7B694D7}']
+    { The icon size for a button that has none of its own, in LOGICAL px; 0 when the
+      container has none to give, and the icon is then sized from its button. AFor is the
+      button that asks (nil = any of them): a container leaves a part of its own out by
+      answering 0 for it -- the overflow chevron of TTyToolBarEx is a glyph button too. }
+    function HostGlyphSize(AFor: TControl): Integer;
   end;
 
   { Shared base: TTyButton + an icon-font glyph placed per GlyphLayout. Usable on
@@ -154,6 +170,21 @@ type
       DisabledImages) keeps the contract structurally: it only ever swaps the COLLECTION,
       and only when the alternate really holds the same ImageName. }
     function GetGlyphSource(AStates: TTyStateSet): TTyGlyphSource; virtual;
+    { The size the container this button sits on gives its icons (ITyGlyphSizeHost -- a tool
+      bar's --toolbar-icon-size, #231), in logical px; 0 = none, or no such container. }
+    function ContainerGlyphSize: Integer;
+    { The glyph size this button was GIVEN, in logical px: its own GlyphSize, else its
+      container's (ContainerGlyphSize). 0 = neither, and the glyph is then sized from the
+      box. }
+    function GivenGlyphSize: Integer;
+    { True when the caption is really drawn beside or under the glyph: ShowCaption, and a
+      caption to show. What every measurement has to agree with the paint about (#228). }
+    function CaptionDrawn: Boolean;
+    { True for a glyph stacked above or below a drawn caption that nothing gave a size: it
+      takes what the box leaves over the caption, and never under TyGlyphStackedMin (#229). }
+    function StackedAutoGlyph: Boolean;
+    { #232. A caption that is not drawn serves as the hint when the button has none. }
+    procedure CMHintShow(var Message: TLMessage); message CM_HINTSHOW;
     { Draw the glyph (if any) then the inherited caption in the leftover rect. }
     procedure DrawContent(APainter: TTyPainter; const AContentRect: TRect;
       const AStyle: TTyStyleSet); override;
@@ -164,14 +195,17 @@ type
       is worse than none at all. }
     function EffectiveGapPx(APPI: Integer): Integer;
     { The glyph square's edge in DEVICE px at APPI under AStyle, mirroring the choice
-      DrawContent makes: an explicit GlyphSize (scaled) wins, otherwise auto-fit. }
+      DrawContent makes: a size the button was given (GivenGlyphSize, scaled) wins, otherwise
+      auto-fit. }
     function MeasureGlyphSlot(APPI: Integer; const AStyle: TTyStyleSet): Integer;
-    { The glyph's edge in DEVICE px when — and only when — GlyphSize was set EXPLICITLY and
-      there is really a glyph to draw; 0 otherwise. Deliberately NOT MeasureGlyphSlot: that
-      one falls back to the AUTO square, which is derived FROM the content box, so feeding it
-      into a size FLOOR would pin the control at whatever height it happens to have and it
-      could never shrink again — the minimum would stop being a measurement and become a
-      ratchet. An auto glyph demands nothing; it takes the box it is given. }
+    { The glyph's edge in DEVICE px that does NOT depend on the box, when there is really a
+      glyph to draw: a size the button was given (GivenGlyphSize), or the minimum of a glyph
+      stacked on a drawn caption (TyGlyphStackedMin); 0 otherwise. Deliberately NOT
+      MeasureGlyphSlot: that one falls back to the AUTO square, which is derived FROM the
+      content box, so feeding it into a size FLOOR would pin the control at whatever height
+      it happens to have and it could never shrink again — the minimum would stop being a
+      measurement and become a ratchet. An auto glyph demands nothing; it takes the box it
+      is given. }
     function FixedGlyphPx(APPI: Integer): Integer;
     { A ribbon tile (glyph-TOP) stacks glyph, gap and caption down the box — exactly what
       TyGlyphButtonSplit lays out — so all three are part of the minimum HEIGHT: a shorter box
@@ -681,12 +715,13 @@ end;
 
 function TTyGlyphButtonBase.MeasureGlyphSlot(APPI: Integer; const AStyle: TTyStyleSet): Integer;
 var
-  scaledSize: Integer;
+  scaledSize, leastPx: Integer;
 begin
-  scaledSize := MulDiv(FGlyphSize, APPI, 96);
+  scaledSize := MulDiv(GivenGlyphSize, APPI, 96);
   if scaledSize > 0 then
     Result := scaledSize
   else
+  begin
     { Auto (GlyphSize = 0). DrawContent derives the square from the CONTENT box — the
       client rect minus the theme's padding, the very inset RenderTo applies — so the
       measurement has to start from the same place. glyph-left takes that box's HEIGHT
@@ -695,7 +730,61 @@ begin
       that min settles on the same number. One expression is therefore honest for both
       layouts. Height is used, not proposed: it stays whatever the layout gave us. }
     Result := ClientHeight - MulDiv(AStyle.Padding.Top + AStyle.Padding.Bottom, APPI, 96);
+    { #229. Stacked on a caption that IS drawn, the box is shared: the glyph takes what the
+      gap and the caption's line leave, and never less than TyGlyphStackedMin. It used to
+      take the whole box, and the caption was left with nothing to be drawn in. }
+    if StackedAutoGlyph then
+    begin
+      Dec(Result, EffectiveGapPx(APPI) + inherited MeasureContentHeight(APPI));
+      leastPx := MulDiv(TyGlyphStackedMin, APPI, 96);
+      if Result < leastPx then Result := leastPx;
+    end;
+  end;
   if Result < 0 then Result := 0;
+end;
+
+function TTyGlyphButtonBase.ContainerGlyphSize: Integer;
+var
+  host: ITyGlyphSizeHost;
+begin
+  Result := 0;
+  if (Parent <> nil) and Supports(Parent, ITyGlyphSizeHost, host) then
+    Result := host.HostGlyphSize(Self);
+end;
+
+function TTyGlyphButtonBase.GivenGlyphSize: Integer;
+begin
+  Result := FGlyphSize;
+  if Result <= 0 then Result := ContainerGlyphSize;
+end;
+
+function TTyGlyphButtonBase.CaptionDrawn: Boolean;
+begin
+  Result := FShowCaption and (Caption <> '');
+end;
+
+function TTyGlyphButtonBase.StackedAutoGlyph: Boolean;
+begin
+  Result := (FGlyphLayout in [glTop, glBottom]) and CaptionDrawn and CanShowGlyph
+    and (GivenGlyphSize <= 0);
+end;
+
+procedure TTyGlyphButtonBase.CMHintShow(var Message: TLMessage);
+var
+  info: PHintInfo;
+  disp: string;
+  mp: Integer;
+begin
+  inherited;
+  { The message is Forms.TCMHintShow; read as its LParam so this unit need not use Forms.
+    LCL has put the control's own Hint in HintStr by now; a button that has one keeps it. }
+  info := PHintInfo(Message.LParam);
+  if (info = nil) or (info^.HintStr <> '') then Exit;
+  { Only a caption the user cannot read off the button: hidden, with an icon in its place.
+    A button with no icon draws its caption whatever ShowCaption says (see ShowCaption). }
+  if FShowCaption or (Caption = '') or not CanShowGlyph then Exit;
+  ResolveCaptionText(disp, mp);
+  info^.HintStr := disp;
 end;
 
 function TTyGlyphButtonBase.FixedGlyphPx(APPI: Integer): Integer;
@@ -703,9 +792,12 @@ begin
   Result := 0;
   // No source -> DrawContent paints a plain caption; nothing to reserve for.
   if not CanShowGlyph then Exit;
-  // Auto (GlyphSize = 0): computed FROM the box, so it can never be a demand ON the box.
-  if FGlyphSize <= 0 then Exit;
-  Result := MulDiv(FGlyphSize, APPI, 96);
+  // A size the button was given: its own GlyphSize, or its container's (#231).
+  Result := MulDiv(GivenGlyphSize, APPI, 96);
+  { Auto: computed FROM the box, so it can never be a demand ON the box -- except the least a
+    glyph stacked on a drawn caption is (#229), which is a number of its own and so no ratchet. }
+  if (Result <= 0) and StackedAutoGlyph then
+    Result := MulDiv(TyGlyphStackedMin, APPI, 96);
   if Result < 0 then Result := 0;
 end;
 
@@ -722,14 +814,28 @@ begin
   if (gpx < 1) or not (FGlyphLayout in [glTop, glBottom]) then
   begin
     Result := lineH;
+    { #231. An icon size the CONTAINER gave is a statement about its rows. "Large icons" has
+      to make the row tall enough for them -- otherwise the icon is fitted into the old box
+      and nothing got larger -- and "small icons" with no captions has to let the row be as
+      low as the icons: the line of a caption that is not drawn is not owed. A button's OWN
+      GlyphSize in these layouts is still fitted into the box its host gave it, as it always
+      was: a form that sets one must not find its buttons resized. }
+    if (FGlyphSize <= 0) and (gpx > 0) then
+    begin
+      if not FShowCaption then
+        Result := gpx                 // icon only: the icon is all there is to hold
+      else if gpx > Result then
+        Result := gpx;                // beside its caption: the taller of the two
+    end;
     Exit;
   end;
   Result := gpx;
   { The gap — and the caption's line beside it — are only paid for when a caption is really
     drawn: DrawContent skips the caption rect entirely when Caption is empty, exactly as the
     preferred WIDTH refuses to pay a gap to nothing. Same EffectiveGapPx the paint uses, so
-    a per-instance Spacing or a skin retuning the metric moves both together. }
-  if Caption <> '' then
+    a per-instance Spacing or a skin retuning the metric moves both together.
+    #228: "really drawn" includes ShowCaption -- a hidden caption used to be paid for. }
+  if CaptionDrawn then
   begin
     gapPx := EffectiveGapPx(APPI);
     Inc(Result, gapPx + lineH);
@@ -755,6 +861,15 @@ begin
   glyphPx := MeasureGlyphSlot(ppi, S);
   if glyphPx < 1 then Exit;
   padX := MulDiv(S.Padding.Left + S.Padding.Right, ppi, 96);
+  { #228. Icon-only: DrawContent draws the glyph alone, so the glyph and the padding are the
+    whole width. The caption's width used to stay in, and an auto-sized icon-only tool was
+    as wide as with its caption showing. }
+  if not FShowCaption then
+  begin
+    PreferredWidth := glyphPx + padX;
+    if PreferredWidth < 1 then PreferredWidth := 1;
+    Exit;
+  end;
   if FGlyphLayout in [glTop, glBottom] then
   begin
     // Stacked (ribbon tile, or caption-over-icon): the glyph sits ABOVE or BELOW the
@@ -809,19 +924,30 @@ begin
     Exit;
   end;
 
-  // Device-px glyph size: explicit GlyphSize (scaled) wins; else auto-fit from the
-  // content box — the short side for the STACKED layouts (a big square icon over or under
-  // the caption), the box height for the SIDE-BY-SIDE ones (a caption-height icon beside
-  // the text). MeasureGlyphSlot mirrors this choice; the two must not drift.
-  scaledSize := APainter.Scale(FGlyphSize);
+  // Painter PPI, so a per-instance Spacing scales exactly as the theme metric did.
+  gapPx := EffectiveGapPx(APainter.PPI);
+  // Device-px glyph size: a size the button was given (its own GlyphSize, or its
+  // container's, scaled) wins; else auto-fit from the content box — the short side for the
+  // STACKED layouts (a big square icon over or under the caption), the box height for the
+  // SIDE-BY-SIDE ones (a caption-height icon beside the text). MeasureGlyphSlot mirrors
+  // this choice; the two must not drift.
+  scaledSize := APainter.Scale(GivenGlyphSize);
   if scaledSize > 0 then
     glyphPx := scaledSize
   else
   begin
     if FGlyphLayout in [glTop, glBottom] then
     begin
-      autoPx := cw;
-      if ch < autoPx then autoPx := ch;
+      autoPx := ch;
+      { #229: stacked on a caption that is drawn, the glyph takes what the gap and the
+        caption's line leave, and never under TyGlyphStackedMin (see MeasureGlyphSlot). }
+      if StackedAutoGlyph then
+      begin
+        Dec(autoPx, gapPx + inherited MeasureContentHeight(APainter.PPI));
+        if autoPx < APainter.Scale(TyGlyphStackedMin) then
+          autoPx := APainter.Scale(TyGlyphStackedMin);
+      end;
+      if cw < autoPx then autoPx := cw;
     end
     else
       autoPx := ch;
@@ -833,8 +959,6 @@ begin
     Exit;
   end;
 
-  // Painter PPI, so a per-instance Spacing scales exactly as the theme metric did.
-  gapPx := EffectiveGapPx(APainter.PPI);
   { MIRRORING: glyph-left becomes glyph-right, so the icon stays on the side the caption
     STARTS at. Only the split needs it — the size decision above reads glTop/glBottom, which
     the flip never produces from a side layout and never turns into one, so MeasureGlyphSlot
