@@ -1309,6 +1309,10 @@ type
       its end - what is typed there goes outside the link. A place with no object beside it is
       its own (nothing is laid out for it). }
     function RestingPlace(APos: TTyRichPos): TTyRichPos;
+    { A place AGiven (on its line with AAtEnd) rested to ARested: True when ARested is shown on
+      that same line only with the line-end affinity (it is where that line wraps) - the caret
+      stays on the line it was put on. }
+    function RestKeepsLineEnd(AGiven, ARested: TTyRichPos; AAtEnd: Boolean): Boolean;
     { The other end of the run of objects with no width APos stands in or beside (AForward its
       end, else its start); APos when there is none. }
     function UnseenEnd(APos: TTyRichPos; AForward: Boolean): TTyRichPos;
@@ -4919,8 +4923,9 @@ begin
   begin
     a0 := RestingPlace(ACaret);
     if AAnchor = ACaret then AAnchor := a0 else AAnchor := RestingPlace(AAnchor);
-    // (the affinity is of the place it was given for)
-    if a0 <> ACaret then AAtEnd := False;
+    { The affinity is of the place it was given for: moved over marks, the caret keeps the line
+      it was given on (a place rested over a close mark that ends its line is that line's end). }
+    if a0 <> ACaret then AAtEnd := RestKeepsLineEnd(ACaret, a0, AAtEnd);
     ACaret := a0;
   end;
   a0 := Math.Min(FSelAnchor, FCaret);
@@ -4969,6 +4974,34 @@ begin
   end;
   // a selected object's handles come or go: their place alone is painted again
   SyncObjectOverlay;
+end;
+
+function TTyCustomRichEdit.RestKeepsLineEnd(AGiven, ARested: TTyRichPos; AAtEnd: Boolean): Boolean;
+var
+  t: TTyRichText;
+  b: TTyBlockLayout;
+  start, gs, rs0, rs1, e: TTyRichPos;
+  atEnd: Boolean;
+begin
+  Result := False;
+  t := FDoc.Text;
+  if (ARested <= AGiven) or (t.ParaOfPos(AGiven) <> t.ParaOfPos(ARested)) then Exit;
+  EnsureParams;
+  FDoc.BeginRead;
+  try
+    b := LayoutBlockAt(t.ParaOfPos(AGiven));
+    try
+      start := t.ParaStart(b.FirstPara);
+      b.LineBounds(AGiven - start, AAtEnd, gs, e, atEnd);
+      b.LineBounds(ARested - start, True, rs1, e, atEnd);
+      b.LineBounds(ARested - start, False, rs0, e, atEnd);
+      Result := (rs1 = gs) and (rs0 <> gs);
+    finally
+      b.Release;
+    end;
+  finally
+    FDoc.EndRead;
+  end;
 end;
 
 { An object's character right before or right after APos: only then can APos be in a run of

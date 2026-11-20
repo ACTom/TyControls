@@ -118,6 +118,7 @@ type
     procedure TestAPointerMoveReadsNothingAgain;
     procedure TestTheLinkAndFieldQueries;
     procedure TestALineBreaksAtAFieldOnlyWhereTheCaretRests;
+    procedure TestDownAndUpNeverSkipALine;
   end;
 
 implementation
@@ -1725,6 +1726,233 @@ begin
     end;
     if k in [0, 1] then
       AssertTrue(what + ': some link began a line', total > 0);
+  end;
+end;
+
+{ Down and Up go to the next line and the line before, never past one, whatever marks end or
+  begin a line: a line that ends in a link's close mark, one that begins with a link's open
+  mark, wrapped Chinese and Latin text; with Shift too; from a line's end and its start; the
+  goal column kept over many presses. The caret is drawn where it is in the same text without
+  the links (their marks have no width), after every key and after a click right of a line's
+  end. }
+procedure TTyRichFieldControlTest.TestDownAndUpNeverSkipALine;
+const
+  HeadZh = '{|rtf1|ansi|ansicpg936|deff0{|fonttbl{|f0 Arial;}{|f1|fnil|fcharset134 SimSun;}}' +
+    '{|colortbl;|red0|green0|blue255;}|pard|f0 ';
+var
+  plain: TFieldProbe;
+  tops: array of Integer;
+  k, w, wi, i, j, n: Integer;
+  fieldDoc, plainDoc, what: RawByteString;
+  widths: TIntegerDynArray;
+  st: TBytesStream;
+
+  function Three(A, B, C: Integer): TIntegerDynArray;
+  begin
+    Result := nil;
+    SetLength(Result, 3);
+    Result[0] := A;
+    Result[1] := B;
+    Result[2] := C;
+  end;
+
+  function LineOf(ARich: TFieldProbe): Integer;
+  var
+    t: Integer;
+  begin
+    t := ARich.CaretClientRect.Top;
+    for Result := 0 to High(tops) do
+      if tops[Result] = t then Exit;
+    Result := -1;
+  end;
+
+  procedure Collect;
+  var
+    p: TTyRichPos;
+    t, a, b: Integer;
+  begin
+    tops := nil;
+    for p := 0 to Doc.Text.Length do
+    begin
+      t := FRich.PositionRect(p).Top;
+      a := 0;
+      while (a < Length(tops)) and (tops[a] < t) do Inc(a);
+      if (a < Length(tops)) and (tops[a] = t) then Continue;
+      SetLength(tops, Length(tops) + 1);
+      for b := High(tops) downto a + 1 do tops[b] := tops[b - 1];
+      tops[a] := t;
+    end;
+  end;
+
+  // the caret drawn where the same text without the links draws it
+  procedure Alike(const AStep: string);
+  var
+    r1, r2: TRect;
+  begin
+    r1 := FRich.CaretClientRect;
+    r2 := plain.CaretClientRect;
+    AssertEquals(Format('%s, width %d, %s: the caret''s line', [what, w, AStep]), r2.Top, r1.Top);
+    AssertEquals(Format('%s, width %d, %s: the caret''s column', [what, w, AStep]), r2.Left, r1.Left);
+  end;
+
+  procedure Both(AKey: Word; AShift: TShiftState);
+  begin
+    FRich.Press(AKey, AShift);
+    plain.Press(AKey, AShift);
+  end;
+
+  // the caret at line ALine's start, in both
+  procedure ToLine(ALine: Integer);
+  begin
+    FRich.MDown(mbLeft, [ssLeft], 1, tops[ALine] + 3);
+    FRich.MUp(mbLeft, [], 1, tops[ALine] + 3);
+    plain.MDown(mbLeft, [ssLeft], 1, tops[ALine] + 3);
+    plain.MUp(mbLeft, [], 1, tops[ALine] + 3);
+    AssertEquals(Format('%s, width %d: on line %d', [what, w, ALine]), ALine, LineOf(FRich));
+  end;
+
+  // one press from line ALine, after AFirst (End or Home): the line next to it
+  procedure Step(ALine: Integer; AFirst, AKey: Word; AShift: TShiftState);
+  var
+    want: Integer;
+    s: string;
+  begin
+    ToLine(ALine);
+    Both(AFirst, []);
+    Both(AKey, AShift);
+    if AKey = VK_DOWN then want := Math.Min(ALine + 1, High(tops)) else want := Math.Max(ALine - 1, 0);
+    if AFirst = VK_END then s := 'End' else s := 'Home';
+    s := Format('line %d, %s then ', [ALine, s]);
+    if ssShift in AShift then s := s + 'Shift+';
+    if AKey = VK_DOWN then s := s + 'Down' else s := s + 'Up';
+    AssertEquals(Format('%s, width %d, %s: the next line', [what, w, s]), want, LineOf(FRich));
+    Alike(s);
+  end;
+
+begin
+  plain := NewProbe;
+  try
+    for k := 0 to 3 do
+    begin
+      case k of
+        0:
+          begin
+            // a line that ends in a link's close mark (the link in Chinese)
+            what := 'Chinese, a link''s close at a line''s end';
+            fieldDoc := HeadZh + '|f1 |''d6|''d0|''ce|''c4|''d6|''d0|''ce|''c4 {|field{|*|fldinst ' +
+              'HYPERLINK "u"}{|fldrslt |''c1|''b4|''bd|''d3|''c1|''b4|''bd|''d3 link text}}' +
+              '|''d6|''d0|''ce|''c4 tail words here|par}';
+            widths := Three(90, 100, 120);
+          end;
+        1:
+          begin
+            // a line that begins with a link's open mark (no space after the link)
+            what := 'Latin, a link''s open at a line''s start';
+            fieldDoc := Head + 'some words {|field{|*|fldinst HYPERLINK "u"}{|fldrslt linked}}more ' +
+              'words here and more|par}';
+            widths := Three(100, 110, 130);
+          end;
+        2:
+          begin
+            what := 'wrapped Chinese, many links';
+            fieldDoc := HeadZh + '|f1 ';
+            for i := 1 to 12 do
+              fieldDoc := fieldDoc + '|u20013?|u25991?{|field{|*|fldinst HYPERLINK "x"}{|fldrslt ' +
+                '|u38142?|u25509?|u25991?}}|u23383?';
+            fieldDoc := fieldDoc + '|par}';
+            widths := Three(90, 123, 157);
+          end;
+      else
+        begin
+          what := 'wrapped Latin, many links';
+          fieldDoc := Head;
+          for i := 1 to 10 do
+            fieldDoc := fieldDoc + 'some words {|field{|*|fldinst HYPERLINK "x"}{|fldrslt linked text}} ';
+          fieldDoc := fieldDoc + '|par}';
+          widths := Three(110, 151, 197);
+        end;
+      end;
+      // the same text without the links: every field group's instruction and braces gone
+      plainDoc := fieldDoc;
+      while Pos('{|field{|*|fldinst ', plainDoc) > 0 do
+      begin
+        i := Pos('{|field{|*|fldinst ', plainDoc);
+        j := Pos('}{|fldrslt ', plainDoc, i);
+        Delete(plainDoc, i, j + Length('}{|fldrslt ') - i);
+        // the result's own closing brace and the field's
+        j := Pos('}}', plainDoc, i);
+        Delete(plainDoc, j, 2);
+      end;
+      Load(Rtf(fieldDoc));
+      st := TBytesStream.Create(RawBytes(Rtf(plainDoc)));
+      try
+        plain.LoadFromStream(st);
+      finally
+        st.Free;
+      end;
+      plain.FinishLoading;
+      plain.UpdateView;
+      for wi := 0 to High(widths) do
+      begin
+        w := widths[wi];
+        FRich.SetBounds(0, 0, w, 2000);
+        FRich.UpdateView;
+        plain.SetBounds(0, 0, w, 2000);
+        plain.UpdateView;
+        Collect;
+        n := Length(tops);
+        AssertTrue(Format('%s, width %d: wrapped', [what, w]), n >= 3);
+        for i := 0 to n - 1 do
+        begin
+          Step(i, VK_END, VK_DOWN, []);
+          Step(i, VK_HOME, VK_DOWN, []);
+          Step(i, VK_END, VK_DOWN, [ssShift]);
+          Step(i, VK_END, VK_UP, []);
+          Step(i, VK_HOME, VK_UP, []);
+          Step(i, VK_END, VK_UP, [ssShift]);
+          // a click right of the line's end: that line
+          FRich.MDown(mbLeft, [ssLeft], w - 6, tops[i] + 3);
+          FRich.MUp(mbLeft, [], w - 6, tops[i] + 3);
+          plain.MDown(mbLeft, [ssLeft], w - 6, tops[i] + 3);
+          plain.MUp(mbLeft, [], w - 6, tops[i] + 3);
+          AssertEquals(Format('%s, width %d: a click right of line %d''s end', [what, w, i]), i,
+            LineOf(FRich));
+          Alike(Format('a click right of line %d''s end', [i]));
+        end;
+        // the goal column kept: from the first line's end down to the last, and back up
+        for j := 0 to 1 do
+        begin
+          ToLine(0);
+          FRich.MDown(mbLeft, [ssLeft], (w * (j + 1)) div 3, tops[0] + 3);
+          FRich.MUp(mbLeft, [], (w * (j + 1)) div 3, tops[0] + 3);
+          plain.MDown(mbLeft, [ssLeft], (w * (j + 1)) div 3, tops[0] + 3);
+          plain.MUp(mbLeft, [], (w * (j + 1)) div 3, tops[0] + 3);
+          for i := 1 to n - 1 do
+          begin
+            Both(VK_DOWN, []);
+            AssertEquals(Format('%s, width %d: Down %d times', [what, w, i]), i, LineOf(FRich));
+            Alike(Format('Down %d times', [i]));
+          end;
+          for i := n - 2 downto 0 do
+          begin
+            Both(VK_UP, []);
+            AssertEquals(Format('%s, width %d: back up to line %d', [what, w, i]), i, LineOf(FRich));
+            Alike(Format('back up to line %d', [i]));
+          end;
+        end;
+        ToLine(0);
+        Both(VK_END, []);
+        for i := 1 to n - 1 do
+        begin
+          Both(VK_DOWN, [ssShift]);
+          AssertEquals(Format('%s, width %d: Shift+Down %d times from the end', [what, w, i]), i,
+            LineOf(FRich));
+          Alike(Format('Shift+Down %d times from the end', [i]));
+        end;
+      end;
+    end;
+  finally
+    plain.Free;
   end;
 end;
 
