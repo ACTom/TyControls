@@ -16,10 +16,11 @@ unit test.toolbar.display;
 interface
 
 uses
-  Classes, SysUtils, Types, Controls, Forms, Graphics, LCLType, LMessages, fpcunit, testregistry,
-  tyControls.Types, tyControls.Controller, tyControls.Base, tyControls.Painter,
+  Classes, SysUtils, Types, Math, Controls, Forms, Graphics, ActnList, LCLType, LMessages,
+  fpcunit, testregistry,
+  tyControls.Types, tyControls.Controller, tyControls.Base, tyControls.Painter, tyControls.IconFont,
   tyControls.Button, tyControls.GlyphButtons, tyControls.ToolBar, tyControls.ToolBarEx,
-  tyControls.Edit, BGRABitmap, BGRABitmapTypes;
+  tyControls.Edit, tyControls.ComboBox, BGRABitmap, BGRABitmapTypes;
 
 type
   TToolbarDisplayTest = class(TTestCase)
@@ -27,12 +28,16 @@ type
     FCtl: TTyStyleController;
     FForm: TForm;
     FBar: TTyToolBar;
+    FFloorCalls: Integer;
     function NewBar: TTyToolBar;
     function NewEx(AWidth: Integer): TTyToolBarEx;
     function AddTool(const ACaption: string; AWithIcon: Boolean = True;
       ABar: TTyToolBar = nil): TTyToolButton;
     function IconBox(B: TTyGlyphButtonBase; AHeight: Integer = 0; AWidth: Integer = 0): TRect;
     function BoxText(const R: TRect): string;
+    function LoadActionBar(AActionsFirst: Boolean; out AButton: TTySpeedButton): TForm;
+    procedure LayoutOfTheBar(Sender: TObject);
+    procedure CountFloor(Sender: TObject);
     procedure Layout(ABar: TTyToolBar = nil);
     function PrefW(B: TTyGlyphButtonBase): Integer;
     function Slot(B: TTyGlyphButtonBase): Integer;
@@ -49,6 +54,19 @@ type
     procedure TheBarsShowCaptionsMovesAToolsWidth;
     procedure AButtonWithNoIconKeepsItsCaptionsWidth;
     procedure AnIconOnlyStackedButtonAsksNoRoomForACaption;
+    procedure ACaptionDoesNotWidenAnIconOnlyButtonsFloor;
+    procedure AnIconOnlyButtonOnAnActionLoadsAtItsOwnWidth;
+    procedure AnIconOnlyButtonLoadsAtItsOwnWidthWhenTheActionComesLater;
+    procedure AFixedWidthToolWidensForItsCaptionAndComesBack;
+    procedure ASpeedButtonOfAFixedWidthDoesTheSame;
+    procedure AWidthTheHostWritesMeanwhileIsKept;
+    procedure AToolComesBackWhenTheIconSizeIsTakenAway;
+    procedure OnTheOverflowBarAToolComesBackToo;
+    procedure TheToolWhoseChangeRanThePassComesBackToo;
+    procedure AWidthTheFloorClampedBetweenPassesIsStillTheBars;
+    procedure AToolWiderThanItsIconComesBackToThatWidth;
+    procedure ASteadyBarMeasuresNothingAgain;
+    procedure AToolIsNotLeftWiderThanItWasBuilt;
     { #229 }
     procedure AStackedIconLeavesRoomForItsCaption;
     procedure AStackedIconIsNeverUnderSixteen;
@@ -66,6 +84,7 @@ type
     procedure ASeparatorTakesTheRowsHeight;
     procedure AnEditKeepsItsHeightAndIsCentred;
     procedure AnEditTallerThanTheRowIsHeldToIt;
+    procedure AComboOnTheSecondRowIsCentredInItsRow;
     procedure AToolThatNeedsMoreStillMakesTheRowTaller;
     { #231 }
     procedure WithoutTheTokenAnIconIsSizedFromItsButton;
@@ -98,8 +117,23 @@ implementation
 type
   { reach the protected measuring methods and the bar's layout }
   TGlyphCrack = class(TTyGlyphButtonBase);
+
+  { A tool whose floor update runs a layout pass of its bar on the spot -- what LCL does in a
+    real window as soon as a control's constraints move. The headless runner never does. }
+  TRealignTool = class(TTyToolButton)
+  public
+    AfterFloor: TNotifyEvent;
+  protected
+    procedure DoUpdateSizeConstraints; override;
+  end;
   TBarCrack = class(TTyToolBar);
   TExCrack = class(TTyToolBarEx);
+
+procedure TRealignTool.DoUpdateSizeConstraints;
+begin
+  inherited DoUpdateSizeConstraints;
+  if Assigned(AfterFloor) then AfterFloor(Self);
+end;
 
 { ---- fixture ---- }
 
@@ -314,6 +348,399 @@ begin
   AssertTrue('less than with the caption under it', Floor(b) < withCaption);
 end;
 
+{ The floor (Constraints.MinWidth) is the same measurement, and it is what overrules the
+  Width a form wrote: an icon-only button that takes a long caption -- from an action, most
+  often -- was pushed out to the caption's width. }
+procedure TToolbarDisplayTest.ACaptionDoesNotWidenAnIconOnlyButtonsFloor;
+var
+  icons: TTyIconFont;
+  b: TTySpeedButton;
+  none, longer: Integer;
+begin
+  icons := TTyIconFont.Create(FForm);
+  b := TTySpeedButton.Create(FForm);
+  b.Controller := FCtl;
+  b.Font.PixelsPerInch := 96;
+  b.IconFont := icons;
+  b.GlyphName := 'save';
+  b.GlyphSize := 16;
+  b.ShowCaption := False;
+  b.Caption := '';
+  b.Parent := FBar;
+  b.Invalidate;
+  none := b.Constraints.MinWidth;
+  b.Caption := 'A rather long caption';
+  longer := b.Constraints.MinWidth;
+  AssertEquals('the caption does not widen an icon-only button', none, longer);
+  AssertEquals('the icon and the padding', 16 + PadX(b), longer);
+  b.ShowCaption := True;
+  AssertTrue('with its caption shown it is wider again', b.Constraints.MinWidth > longer + 40);
+  b.ShowCaption := False;
+  AssertEquals('and narrow again without it', none, b.Constraints.MinWidth);
+end;
+
+{ A form as the designer writes it: an icon-only speed button, 28 wide, linked to an action
+  with a long caption, on a tool bar. The properties arrive one at a time, and for a while
+  the button has a caption and no icon yet, or an icon and its caption showing. None of
+  those passing states may leave the button wider than the form says. }
+function TToolbarDisplayTest.LoadActionBar(AActionsFirst: Boolean; out AButton: TTySpeedButton): TForm;
+const
+  cActions =
+    '  object Acts: TActionList'#10 +
+    '    object ActSave: TAction'#10 +
+    '      Caption = ''Save the whole document now'''#10 +
+    '    end'#10 +
+    '  end'#10;
+  cBar =
+    '  object Icons: TTyIconFont'#10 +
+    '  end'#10 +
+    '  object Tools: TTyToolBar'#10 +
+    '    Left = 0'#10 +
+    '    Height = 36'#10 +
+    '    Top = 0'#10 +
+    '    Width = 600'#10 +
+    '    ButtonHeight = 28'#10 +
+    '    object BtnSave: TTySpeedButton'#10 +
+    '      Left = 6'#10 +
+    '      Height = 28'#10 +
+    '      Top = 4'#10 +
+    '      Width = 28'#10 +
+    '      Action = ActSave'#10 +
+    '      StyleClass = ''ghost'''#10 +
+    '      IconFont = Icons'#10 +
+    '      GlyphName = ''save'''#10 +
+    '      GlyphSize = 16'#10 +
+    '      ShowCaption = False'#10 +
+    '    end'#10 +
+    '  end'#10;
+var
+  txt: TStringStream;
+  bin: TMemoryStream;
+  body: string;
+begin
+  if AActionsFirst then body := cActions + cBar else body := cBar + cActions;
+  Result := TForm.CreateNew(nil);
+  txt := TStringStream.Create('object F: TForm'#10 + body + 'end'#10);
+  bin := TMemoryStream.Create;
+  try
+    ObjectTextToBinary(txt, bin);
+    bin.Position := 0;
+    bin.ReadComponent(Result);
+  finally
+    bin.Free;
+    txt.Free;
+  end;
+  AButton := Result.FindComponent('BtnSave') as TTySpeedButton;
+end;
+
+procedure TToolbarDisplayTest.AnIconOnlyButtonOnAnActionLoadsAtItsOwnWidth;
+var
+  f: TForm;
+  b: TTySpeedButton;
+begin
+  f := LoadActionBar(True, b);
+  try
+    AssertEquals('setup: the action gave its caption', 'Save the whole document now', b.Caption);
+    AssertFalse('setup: and the caption is not shown', b.ShowCaption);
+    Layout(f.FindComponent('Tools') as TTyToolBar);   // what showing the form does
+    AssertEquals('the width the form says, or the icon and its padding if that is more',
+      Max(28, 16 + PadX(b)), b.Width);
+  finally
+    f.Free;
+  end;
+end;
+
+procedure TToolbarDisplayTest.AnIconOnlyButtonLoadsAtItsOwnWidthWhenTheActionComesLater;
+var
+  f: TForm;
+  b: TTySpeedButton;
+begin
+  f := LoadActionBar(False, b);
+  try
+    AssertEquals('setup: the action gave its caption', 'Save the whole document now', b.Caption);
+    Layout(f.FindComponent('Tools') as TTyToolBar);   // what showing the form does
+    AssertEquals('the width the form says, or the icon and its padding if that is more',
+      Max(28, 16 + PadX(b)), b.Width);
+  finally
+    f.Free;
+  end;
+end;
+
+{ A tool that is not auto-sized has the width the form gave it, and no less than what it has
+  to draw. LCL applies a control's constraints only when its bounds change: with captions
+  switched on over icon-only tools the floor rose and the width did not, so the captions
+  were cut off -- and a width the floor had pushed up never came back down. The bar lays
+  such a tool out at its floor and remembers the width it had. }
+procedure TToolbarDisplayTest.AFixedWidthToolWidensForItsCaptionAndComesBack;
+var
+  b: TTyToolButton;
+  narrow: Integer;
+begin
+  b := AddTool('Save all changes');
+  b.Width := 10;
+  Layout;
+  narrow := b.Width;
+  AssertEquals('setup: icon only, as wide as its floor', b.Constraints.MinWidth, narrow);
+  FBar.ShowCaptions := True;
+  Layout;
+  AssertTrue(Format('wider for its caption (%d against %d)', [b.Width, narrow]),
+    b.Width > narrow + 40);
+  AssertEquals('exactly what it has to draw', b.Constraints.MinWidth, b.Width);
+  FBar.ShowCaptions := False;
+  Layout;
+  AssertEquals('and back to the width it had', narrow, b.Width);
+end;
+
+procedure TToolbarDisplayTest.ASpeedButtonOfAFixedWidthDoesTheSame;
+var
+  s: TTySpeedButton;
+  narrow: Integer;
+begin
+  s := TTySpeedButton.Create(FForm);
+  s.Controller := FCtl;
+  s.Font.PixelsPerInch := 96;
+  s.GlyphKind := tgCheck;
+  s.Parent := FBar;             // the bar's ShowCaptions = False reaches it here
+  s.Caption := 'Save all changes';
+  s.Width := 10;
+  Layout;
+  narrow := s.Width;
+  AssertTrue(Format('setup: icon only, a narrow button (%d)', [narrow]), narrow < 50);
+  FBar.ShowCaptions := True;
+  Layout;
+  AssertTrue(Format('wider for its caption (%d against %d)', [s.Width, narrow]),
+    s.Width > narrow + 40);
+  AssertEquals('exactly what it has to draw', s.Constraints.MinWidth, s.Width);
+  FBar.ShowCaptions := False;
+  Layout;
+  AssertEquals('and back to the width it had', narrow, s.Width);
+  FBar.ShowCaptions := True;
+  Layout;
+  s.Parent := nil;              // taken off the bar while it is wide: nothing is remembered
+  s.Parent := FBar;
+  FBar.ShowCaptions := False;
+  Layout;
+  AssertTrue('a button that left the bar keeps the width it left with', s.Width > narrow + 40);
+end;
+
+{ The bar re-derives a width only while it is still the one the bar lent. A width the host
+  writes meanwhile is the host's, and stays. }
+procedure TToolbarDisplayTest.AWidthTheHostWritesMeanwhileIsKept;
+var
+  b: TTyToolButton;
+  s: TTySpeedButton;
+begin
+  b := AddTool('Save all changes');
+  b.Width := 10;
+  s := TTySpeedButton.Create(FForm);
+  s.Controller := FCtl;
+  s.Font.PixelsPerInch := 96;
+  s.GlyphKind := tgCheck;
+  s.Parent := FBar;
+  s.Caption := 'Save all changes';
+  s.Width := 10;
+  Layout;
+  FBar.ShowCaptions := True;
+  Layout;
+  b.Width := 300;
+  s.Width := 310;
+  FBar.ShowCaptions := False;
+  Layout;
+  AssertEquals('the tool keeps the width the host wrote', 300, b.Width);
+  AssertEquals('and so does the speed button', 310, s.Width);
+end;
+
+{ An icon nobody sized is as tall as its box, so the width floor follows the HEIGHT. A row
+  that grew for a large icon and shrank again must not leave its tools with the floor of
+  the tall row. }
+procedure TToolbarDisplayTest.AToolComesBackWhenTheIconSizeIsTakenAway;
+var
+  b: TTyToolButton;
+  w, h: Integer;
+begin
+  b := AddTool('Save');
+  b.Width := 10;
+  Layout;
+  w := b.Width;
+  h := b.Height;
+  FBar.StyleOverride := '--toolbar-icon-size: 40px;';
+  Layout;
+  AssertTrue(Format('setup: wider and taller for the icon (%dx%d against %dx%d)',
+    [b.Width, b.Height, w, h]), (b.Width > w + 10) and (b.Height > h + 10));
+  FBar.StyleOverride := '';
+  Layout;
+  AssertEquals('as tall as before', h, b.Height);
+  AssertEquals('and as wide as before', w, b.Width);
+end;
+
+procedure TToolbarDisplayTest.OnTheOverflowBarAToolComesBackToo;
+var
+  ex: TTyToolBarEx;
+  b: TTyToolButton;
+  w, h: Integer;
+begin
+  ex := NewEx(700);
+  b := AddTool('Save', True, ex);
+  b.Width := 10;
+  Layout(ex);
+  w := b.Width;
+  h := b.Height;
+  ex.StyleOverride := '--toolbar-icon-size: 40px;';
+  Layout(ex);
+  AssertTrue('setup: wider and taller for the icon', (b.Width > w + 10) and (b.Height > h + 10));
+  ex.StyleOverride := '';
+  Layout(ex);
+  AssertEquals('as tall as before', h, b.Height);
+  AssertEquals('and as wide as before', w, b.Width);
+  ex.ShowCaptions := True;
+  Layout(ex);
+  AssertEquals('wide enough for its caption', b.Constraints.MinWidth, b.Width);
+  ex.ShowCaptions := False;
+  Layout(ex);
+  AssertEquals('and back', w, b.Width);
+end;
+
+procedure TToolbarDisplayTest.LayoutOfTheBar(Sender: TObject);
+begin
+  Layout;
+end;
+
+procedure TToolbarDisplayTest.CountFloor(Sender: TObject);
+begin
+  Inc(FFloorCalls);
+end;
+
+{ LCL applies a control's constraints whenever its bounds change, for whatever reason. A floor
+  that rose is then applied by LCL before the bar's next pass -- in a real window, in the
+  very pass where the row grows -- and the bar finds the button already wide. That width is
+  the floor's doing, not the host's: when the floor falls the button comes back. }
+procedure TToolbarDisplayTest.AWidthTheFloorClampedBetweenPassesIsStillTheBars;
+var
+  b: TTyToolButton;
+  s: TTySpeedButton;
+  wb, ws: Integer;
+begin
+  b := AddTool('Save all changes');
+  b.Width := 10;
+  s := TTySpeedButton.Create(FForm);
+  s.Controller := FCtl;
+  s.Font.PixelsPerInch := 96;
+  s.GlyphKind := tgCheck;
+  s.Parent := FBar;
+  s.Caption := 'Save all changes';
+  s.Width := 10;
+  Layout;
+  wb := b.Width;
+  ws := s.Width;
+  FBar.ShowCaptions := True;                              // the floors rise ...
+  b.SetBounds(b.Left, b.Top + 1, b.Width, b.Height);      // ... and any change of bounds applies them
+  s.SetBounds(s.Left, s.Top + 1, s.Width, s.Height);
+  AssertEquals('setup: LCL clamped the tool up to its floor', b.Constraints.MinWidth, b.Width);
+  AssertEquals('setup: and the speed button', s.Constraints.MinWidth, s.Width);
+  AssertTrue('setup: both wider than they were', (b.Width > wb + 40) and (s.Width > ws + 40));
+  Layout;
+  FBar.ShowCaptions := False;
+  Layout;
+  AssertEquals('the tool is back at the width it had', wb, b.Width);
+  AssertEquals('and so is the speed button', ws, s.Width);
+end;
+
+procedure TToolbarDisplayTest.AToolWiderThanItsIconComesBackToThatWidth;
+var
+  b: TTyToolButton;
+begin
+  b := AddTool('Save all changes and then some more');
+  b.Width := 70;
+  Layout;
+  AssertEquals('setup: the width the form gave it, wider than its icon', 70, b.Width);
+  AssertTrue('setup: its floor is under that', b.Constraints.MinWidth < 70);
+  FBar.ShowCaptions := True;
+  Layout;
+  AssertTrue(Format('setup: wider for its caption (%d)', [b.Width]), b.Width > 110);
+  FBar.ShowCaptions := False;
+  Layout;
+  AssertEquals('back at seventy, not at its floor', 70, b.Width);
+end;
+
+{ A tool as the constructor makes it is 23 wide; its caption and icon arrive afterwards and
+  raise its floor over that without moving it. The first pass that gives it the row's height
+  must not let LCL push it up to the floor unrecorded -- 23 is the width it was built with,
+  and it is the width to come back to. }
+procedure TToolbarDisplayTest.AToolIsNotLeftWiderThanItWasBuilt;
+var
+  b: TTyToolButton;
+begin
+  b := TTyToolButton.Create(FForm);
+  b.Controller := FCtl;
+  b.Font.PixelsPerInch := 96;
+  b.Parent := FBar;
+  b.Caption := 'Save';
+  b.GlyphKind := tgCheck;
+  AssertEquals('setup: still as wide as it was built', 23, b.Width);
+  AssertTrue('setup: under its floor', b.Constraints.MinWidth > 23);
+  FBar.ButtonHeight := 60;            // the first pass changes its height
+  Layout;
+  AssertEquals('setup: laid out at its floor', b.Constraints.MinWidth, b.Width);
+  FBar.StyleOverride := '--toolbar-icon-size: 4px;';   // a floor under 23
+  Layout;
+  AssertTrue('setup: the floor is under what it was built with', b.Constraints.MinWidth < 23);
+  AssertEquals('back at the width it was built with', 23, b.Width);
+end;
+
+{ Settling the row's height and measuring again is for a pass in which something moved. A
+  pass over a bar that has not changed must not touch its tools: a measure invalidates, an
+  invalidate lays out, and the bar would never come to rest. }
+procedure TToolbarDisplayTest.ASteadyBarMeasuresNothingAgain;
+var
+  b: TRealignTool;
+begin
+  b := TRealignTool.Create(FForm);
+  b.Controller := FCtl;
+  b.Font.PixelsPerInch := 96;
+  b.Caption := 'Save';
+  b.GlyphKind := tgCheck;
+  b.Parent := FBar;
+  AddTool('Other');
+  FBar.StyleOverride := '--toolbar-icon-size: 40px;';   // a row taller than ButtonHeight
+  Layout;
+  Layout;
+  FFloorCalls := 0;
+  b.AfterFloor := @CountFloor;
+  Layout;
+  b.AfterFloor := nil;
+  AssertEquals('nothing changed, nothing is measured', 0, FFloorCalls);
+end;
+
+{ In a real window the pass that shrinks the row runs INSIDE the Invalidate of the tool whose
+  floor just moved. That tool was measured for the tall row a moment before, and while its own
+  Invalidate is under way a second one does nothing -- so it has to be measured for the new
+  height some other way, or it alone stays as wide as the large icon made it. }
+procedure TToolbarDisplayTest.TheToolWhoseChangeRanThePassComesBackToo;
+var
+  b: TRealignTool;
+  w, h: Integer;
+begin
+  b := TRealignTool.Create(FForm);
+  b.Controller := FCtl;
+  b.Font.PixelsPerInch := 96;
+  b.Caption := 'Save';
+  b.GlyphKind := tgCheck;
+  b.Parent := FBar;              // icon only from here on, as the bar says
+  b.Width := 10;
+  Layout;
+  w := b.Width;
+  h := b.Height;
+  FBar.StyleOverride := '--toolbar-icon-size: 40px;';
+  Layout;
+  AssertTrue(Format('setup: wider and taller for the icon (%dx%d against %dx%d)',
+    [b.Width, b.Height, w, h]), (b.Width > w + 10) and (b.Height > h + 10));
+  b.AfterFloor := @LayoutOfTheBar;
+  FBar.StyleOverride := '';      // the bar tells the tool; the tool's floor moves; the pass runs
+  b.AfterFloor := nil;
+  AssertEquals('as tall as before', h, b.Height);
+  AssertEquals('and as wide as before', w, b.Width);
+end;
+
 { ---- #229: an icon above its caption ---- }
 
 procedure TToolbarDisplayTest.AStackedIconLeavesRoomForItsCaption;
@@ -493,6 +920,38 @@ begin
   AssertEquals('setup: the row is forty', 40, tool.Height);
   AssertEquals('as tall as the row, no more', 40, ed.Height);
   AssertEquals('and on it', tool.Top, ed.Top);
+end;
+
+{ The same on a bar that wraps: a combo box on the second row keeps its own height and sits
+  on that row's centre line, beside a button that fills the row. }
+procedure TToolbarDisplayTest.AComboOnTheSecondRowIsCentredInItsRow;
+var
+  first, last, beside: TTyToolButton;
+  combo: TTyComboBox;
+  h: Integer;
+begin
+  first := AddTool('One');
+  last := AddTool('Two');
+  last.Wrap := True;                 // the row ends after this tool
+  combo := TTyComboBox.Create(FForm);
+  combo.Controller := FCtl;
+  combo.Font.PixelsPerInch := 96;
+  combo.Parent := FBar;
+  combo.Width := 90;
+  beside := AddTool('Three');
+  FBar.ButtonHeight := 24;
+  Layout;
+  h := combo.Height;                 // what it is in a row no taller than itself
+
+  FBar.ButtonHeight := h + 20;
+  Layout;
+  AssertTrue('setup: the combo is on a second row', combo.Top > first.Top + first.Height);
+  AssertEquals('setup: with a button beside it', combo.Top - 10, beside.Top);
+  AssertEquals('the button fills the row', h + 20, beside.Height);
+  AssertEquals('the combo keeps its own height', h, combo.Height);
+  AssertEquals('both rows are as tall', first.Height, beside.Height);
+  AssertEquals('and the second row starts a row and the spacing below the first',
+    first.Top + first.Height + FBar.ButtonSpacing, beside.Top);
 end;
 
 procedure TToolbarDisplayTest.AToolThatNeedsMoreStillMakesTheRowTaller;
@@ -972,4 +1431,6 @@ end;
 
 initialization
   RegisterTest(TToolbarDisplayTest);
+  { the .lfm text of LoadActionBar names these }
+  RegisterClasses([TTyToolBar, TTySpeedButton, TTyIconFont, TActionList, TAction]);
 end.

@@ -153,7 +153,9 @@ MainBar.StyleOverride := '--toolbar-icon-size: 32px;';                        //
 
 工具自己设了 `GlyphSize` 的不受它影响。令牌没设时和以前一样，图标按按钮的高度算。运行时改这个令牌，工具条会让上面的按钮重新量一遍。`TTyToolBarEx` 的溢出箭头不算工具，大小不变；溢出到弹出层里的工具仍用工具条的图标大小。
 
-**按钮跟着变。** 行高取 `ButtonHeight` 和各工具所需高度里最大的那个：`--toolbar-icon-size` 给的图标变大，或者图标叠到标题上方，行自己长高，不用再去改 `ButtonHeight`；工具条 `Align` 为 `alTop` / `alBottom` 时条的高度也跟着变。宽度要跟着变，工具得是 `AutoSize := True`：只显示图标时宽度是图标加内边距，显示标题时再加上标题。没开 `AutoSize` 的工具保持你给的宽度，只是不会窄于内容。
+这个令牌管的是能画图标的按钮：`TTyToolButton`、`TTySpeedButton`、`TTyGlyphButton`，图标来自图标字体、图像集合都一样。不画图标的按钮（`TTyColorButton`、`TTyDropDownButton`、`TTyMenuButton`、普通 `TTyButton`）不读它；它们和别的按钮一样取行高，颜色按钮的色块按按钮的盒子画，所以行变高时色块也跟着变大。
+
+**按钮跟着变。** 行高取 `ButtonHeight` 和各工具所需高度里最大的那个：`--toolbar-icon-size` 给的图标变大，或者图标叠到标题上方，行自己长高，不用再去改 `ButtonHeight`；工具条 `Align` 为 `alTop` / `alBottom` 时条的高度也跟着变。宽度要跟着变，工具得是 `AutoSize := True`：只显示图标时宽度是图标加内边距，显示标题时再加上标题。没开 `AutoSize` 的工具保持你给的宽度，只是不会窄于内容：要画的东西变多（显示标题、图标变大）时工具条把它排宽，变少后回到你给的宽度。
 
 **图标在上、文字在下**时，没指定大小的图标取行里除去标题那一行之后剩下的高度，最小 16。想要更大的图标，设 `--toolbar-icon-size`，或者把 `ButtonHeight` 调高。
 
@@ -601,6 +603,7 @@ B.Wrap := True;                        // 这一行到此为止，后面的工�
 - **`OnPaintButton` 是整体替换：** 挂上即接管每个工具按钮的全部绘制（含分隔占位），清掉即恢复主题默认。要"在主题绘制**之上**补一笔"用继承来的 `OnPaint`（[../events.md](../events.md)），不要用它。
 - **占位样式不吃 `Flat` 的 ghost：** `Flat = True` 时工具条会把空 `StyleClass` 的子 `TTyButton` 设成 `'ghost'`，但 `Style` 为 `tbsSeparator` / `tbsDivider` 的工具按钮**被跳过**——它解析的是 `TyToolSeparator` 键，套上按钮族的变体等于向主题要一条 `TyToolSeparator.ghost`（没有哪套皮肤定义过），还会在宿主从没设过样式的控件上留下一个 `StyleClass`。
 - **`TTyToolBarEx` 整份重写了 `AlignControls`：** `Wrapable = True` 时它把活儿原样交回基类（`inherited AlignControls`），于是走的是同一个排布函数、同一套几何；`Wrapable = False` 时它走自己的溢出 chevron 路径，**完全不调用 `TyToolbarLayout`**，那条路上只有一行，也就没有"断行"可言。改基类的排布时这两条路都要一起验——`TToolBarExControlTest.TestWrapableGeometryIsTheBaseSolvers` 就是钉住前者的那颗钉子。
+- **代码里建工具，先设 `Parent` 再设 `Width`：** 按钮不会窄于它要画的内容。还没放上工具条时它的 `ShowCaption` 是 `True`，这时设的宽度会先被标题撑宽，放上只显示图标的工具条以后也不会自己缩回去（工具条只记得它排过的宽度）。先 `Parent := ToolBar`、或先 `ShowCaption := False`，再设宽度。`.lfm` 里的工具没有这个问题。
 - **ShowCaptions 的默认值是 `False`（与 LCL 一致）：** 它只对**能画图标**的工具项（`TTyGlyphButtonBase` 一族）生效，且只把标题换成图标——**解析不出图标的工具项照旧显示标题**，所以给一条纯文字工具条打开这个默认值不会把它抹白。工具项上一旦有人写过 `ShowCaption`，工具条就不再管它。
 - **Images 借给工具项：** 工具条把自己的 `TTyImageCollection` 借给**没有 `Images` 的**子图标按钮，于是工具项只需设 `ImageName`；自带集合的工具项不受影响。工具项**加入工具条之后**才设 `Images` 也有效（`InsertControl` 里也会下发一次）。
 - **无四周边框：** 主题的 `border-color` / `border-width` 只画工具条**底部一条 hairline**，不绘制四周边框；工具条不参与任何伪类状态。

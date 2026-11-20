@@ -491,9 +491,11 @@ For one tool bar, in its own `StyleOverride`:
 ```
 
 It applies to the buttons on the bar that draw an icon and have no `GlyphSize` of their own:
-`TTyToolButton`, `TTyGlyphButton`, `TTySpeedButton`. A button with its own `GlyphSize` keeps it. When
-the icon is taller than the row, the row grows, and a tool with `AutoSize` changes its width too. A
-button that is not on a tool bar does not read this token. The other display choices (icons only,
+`TTyToolButton`, `TTyGlyphButton`, `TTySpeedButton`, whether the icon comes from an icon font or an
+image collection. A button with its own `GlyphSize` keeps it. Buttons that draw no icon
+(`TTyColorButton`, `TTyDropDownButton`, `TTyMenuButton`) do not read it; they take the row's height
+like any other button. When the icon is taller than the row, the row grows, and the tools change
+their width too. A button that is not on a tool bar does not read this token. The other display choices (icons only,
 icons with text) are properties of the tool bar; see section 3.1.3 of
 [controls/toolbar.md](controls/toolbar.md).
 

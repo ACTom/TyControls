@@ -476,8 +476,9 @@ typeKey 与文本类控件引用。它们都是普通 `--变量`,可被主题作
 ```
 
 管到的是工具条上能画图标、自己又没设 `GlyphSize` 的按钮:`TTyToolButton`、`TTyGlyphButton`、
-`TTySpeedButton`。自己设了 `GlyphSize` 的按钮用自己的。图标比行高的时候,行自己长高;`AutoSize` 的
-工具宽度也跟着变。不在工具条上的按钮不读这个令牌。显示方式的其他搭配(只显示图标、图标配文字)是
+`TTySpeedButton`,图标来自图标字体还是图像集合都一样。自己设了 `GlyphSize` 的按钮用自己的。不画图标的
+按钮(`TTyColorButton`、`TTyDropDownButton`、`TTyMenuButton`)不读它,只是和别的按钮一样取行高。图标比
+行高的时候,行自己长高,工具的宽度也跟着变。不在工具条上的按钮不读这个令牌。显示方式的其他搭配(只显示图标、图标配文字)是
 工具条的属性,见 [controls/toolbar.md](controls/toolbar.md) 第 3.1.3 节。
 
 3.0.5 新增。更早的版本不认这个令牌,图标大小只能在每个按钮上用 `GlyphSize` 设。

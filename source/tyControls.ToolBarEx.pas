@@ -312,13 +312,17 @@ begin
           if TTyButton(kids[i]).StyleClass = 'ghost' then
             TTyButton(kids[i]).StyleClass := '';
       end;
-      { The base bar's ButtonWidth floor, through the base's own arbitration — the overflow
-        fit must be decided over the widths the buttons will actually be laid out at, or a
-        floored button would be judged to fit by its narrower natural width. With ButtonWidth
-        unset this is exactly kids[i].Width. (For a button this pass then HIDES, the recorded
-        lend self-heals — see EffectiveToolWidth.) }
-      widths[i] := EffectiveToolWidth(kids[i]);
     end;
+    { The row's height first, then the widths: a button's width floor can depend on its
+      height (see TTyToolBar.SettleRowHeight). }
+    SettleRowHeight(kids, RowHeightPx(kids));
+    { The base bar's ButtonWidth floor, through the base's own arbitration — the overflow
+      fit must be decided over the widths the buttons will actually be laid out at, or a
+      floored button would be judged to fit by its narrower natural width. With ButtonWidth
+      unset this is exactly kids[i].Width. (For a button this pass then HIDES, the recorded
+      lend self-heals — see EffectiveToolWidth.) }
+    for i := 0 to n - 1 do
+      widths[i] := EffectiveToolWidth(kids[i]);
 
     { The same scaling the base layout does, for the same reason: Indent, ButtonSpacing,
       ButtonHeight and the pad are logical px, the widths and ClientWidth beside them are
