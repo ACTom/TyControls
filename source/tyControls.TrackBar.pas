@@ -328,6 +328,18 @@ function TyTrackInputStep(AStep: Integer; AReversed: Boolean): Integer;
   slider band come out the same size and in the same place on both.
   TyTrackThumbLen: the thumb's length along the track at APPI (12 logical px, at least 1). }
 function TyTrackThumbLen(APPI: Integer): Integer;
+{ #236. What a track bar's frame keeps on each edge, in device px at APPI (a TRect used as
+  four insets): AStyle's padding, and the wider of its border and the focus ring that
+  AFocusedStyle -- the bar's style with the focus -- draws. }
+function TyTrackFrameInsets(const AStyle, AFocusedStyle: TTyStyleSet; APPI: Integer): TRect;
+{ AClient less AInsets: the rectangle the groove, the thumbs, the ticks and the value are
+  laid out in. An axis the frame leaves nothing of keeps the client's extent, so a bar too
+  small for its frame keeps its parts rather than turning them inside out. }
+function TyTrackContentRect(const AClient, AInsets: TRect): TRect;
+{ #237. A thumb's rectangle AThumb given a thickness across the track (device px): centred
+  on the slider band ASlide. Left as it is when the band is no wider than that. }
+procedure TyTrackFitThumbAcross(const ASlide: TRect; AOrientation: TTyTrackOrientation;
+  AThicknessPx: Integer; var AThumb: TRect);
 { The groove's thickness across the track, in device px: the theme's --track-thickness. }
 function TyTrackGrooveThickness(APainter: TTyPainter; AController: TTyCustomStyleController): Integer;
 { The band the thumb rides in: AR less the tick strips (ABand -- ticks plus labels -- on each
@@ -403,6 +415,64 @@ function TyTrackThumbLen(APPI: Integer): Integer;
 begin
   Result := MulDiv(TyTrackThumbLength, APPI, 96);
   if Result < 1 then Result := 1;
+end;
+
+function TyTrackFrameInsets(const AStyle, AFocusedStyle: TTyStyleSet; APPI: Integer): TRect;
+var
+  edge, ring: Integer;
+begin
+  edge := 0;
+  if TyBorderVisible(AStyle) then edge := MulDiv(AStyle.BorderWidth, APPI, 96);
+  if (tpOutline in AFocusedStyle.Present) and (AFocusedStyle.OutlineWidth > 0) then
+  begin
+    ring := MulDiv(AFocusedStyle.OutlineWidth, APPI, 96);
+    if AFocusedStyle.OutlineOffset > 0 then
+      Inc(ring, MulDiv(AFocusedStyle.OutlineOffset, APPI, 96));
+    if ring > edge then edge := ring;
+  end;
+  Result.Left   := edge + MulDiv(AStyle.Padding.Left, APPI, 96);
+  Result.Top    := edge + MulDiv(AStyle.Padding.Top, APPI, 96);
+  Result.Right  := edge + MulDiv(AStyle.Padding.Right, APPI, 96);
+  Result.Bottom := edge + MulDiv(AStyle.Padding.Bottom, APPI, 96);
+end;
+
+function TyTrackContentRect(const AClient, AInsets: TRect): TRect;
+begin
+  Result := Rect(AClient.Left + AInsets.Left, AClient.Top + AInsets.Top,
+                 AClient.Right - AInsets.Right, AClient.Bottom - AInsets.Bottom);
+  if Result.Right <= Result.Left then
+  begin
+    Result.Left := AClient.Left;
+    Result.Right := AClient.Right;
+  end;
+  if Result.Bottom <= Result.Top then
+  begin
+    Result.Top := AClient.Top;
+    Result.Bottom := AClient.Bottom;
+  end;
+end;
+
+procedure TyTrackFitThumbAcross(const ASlide: TRect; AOrientation: TTyTrackOrientation;
+  AThicknessPx: Integer; var AThumb: TRect);
+var
+  mid: Integer;
+begin
+  if AThicknessPx <= 0 then Exit;
+  if AOrientation = toVertical then
+  begin
+    if AThicknessPx < AThumb.Right - AThumb.Left then
+    begin
+      mid := (ASlide.Left + ASlide.Right) div 2;
+      AThumb.Left := mid - AThicknessPx div 2;
+      AThumb.Right := AThumb.Left + AThicknessPx;
+    end;
+  end
+  else if AThicknessPx < AThumb.Bottom - AThumb.Top then
+  begin
+    mid := (ASlide.Top + ASlide.Bottom) div 2;
+    AThumb.Top := mid - AThicknessPx div 2;
+    AThumb.Bottom := AThumb.Top + AThicknessPx;
+  end;
 end;
 
 function TyTrackGrooveThickness(APainter: TTyPainter; AController: TTyCustomStyleController): Integer;
@@ -805,44 +875,13 @@ begin
 end;
 
 function TTyCustomTrackBar.FrameInsets(APPI: Integer): TRect;
-var
-  S, F: TTyStyleSet;
-  edge, ring: Integer;
 begin
-  S := CurrentStyle;
-  edge := 0;
-  if TyBorderVisible(S) then edge := MulDiv(S.BorderWidth, APPI, 96);
-  F := StyleInState(CurrentStates + [tysFocused]);
-  if (tpOutline in F.Present) and (F.OutlineWidth > 0) then
-  begin
-    ring := MulDiv(F.OutlineWidth, APPI, 96);
-    if F.OutlineOffset > 0 then Inc(ring, MulDiv(F.OutlineOffset, APPI, 96));
-    if ring > edge then edge := ring;
-  end;
-  Result.Left   := edge + MulDiv(S.Padding.Left, APPI, 96);
-  Result.Top    := edge + MulDiv(S.Padding.Top, APPI, 96);
-  Result.Right  := edge + MulDiv(S.Padding.Right, APPI, 96);
-  Result.Bottom := edge + MulDiv(S.Padding.Bottom, APPI, 96);
+  Result := TyTrackFrameInsets(CurrentStyle, StyleInState(CurrentStates + [tysFocused]), APPI);
 end;
 
 function TTyCustomTrackBar.ContentRectIn(const AClient: TRect; APPI: Integer): TRect;
-var
-  ins: TRect;
 begin
-  ins := FrameInsets(APPI);
-  Result := Rect(AClient.Left + ins.Left, AClient.Top + ins.Top,
-                 AClient.Right - ins.Right, AClient.Bottom - ins.Bottom);
-  { A bar too small for its frame keeps its parts rather than turning them inside out. }
-  if Result.Right <= Result.Left then
-  begin
-    Result.Left := AClient.Left;
-    Result.Right := AClient.Right;
-  end;
-  if Result.Bottom <= Result.Top then
-  begin
-    Result.Top := AClient.Top;
-    Result.Bottom := AClient.Bottom;
-  end;
+  Result := TyTrackContentRect(AClient, FrameInsets(APPI));
 end;
 
 function TTyCustomTrackBar.MainOrigin: Integer;
@@ -1378,7 +1417,7 @@ var
   R, C, SlideR, GrooveR, ThumbR, SelR: TRect;
   SelLo, SelHi: Integer;
   ThumbStates: TTyStateSet;
-  TW, MLen, Off, ThumbTh, ThumbRad, Mid: Integer;
+  TW, MLen, Off, ThumbTh, ThumbRad: Integer;
   Ticks: TTyTrackTicks;
   Band, GrooveTh: Integer;
   vs, vw: TSize;
@@ -1500,24 +1539,7 @@ begin
       thickness given: it fills the slider band, as it always did. One given: that, centred
       on the groove and never more than the band. }
     ThumbTh := P.Scale(StyleMetric('--track-thumb-thickness', 0));
-    if ThumbTh > 0 then
-    begin
-      if FOrientation = toVertical then
-      begin
-        if ThumbTh < ThumbR.Right - ThumbR.Left then
-        begin
-          Mid := (SlideR.Left + SlideR.Right) div 2;
-          ThumbR.Left := Mid - ThumbTh div 2;
-          ThumbR.Right := ThumbR.Left + ThumbTh;
-        end;
-      end
-      else if ThumbTh < ThumbR.Bottom - ThumbR.Top then
-      begin
-        Mid := (SlideR.Top + SlideR.Bottom) div 2;
-        ThumbR.Top := Mid - ThumbTh div 2;
-        ThumbR.Bottom := ThumbR.Top + ThumbTh;
-      end;
-    end;
+    TyTrackFitThumbAcross(SlideR, FOrientation, ThumbTh, ThumbR);
     ThumbRad := StyleMetric('--track-thumb-radius', -1);
     if ThumbRad >= 0 then ThumbS.BorderRadius := ThumbRad;
     TyDrawTrackThumb(P, ThumbR, ThumbS);
