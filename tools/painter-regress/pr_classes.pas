@@ -661,6 +661,7 @@ begin
   Reg(TTyRowLayout);
   Reg(TTyRichObject);
   Reg(TTyRichPicture);
+  Reg(TTyRichKeptPicture);
   Reg(TTyRichOpaque);
   Reg(TTyRichFieldMark);
   Reg(TTyRichTable);
