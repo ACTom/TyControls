@@ -2618,18 +2618,22 @@ procedure TTyRichFieldsTest.TestASaveBesideALargeFieldReadsOnlyItsMarksParagraph
     Result := Rtf(s + '|pard tail|par}');
   end;
 
-  // the bytes A and B do not share at their start and end, the group G taken out of both
-  function DiffBytes(const A, B, G: RawByteString; out AFrom: Integer): Integer;
+  // the bytes A and B do not share at their start and end, the groups G taken out of both
+  function DiffBytes(const A, B: RawByteString; const G: array of RawByteString;
+    out AFrom: Integer): Integer;
   var
     x, y: RawByteString;
-    p, s: Integer;
+    p, s, i: Integer;
   begin
     x := A;
     y := B;
-    p := Pos(G, x);
-    if p > 0 then Delete(x, p, Length(G));
-    p := Pos(G, y);
-    if p > 0 then Delete(y, p, Length(G));
+    for i := 0 to High(G) do
+    begin
+      p := Pos(G[i], x);
+      if p > 0 then Delete(x, p, Length(G[i]));
+      p := Pos(G[i], y);
+      if p > 0 then Delete(y, p, Length(G[i]));
+    end;
     p := 0;
     while (p < Length(x)) and (p < Length(y)) and (x[p + 1] = y[p + 1]) do Inc(p);
     s := 0;
@@ -2639,7 +2643,7 @@ procedure TTyRichFieldsTest.TestASaveBesideALargeFieldReadsOnlyItsMarksParagraph
   end;
 
   procedure Check(const AMsg: string; const B: TBytes; const AAt: array of TTyRichPos;
-    const AGroup: RawByteString);
+    const AGroups: array of RawByteString);
   var
     d, r: TTyRichDocument;
     load: TTyRtfLoad;
@@ -2660,10 +2664,12 @@ procedure TTyRichFieldsTest.TestASaveBesideALargeFieldReadsOnlyItsMarksParagraph
         (Length(B) < 400000) or (load.IntervalCount > 8));
       AssertTrue(Format('%s: intervals read for the save: %d of %d', [AMsg, parses, load.IntervalCount]),
         parses <= 3);
-      n := DiffBytes(StrOfBytes(B), StrOfBytes(o), AGroup, from);
-      AssertTrue(Format('%s: the output differs from the file in %d bytes from %d (the group aside)',
+      n := DiffBytes(StrOfBytes(B), StrOfBytes(o), AGroups, from);
+      AssertTrue(Format('%s: the output differs from the file in %d bytes from %d (the groups aside)',
         [AMsg, n, from]), n < 4096 * Length(AAt));
-      AssertEquals(AMsg + ': the group once', CountRaw(AGroup, StrOfBytes(B)), CountRaw(AGroup, StrOfBytes(o)));
+      for i := 0 to High(AGroups) do
+        AssertEquals(AMsg + ': each group as the file has it', CountRaw(AGroups[i], StrOfBytes(B)),
+          CountRaw(AGroups[i], StrOfBytes(o)));
       CheckBalanced(Self, AMsg, o);
       r := LoadDoc(o, True);
       try
@@ -2696,9 +2702,9 @@ begin
   finally
     d.Free;
   end;
-  Check('a key before the open mark', b, [openAt], FieldGroup(s, 1));
-  Check('a key after the close mark', b, [closeAt], FieldGroup(s, 1));
-  Check('both', b, [openAt, closeAt], FieldGroup(s, 1));
+  Check('a key before the open mark', b, [openAt], [FieldGroup(s, 1)]);
+  Check('a key after the close mark', b, [closeAt], [FieldGroup(s, 1)]);
+  Check('both', b, [openAt, closeAt], [FieldGroup(s, 1)]);
   // one field closes and the next opens in one paragraph
   s := Wrapped(1, 2);
   b := BytesOf(s);
@@ -2710,7 +2716,7 @@ begin
   finally
     d.Free;
   end;
-  Check('between two fields', b, [between], FieldGroup(s, 1));
+  Check('between two fields', b, [between], [FieldGroup(s, 1), FieldGroup(s, 2)]);
   // eight deep: the outer marks' paragraphs
   s := Wrapped(8, 1);
   b := BytesOf(s);
@@ -2723,8 +2729,8 @@ begin
   finally
     d.Free;
   end;
-  Check('eight deep, before them', b, [openAt], FieldGroup(s, 1));
-  Check('eight deep, after them', b, [closeAt], FieldGroup(s, 1));
+  Check('eight deep, before them', b, [openAt], [FieldGroup(s, 1)]);
+  Check('eight deep, after them', b, [closeAt], [FieldGroup(s, 1)]);
   // right after the close mark of Word's own contents
   b := Fixture('word-toc.rtf');
   s := StrOfBytes(b);
@@ -2736,7 +2742,7 @@ begin
     d.Free;
   end;
   k := Pos(Rtf('{|field|fldedit'), s);
-  Check('after Word''s contents', b, [closeAt], FieldGroup(s, CountRaw(Rtf('{|field'), Copy(s, 1, k - 1)) + 1));
+  Check('after Word''s contents', b, [closeAt], [FieldGroup(s, CountRaw(Rtf('{|field'), Copy(s, 1, k - 1)) + 1)]);
 end;
 
 { Word restates the section's properties (\sectd, \ltrsect, \linex0, \headery851 ...) inside

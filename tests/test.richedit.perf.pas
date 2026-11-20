@@ -1218,7 +1218,7 @@ end;
   100 ms - the field's verdict and its bytes are not paid for again. }
 procedure TTyRichEditPerfTest.TestOneFieldAroundA100MBRtf;
 var
-  path: string;
+  path, plain: string;
   bmp: TBitmap;
   d: TTyRichDocument;
   load: TTyRtfLoad;
@@ -1228,10 +1228,18 @@ begin
   CheckRoom;
   path := NewFile('.rtf');
   MakeWrappedRtf(path, CFileBytes, 1);
+  plain := NewFile('.rtf');
+  MakeWrappedRtf(plain, CFileBytes, 0);
   bmp := TBitmap.Create;
   try
     bmp.PixelFormat := pf32bit;
     bmp.SetSize(FRich.Width, FRich.Height);
+    // the same paragraphs with no field, first: what the field adds (not asserted)
+    t0 := Clock;
+    FRich.LoadFromFile(plain);
+    TPerfRich(FRich).PaintInto(bmp);
+    Report(Format('the same %d MB with no field: load (first slice) and first paint (not asserted)',
+      [SizeOfFile(plain) div (1024 * 1024)]), Clock - t0);
     t0 := Clock;
     FRich.LoadFromFile(path);
     TPerfRich(FRich).PaintInto(bmp);
