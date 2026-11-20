@@ -359,6 +359,60 @@ resourcestring
     CRichMaxParaLayoutChars characters). %s is how many characters are not shown. }
   rsRichEditParaNotShown  = '%s more characters of this paragraph are not shown.';
 
+  { --- TTyRichEdit's actions (tyControls.RichEdit.Actions) ----------------------
+    The captions and hints of the ready-made actions for menus and toolbars. }
+  rsRichActBold              = '&Bold';
+  rsRichActBoldHint          = 'Bold';
+  rsRichActItalic            = '&Italic';
+  rsRichActItalicHint        = 'Italic';
+  rsRichActUnderline         = '&Underline';
+  rsRichActUnderlineHint     = 'Underline';
+  rsRichActStrikeOut         = 'Stri&kethrough';
+  rsRichActStrikeOutHint     = 'Strikethrough';
+  rsRichActSuperscript       = 'Su&perscript';
+  rsRichActSuperscriptHint   = 'Superscript';
+  rsRichActSubscript         = 'Subs&cript';
+  rsRichActSubscriptHint     = 'Subscript';
+  rsRichActAlignLeft         = 'Align &Left';
+  rsRichActAlignLeftHint     = 'Align left';
+  rsRichActAlignCenter       = '&Center';
+  rsRichActAlignCenterHint   = 'Center';
+  rsRichActAlignRight        = 'Align &Right';
+  rsRichActAlignRightHint    = 'Align right';
+  rsRichActJustify           = '&Justify';
+  rsRichActJustifyHint       = 'Justify';
+  rsRichActBullets           = 'B&ullets';
+  rsRichActBulletsHint       = 'Bulleted list';
+  rsRichActNumbering         = '&Numbering';
+  rsRichActNumberingHint     = 'Numbered list';
+  rsRichActIndentIncrease    = '&Increase Indent';
+  rsRichActIndentIncreaseHint = 'Increase indent';
+  rsRichActIndentDecrease    = '&Decrease Indent';
+  rsRichActIndentDecreaseHint = 'Decrease indent';
+  rsRichActInsertPicture     = '&Picture...';
+  rsRichActInsertPictureHint = 'Insert a picture from a file';
+  rsRichActInsertTable       = '&Table';
+  rsRichActInsertTableHint   = 'Insert a table';
+  rsRichActFind              = '&Find...';
+  rsRichActFindHint          = 'Find';
+  rsRichActReplace           = '&Replace...';
+  rsRichActReplaceHint       = 'Replace';
+  rsRichActUndo              = '&Undo';
+  rsRichActUndoHint          = 'Undo';
+  rsRichActRedo              = '&Redo';
+  rsRichActRedoHint          = 'Redo';
+  rsRichActZoomIn            = 'Zoom &In';
+  rsRichActZoomInHint        = 'Zoom in';
+  rsRichActZoomOut           = 'Zoom &Out';
+  rsRichActZoomOutHint       = 'Zoom out';
+  rsRichActZoomReset         = '&100%';
+  rsRichActZoomResetHint     = 'Zoom to 100%';
+  { %s = the text looked for }
+  rsRichActNotFound          = 'Cannot find "%s".';
+  { The insert picture action's file filter: %s = the file masks of every picture format read }
+  rsRichActPictureFiles      = 'Pictures (%s)';
+  rsRichActAllFiles          = 'All files';
+
   { --- TTyTerminalView context menu ------------------------------------------
     The terminal's own four-item menu reuses Copy / Paste / Select All above; this is
     its fourth item, which clears the scrollback. }

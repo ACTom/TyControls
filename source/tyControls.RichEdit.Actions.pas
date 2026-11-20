@@ -1,0 +1,1399 @@
+unit tyControls.RichEdit.Actions;
+
+{ Ready-made actions for a TTyRichEdit's menus and toolbars - Delphi's TRichEditBold family and
+  more: the character styles, the paragraph's alignment, lists and indent, a picture and a
+  table, find and replace, undo and redo, zoom. Put them in a TActionList (the IDE's action
+  list editor offers them under 'TyControls Rich Edit') and link menu items, TTySpeedButtons or
+  any other control to them.
+
+  Which rich edit: the one the RichEdit property names when it is set (another form's too),
+  else the focused control when it is a TTyCustomRichEdit - LCL's way for edit actions
+  (HandlesTarget / UpdateTarget / ExecuteTarget) -, else none, and then the action is disabled
+  (DisableIfNoHandler).
+
+  What they show is the rich edit's own answer, never a rule of theirs: Enabled is the
+  control's Can... query (CanUndo, CanInsertTable, CanInsertPicture) or, for the formats, the
+  user's right to format there that the control reports with its paragraph view
+  (CaretParagraphView's Editable: not ReadOnly, enabled, the document taking edits, outside
+  its update); Checked is the format API's reading (SelAttributes, Paragraph) - a style, an
+  alignment or a list shared by the whole selection (ConsistentAttributes), never a mixed
+  one. What they do goes through the control's doors for the user: the paragraph actions
+  through ApplyParagraphFormat, the table and the picture through InsertTable and
+  InsertPictureFromFile, undo and redo through Undo and Redo - each one undo step named as
+  the control names it, a refusal told by the control (OnEditRefused) as for a key. The
+  character styles are written through SelAttributes, the format API (one step; with nothing
+  selected the format the next typed text gets): it does not stop at ReadOnly, so the action
+  writes only where the control reports the user may format, and what the engine refuses
+  there (a field's result) is told through the control's EditRefused, never raised.
+
+  What an update costs: the application's idle updates every action, several times when a
+  menu item and a button share one. The actions do not ask the rich edit each time: one
+  record per rich edit (TTyRichEditActionState) asks it once after each change of its
+  selection, content, format, view, ReadOnly or Enabled - the notification the ruler hears
+  (AddHandlerOnParagraphView), not the application's events -, and every action reads that
+  record. The format queries it asks (SelAttributes.ConsistentAttributes and Paragraph's) are
+  bounded by the control (about 30 ms of a walk over a selection, the answer remembered for
+  the selection and the content); an idle round reads none of them.
+
+  Shortcuts are the common editors' (Ctrl+B, I, U; Ctrl+L, E, R, J; Ctrl+Z, Y; Ctrl+F, H;
+  Ctrl+plus, minus, 0), each the action's default, changeable. A key the rich edit takes
+  itself is never the action's too: LCL asks the focused control first, so Ctrl+Z and Ctrl+Y
+  in a focused rich edit are its own undo and redo, and the actions' shortcuts serve the
+  others and the keys it leaves (Ctrl+B ...).
+
+  Find and Replace show the package's own dialogs (TTyFindDialog, TTyReplaceDialog; Dialog
+  publishes each as a subcomponent): Find Next runs the rich edit's FindNext, Replace replaces
+  the match selected and finds the next, Replace All its ReplaceAll (one undo step). Insert
+  picture asks for a file with the package's open dialog (a filter of the formats the rich
+  edit reads: TyRichPictureFilter); Insert table inserts Rows x Columns, OnChooseSize asking
+  first. }
+
+{$mode objfpc}{$H+}
+
+interface
+
+uses
+  Classes, SysUtils, Graphics, Controls, ActnList, Dialogs, LCLType, LCLProc,
+  tyControls.StrConsts, tyControls.RichEdit.Text, tyControls.RichEdit.Model, tyControls.RichEdit.Attrs,
+  tyControls.RichEdit.Find, tyControls.RichEdit, tyControls.Dialogs, tyControls.Dialogs.Find,
+  tyControls.Dialogs.FileDialog;
+
+const
+  { The shortcuts given as the actions' defaults (TShortCut values: Ctrl is $4000, Shift
+    $2000), so a form file stores only a changed one. }
+  CTyRichKeyBold = $4000 + VK_B;
+  CTyRichKeyItalic = $4000 + VK_I;
+  CTyRichKeyUnderline = $4000 + VK_U;
+  CTyRichKeyAlignLeft = $4000 + VK_L;
+  CTyRichKeyAlignCenter = $4000 + VK_E;
+  CTyRichKeyAlignRight = $4000 + VK_R;
+  CTyRichKeyJustify = $4000 + VK_J;
+  CTyRichKeyBullets = $4000 + $2000 + VK_L;
+  CTyRichKeyFind = $4000 + VK_F;
+  CTyRichKeyReplace = $4000 + VK_H;
+  CTyRichKeyUndo = $4000 + VK_Z;
+  CTyRichKeyRedo = $4000 + VK_Y;
+  CTyRichKeyZoomIn = $4000 + VK_OEM_PLUS;
+  CTyRichKeyZoomOut = $4000 + VK_OEM_MINUS;
+  CTyRichKeyZoomReset = $4000 + VK_0;
+  { How far Increase / Decrease Indent move a paragraph: to the next multiple of half an inch
+    (Word's default tab stops), twips. }
+  CTyRichIndentStep = 720;
+  { The default size of the table Insert table makes. }
+  CTyRichDefaultTableSize = 3;
+
+type
+  { What the actions show of one rich edit, asked of it once per change (see the unit's
+    header). Owned by the rich edit, made by the first action that looks at it; an
+    application does not make one. }
+  TTyRichEditActionState = class(TComponent)
+  private
+    FRich: TTyCustomRichEdit;
+    FDirty: Boolean;
+    FRefreshes, FQueries: Integer;
+    FHasView, FEditable: Boolean;
+    FCaretPara: TTyParaFormat;
+    FStyle: TFontStyles;
+    FCharSame: TTyRichConsistentAttributes;
+    FSubscript: TTySubscriptType;
+    FAlign: TTyParaAlign;
+    FList: TTyListKind;
+    FParaSame: TTyRichConsistentParaAttributes;
+    FCanTable, FCanPicture: Boolean;
+    procedure ViewChanged(Sender: TObject);
+    procedure Refresh;
+  public
+    constructor CreateFor(ARich: TTyCustomRichEdit);
+    destructor Destroy; override;
+    { The record of ARich (made the first time). }
+    class function Find(ARich: TTyCustomRichEdit): TTyRichEditActionState;
+    { What it shows is to be asked again before it is read next. }
+    procedure Changed;
+    { Asks the rich edit again when something changed since it last asked. }
+    procedure Check;
+    property RichEdit: TTyCustomRichEdit read FRich;
+    { How many times it asked the rich edit, and how many of the rich edit's queries that took
+      (for a test that holds an idle round to no query). }
+    property Refreshes: Integer read FRefreshes;
+    property Queries: Integer read FQueries;
+    { The control's paragraph view could be had (it was laid out, outside its update). }
+    property HasView: Boolean read FHasView;
+    { The user may format here: the view's Editable. }
+    property Editable: Boolean read FEditable;
+    { The caret's paragraph's format (meaningful with HasView). }
+    property CaretParagraph: TTyParaFormat read FCaretPara;
+    { SelAttributes.Style / ConsistentAttributes / Subscript; Paragraph.ParaAlign / Numbering
+      / ConsistentAttributes (meaningful with HasView). }
+    property Style: TFontStyles read FStyle;
+    property CharConsistent: TTyRichConsistentAttributes read FCharSame;
+    property Subscript: TTySubscriptType read FSubscript;
+    property ParaAlign: TTyParaAlign read FAlign;
+    property Numbering: TTyListKind read FList;
+    property ParaConsistent: TTyRichConsistentParaAttributes read FParaSame;
+    property CanInsertTable: Boolean read FCanTable;
+    property CanInsertPicture: Boolean read FCanPicture;
+  end;
+
+  { The base of the rich edit's actions: the target (RichEdit, else the focused rich edit) and
+    LCL's three calls. A descendant overrides UpdateOn / ExecuteOn. }
+  TTyRichEditAction = class(TAction)
+  private
+    FRichEdit: TTyCustomRichEdit;
+    procedure SetRichEdit(AValue: TTyCustomRichEdit);
+  protected
+    procedure Notification(AComponent: TComponent; Operation: TOperation); override;
+    { The rich edit Target is, or nil. }
+    function RichOf(Target: TObject): TTyCustomRichEdit;
+    function StateOf(ARich: TTyCustomRichEdit): TTyRichEditActionState;
+    { Enabled and Checked from ARich's record (checked already). }
+    procedure UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); virtual;
+    procedure ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); virtual;
+    { A refusal the format API raised, told by the control as for a key. }
+    procedure Refused(ARich: TTyCustomRichEdit; const AReason: string);
+  public
+    constructor Create(AOwner: TComponent); override;
+    destructor Destroy; override;
+    function HandlesTarget(Target: TObject): Boolean; override;
+    procedure UpdateTarget(Target: TObject); override;
+    procedure ExecuteTarget(Target: TObject); override;
+    { With RichEdit set the action needs no form to find its target: it updates and runs on
+      that rich edit (after the action list's and its own OnUpdate / OnExecute, as LCL's). }
+    function Update: Boolean; override;
+    function Execute: Boolean; override;
+  published
+    property RichEdit: TTyCustomRichEdit read FRichEdit write SetRichEdit;
+  end;
+
+  { A character style switched on or off over the selection (or for the next typed text):
+    Checked when the whole selection has it. }
+  TTyRichEditStyleAction = class(TTyRichEditAction)
+  protected
+    function StyleOf: TFontStyle; virtual; abstract;
+    procedure UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+    procedure ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+  end;
+
+  TTyRichEditBold = class(TTyRichEditStyleAction)
+  protected
+    function StyleOf: TFontStyle; override;
+  public
+    constructor Create(AOwner: TComponent); override;
+  published
+    property ShortCut default CTyRichKeyBold;
+  end;
+
+  TTyRichEditItalic = class(TTyRichEditStyleAction)
+  protected
+    function StyleOf: TFontStyle; override;
+  public
+    constructor Create(AOwner: TComponent); override;
+  published
+    property ShortCut default CTyRichKeyItalic;
+  end;
+
+  TTyRichEditUnderline = class(TTyRichEditStyleAction)
+  protected
+    function StyleOf: TFontStyle; override;
+  public
+    constructor Create(AOwner: TComponent); override;
+  published
+    property ShortCut default CTyRichKeyUnderline;
+  end;
+
+  TTyRichEditStrikeOut = class(TTyRichEditStyleAction)
+  protected
+    function StyleOf: TFontStyle; override;
+  public
+    constructor Create(AOwner: TComponent); override;
+  end;
+
+  { Superscript or subscript switched on (the other one off) or off. }
+  TTyRichEditScriptAction = class(TTyRichEditAction)
+  protected
+    function ScriptOf: TTySubscriptType; virtual; abstract;
+    procedure UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+    procedure ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+  end;
+
+  TTyRichEditSuperscript = class(TTyRichEditScriptAction)
+  protected
+    function ScriptOf: TTySubscriptType; override;
+  public
+    constructor Create(AOwner: TComponent); override;
+  end;
+
+  TTyRichEditSubscript = class(TTyRichEditScriptAction)
+  protected
+    function ScriptOf: TTySubscriptType; override;
+  public
+    constructor Create(AOwner: TComponent); override;
+  end;
+
+  { The paragraphs' alignment: Checked when every paragraph the selection touches has it. }
+  TTyRichEditAlignAction = class(TTyRichEditAction)
+  protected
+    function AlignOf: TTyParaAlign; virtual; abstract;
+    procedure UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+    procedure ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+  end;
+
+  TTyRichEditAlignLeft = class(TTyRichEditAlignAction)
+  protected
+    function AlignOf: TTyParaAlign; override;
+  public
+    constructor Create(AOwner: TComponent); override;
+  published
+    property ShortCut default CTyRichKeyAlignLeft;
+  end;
+
+  TTyRichEditAlignCenter = class(TTyRichEditAlignAction)
+  protected
+    function AlignOf: TTyParaAlign; override;
+  public
+    constructor Create(AOwner: TComponent); override;
+  published
+    property ShortCut default CTyRichKeyAlignCenter;
+  end;
+
+  TTyRichEditAlignRight = class(TTyRichEditAlignAction)
+  protected
+    function AlignOf: TTyParaAlign; override;
+  public
+    constructor Create(AOwner: TComponent); override;
+  published
+    property ShortCut default CTyRichKeyAlignRight;
+  end;
+
+  TTyRichEditAlignJustify = class(TTyRichEditAlignAction)
+  protected
+    function AlignOf: TTyParaAlign; override;
+  public
+    constructor Create(AOwner: TComponent); override;
+  published
+    property ShortCut default CTyRichKeyJustify;
+  end;
+
+  { A list kind switched on (the paragraphs become its items, with the default hanging indent
+    where they have none) or off (plain paragraphs again) - the format API's Numbering. }
+  TTyRichEditListAction = class(TTyRichEditAction)
+  protected
+    function KindOf: TTyListKind; virtual; abstract;
+    procedure UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+    procedure ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+  end;
+
+  TTyRichEditBullets = class(TTyRichEditListAction)
+  protected
+    function KindOf: TTyListKind; override;
+  public
+    constructor Create(AOwner: TComponent); override;
+  published
+    property ShortCut default CTyRichKeyBullets;
+  end;
+
+  TTyRichEditNumbering = class(TTyRichEditListAction)
+  protected
+    function KindOf: TTyListKind; override;
+  public
+    constructor Create(AOwner: TComponent); override;
+  end;
+
+  { The paragraphs moved right or left: the caret paragraph's first line to the next (the
+    previous) multiple of CTyRichIndentStep, not left of the margin, and every paragraph the
+    selection touches to that place, each keeping its own hanging offset (Delphi's
+    FirstIndent; the ruler's rule for several paragraphs). }
+  TTyRichEditIndentAction = class(TTyRichEditAction)
+  protected
+    function Direction: Integer; virtual; abstract;
+    procedure UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+    procedure ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+  end;
+
+  TTyRichEditIndentIncrease = class(TTyRichEditIndentAction)
+  protected
+    function Direction: Integer; override;
+  public
+    constructor Create(AOwner: TComponent); override;
+  end;
+
+  TTyRichEditIndentDecrease = class(TTyRichEditIndentAction)
+  protected
+    function Direction: Integer; override;
+  public
+    constructor Create(AOwner: TComponent); override;
+  end;
+
+  { A picture from a file, chosen in the package's open dialog (Dialog; its Filter, when
+    empty, is TyRichPictureFilter), through InsertPictureFromFile. Enabled: CanInsertPicture. }
+  TTyRichEditInsertPicture = class(TTyRichEditAction)
+  private
+    FDialog: TTyOpenPictureDialog;
+  protected
+    procedure UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+    procedure ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+    { Asks for the file (the dialog; a test stands in for it). }
+    function AskFileName(var AFileName: string): Boolean; virtual;
+  public
+    constructor Create(AOwner: TComponent); override;
+  published
+    property Dialog: TTyOpenPictureDialog read FDialog;
+  end;
+
+  { Before a table goes in: the size it will have; AInsert False inserts nothing. }
+  TTyRichTableSizeEvent = procedure(Sender: TObject; var ARows, AColumns: Integer;
+    var AInsert: Boolean) of object;
+
+  { A Rows x Columns table at the caret (InsertTable); OnChooseSize first, where an
+    application asks the user. Enabled: CanInsertTable. }
+  TTyRichEditInsertTable = class(TTyRichEditAction)
+  private
+    FRows, FColumns: Integer;
+    FOnChooseSize: TTyRichTableSizeEvent;
+  protected
+    procedure UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+    procedure ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+  public
+    constructor Create(AOwner: TComponent); override;
+  published
+    property Rows: Integer read FRows write FRows default CTyRichDefaultTableSize;
+    property Columns: Integer read FColumns write FColumns default CTyRichDefaultTableSize;
+    property OnChooseSize: TTyRichTableSizeEvent read FOnChooseSize write FOnChooseSize;
+  end;
+
+  { A search found nothing. }
+  TTyRichNotFoundEvent = procedure(Sender: TObject; const AText: string) of object;
+  { Replace All replaced ACount matches. }
+  TTyRichReplacedEvent = procedure(Sender: TObject; ACount: Integer) of object;
+
+  { The package's find dialog (Dialog), shown for the rich edit the action ran on; its Find
+    Next is the rich edit's FindNext (the case and whole-word boxes; up or down; round the
+    document's end). Nothing found: OnNotFound, else the package's message box. The dialog's
+    OnFind is the action's. Enabled: a rich edit to search (it is enabled). }
+  TTyRichEditFind = class(TTyRichEditAction)
+  private
+    FOnNotFound: TTyRichNotFoundEvent;
+    procedure DialogFind(Sender: TObject);
+    procedure SetSearched(AValue: TTyCustomRichEdit);
+  protected
+    FSearched: TTyCustomRichEdit;
+    FDialog: TTyFindDialog;
+    procedure Notification(AComponent: TComponent; Operation: TOperation); override;
+    function MakeDialog: TTyFindDialog; virtual;
+    procedure UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+    procedure ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+    { Shows the dialog (a test builds it without showing it). }
+    procedure ShowDialog; virtual;
+    { Nothing found: OnNotFound, else ShowNotFound. }
+    procedure NotFound(const AText: string);
+    procedure ShowNotFound(const AText: string); virtual;
+    function SearchOptions: TTyRichFindOptions;
+    { Find Next on the rich edit searched; False when nothing was found (told). }
+    function FindAgain: Boolean;
+  public
+    constructor Create(AOwner: TComponent); override;
+    { The rich edit the dialog searches (the last one the action ran on). }
+    property Searched: TTyCustomRichEdit read FSearched;
+  published
+    property ShortCut default CTyRichKeyFind;
+    { The dialog the action shows (a TTyReplaceDialog for the replace action). Its OnFind and
+      OnReplace are the action's. }
+    property Dialog: TTyFindDialog read FDialog;
+    property OnNotFound: TTyRichNotFoundEvent read FOnNotFound write FOnNotFound;
+  end;
+
+  { The package's replace dialog: Find Next as Find's, Replace the selected match (then the
+    next found), Replace All every match as one undo step (the rich edit's ReplaceAll;
+    OnReplaced says how many). It replaces only where the user may edit (not ReadOnly, the
+    document taking edits): the replace methods are the document API and do not stop there
+    by themselves. Enabled: as the formats'. }
+  TTyRichEditReplace = class(TTyRichEditFind)
+  private
+    FOnReplaced: TTyRichReplacedEvent;
+    procedure DialogReplace(Sender: TObject);
+    function GetReplaceDialog: TTyReplaceDialog;
+  protected
+    function MakeDialog: TTyFindDialog; override;
+    procedure UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+    procedure ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+  public
+    constructor Create(AOwner: TComponent); override;
+    { Dialog as what it is. }
+    property ReplaceDialog: TTyReplaceDialog read GetReplaceDialog;
+  published
+    property ShortCut default CTyRichKeyReplace;
+    property OnReplaced: TTyRichReplacedEvent read FOnReplaced write FOnReplaced;
+  end;
+
+  TTyRichEditUndo = class(TTyRichEditAction)
+  protected
+    procedure UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+    procedure ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+  public
+    constructor Create(AOwner: TComponent); override;
+  published
+    property ShortCut default CTyRichKeyUndo;
+  end;
+
+  TTyRichEditRedo = class(TTyRichEditAction)
+  protected
+    procedure UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+    procedure ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+  public
+    constructor Create(AOwner: TComponent); override;
+  published
+    property ShortCut default CTyRichKeyRedo;
+  end;
+
+  { Zoom by CRichZoomStep (Ctrl+wheel's step) within CRichZoomMin .. CRichZoomMax, or back
+    to 100 %. }
+  TTyRichEditZoomIn = class(TTyRichEditAction)
+  protected
+    procedure UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+    procedure ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+  public
+    constructor Create(AOwner: TComponent); override;
+  published
+    property ShortCut default CTyRichKeyZoomIn;
+  end;
+
+  TTyRichEditZoomOut = class(TTyRichEditAction)
+  protected
+    procedure UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+    procedure ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+  public
+    constructor Create(AOwner: TComponent); override;
+  published
+    property ShortCut default CTyRichKeyZoomOut;
+  end;
+
+  TTyRichEditZoomReset = class(TTyRichEditAction)
+  protected
+    procedure UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+    procedure ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+  public
+    constructor Create(AOwner: TComponent); override;
+  published
+    property ShortCut default CTyRichKeyZoomReset;
+  end;
+
+  TTyRichEditActionClass = class of TTyRichEditAction;
+
+const
+  { Every action of this unit, in the order the IDE lists them. }
+  CTyRichEditActions: array[0..22] of TTyRichEditActionClass = (
+    TTyRichEditBold, TTyRichEditItalic, TTyRichEditUnderline, TTyRichEditStrikeOut,
+    TTyRichEditSuperscript, TTyRichEditSubscript,
+    TTyRichEditAlignLeft, TTyRichEditAlignCenter, TTyRichEditAlignRight,
+    TTyRichEditAlignJustify, TTyRichEditBullets, TTyRichEditNumbering,
+    TTyRichEditIndentIncrease, TTyRichEditIndentDecrease,
+    TTyRichEditInsertPicture, TTyRichEditInsertTable,
+    TTyRichEditFind, TTyRichEditReplace, TTyRichEditUndo, TTyRichEditRedo,
+    TTyRichEditZoomIn, TTyRichEditZoomOut, TTyRichEditZoomReset);
+
+{ An open dialog's filter of the picture files a rich edit reads (InsertPictureFromFile):
+  every format the LCL reads (the formats registered with TPicture - PNG and JPEG are kept
+  with their own bytes, the others decoded), without the metafiles it refuses; then all
+  files. }
+function TyRichPictureFilter: string;
+
+implementation
+
+type
+  TRichEditAccess = class(TTyCustomRichEdit);
+
+function TyRichPictureFilter: string;
+var
+  masks: TStringList;
+  i: Integer;
+  m, e: string;
+begin
+  masks := TStringList.Create;
+  try
+    masks.Delimiter := ';';
+    masks.StrictDelimiter := True;
+    masks.DelimitedText := GraphicFileMask(TGraphic);
+    m := '';
+    for i := 0 to masks.Count - 1 do
+    begin
+      e := LowerCase(Trim(masks[i]));
+      // (refused by the rich edit: a metafile is no picture it can hold)
+      if (e = '') or (e = '*.wmf') or (e = '*.emf') then Continue;
+      if m <> '' then m := m + ';';
+      m := m + e;
+    end;
+  finally
+    masks.Free;
+  end;
+  Result := Format(rsRichActPictureFiles, [m]) + '|' + m + '|' + rsRichActAllFiles + '|*';
+end;
+
+{ TTyRichEditActionState }
+
+constructor TTyRichEditActionState.CreateFor(ARich: TTyCustomRichEdit);
+begin
+  // owned by the rich edit: it goes with it, and nothing of it outlives it
+  inherited Create(ARich);
+  FRich := ARich;
+  FDirty := True;
+  FRich.AddHandlerOnParagraphView(@ViewChanged);
+end;
+
+destructor TTyRichEditActionState.Destroy;
+begin
+  // (freed with its rich edit, whose handlers are gone by then)
+  if (FRich <> nil) and not (csDestroying in FRich.ComponentState) then
+    FRich.RemoveHandlerOnParagraphView(@ViewChanged);
+  inherited Destroy;
+end;
+
+class function TTyRichEditActionState.Find(ARich: TTyCustomRichEdit): TTyRichEditActionState;
+var
+  i: Integer;
+begin
+  for i := 0 to ARich.ComponentCount - 1 do
+    if ARich.Components[i] is TTyRichEditActionState then
+      Exit(TTyRichEditActionState(ARich.Components[i]));
+  Result := TTyRichEditActionState.CreateFor(ARich);
+end;
+
+procedure TTyRichEditActionState.ViewChanged(Sender: TObject);
+begin
+  // only noted: the hearer of this notification must not change the document
+  FDirty := True;
+end;
+
+procedure TTyRichEditActionState.Changed;
+begin
+  FDirty := True;
+end;
+
+procedure TTyRichEditActionState.Check;
+begin
+  if FDirty then Refresh;
+end;
+
+procedure TTyRichEditActionState.Refresh;
+var
+  view: TTyRichParaView;
+begin
+  FDirty := False;
+  Inc(FRefreshes);
+  Inc(FQueries);
+  FHasView := FRich.CaretParagraphView(view);
+  FEditable := FHasView and view.Editable;
+  if FHasView then
+  begin
+    FCaretPara := view.Format;
+    // the format API's readings: the selection's first character / paragraph, and what the
+    // whole selection shares (bounded and remembered by the control)
+    FStyle := FRich.SelAttributes.Style;
+    FCharSame := FRich.SelAttributes.ConsistentAttributes;
+    FSubscript := FRich.SelAttributes.Subscript;
+    FAlign := FRich.Paragraph.ParaAlign;
+    FList := FRich.Paragraph.Numbering;
+    FParaSame := FRich.Paragraph.ConsistentAttributes;
+    Inc(FQueries, 6);
+  end
+  else
+  begin
+    FCaretPara := TyDefaultParaFormat;
+    FStyle := [];
+    FCharSame := [];
+    FSubscript := sstNone;
+    FAlign := paraLeft;
+    FList := lkNone;
+    FParaSame := [];
+  end;
+  FCanTable := FRich.CanInsertTable;
+  FCanPicture := FRich.CanInsertPicture;
+  Inc(FQueries, 2);
+end;
+
+{ TTyRichEditAction }
+
+constructor TTyRichEditAction.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  DisableIfNoHandler := True;
+end;
+
+destructor TTyRichEditAction.Destroy;
+begin
+  SetRichEdit(nil);
+  inherited Destroy;
+end;
+
+procedure TTyRichEditAction.SetRichEdit(AValue: TTyCustomRichEdit);
+begin
+  if FRichEdit = AValue then Exit;
+  if FRichEdit <> nil then FRichEdit.RemoveFreeNotification(Self);
+  FRichEdit := AValue;
+  if FRichEdit <> nil then FRichEdit.FreeNotification(Self);
+end;
+
+procedure TTyRichEditAction.Notification(AComponent: TComponent; Operation: TOperation);
+begin
+  inherited Notification(AComponent, Operation);
+  if (Operation = opRemove) and (AComponent = FRichEdit) then FRichEdit := nil;
+end;
+
+function TTyRichEditAction.RichOf(Target: TObject): TTyCustomRichEdit;
+begin
+  if Target is TTyCustomRichEdit then Result := TTyCustomRichEdit(Target)
+  else Result := nil;
+end;
+
+function TTyRichEditAction.StateOf(ARich: TTyCustomRichEdit): TTyRichEditActionState;
+begin
+  Result := TTyRichEditActionState.Find(ARich);
+end;
+
+function TTyRichEditAction.HandlesTarget(Target: TObject): Boolean;
+begin
+  if FRichEdit <> nil then Result := Target = FRichEdit
+  else Result := (Target is TTyCustomRichEdit) and TTyCustomRichEdit(Target).Focused;
+end;
+
+procedure TTyRichEditAction.UpdateTarget(Target: TObject);
+var
+  r: TTyCustomRichEdit;
+  st: TTyRichEditActionState;
+begin
+  r := RichOf(Target);
+  if (r = nil) or (csDesigning in r.ComponentState) or (csDestroying in r.ComponentState) then
+  begin
+    Enabled := False;
+    Checked := False;
+    Exit;
+  end;
+  st := StateOf(r);
+  st.Check;
+  UpdateOn(r, st);
+end;
+
+procedure TTyRichEditAction.ExecuteTarget(Target: TObject);
+var
+  r: TTyCustomRichEdit;
+  st: TTyRichEditActionState;
+begin
+  r := RichOf(Target);
+  if (r = nil) or (csDesigning in r.ComponentState) or (csDestroying in r.ComponentState) then
+    Exit;
+  st := StateOf(r);
+  st.Check;
+  ExecuteOn(r, st);
+end;
+
+function TTyRichEditAction.Update: Boolean;
+begin
+  if FRichEdit = nil then Exit(inherited Update);
+  if (ActionList <> nil) and ActionList.UpdateAction(Self) then Exit(True);
+  if Assigned(OnUpdate) then
+  begin
+    OnUpdate(Self);
+    Exit(True);
+  end;
+  UpdateTarget(FRichEdit);
+  Result := True;
+end;
+
+function TTyRichEditAction.Execute: Boolean;
+begin
+  if FRichEdit = nil then Exit(inherited Execute);
+  Result := False;
+  if (ActionList <> nil) and (ActionList.State <> asNormal) then Exit;
+  Update;
+  if AutoCheck then Checked := not Checked;
+  if not Enabled then Exit;
+  if (ActionList <> nil) and ActionList.ExecuteAction(Self) then Exit(True);
+  if Assigned(OnExecute) then
+  begin
+    OnExecute(Self);
+    Exit(True);
+  end;
+  // (the target may be gone by now: a handler of the update)
+  if FRichEdit = nil then Exit;
+  ExecuteTarget(FRichEdit);
+  Result := True;
+end;
+
+procedure TTyRichEditAction.UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState);
+begin
+  Enabled := AState.Editable;
+  Checked := False;
+end;
+
+procedure TTyRichEditAction.ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState);
+begin
+end;
+
+procedure TTyRichEditAction.Refused(ARich: TTyCustomRichEdit; const AReason: string);
+begin
+  TRichEditAccess(ARich).EditRefused(AReason);
+end;
+
+{ TTyRichEditStyleAction }
+
+procedure TTyRichEditStyleAction.UpdateOn(ARich: TTyCustomRichEdit;
+  AState: TTyRichEditActionState);
+const
+  Same: array[TFontStyle] of TTyRichConsistentAttribute = (caBold, caItalic, caUnderline,
+    caStrikeOut);
+begin
+  Enabled := AState.Editable;
+  Checked := AState.HasView and (StyleOf in AState.Style) and (Same[StyleOf] in AState.CharConsistent);
+end;
+
+procedure TTyRichEditStyleAction.ExecuteOn(ARich: TTyCustomRichEdit;
+  AState: TTyRichEditActionState);
+var
+  turnOn: Boolean;
+begin
+  // the format API writes regardless of ReadOnly: only where the user may format
+  if not AState.Editable then Exit;
+  turnOn := not Checked;
+  // asked again after this (a write with nothing selected tells no one)
+  AState.Changed;
+  try
+    case StyleOf of
+      fsBold: ARich.SelAttributes.Bold := turnOn;
+      fsItalic: ARich.SelAttributes.Italic := turnOn;
+      fsUnderline: ARich.SelAttributes.Underline := turnOn;
+      fsStrikeOut: ARich.SelAttributes.Strikeout := turnOn;
+    end;
+  except
+    on E: ETyRichEdit do Refused(ARich, E.Message);
+  end;
+end;
+
+function TTyRichEditBold.StyleOf: TFontStyle;
+begin
+  Result := fsBold;
+end;
+
+constructor TTyRichEditBold.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  Caption := rsRichActBold;
+  Hint := rsRichActBoldHint;
+  ShortCut := CTyRichKeyBold;
+end;
+
+function TTyRichEditItalic.StyleOf: TFontStyle;
+begin
+  Result := fsItalic;
+end;
+
+constructor TTyRichEditItalic.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  Caption := rsRichActItalic;
+  Hint := rsRichActItalicHint;
+  ShortCut := CTyRichKeyItalic;
+end;
+
+function TTyRichEditUnderline.StyleOf: TFontStyle;
+begin
+  Result := fsUnderline;
+end;
+
+constructor TTyRichEditUnderline.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  Caption := rsRichActUnderline;
+  Hint := rsRichActUnderlineHint;
+  ShortCut := CTyRichKeyUnderline;
+end;
+
+function TTyRichEditStrikeOut.StyleOf: TFontStyle;
+begin
+  Result := fsStrikeOut;
+end;
+
+constructor TTyRichEditStrikeOut.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  Caption := rsRichActStrikeOut;
+  Hint := rsRichActStrikeOutHint;
+end;
+
+{ TTyRichEditScriptAction }
+
+procedure TTyRichEditScriptAction.UpdateOn(ARich: TTyCustomRichEdit;
+  AState: TTyRichEditActionState);
+begin
+  Enabled := AState.Editable;
+  Checked := AState.HasView and (AState.Subscript = ScriptOf) and
+    (caSubscript in AState.CharConsistent);
+end;
+
+procedure TTyRichEditScriptAction.ExecuteOn(ARich: TTyCustomRichEdit;
+  AState: TTyRichEditActionState);
+var
+  v: TTySubscriptType;
+begin
+  if not AState.Editable then Exit;
+  if Checked then v := sstNone else v := ScriptOf;
+  AState.Changed;
+  try
+    ARich.SelAttributes.Subscript := v;
+  except
+    on E: ETyRichEdit do Refused(ARich, E.Message);
+  end;
+end;
+
+function TTyRichEditSuperscript.ScriptOf: TTySubscriptType;
+begin
+  Result := sstSuperscript;
+end;
+
+constructor TTyRichEditSuperscript.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  Caption := rsRichActSuperscript;
+  Hint := rsRichActSuperscriptHint;
+end;
+
+function TTyRichEditSubscript.ScriptOf: TTySubscriptType;
+begin
+  Result := sstSubscript;
+end;
+
+constructor TTyRichEditSubscript.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  Caption := rsRichActSubscript;
+  Hint := rsRichActSubscriptHint;
+end;
+
+{ TTyRichEditAlignAction }
+
+procedure TTyRichEditAlignAction.UpdateOn(ARich: TTyCustomRichEdit;
+  AState: TTyRichEditActionState);
+begin
+  Enabled := AState.Editable;
+  Checked := AState.HasView and (AState.ParaAlign = AlignOf) and
+    (cpaAlignment in AState.ParaConsistent);
+end;
+
+procedure TTyRichEditAlignAction.ExecuteOn(ARich: TTyCustomRichEdit;
+  AState: TTyRichEditActionState);
+var
+  f: TTyParaFormat;
+begin
+  f := TyDefaultParaFormat;
+  f.Align := AlignOf;
+  ARich.ApplyParagraphFormat([pffAlign], f);
+end;
+
+function TTyRichEditAlignLeft.AlignOf: TTyParaAlign;
+begin
+  Result := paraLeft;
+end;
+
+constructor TTyRichEditAlignLeft.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  Caption := rsRichActAlignLeft;
+  Hint := rsRichActAlignLeftHint;
+  ShortCut := CTyRichKeyAlignLeft;
+end;
+
+function TTyRichEditAlignCenter.AlignOf: TTyParaAlign;
+begin
+  Result := paraCenter;
+end;
+
+constructor TTyRichEditAlignCenter.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  Caption := rsRichActAlignCenter;
+  Hint := rsRichActAlignCenterHint;
+  ShortCut := CTyRichKeyAlignCenter;
+end;
+
+function TTyRichEditAlignRight.AlignOf: TTyParaAlign;
+begin
+  Result := paraRight;
+end;
+
+constructor TTyRichEditAlignRight.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  Caption := rsRichActAlignRight;
+  Hint := rsRichActAlignRightHint;
+  ShortCut := CTyRichKeyAlignRight;
+end;
+
+function TTyRichEditAlignJustify.AlignOf: TTyParaAlign;
+begin
+  Result := paraJustify;
+end;
+
+constructor TTyRichEditAlignJustify.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  Caption := rsRichActJustify;
+  Hint := rsRichActJustifyHint;
+  ShortCut := CTyRichKeyJustify;
+end;
+
+{ TTyRichEditListAction }
+
+procedure TTyRichEditListAction.UpdateOn(ARich: TTyCustomRichEdit;
+  AState: TTyRichEditActionState);
+begin
+  Enabled := AState.Editable;
+  Checked := AState.HasView and (AState.Numbering = KindOf) and
+    (cpaNumbering in AState.ParaConsistent);
+end;
+
+procedure TTyRichEditListAction.ExecuteOn(ARich: TTyCustomRichEdit;
+  AState: TTyRichEditActionState);
+var
+  l: TTyListFormat;
+begin
+  // Paragraph.Numbering's write: the kind only, the indents a list item gets or gives back
+  l := TyDefaultParaFormat.List;
+  if Checked then l.Kind := lkNone else l.Kind := KindOf;
+  ARich.ApplyParagraphFormat([pffListKind, pffListIndents], TyRichListValue(l));
+end;
+
+function TTyRichEditBullets.KindOf: TTyListKind;
+begin
+  Result := lkBullet;
+end;
+
+constructor TTyRichEditBullets.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  Caption := rsRichActBullets;
+  Hint := rsRichActBulletsHint;
+  ShortCut := CTyRichKeyBullets;
+end;
+
+function TTyRichEditNumbering.KindOf: TTyListKind;
+begin
+  Result := lkDecimal;
+end;
+
+constructor TTyRichEditNumbering.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  Caption := rsRichActNumbering;
+  Hint := rsRichActNumberingHint;
+end;
+
+{ TTyRichEditIndentAction }
+
+procedure TTyRichEditIndentAction.UpdateOn(ARich: TTyCustomRichEdit;
+  AState: TTyRichEditActionState);
+begin
+  Enabled := AState.Editable;
+  Checked := False;
+end;
+
+procedure TTyRichEditIndentAction.ExecuteOn(ARich: TTyCustomRichEdit;
+  AState: TTyRichEditActionState);
+var
+  f: TTyParaFormat;
+  place, q: Integer;
+begin
+  if not AState.HasView then Exit;
+  // where the caret paragraph's first line starts, and the step's place beyond it
+  place := AState.CaretParagraph.LeftIndent + AState.CaretParagraph.FirstIndent;
+  if Direction > 0 then
+  begin
+    if place < 0 then q := 0
+    else q := (place div CTyRichIndentStep + 1) * CTyRichIndentStep;
+  end
+  else if place <= 0 then
+    q := 0
+  else
+    q := ((place - 1) div CTyRichIndentStep) * CTyRichIndentStep;
+  f := TyDefaultParaFormat;
+  f.LeftIndent := q;
+  f.FirstIndent := 0;
+  ARich.ApplyParagraphFormat([pffStartIndent], f);
+end;
+
+function TTyRichEditIndentIncrease.Direction: Integer;
+begin
+  Result := 1;
+end;
+
+constructor TTyRichEditIndentIncrease.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  Caption := rsRichActIndentIncrease;
+  Hint := rsRichActIndentIncreaseHint;
+end;
+
+function TTyRichEditIndentDecrease.Direction: Integer;
+begin
+  Result := -1;
+end;
+
+constructor TTyRichEditIndentDecrease.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  Caption := rsRichActIndentDecrease;
+  Hint := rsRichActIndentDecreaseHint;
+end;
+
+{ TTyRichEditInsertPicture }
+
+constructor TTyRichEditInsertPicture.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  Caption := rsRichActInsertPicture;
+  Hint := rsRichActInsertPictureHint;
+  FDialog := TTyOpenPictureDialog.Create(Self);
+  FDialog.Name := 'Dialog';
+  FDialog.SetSubComponent(True);
+  FDialog.Options := [ofFileMustExist];
+end;
+
+procedure TTyRichEditInsertPicture.UpdateOn(ARich: TTyCustomRichEdit;
+  AState: TTyRichEditActionState);
+begin
+  Enabled := AState.CanInsertPicture;
+  Checked := False;
+end;
+
+function TTyRichEditInsertPicture.AskFileName(var AFileName: string): Boolean;
+begin
+  if FDialog.Filter = '' then FDialog.Filter := TyRichPictureFilter;
+  Result := FDialog.Execute;
+  if Result then AFileName := FDialog.FileName;
+end;
+
+procedure TTyRichEditInsertPicture.ExecuteOn(ARich: TTyCustomRichEdit;
+  AState: TTyRichEditActionState);
+var
+  picName: string;
+begin
+  // (no file is asked for where none can go: run by LCL, the action is disabled then)
+  if not AState.CanInsertPicture then Exit;
+  picName := '';
+  if not AskFileName(picName) or (picName = '') then Exit;
+  // (the dialog's own handlers ran: the rich edit may be gone)
+  if (csDestroying in ARich.ComponentState) then Exit;
+  ARich.InsertPictureFromFile(picName);
+end;
+
+{ TTyRichEditInsertTable }
+
+constructor TTyRichEditInsertTable.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  Caption := rsRichActInsertTable;
+  Hint := rsRichActInsertTableHint;
+  FRows := CTyRichDefaultTableSize;
+  FColumns := CTyRichDefaultTableSize;
+end;
+
+procedure TTyRichEditInsertTable.UpdateOn(ARich: TTyCustomRichEdit;
+  AState: TTyRichEditActionState);
+begin
+  Enabled := AState.CanInsertTable;
+  Checked := False;
+end;
+
+procedure TTyRichEditInsertTable.ExecuteOn(ARich: TTyCustomRichEdit;
+  AState: TTyRichEditActionState);
+var
+  nRows, nCols: Integer;
+  go: Boolean;
+begin
+  if not AState.CanInsertTable then Exit;
+  nRows := FRows;
+  nCols := FColumns;
+  go := True;
+  if Assigned(FOnChooseSize) then FOnChooseSize(Self, nRows, nCols, go);
+  if not go or (csDestroying in ARich.ComponentState) then Exit;
+  ARich.InsertTable(nRows, nCols);
+end;
+
+{ TTyRichEditFind }
+
+constructor TTyRichEditFind.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  Caption := rsRichActFind;
+  Hint := rsRichActFindHint;
+  ShortCut := CTyRichKeyFind;
+  FDialog := MakeDialog;
+  FDialog.Name := 'Dialog';
+  FDialog.SetSubComponent(True);
+  // the search goes round the document's end: no scope to choose
+  FDialog.Options := FDialog.Options + [frHideEntireScope];
+  FDialog.OnFind := @DialogFind;
+end;
+
+function TTyRichEditFind.MakeDialog: TTyFindDialog;
+begin
+  Result := TTyFindDialog.Create(Self);
+end;
+
+procedure TTyRichEditFind.SetSearched(AValue: TTyCustomRichEdit);
+begin
+  if FSearched = AValue then Exit;
+  if (FSearched <> nil) and (FSearched <> RichEdit) then FSearched.RemoveFreeNotification(Self);
+  FSearched := AValue;
+  if FSearched <> nil then FSearched.FreeNotification(Self);
+end;
+
+procedure TTyRichEditFind.Notification(AComponent: TComponent; Operation: TOperation);
+begin
+  inherited Notification(AComponent, Operation);
+  if (Operation = opRemove) and (AComponent = FSearched) then FSearched := nil;
+end;
+
+procedure TTyRichEditFind.UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState);
+begin
+  // finding edits nothing: ReadOnly does not stop it (FindNext's rule)
+  Enabled := ARich.IsEnabled;
+  Checked := False;
+end;
+
+procedure TTyRichEditFind.ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState);
+var
+  s: string;
+begin
+  SetSearched(ARich);
+  // a short selection on one line is what the user looks for, as in Notepad
+  if (ARich.SelLength > 0) and (ARich.SelLength <= 128) then
+  begin
+    s := ARich.SelText;
+    if (s <> '') and (Pos(#13, s) = 0) and (Pos(#10, s) = 0) and (Pos(#11, s) = 0) then
+      FDialog.FindText := s;
+  end;
+  ShowDialog;
+end;
+
+procedure TTyRichEditFind.ShowDialog;
+begin
+  FDialog.Execute;
+end;
+
+function TTyRichEditFind.SearchOptions: TTyRichFindOptions;
+begin
+  Result := [rfoWrap];
+  if frMatchCase in FDialog.Options then Include(Result, rfoMatchCase);
+  if frWholeWord in FDialog.Options then Include(Result, rfoWholeWord);
+  if not (frDown in FDialog.Options) then Include(Result, rfoBackward);
+end;
+
+procedure TTyRichEditFind.NotFound(const AText: string);
+begin
+  if Assigned(FOnNotFound) then FOnNotFound(Self, AText)
+  else ShowNotFound(AText);
+end;
+
+procedure TTyRichEditFind.ShowNotFound(const AText: string);
+begin
+  TyShowMessage(Format(rsRichActNotFound, [AText]));
+end;
+
+function TTyRichEditFind.FindAgain: Boolean;
+var
+  s: string;
+begin
+  Result := False;
+  s := FDialog.FindText;
+  if (FSearched = nil) or (s = '') or (csDestroying in FSearched.ComponentState) then Exit;
+  Result := FSearched.FindNext(s, SearchOptions);
+  if not Result then NotFound(s);
+end;
+
+procedure TTyRichEditFind.DialogFind(Sender: TObject);
+begin
+  FindAgain;
+end;
+
+{ TTyRichEditReplace }
+
+constructor TTyRichEditReplace.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  Caption := rsRichActReplace;
+  Hint := rsRichActReplaceHint;
+  ShortCut := CTyRichKeyReplace;
+  TTyReplaceDialog(FDialog).OnReplace := @DialogReplace;
+end;
+
+function TTyRichEditReplace.MakeDialog: TTyFindDialog;
+begin
+  Result := TTyReplaceDialog.Create(Self);
+end;
+
+function TTyRichEditReplace.GetReplaceDialog: TTyReplaceDialog;
+begin
+  Result := TTyReplaceDialog(FDialog);
+end;
+
+procedure TTyRichEditReplace.UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState);
+begin
+  Enabled := AState.Editable;
+  Checked := False;
+end;
+
+procedure TTyRichEditReplace.ExecuteOn(ARich: TTyCustomRichEdit;
+  AState: TTyRichEditActionState);
+begin
+  if not AState.Editable then Exit;
+  inherited ExecuteOn(ARich, AState);
+end;
+
+procedure TTyRichEditReplace.DialogReplace(Sender: TObject);
+var
+  r: TTyCustomRichEdit;
+  st: TTyRichEditActionState;
+  s, w: string;
+  start, len: TTyRichPos;
+  n: Integer;
+  so: TTySearchOptions;
+begin
+  r := FSearched;
+  s := FDialog.FindText;
+  if (r = nil) or (s = '') or (csDestroying in r.ComponentState) then Exit;
+  w := ReplaceDialog.ReplaceText;
+  // the replace methods are the document API: they replace only where the user may edit
+  st := StateOf(r);
+  st.Check;
+  if not st.Editable then Exit;
+  if frReplaceAll in FDialog.Options then
+  begin
+    n := r.ReplaceAll(s, w, SearchOptions - [rfoWrap, rfoBackward]);
+    if Assigned(FOnReplaced) then FOnReplaced(Self, n);
+    if n = 0 then NotFound(s);
+    Exit;
+  end;
+  // the selection a match of the search: it is replaced, then the next one found
+  start := 0;
+  len := 0;
+  so := [];
+  if frMatchCase in FDialog.Options then Include(so, soMatchCase);
+  if frWholeWord in FDialog.Options then Include(so, soWholeWord);
+  if r.HasSelection and r.Search(s, r.SelStart, r.SelLength, so, start, len) and
+    (start = r.SelStart) and (len = r.SelLength) then
+  begin
+    try
+      r.SelText := w;
+    except
+      on E: ETyRichEdit do
+      begin
+        Refused(r, E.Message);
+        Exit;
+      end;
+    end;
+  end;
+  FindAgain;
+end;
+
+{ TTyRichEditUndo / TTyRichEditRedo }
+
+constructor TTyRichEditUndo.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  Caption := rsRichActUndo;
+  Hint := rsRichActUndoHint;
+  ShortCut := CTyRichKeyUndo;
+end;
+
+procedure TTyRichEditUndo.UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState);
+begin
+  Enabled := ARich.CanUndo;
+  Checked := False;
+end;
+
+procedure TTyRichEditUndo.ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState);
+begin
+  ARich.Undo;
+end;
+
+constructor TTyRichEditRedo.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  Caption := rsRichActRedo;
+  Hint := rsRichActRedoHint;
+  ShortCut := CTyRichKeyRedo;
+end;
+
+procedure TTyRichEditRedo.UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState);
+begin
+  Enabled := ARich.CanRedo;
+  Checked := False;
+end;
+
+procedure TTyRichEditRedo.ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState);
+begin
+  ARich.Redo;
+end;
+
+{ Zoom }
+
+constructor TTyRichEditZoomIn.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  Caption := rsRichActZoomIn;
+  Hint := rsRichActZoomInHint;
+  ShortCut := CTyRichKeyZoomIn;
+  SecondaryShortCuts.Add(ShortCutToText($4000 + VK_ADD));
+end;
+
+procedure TTyRichEditZoomIn.UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState);
+begin
+  Enabled := ARich.Zoom < CRichZoomMax;
+  Checked := False;
+end;
+
+procedure TTyRichEditZoomIn.ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState);
+begin
+  ARich.Zoom := ARich.Zoom + CRichZoomStep;
+end;
+
+constructor TTyRichEditZoomOut.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  Caption := rsRichActZoomOut;
+  Hint := rsRichActZoomOutHint;
+  ShortCut := CTyRichKeyZoomOut;
+  SecondaryShortCuts.Add(ShortCutToText($4000 + VK_SUBTRACT));
+end;
+
+procedure TTyRichEditZoomOut.UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState);
+begin
+  Enabled := ARich.Zoom > CRichZoomMin;
+  Checked := False;
+end;
+
+procedure TTyRichEditZoomOut.ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState);
+begin
+  ARich.Zoom := ARich.Zoom - CRichZoomStep;
+end;
+
+constructor TTyRichEditZoomReset.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  Caption := rsRichActZoomReset;
+  Hint := rsRichActZoomResetHint;
+  ShortCut := CTyRichKeyZoomReset;
+  SecondaryShortCuts.Add(ShortCutToText($4000 + VK_NUMPAD0));
+end;
+
+procedure TTyRichEditZoomReset.UpdateOn(ARich: TTyCustomRichEdit;
+  AState: TTyRichEditActionState);
+begin
+  Enabled := True;
+  Checked := ARich.Zoom = 100;
+end;
+
+procedure TTyRichEditZoomReset.ExecuteOn(ARich: TTyCustomRichEdit;
+  AState: TTyRichEditActionState);
+begin
+  ARich.Zoom := 100;
+end;
+
+end.

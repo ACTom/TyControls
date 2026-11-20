@@ -877,6 +877,204 @@ msgstr ""
 msgid "%s more characters of this paragraph are not shown."
 msgstr ""
 
+#: tycontrols.strconsts.rsrichactbold
+msgid "&Bold"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactboldhint
+msgid "Bold"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactitalic
+msgid "&Italic"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactitalichint
+msgid "Italic"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactunderline
+msgid "&Underline"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactunderlinehint
+msgid "Underline"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactstrikeout
+msgid "Stri&kethrough"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactstrikeouthint
+msgid "Strikethrough"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactsuperscript
+msgid "Su&perscript"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactsuperscripthint
+msgid "Superscript"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactsubscript
+msgid "Subs&cript"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactsubscripthint
+msgid "Subscript"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactalignleft
+msgid "Align &Left"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactalignlefthint
+msgid "Align left"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactaligncenter
+msgid "&Center"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactaligncenterhint
+msgid "Center"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactalignright
+msgid "Align &Right"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactalignrighthint
+msgid "Align right"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactjustify
+msgid "&Justify"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactjustifyhint
+msgid "Justify"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactbullets
+msgid "B&ullets"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactbulletshint
+msgid "Bulleted list"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactnumbering
+msgid "&Numbering"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactnumberinghint
+msgid "Numbered list"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactindentincrease
+msgid "&Increase Indent"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactindentincreasehint
+msgid "Increase indent"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactindentdecrease
+msgid "&Decrease Indent"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactindentdecreasehint
+msgid "Decrease indent"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactinsertpicture
+msgid "&Picture..."
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactinsertpicturehint
+msgid "Insert a picture from a file"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactinserttable
+msgid "&Table"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactinserttablehint
+msgid "Insert a table"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactfind
+msgid "&Find..."
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactfindhint
+msgid "Find"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactreplace
+msgid "&Replace..."
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactreplacehint
+msgid "Replace"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactundo
+msgid "&Undo"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactundohint
+msgid "Undo"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactredo
+msgid "&Redo"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactredohint
+msgid "Redo"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactzoomin
+msgid "Zoom &In"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactzoominhint
+msgid "Zoom in"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactzoomout
+msgid "Zoom &Out"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactzoomouthint
+msgid "Zoom out"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactzoomreset
+msgid "&100%"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactzoomresethint
+msgid "Zoom to 100%"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactnotfound
+#, object-pascal-format
+msgid "Cannot find \"%s\"."
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactpicturefiles
+#, object-pascal-format
+msgid "Pictures (%s)"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactallfiles
+msgid "All files"
+msgstr ""
+
 #: tycontrols.strconsts.rsrichundoinserttext
 msgid "Insert text"
 msgstr ""

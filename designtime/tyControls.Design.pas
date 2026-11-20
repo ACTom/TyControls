@@ -16,6 +16,7 @@ unit tyControls.Design;
 interface
 uses
   Classes, SysUtils, Forms, Controls, Dialogs, Menus, StdCtrls, ExtCtrls, Graphics, LCLIntf, LCLType,
+  ActnList,
   PropEdits, PropEditUtils, ComponentEditors, ProjectIntf, FormEditingIntf, LazIDEIntf,
   LResources, tyControls.Types, tyControls.Component,
   tyControls.Base, tyControls.Controller, tyControls.StyleModel,
@@ -48,7 +49,8 @@ uses
   tyControls.TrackBar, tyControls.MultiTrackBar, tyControls.GroupBox, tyControls.PageControl,
   tyControls.TabSheet,
   tyControls.SpinEdit, tyControls.FloatSpinEdit,
-  tyControls.Memo, tyControls.RichEdit, tyControls.RichEdit.Ruler, tyControls.Terminal,
+  tyControls.Memo, tyControls.RichEdit, tyControls.RichEdit.Ruler, tyControls.RichEdit.Actions,
+  tyControls.Terminal,
   tyControls.Menu,
   tyControls.NativeStyler,
   tyControls.Splitter, tyControls.StatusBar, tyControls.ToolBar,
@@ -239,6 +241,17 @@ begin
     practice: the surface is not on the palette, so a stray one only appears if you deliberately copy
     it, and a form ignores any surface that is not its own. }
   RegisterNoIcon([TTyFormSurface]);
+  { The rich edit's ready-made actions: the action list editor's "New Standard Action" lists them
+    under their own category (no palette button - an action is no palette component). }
+  RegisterActions('TyControls Rich Edit',
+    [TTyRichEditBold, TTyRichEditItalic, TTyRichEditUnderline, TTyRichEditStrikeOut,
+     TTyRichEditSuperscript, TTyRichEditSubscript,
+     TTyRichEditAlignLeft, TTyRichEditAlignCenter, TTyRichEditAlignRight,
+     TTyRichEditAlignJustify, TTyRichEditBullets, TTyRichEditNumbering,
+     TTyRichEditIndentIncrease, TTyRichEditIndentDecrease,
+     TTyRichEditInsertPicture, TTyRichEditInsertTable,
+     TTyRichEditFind, TTyRichEditReplace, TTyRichEditUndo, TTyRichEditRedo,
+     TTyRichEditZoomIn, TTyRichEditZoomOut, TTyRichEditZoomReset], nil);
   { The three sibling units own everything else. }
   RegisterPropertyEditors;
   RegisterComponentEditors;

@@ -52,6 +52,7 @@ uses
   tyControls.PropertyGrid, tyControls.RadioGroup, tyControls.Rating, tyControls.RelativePanel,
   tyControls.Ribbon, tyControls.RibbonAppMenu, tyControls.RibbonBackstage, tyControls.RibbonGallery,
   tyControls.RibbonQuickAccess, tyControls.RichEdit, tyControls.RichEdit.Ruler,
+  tyControls.RichEdit.Actions,
   tyControls.ScrollBar, tyControls.ScrollBox, tyControls.ScrollPanel,
   tyControls.Segmented, tyControls.ShadowLabel, tyControls.Shape, tyControls.ShellComboBox,
   tyControls.ShellListView, tyControls.ShellTreeView, tyControls.SizeBox, tyControls.Sparkline,
@@ -63,7 +64,7 @@ uses
   tyControls.TyLabel, tyControls.UpDown, tyControls.URLEdit, tyControls.ValueListEditor;
 
 const
-  Palette: array[0..198] of TComponentClass = (
+  Palette: array[0..221] of TComponentClass = (
     TTyAboutDialog, TTyAccordion, TTyActivityBar, TTyActivityIndicator,
     TTyAdvancedComboBox, TTyAdvancedListBox, TTyAlert, TTyAnalogClock,
     TTyArrow, TTyBadge, TTyBalloonHint, TTyBevel,
@@ -102,6 +103,13 @@ const
     TTyReplaceDialog, TTyRibbon, TTyRibbonAppMenu, TTyRibbonBackstage,
     TTyRibbonGallery, TTyRibbonGroup, TTyRibbonPage, TTyRibbonQuickAccess,
     TTyRichEdit, TTyRichEditRuler,
+    { the rich edit's actions (registered with RegisterActions, not on the palette) }
+    TTyRichEditBold, TTyRichEditItalic, TTyRichEditUnderline, TTyRichEditStrikeOut,
+    TTyRichEditSuperscript, TTyRichEditSubscript, TTyRichEditAlignLeft, TTyRichEditAlignCenter,
+    TTyRichEditAlignRight, TTyRichEditAlignJustify, TTyRichEditBullets, TTyRichEditNumbering,
+    TTyRichEditIndentIncrease, TTyRichEditIndentDecrease, TTyRichEditInsertPicture,
+    TTyRichEditInsertTable, TTyRichEditFind, TTyRichEditReplace, TTyRichEditUndo,
+    TTyRichEditRedo, TTyRichEditZoomIn, TTyRichEditZoomOut, TTyRichEditZoomReset,
     TTySaveDialog, TTySavePictureDialog, TTySavePreviewDialog, TTyScrollBar,
     TTyScrollBox, TTyScrollPanel, TTySegmented, TTySelectPathDialog,
     TTySelectValueDialog, TTyShadowLabel, TTyShape, TTyShellComboBox,

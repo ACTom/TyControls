@@ -1038,6 +1038,204 @@ msgstr "命令的第 %d 部分（%s）无法执行"
 msgid "%s more characters of this paragraph are not shown."
 msgstr "本段还有 %s 个字符没有显示。"
 
+#: tycontrols.strconsts.rsrichactbold
+msgid "&Bold"
+msgstr "粗体(&B)"
+
+#: tycontrols.strconsts.rsrichactboldhint
+msgid "Bold"
+msgstr "粗体"
+
+#: tycontrols.strconsts.rsrichactitalic
+msgid "&Italic"
+msgstr "斜体(&I)"
+
+#: tycontrols.strconsts.rsrichactitalichint
+msgid "Italic"
+msgstr "斜体"
+
+#: tycontrols.strconsts.rsrichactunderline
+msgid "&Underline"
+msgstr "下划线(&U)"
+
+#: tycontrols.strconsts.rsrichactunderlinehint
+msgid "Underline"
+msgstr "下划线"
+
+#: tycontrols.strconsts.rsrichactstrikeout
+msgid "Stri&kethrough"
+msgstr "删除线(&K)"
+
+#: tycontrols.strconsts.rsrichactstrikeouthint
+msgid "Strikethrough"
+msgstr "删除线"
+
+#: tycontrols.strconsts.rsrichactsuperscript
+msgid "Su&perscript"
+msgstr "上标(&P)"
+
+#: tycontrols.strconsts.rsrichactsuperscripthint
+msgid "Superscript"
+msgstr "上标"
+
+#: tycontrols.strconsts.rsrichactsubscript
+msgid "Subs&cript"
+msgstr "下标(&C)"
+
+#: tycontrols.strconsts.rsrichactsubscripthint
+msgid "Subscript"
+msgstr "下标"
+
+#: tycontrols.strconsts.rsrichactalignleft
+msgid "Align &Left"
+msgstr "左对齐(&L)"
+
+#: tycontrols.strconsts.rsrichactalignlefthint
+msgid "Align left"
+msgstr "左对齐"
+
+#: tycontrols.strconsts.rsrichactaligncenter
+msgid "&Center"
+msgstr "居中(&C)"
+
+#: tycontrols.strconsts.rsrichactaligncenterhint
+msgid "Center"
+msgstr "居中"
+
+#: tycontrols.strconsts.rsrichactalignright
+msgid "Align &Right"
+msgstr "右对齐(&R)"
+
+#: tycontrols.strconsts.rsrichactalignrighthint
+msgid "Align right"
+msgstr "右对齐"
+
+#: tycontrols.strconsts.rsrichactjustify
+msgid "&Justify"
+msgstr "两端对齐(&J)"
+
+#: tycontrols.strconsts.rsrichactjustifyhint
+msgid "Justify"
+msgstr "两端对齐"
+
+#: tycontrols.strconsts.rsrichactbullets
+msgid "B&ullets"
+msgstr "项目符号(&U)"
+
+#: tycontrols.strconsts.rsrichactbulletshint
+msgid "Bulleted list"
+msgstr "项目符号列表"
+
+#: tycontrols.strconsts.rsrichactnumbering
+msgid "&Numbering"
+msgstr "编号(&N)"
+
+#: tycontrols.strconsts.rsrichactnumberinghint
+msgid "Numbered list"
+msgstr "编号列表"
+
+#: tycontrols.strconsts.rsrichactindentincrease
+msgid "&Increase Indent"
+msgstr "增加缩进(&I)"
+
+#: tycontrols.strconsts.rsrichactindentincreasehint
+msgid "Increase indent"
+msgstr "增加缩进"
+
+#: tycontrols.strconsts.rsrichactindentdecrease
+msgid "&Decrease Indent"
+msgstr "减少缩进(&D)"
+
+#: tycontrols.strconsts.rsrichactindentdecreasehint
+msgid "Decrease indent"
+msgstr "减少缩进"
+
+#: tycontrols.strconsts.rsrichactinsertpicture
+msgid "&Picture..."
+msgstr "图片(&P)..."
+
+#: tycontrols.strconsts.rsrichactinsertpicturehint
+msgid "Insert a picture from a file"
+msgstr "从文件插入图片"
+
+#: tycontrols.strconsts.rsrichactinserttable
+msgid "&Table"
+msgstr "表格(&T)"
+
+#: tycontrols.strconsts.rsrichactinserttablehint
+msgid "Insert a table"
+msgstr "插入表格"
+
+#: tycontrols.strconsts.rsrichactfind
+msgid "&Find..."
+msgstr "查找(&F)..."
+
+#: tycontrols.strconsts.rsrichactfindhint
+msgid "Find"
+msgstr "查找"
+
+#: tycontrols.strconsts.rsrichactreplace
+msgid "&Replace..."
+msgstr "替换(&R)..."
+
+#: tycontrols.strconsts.rsrichactreplacehint
+msgid "Replace"
+msgstr "替换"
+
+#: tycontrols.strconsts.rsrichactundo
+msgid "&Undo"
+msgstr "撤销(&U)"
+
+#: tycontrols.strconsts.rsrichactundohint
+msgid "Undo"
+msgstr "撤销"
+
+#: tycontrols.strconsts.rsrichactredo
+msgid "&Redo"
+msgstr "重做(&R)"
+
+#: tycontrols.strconsts.rsrichactredohint
+msgid "Redo"
+msgstr "重做"
+
+#: tycontrols.strconsts.rsrichactzoomin
+msgid "Zoom &In"
+msgstr "放大(&I)"
+
+#: tycontrols.strconsts.rsrichactzoominhint
+msgid "Zoom in"
+msgstr "放大"
+
+#: tycontrols.strconsts.rsrichactzoomout
+msgid "Zoom &Out"
+msgstr "缩小(&O)"
+
+#: tycontrols.strconsts.rsrichactzoomouthint
+msgid "Zoom out"
+msgstr "缩小"
+
+#: tycontrols.strconsts.rsrichactzoomreset
+msgid "&100%"
+msgstr "100%(&1)"
+
+#: tycontrols.strconsts.rsrichactzoomresethint
+msgid "Zoom to 100%"
+msgstr "缩放到 100%"
+
+#: tycontrols.strconsts.rsrichactnotfound
+#, object-pascal-format
+msgid "Cannot find \"%s\"."
+msgstr "找不到“%s”。"
+
+#: tycontrols.strconsts.rsrichactpicturefiles
+#, object-pascal-format
+msgid "Pictures (%s)"
+msgstr "图片 (%s)"
+
+#: tycontrols.strconsts.rsrichactallfiles
+msgid "All files"
+msgstr "所有文件"
+
 #: tycontrols.strconsts.rstoolbarmorecommands
 msgid "More commands"
 msgstr "更多命令"

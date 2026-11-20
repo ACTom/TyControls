@@ -101,6 +101,7 @@ uses
   tyControls.FontUnits,
   tyControls.Form,
   tyControls.FormSurface,
+  tyControls.Frame,
   tyControls.Gauge,
   tyControls.GearActivityIndicator,
   tyControls.GearDial,
@@ -163,6 +164,21 @@ uses
   tyControls.RibbonBackstage,
   tyControls.RibbonGallery,
   tyControls.RibbonQuickAccess,
+  tyControls.RichEdit,
+  tyControls.RichEdit.Actions,
+  tyControls.RichEdit.Attrs,
+  tyControls.RichEdit.Commands,
+  tyControls.RichEdit.Find,
+  tyControls.RichEdit.Layout,
+  tyControls.RichEdit.Model,
+  tyControls.RichEdit.OleDrop,
+  tyControls.RichEdit.RowFormat,
+  tyControls.RichEdit.RtfRead,
+  tyControls.RichEdit.RtfWrite,
+  tyControls.RichEdit.Ruler,
+  tyControls.RichEdit.Text,
+  tyControls.RichEdit.TextIO,
+  tyControls.RichEdit.Wmf,
   tyControls.ScrollBar,
   tyControls.ScrollBox,
   tyControls.ScrollContent,
@@ -246,6 +262,8 @@ begin
   Reg(TTyAdvancedComboBox);
   Reg(TTyCustomAdvancedListBox);
   Reg(TTyAdvancedListBox);
+  Reg(TTyAlertAction);
+  Reg(TTyAlertActions);
   Reg(TTyCustomAlert);
   Reg(TTyAlert);
   Reg(TTyCustomAnalogClock);
@@ -424,6 +442,7 @@ begin
   Reg(TTyForm);
   Reg(TTyCustomFormSurface);
   Reg(TTyFormSurface);
+  Reg(TTyFrame);
   Reg(TTyCustomGauge);
   Reg(TTyGauge);
   Reg(TTyCustomGearActivityIndicator);
@@ -583,6 +602,71 @@ begin
   Reg(TTyRibbonGallery);
   Reg(TTyCustomRibbonQuickAccess);
   Reg(TTyRibbonQuickAccess);
+  Reg(TTyRichSelectionOffer);
+  Reg(TTyRichEditLines);
+  Reg(TTyCustomRichEdit);
+  Reg(TTyRichEdit);
+  Reg(TTyRichEditActionState);
+  Reg(TTyRichEditAction);
+  Reg(TTyRichEditStyleAction);
+  Reg(TTyRichEditBold);
+  Reg(TTyRichEditItalic);
+  Reg(TTyRichEditUnderline);
+  Reg(TTyRichEditStrikeOut);
+  Reg(TTyRichEditScriptAction);
+  Reg(TTyRichEditSuperscript);
+  Reg(TTyRichEditSubscript);
+  Reg(TTyRichEditAlignAction);
+  Reg(TTyRichEditAlignLeft);
+  Reg(TTyRichEditAlignCenter);
+  Reg(TTyRichEditAlignRight);
+  Reg(TTyRichEditAlignJustify);
+  Reg(TTyRichEditListAction);
+  Reg(TTyRichEditBullets);
+  Reg(TTyRichEditNumbering);
+  Reg(TTyRichEditIndentAction);
+  Reg(TTyRichEditIndentIncrease);
+  Reg(TTyRichEditIndentDecrease);
+  Reg(TTyRichEditInsertPicture);
+  Reg(TTyRichEditInsertTable);
+  Reg(TTyRichEditFind);
+  Reg(TTyRichEditReplace);
+  Reg(TTyRichEditUndo);
+  Reg(TTyRichEditRedo);
+  Reg(TTyRichEditZoomIn);
+  Reg(TTyRichEditZoomOut);
+  Reg(TTyRichEditZoomReset);
+  Reg(TTyRichTextAttributes);
+  Reg(TTyRichParaAttributes);
+  Reg(TTyRichInsertText);
+  Reg(TTyRichDelete);
+  Reg(TTyRichSetCharFormat);
+  Reg(TTyRichSetParaFormat);
+  Reg(TTyRichInsertObject);
+  Reg(TTyRichResizeObject);
+  Reg(TTyRichInsertFragment);
+  Reg(TTyRichRangeTransfer);
+  Reg(TTyRichCopy);
+  Reg(TTyRichMove);
+  Reg(TTyRichCompositeCommand);
+  Reg(TTyRichTableCommand);
+  Reg(TTyRichInsertTable);
+  Reg(TTyRichInsertRow);
+  Reg(TTyRichDeleteRow);
+  Reg(TTyRichInsertColumn);
+  Reg(TTyRichDeleteColumn);
+  Reg(TTyRichReplaceAllCommand);
+  Reg(TTyRichBgraDevice);
+  Reg(TTyParaLayout);
+  Reg(TTyRowLayout);
+  Reg(TTyRichObject);
+  Reg(TTyRichPicture);
+  Reg(TTyRichOpaque);
+  Reg(TTyRichFieldMark);
+  Reg(TTyRichTable);
+  Reg(TTyRichParaLoader);
+  Reg(TTyCustomRichEditRuler);
+  Reg(TTyRichEditRuler);
   Reg(TTyCustomScrollBar);
   Reg(TTyScrollBar);
   Reg(TTyCustomScrollBox);
@@ -625,6 +709,7 @@ begin
   Reg(TTyTabSet);
   Reg(TTyCustomTabSheet);
   Reg(TTyTabSheet);
+  Reg(TTyTabCloseButton);
   Reg(TTyCustomTabStrip);
   Reg(TTyCustomTag);
   Reg(TTyTag);
@@ -653,6 +738,8 @@ begin
   Reg(TTyToolWindow);
   Reg(TTyCustomToolWindowActions);
   Reg(TTyToolWindowActions);
+  Reg(TTyToolWindowCommand);
+  Reg(TTyToolWindowCommands);
   Reg(TTyToolWindowDropPreview);
   Reg(TTyCustomToolWindowBar);
   Reg(TTyToolWindowBar);

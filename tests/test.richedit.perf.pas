@@ -63,6 +63,7 @@ type
     procedure TestAContentsPastedIntoAnotherDocument;
     procedure TestA100MBRtfOfEquations;
     procedure TestAKeyWithARulerLinked;
+    procedure TestTheActionsOverAWhole100MBSelection;
   private
     procedure SaveBesideFields(ABytes: Int64; ANest: Integer);
   end;
@@ -72,7 +73,8 @@ implementation
 uses
   Math, LCLType, Controls, BGRABitmap, BGRABitmapTypes, tyControls.RichEdit.Text,
   tyControls.RichEdit.RtfRead, tyControls.RichEdit.RtfWrite, tyControls.RichEdit.Model,
-  tyControls.RichEdit.Commands, tyControls.RichEdit.Find, tyControls.RichEdit.Ruler
+  tyControls.RichEdit.Commands, tyControls.RichEdit.Find, tyControls.RichEdit.Ruler,
+  tyControls.RichEdit.Actions
   {$IFDEF LCLWin32}, test.richedit.dropacross{$ENDIF};
 
 {$IFDEF MSWINDOWS}
@@ -1794,6 +1796,71 @@ begin
   end;
   WriteLn(Format('TTyRichEditPerfTest: 5000 / 500: the paste %.1f times, the save %.1f times',
     [pasteMs[1] / Max(0.1, pasteMs[0]), saveMs[1] / Max(0.1, saveMs[0])]));
+end;
+
+{ Every action of tyControls.RichEdit.Actions linked to a 100 MB document (a txt, then an RTF
+  read to its end) with all of it selected: the first round of updates after the selection
+  asks the rich edit once - the format queries over the whole selection, bounded by the
+  control - and a round after it, as the application's idle makes them, asks nothing. Both
+  printed; the first held to the keystroke's line, an idle round to a tenth of it. }
+procedure TTyRichEditPerfTest.TestTheActionsOverAWhole100MBSelection;
+var
+  path: string;
+  bmp: TBitmap;
+  acts: array of TTyRichEditAction;
+  i, k, f: Integer;
+  t0, first, idle: Double;
+const
+  Exts: array[0..1] of string = ('.txt', '.rtf');
+begin
+  CheckRoom;
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf32bit;
+    bmp.SetSize(FRich.Width, FRich.Height);
+    SetLength(acts, Length(CTyRichEditActions));
+    for i := 0 to High(acts) do
+    begin
+      acts[i] := CTyRichEditActions[i].Create(nil);
+      acts[i].RichEdit := FRich;
+    end;
+    try
+      for f := 0 to High(Exts) do
+      begin
+        path := NewFile(Exts[f]);
+        if f = 0 then MakeText(path, CFileBytes) else MakeRtf(path, CFileBytes);
+        FRich.LoadFromFile(path);
+        FRich.FinishLoading;
+        TPerfRich(FRich).PaintInto(bmp);
+        for i := 0 to High(acts) do acts[i].Update;
+        FRich.SelectAll;
+        TPerfRich(FRich).PaintInto(bmp);
+        t0 := Clock;
+        for i := 0 to High(acts) do acts[i].Update;
+        first := Clock - t0;
+        idle := MaxDouble;
+        for k := 1 to 5 do
+        begin
+          t0 := Clock;
+          for i := 0 to High(acts) do acts[i].Update;
+          idle := Min(idle, Clock - t0);
+        end;
+        Report(Format('%s: %d actions, all of it selected: the first round (the queries)',
+          [Exts[f], Length(acts)]), first);
+        Report(Format('%s: %d actions, all of it selected: an idle round (best of 5)',
+          [Exts[f], Length(acts)]), idle);
+        AssertTrue(Format('%s: the first round in %.1f ms', [Exts[f], first]),
+          first <= CKeystrokeMs);
+        AssertTrue(Format('%s: an idle round in %.2f ms', [Exts[f], idle]),
+          idle <= CKeystrokeMs / 10);
+        FRich.Clear;
+      end;
+    finally
+      for i := 0 to High(acts) do acts[i].Free;
+    end;
+  finally
+    bmp.Free;
+  end;
 end;
 
 initialization

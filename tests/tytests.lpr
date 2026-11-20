@@ -310,7 +310,8 @@ uses
   test.richedit.fieldctl,
   test.richedit.fieldpaste,
   test.richedit.keptpictures,
-  test.richedit.ruler;
+  test.richedit.ruler,
+  test.richedit.actions;
 
 type
   TTyTestRunner = class(TTestRunner)
