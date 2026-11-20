@@ -1240,6 +1240,10 @@ type
     // the caret and the selection
     function GetSelStart: TTyRichPos;
     function GetSelLength: TTyRichPos;
+    function GetPlacedSelStart: TTyRichPos;
+    function GetPlacedSelLength: TTyRichPos;
+    function GetCaretIndex: TTyRichPos;
+    procedure SettlePlaces;
     procedure SetSelStart(AValue: TTyRichPos);
     procedure SetSelLength(AValue: TTyRichPos);
     procedure SetCaretIndex(AValue: TTyRichPos);
@@ -2256,12 +2260,13 @@ type
       same update (SelText, Lines, the format writes, InDelText) move them exactly as outside
       an update; a change made straight through Document.Execute does not. When the update
       ends they are clamped to the final text (and to a caret place) and the selection is
-      painted. }
-    property SelStart: TTyRichPos read GetSelStart write SetSelStart;
-    property SelLength: TTyRichPos read GetSelLength write SetSelLength;
+      painted; read right after it (or after an edit from code), they are that caret place
+      already - as CaretIndex is. }
+    property SelStart: TTyRichPos read GetPlacedSelStart write SetSelStart;
+    property SelLength: TTyRichPos read GetPlacedSelLength write SetSelLength;
     { The caret: SelStart's end or the other (the end a Shift move moves); writing it collapses
       the selection there. Inside an update: as SelStart. }
-    property CaretIndex: TTyRichPos read FCaret write SetCaretIndex;
+    property CaretIndex: TTyRichPos read GetCaretIndex write SetCaretIndex;
     { Delphi's CaretPos (TCustomRichEdit's): X the column, Y the line of the selection's END
       (its larger end, as Delphi reads EM_EXGETSEL's cpMax), where a line is a paragraph
       (Lines) and a column a character of it; written, the selection collapses at column X
@@ -4346,6 +4351,13 @@ begin
   Result := TyRichWordClass(C);
 end;
 
+{ A place a change left (the document's update, an edit from code) is put where the caret
+  rests before it is read - not only by the next paint or key. }
+procedure TTyCustomRichEdit.SettlePlaces;
+begin
+  if FSnapPending and not ViewBehind and not (csDestroying in ComponentState) then Settle;
+end;
+
 function TTyCustomRichEdit.GetSelStart: TTyRichPos;
 begin
   Result := Math.Min(FCaret, FSelAnchor);
@@ -4354,6 +4366,26 @@ end;
 function TTyCustomRichEdit.GetSelLength: TTyRichPos;
 begin
   Result := Abs(FCaret - FSelAnchor);
+end;
+
+// (the properties' reads: settled first; the control's own reads are not - they run where it
+// settles itself, at a key's or a paint's start)
+function TTyCustomRichEdit.GetPlacedSelStart: TTyRichPos;
+begin
+  SettlePlaces;
+  Result := Math.Min(FCaret, FSelAnchor);
+end;
+
+function TTyCustomRichEdit.GetPlacedSelLength: TTyRichPos;
+begin
+  SettlePlaces;
+  Result := Abs(FCaret - FSelAnchor);
+end;
+
+function TTyCustomRichEdit.GetCaretIndex: TTyRichPos;
+begin
+  SettlePlaces;
+  Result := FCaret;
 end;
 
 function TTyCustomRichEdit.HasSelection: Boolean;

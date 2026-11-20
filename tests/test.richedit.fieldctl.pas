@@ -122,6 +122,7 @@ type
     procedure TestAPointerOverALongContentsFindsItOnce;
     procedure TestAKeyInsideAResultIsRefusedWhateverMarksAreNear;
     procedure TestTheWordKeysSelectTheFieldsFirst;
+    procedure TestPositionsReadFromCodeAreRestingPlaces;
   end;
 
 implementation
@@ -2236,6 +2237,40 @@ begin
     AssertEquals(Format('entry %d to after the contents: ... its end kept', [e]),
       PosOfText('after') + 2, FRich.SelStart + FRich.SelLength);
   end;
+end;
+
+{ SelStart, SelLength and CaretIndex read from code right after the document's update ends -
+  set inside it, or moved by an edit from code in it - answer where the caret rests, with no
+  paint or key between. }
+procedure TTyRichFieldControlTest.TestPositionsReadFromCodeAreRestingPlaces;
+begin
+  // ab [link] cd: the open mark at 3, the close mark at 8
+  Load(LinkDoc);
+  Doc.BeginUpdate;
+  FRich.SelStart := 4;
+  Doc.EndUpdate;
+  AssertEquals('SelStart: before the open mark', Int64(3), FRich.SelStart);
+  AssertEquals('CaretIndex: the same', Int64(3), FRich.CaretIndex);
+  AssertEquals('SelLength: none', Int64(0), FRich.SelLength);
+  // a selection set inside: both ends rested
+  Load(LinkDoc);
+  Doc.BeginUpdate;
+  FRich.SelStart := 4;
+  FRich.SelLength := 4;
+  Doc.EndUpdate;
+  AssertEquals('a selection''s start: before the open mark', Int64(3), FRich.SelStart);
+  AssertEquals('... its length: to after the close mark', Int64(6), FRich.SelLength);
+  // the caret moved by an edit from code inside the update, then set there
+  Load(LinkDoc);
+  Doc.BeginUpdate;
+  Doc.Execute(TTyRichInsertText.Create(0, 'xy', Doc.TypingFormatAt(0)));
+  FRich.SelStart := 6;
+  Doc.EndUpdate;
+  AssertEquals('after an insert from code: before the open mark', Int64(5), FRich.CaretIndex);
+  AssertEquals('... SelStart the same', Int64(5), FRich.SelStart);
+  // what is typed next goes there
+  Chars('Q');
+  AssertEquals('typed where it was read', Hex(Raw('xyab Q') + OC), Hex(Copy(AllText, 1, 9)));
 end;
 
 initialization
