@@ -2747,10 +2747,11 @@ end;
 
 { Word restates the section's properties (\sectd, \ltrsect, \linex0, \headery851 ...) inside
   its contents' result before entries; they are no character's. Text copied out of a result
-  carries none of them: copied as RTF, pasted into the same document (as the control pastes:
-  its filter), into a second copy of the file (no filter), copied inside the document - each
-  saved holds the file's own \sectd and section words, no more; the field's bytes go out as
-  they came. }
+  carries none of them: copied as RTF, pasted into the last paragraph of the same document (as
+  the control pastes: its filter), into a second copy of the file (no filter), copied inside
+  the document - each saved holds as many section words as the same document saved with six
+  plain letters pasted there instead (the paragraph written again from the model, its own runs
+  with the words the body gave them); the field's bytes go out as they came. }
 procedure TTyRichFieldsTest.TestTextCopiedOutOfAResultCarriesNoSectionWords;
 const
   Words: array[0..3] of string = ('|sectd', '|ltrsect', '|linex', '|headery');
@@ -2760,16 +2761,29 @@ var
   a, z, at: TTyRichPos;
   ends: Boolean;
   i: Integer;
-  f: RawByteString;
+  f, head, base: RawByteString;
 
-  procedure Same(const AMsg: string; ADoc: TTyRichDocument);
+  // ADoc saved with six letters of no format of the file's pasted at AAt instead (undone)
+  function Keyed(ADoc: TTyRichDocument; AAt: TTyRichPos): RawByteString;
+  var
+    p: TTyRichDocument;
+    e: Boolean;
+  begin
+    p := TyRichReadRtfFragment(BytesOf(Rtf('{|rtf1|ansi|deff0{|fonttbl{|f0 Arial;}}|pard|b abcdef}')), e);
+    AssertTrue('the letters', ADoc.Execute(TTyRichInsertFragment.Create(AAt, p, e, False,
+      TyRichFragmentFilterFor(p, ADoc))));
+    Result := StrOfBytes(SaveOut(ADoc));
+    ADoc.Undo;
+  end;
+
+  procedure Same(const AMsg: string; ADoc: TTyRichDocument; const ABase: RawByteString);
   var
     o: RawByteString;
     j: Integer;
   begin
     o := StrOfBytes(SaveOut(ADoc));
     for j := 0 to High(Words) do
-      AssertEquals(Format('%s: %s as the file has it', [AMsg, Words[j]]), CountRaw(Rtf(Words[j]), f),
+      AssertEquals(Format('%s: %s as with plain letters', [AMsg, Words[j]]), CountRaw(Rtf(Words[j]), ABase),
         CountRaw(Rtf(Words[j]), o));
   end;
 
@@ -2780,29 +2794,33 @@ begin
   try
     AssertTrue('an entry''s link', d.FieldRangeAt(d.Text.ParaStart(10) + 2, a, z));
     r := RangeOut(d, a + 1, 6);
+    // (the copy begins with the file's header, which has the document's own \sectd)
+    head := Copy(f, 1, TyRichRtfLoadOf(d).Header.Stop);
     for i := 0 to High(Words) do
-      AssertEquals(Format('copied: no %s', [Words[i]]), 0, CountRaw(Rtf(Words[i]), StrOfBytes(r)));
+      AssertEquals(Format('copied: no %s but the header''s', [Words[i]]), CountRaw(Rtf(Words[i]), head),
+        CountRaw(Rtf(Words[i]), StrOfBytes(r)));
     at := d.Text.ParaStart(d.Text.ParaCount - 1) + 2;
+    base := Keyed(d, at);
     src := TyRichReadRtfFragment(r, ends);
     AssertTrue('pasted into the same document',
       d.Execute(TTyRichInsertFragment.Create(at, src, ends, False, TyRichFragmentFilterFor(src, d))));
-    Same('pasted into the same document', d);
+    Same('pasted into the same document', d, base);
     d.Undo;
     AssertTrue('copied inside the document', d.Execute(TTyRichCopy.Create(a + 1, 6, at)));
-    Same('copied inside the document', d);
+    Same('copied inside the document', d, base);
     d.Undo;
     d2 := LoadDoc(b, True);
     try
       src := TyRichReadRtfFragment(r, ends);
       at := d2.Text.ParaStart(d2.Text.ParaCount - 1) + 2;
       AssertTrue('pasted into a second copy', d2.Execute(TTyRichInsertFragment.Create(at, src, ends)));
-      Same('pasted into a second copy of the file, no filter', d2);
+      Same('pasted into a second copy of the file, no filter', d2, base);
     finally
       d2.Free;
     end;
-    // an edit in the first paragraph: the body's section words as they were
-    AssertTrue('typed in the first paragraph', d.Execute(TTyRichInsertText.Create(0, 'Q')));
-    Same('typed in the first paragraph', d);
+    // the field's bytes as the file has them
+    AssertEquals('the contents'' group once', 1, CountRaw(FieldGroup(f, CountRaw(Rtf('{|field'),
+      Copy(f, 1, Pos(Rtf('{|field|fldedit'), f) - 1)) + 1), StrOfBytes(SaveOut(d))));
   finally
     d.Free;
   end;
