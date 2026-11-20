@@ -30,7 +30,7 @@ RichEdit1.SelAttributes.Bold := True;   // 一步撤销
 RichEdit1.SaveToFile('说明.rtf');
 ```
 
-完整的例子在 `examples/richedit`：一个小写字板，菜单和工具栏都是下面 §4 的动作，带标尺、状态栏、换皮肤，"示例文档"菜单打开几份样本(中文和各种格式、表格、图片、Word 的带链接的目录)。
+完整的例子在 `examples/richedit`：一个小写字板，菜单、两行工具栏和编辑框的右键菜单都是下面 §4 的动作——有字体框、字号框(可以填半磅)、文字颜色和突出显示按钮(打开本库的颜色对话框)——带标尺、状态栏、换皮肤，窗口窄了工具栏那一行就折到下一行，"示例文档"菜单打开几份样本(中文和各种格式、表格、图片、Word 的带链接的目录)。
 
 ## 2. 两层 API
 
@@ -71,14 +71,25 @@ RichEdit1.SaveToFile('说明.rtf');
 
 | 动作 | 标题 | 快捷键 | Enabled 问的是 | Checked 问的是 |
 |---|---|---|---|---|
+| `TTyRichEditCut` / `Copy` / `Paste` | 剪切 / 复制 / 粘贴 | Ctrl+X / C / V | 有选区且不是只读 / 有选区 / 剪贴板里有能粘贴的东西 | — |
+| `TTyRichEditSelectAll` / `Delete` | 全选 / 删除 | Ctrl+A / — | 文档里有文字 / 有选区且不是只读 | — |
 | `TTyRichEditBold` / `Italic` / `Underline` | 粗体 / 斜体 / 下划线 | Ctrl+B / I / U | 用户这里能不能改格式 | 整个选区都有这个样式 |
 | `TTyRichEditStrikeOut` | 删除线 | — | 同上 | 同上 |
 | `TTyRichEditSuperscript` / `Subscript` | 上标 / 下标 | — | 同上 | 整个选区都是上标 / 下标 |
+| `TTyRichEditFontName` | 字体 | — | 同上 | 整个选区都是 `FontName` 这个字体 |
+| `TTyRichEditFontSize` | 字号 | — | 同上，且 `Size` 大于 0 | 整个选区都是 `Size` 磅 |
+| `TTyRichEditFontGrow` / `FontShrink` | 增大字号 / 减小字号 | Ctrl+Shift+. / , | 同上，且还有下一档 | — |
+| `TTyRichEditTextColor` / `HighlightColor` | 文字颜色 / 突出显示 | — | 同上 | — |
+| `TTyRichEditClearFormat` | 清除格式 | Ctrl+空格 | 同上 | — |
 | `TTyRichEditAlignLeft` / `Center` / `Right` / `Justify` | 左对齐 / 居中 / 右对齐 / 两端对齐 | Ctrl+L / E / R / J | 同上 | 选区碰到的段落都是这种对齐 |
 | `TTyRichEditBullets` / `Numbering` | 项目符号 / 编号 | Ctrl+Shift+L / — | 同上 | 这些段落都是这种列表 |
 | `TTyRichEditIndentIncrease` / `Decrease` | 增加 / 减少缩进 | — | 同上 | — |
+| `TTyRichEditLineSpacing` | 行距 | — | 同上 | 这些段落都是 `Spacing` 这种行距 |
 | `TTyRichEditInsertPicture` | 图片... | — | `CanInsertPicture` | — |
 | `TTyRichEditInsertTable` | 表格 | — | `CanInsertTable` | — |
+| `TTyRichEditInsertRowAbove` / `RowBelow` | 在上方 / 下方插入行 | — | `CanInsertRow` | — |
+| `TTyRichEditInsertColumnLeft` / `ColumnRight` | 在左侧 / 右侧插入列 | — | `CanInsertColumn` | — |
+| `TTyRichEditDeleteRow` / `DeleteColumn` / `DeleteTable` | 删除行 / 列 / 表格 | — | `CanDeleteRow` / `CanDeleteColumn` / `CanDeleteTable` | — |
 | `TTyRichEditFind` | 查找... | Ctrl+F | 控件可用 | — |
 | `TTyRichEditReplace` | 替换... | Ctrl+H | 用户这里能不能改 | — |
 | `TTyRichEditUndo` / `Redo` | 撤销 / 重做 | Ctrl+Z / Y | `CanUndo` / `CanRedo` | — |
@@ -89,6 +100,12 @@ RichEdit1.SaveToFile('说明.rtf');
 - **标尺**只在 `CanFormatParagraphs` 说可以的地方能拖：域的结果里、含嵌套表格的行里，标记是灰的，按下去也不开始拖动。
 - **作用于哪个富文本**：设了 `RichEdit` 就是它(别的窗体上的也行)；没设就是有焦点的那个 `TTyCustomRichEdit`；都没有就变灰。
 - **字符样式**通过 `ApplyCharacterFormat` 写：没选东西时，它决定接下来打的字是什么格式，不算一步撤销。在域的结果里、含嵌套表格的行里，格式动作是灰的；插入图片也一样。
+- **剪贴板动作**就是文字菜单的那几个(`CutToClipboard`、`CopyToClipboard`、`PasteFromClipboard`、`SelectAll`、`ClearSelection`)，能不能用的回答和编辑框自己的右键菜单一样。
+- **字体和字号**:`TTyRichEditFontName` 设 `FontName`,`TTyRichEditFontSize` 按整磅设 `Size`(字号框要给半磅，可以通过 `ApplyCharacterFormat` 写 `SizeHalfPt`)。增大、减小字号从选区的字号走到常用字号表(8、9、10、11、12、14 …… 72)的下一档。
+- **颜色**:`TTyRichEditTextColor`、`TTyRichEditHighlightColor` 套用自己的 `Color`(默认红色、黄色;`clDefault` 是主题的文字颜色,`clNone` 是不突出显示)。先触发 `OnChooseColor`：程序可以在这里问用户(用本库的 `TySelectColor`)、改颜色或者取消；选中的颜色记下来，下次接着用。
+- **清除格式**把选区里字符的格式恢复成默认：字体、字号、样式、上下标和颜色；段落格式不动。
+- **行距**给选区碰到的段落设 `Spacing`(单倍、1.15、1.5、双倍);和对齐一样，一种行距一个动作。
+- **表格操作**在插入点所在行的上方或下方插入一行，在所在列的左侧或右侧插入一列，或者删除这一行、这一列、整个表格；插入点进到新的行或列。控件说不行的地方就是灰的(不在表格里、有合并单元格的表格、含嵌套表格的行、各行单元格数不同时的列)。
 - **缩进**把插入点所在段落的首行移到下一个(上一个)半英寸处，不越过左边距；选了几个段落时都移到那个位置，各自保留自己的悬挂距离(和标尺的规则一样)。
 - **插入表格**插入 `Rows` × `Columns`(默认 3 × 3)。插入前触发 `OnChooseSize`，程序可以在这里问用户，改大小，或者取消。
 - **插入图片**用本库自己的打开对话框(`Dialog`，一个 `TTyOpenPictureDialog`)，过滤器是控件能读的格式(`TyRichPictureFilter`：LCL 能读的图片都行，PNG 和 JPEG 原样保存字节，其他转成 PNG；不收 WMF、EMF)。

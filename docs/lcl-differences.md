@@ -271,5 +271,5 @@ uses
 - **事件和设置**:`OnModifiedChange`、`OnEditRefused`(用户的编辑被文档拒绝)、`OnZoomChange`、`OnFallbackFont`、`WrapMode`、`TextEncoding`、`TextCodePage`、`ScrollBarAutoHide`。
 - **文档本身**:`Document`(命令、撤销历史、格式),给需要的不只是控件成员的代码用。
 - **用户改格式的门**:`ApplyCharacterFormat` 和 `ApplyParagraphFormat` 像用户的编辑一样改格式(只读或禁用时什么都不做，被拒绝时通过 `OnEditRefused` 告诉，不抛异常),`SelAttributes` 和 `Paragraph` 则是程序的写(不管只读，被拒绝时抛异常);`CanFormatCharacters`、`CanFormatParagraphs` 事先告诉会不会被接受。
-- **动作**:Delphi 的 `TRichEditBold`、`TRichEditItalic`、`TRichEditUnderline`、`TRichEditStrikeOut`、`TRichEditBullets`、`TRichEditAlignLeft`、`TRichEditAlignRight`、`TRichEditAlignCenter`(Vcl.ExtActns)在 `tyControls.RichEdit.Actions` 里是 `TTyRichEditBold` …… `TTyRichEditAlignCenter`,另外还有上标、下标、两端对齐、编号、缩进、图片、表格、查找、替换、撤销、重做、缩放;见 [richedit.md](controls/richedit.md)。
+- **动作**:Delphi 的 `TRichEditBold`、`TRichEditItalic`、`TRichEditUnderline`、`TRichEditStrikeOut`、`TRichEditBullets`、`TRichEditAlignLeft`、`TRichEditAlignRight`、`TRichEditAlignCenter`(Vcl.ExtActns)在 `tyControls.RichEdit.Actions` 里是 `TTyRichEditBold` …… `TTyRichEditAlignCenter`,另外还有剪切、复制、粘贴、全选、字体、字号、文字颜色和突出显示、清除格式、上标、下标、两端对齐、编号、缩进、行距、图片、表格和它的行列、查找、替换、撤销、重做、缩放;见 [richedit.md](controls/richedit.md)。
 - **标尺**:`TTyRichEditRuler`(`tyControls.RichEdit.Ruler`)显示并拖动缩进和制表位;Delphi 没有。

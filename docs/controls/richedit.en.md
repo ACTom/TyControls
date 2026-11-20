@@ -30,7 +30,7 @@ RichEdit1.SelAttributes.Bold := True;   // one undo step
 RichEdit1.SaveToFile('notes.rtf');
 ```
 
-The whole example is `examples/richedit`: a small word processor whose menus and toolbar are the actions of §4, with the ruler, a status bar and the skins; its Samples menu opens a few documents (Chinese text and its formats, a table, pictures, Word's table of contents with its links).
+The whole example is `examples/richedit`: a small word processor whose menus, two toolbar rows and the editor's context menu are the actions of §4 - with a font box, a size box (half sizes too) and text and highlight colour buttons that open the package's colour dialog - with the ruler, a status bar and the skins; when the window is narrow a toolbar row wraps; its Samples menu opens a few documents (Chinese text and its formats, a table, pictures, Word's table of contents with its links).
 
 ## 2. Two layers of API
 
@@ -71,14 +71,25 @@ Ready-made actions for a `TActionList` (the IDE's action list editor shows them 
 
 | Action | Caption | Shortcut | Enabled asks | Checked asks |
 |---|---|---|---|---|
+| `TTyRichEditCut` / `Copy` / `Paste` | Cut / Copy / Paste | Ctrl+X / C / V | a selection, not read-only / a selection / the clipboard holds something it can paste | — |
+| `TTyRichEditSelectAll` / `Delete` | Select All / Delete | Ctrl+A / — | the document has text / a selection, not read-only | — |
 | `TTyRichEditBold` / `Italic` / `Underline` | Bold / Italic / Underline | Ctrl+B / I / U | may the user format here | the whole selection has the style |
 | `TTyRichEditStrikeOut` | Strikethrough | — | the same | the same |
 | `TTyRichEditSuperscript` / `Subscript` | Superscript / Subscript | — | the same | the whole selection is superscript / subscript |
+| `TTyRichEditFontName` | Font | — | the same | the whole selection is in `FontName` |
+| `TTyRichEditFontSize` | Font Size | — | the same, and `Size` is above 0 | the whole selection is `Size` points |
+| `TTyRichEditFontGrow` / `FontShrink` | Grow Font / Shrink Font | Ctrl+Shift+. / , | the same, and there is a next size | — |
+| `TTyRichEditTextColor` / `HighlightColor` | Text Color / Highlight | — | the same | — |
+| `TTyRichEditClearFormat` | Clear Formatting | Ctrl+Space | the same | — |
 | `TTyRichEditAlignLeft` / `Center` / `Right` / `Justify` | Align Left / Center / Align Right / Justify | Ctrl+L / E / R / J | the same | every paragraph the selection touches has that alignment |
 | `TTyRichEditBullets` / `Numbering` | Bullets / Numbering | Ctrl+Shift+L / — | the same | those paragraphs are that kind of list |
 | `TTyRichEditIndentIncrease` / `Decrease` | Increase / Decrease Indent | — | the same | — |
+| `TTyRichEditLineSpacing` | Line Spacing | — | the same | those paragraphs have `Spacing` |
 | `TTyRichEditInsertPicture` | Picture... | — | `CanInsertPicture` | — |
 | `TTyRichEditInsertTable` | Table | — | `CanInsertTable` | — |
+| `TTyRichEditInsertRowAbove` / `RowBelow` | Insert Row Above / Below | — | `CanInsertRow` | — |
+| `TTyRichEditInsertColumnLeft` / `ColumnRight` | Insert Column Left / Right | — | `CanInsertColumn` | — |
+| `TTyRichEditDeleteRow` / `DeleteColumn` / `DeleteTable` | Delete Row / Column / Table | — | `CanDeleteRow` / `CanDeleteColumn` / `CanDeleteTable` | — |
 | `TTyRichEditFind` | Find... | Ctrl+F | the control is enabled | — |
 | `TTyRichEditReplace` | Replace... | Ctrl+H | may the user edit here | — |
 | `TTyRichEditUndo` / `Redo` | Undo / Redo | Ctrl+Z / Y | `CanUndo` / `CanRedo` | — |
@@ -89,6 +100,12 @@ Ready-made actions for a `TActionList` (the IDE's action list editor shows them 
 - **The ruler** can be dragged only where `CanFormatParagraphs` says yes: in a field's result or a row that holds a nested table its markers are grey and a press starts no drag.
 - **Which rich edit**: the one `RichEdit` names when it is set (on another form too); else the focused `TTyCustomRichEdit`; else none, and the action is grey.
 - **The character styles** are written through `ApplyCharacterFormat`: with nothing selected they set the format of the text typed next, which is no undo step. In a field's result and in a row that holds a nested table the format actions are grey, and so is Insert picture.
+- **The clipboard actions** are the text menu's (`CutToClipboard`, `CopyToClipboard`, `PasteFromClipboard`, `SelectAll`, `ClearSelection`), with the answers the edit's own context menu gives.
+- **Font and size**: `TTyRichEditFontName` sets `FontName`, `TTyRichEditFontSize` sets `Size` in whole points (a font size box can give half points through `ApplyCharacterFormat`, `SizeHalfPt`). Grow and Shrink go to the next size of the usual list (8, 9, 10, 11, 12, 14 ... 72) from the selection's size.
+- **Colours**: `TTyRichEditTextColor` and `TTyRichEditHighlightColor` apply their `Color` (red and yellow by default; `clDefault` is the theme's text colour, `clNone` no highlight). `OnChooseColor` comes first: the program can ask the user there (the package's `TySelectColor`), change the colour or cancel; the chosen colour is kept for the next time.
+- **Clear Formatting** gives the selection's characters the default format back: font, size, styles, position and colours; the paragraph formats stay.
+- **Line Spacing** sets `Spacing` (single, 1.15, 1.5, double) on the paragraphs the selection touches; one action per spacing, as with the alignments.
+- **The table operations** insert a row above or below the caret's, a column left or right of it, or delete the row, the column or the whole table; the caret goes into the new row or column. Each is grey where the control says no (outside a table, in a table with merged cells, in a row that holds a nested table, a column where the rows differ in their cells).
 - **Indent** moves the caret paragraph's first line to the next (previous) half inch, never left of the margin; with several paragraphs selected each goes to that place, keeping its own hanging offset (the ruler's rule).
 - **Insert table** inserts `Rows` × `Columns` (3 × 3 by default). `OnChooseSize` comes first: the program can ask the user there, change the size or cancel.
 - **Insert picture** uses the package's own open dialog (`Dialog`, a `TTyOpenPictureDialog`) with a filter of the formats the control reads (`TyRichPictureFilter`: every picture the LCL reads; PNG and JPEG keep their bytes, the others become PNG; no WMF, no EMF).
