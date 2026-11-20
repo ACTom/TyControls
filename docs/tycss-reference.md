@@ -242,7 +242,7 @@ typeKey 与文本类控件引用。它们都是普通 `--变量`,可被主题作
 `--treeview-margin`、`--treeview-icon-gap` 和 §3.5 的四个树线令牌;`TTyMemo` 的 `--memo-tab-size`;
 `TTyPopover` 的六个 `--popover-*` 令牌(它不是控件,但 `StyleOverride` 的规则相同);
 `TTyTabSet` 和 `TTyPageControl` 的关闭按钮令牌(§3.8);`TTyToolBar` 的 `--toolbar-icon-size`(§3.9);
-`TTyTrackBar` 的三个滑块令牌(§3.10)。
+`TTyTrackBar` 的三个滑块令牌(§3.10);`TTyScrollBox`(含 `TTyScrollPanel`)的 `--scrollbox-bars`(§3.11)。
 其他控件暂时只认主题里的值。另外,每个控件都认 §3.6 的 `--over-parent-chrome`。
 3.0.4 以前的版本会忽略控件 `StyleOverride` 里的 `--` 声明,用新版本保存的窗体在旧版本里照样能打开。
 
@@ -544,6 +544,28 @@ typeKey 与文本类控件引用。它们都是普通 `--变量`,可被主题作
 
 4.0 的多滑块一族(`TTyRangeTrackBar`、`TTyMultiTrackBar`、`TTyGradientTrackBar`)读同样三个令牌,也按同样的
 规则让出焦点环和 `padding`;控件上的每个滑块都用这一组大小。
+
+### 3.11 滚动框显示哪几条滚动条
+
+`TTyScrollBox`(含 `TTyScrollPanel`)在内容超出的方向显示滚动条。`--scrollbox-bars` 决定它可以显示哪几条;
+和 §3.4 的令牌一样,可以写在主题里,也可以只写进某一个滚动框的 `StyleOverride`。
+
+| 令牌 | 取值 | 默认 | 含义 |
+|---|---|---|---|
+| `--scrollbox-bars` | `both` \| `vertical` \| `horizontal` \| `none` | `both` | 滚动框可以显示哪几条滚动条。 |
+
+没列出的那条永远不显示,也不占位置;它那个方向照常能用滚轮和代码(`ScrollBy`、`ScrollTo`、`ScrollInView`)滚动。
+不是这四个词的值按 `both` 处理。
+
+```text
+--scrollbox-bars: vertical;
+--scrollbox-bars: none;
+```
+
+第一行让滚动框永远没有横向滚动条,第二行两条都不显示。细节见
+[controls/scrollbox.md](controls/scrollbox.md) 第 5 节。
+
+3.0.5 新增。更早的版本不认这个令牌。
 
 ---
 
