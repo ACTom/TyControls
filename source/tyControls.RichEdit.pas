@@ -1486,7 +1486,6 @@ type
       (told), False. A composition begins only where this says yes (one character for it). }
     function TypingAllowed(var AStart, ALen: TTyRichPos; const AText: UTF8String;
       AUser: Boolean): Boolean;
-    function EdgeTypingFormat(APos: TTyRichPos; out AFormat: TTyCharFormatId): Boolean;
     { The one routine of typing - a key's character, Enter, Tab, SelText from code and an input
       method's commit: AText in place of the selection (one undo step: delete and insert),
       else at the caret - AMergeable: typing, which merges with the typing before it - in
@@ -5915,7 +5914,8 @@ var
 begin
   Result := False;
   FLinkPressed := False;
-  if not IsEnabled or ViewBehind or not LinkClickFires(AShift, AButton) then Exit;
+  // (a disabled control takes no press at all: MouseDown; disabling it ends one, StopDrag)
+  if ViewBehind or not LinkClickFires(AShift, AButton) then Exit;
   c := CharBoxAt(X, Y);
   if (c < 0) or not LinkOfChar(c, o, url) then Exit;
   FLinkPressed := True;
@@ -9531,8 +9531,6 @@ begin
     Exit(FPendingFmt);
   t := FDoc.Text;
   s := GetSelStart;
-  // at a field's edge (also a selection that begins there): the text outside the field's
-  if EdgeTypingFormat(s, Result) then Exit;
   if HasSelection then
   begin
     // typed over: the format of the first character selected (the character before s + 1),
@@ -9541,58 +9539,6 @@ begin
     if s < t.ParaStart(p) + t.ParaLength(p) then Inc(s);
   end;
   Result := FDoc.TypingFormatAt(s);
-end;
-
-{ Typing at a place among objects with no width - a field's edge: the format of the text
-  outside the field, never its result's. With no close mark between the run's start and the
-  place, the text before the run (at a paragraph's start: the mark's own); after a close mark,
-  the text after the run when no open mark follows the place in it, else the close mark's
-  own. False at a place in no such run. }
-function TTyCustomRichEdit.EdgeTypingFormat(APos: TTyRichPos;
-  out AFormat: TTyCharFormatId): Boolean;
-var
-  t: TTyRichText;
-  rs, re, c, lastClose, ps, pe: TTyRichPos;
-  o: TTyRichObject;
-  opened: Boolean;
-begin
-  Result := False;
-  AFormat := Low(TTyCharFormatId);
-  rs := UnseenEnd(APos, False);
-  re := UnseenEnd(APos, True);
-  if rs = re then Exit;
-  t := FDoc.Text;
-  ps := t.ParaStart(t.ParaOfPos(APos));
-  pe := ps + t.ParaLength(t.ParaOfPos(APos));
-  lastClose := -1;
-  opened := False;
-  FDoc.BeginRead;
-  try
-    for c := rs to re - 1 do
-    begin
-      o := FDoc.ObjectAt(c);
-      if not (o is TTyRichFieldMark) then Continue;
-      if TTyRichFieldMark(o).Kind = rfmClose then
-      begin
-        if c < APos then lastClose := c;
-      end
-      else if c >= APos then
-        opened := True;
-    end;
-  finally
-    FDoc.EndRead;
-  end;
-  if lastClose < 0 then
-  begin
-    if rs > ps then AFormat := FDoc.TypingFormatAt(rs)
-    else if APos < re then AFormat := FDoc.TypingFormatAt(APos + 1)
-    else Exit;
-  end
-  else if not opened and (re < pe) then
-    AFormat := FDoc.TypingFormatAt(re + 1)
-  else
-    AFormat := FDoc.TypingFormatAt(lastClose + 1);
-  Result := True;
 end;
 
 function TTyCustomRichEdit.TypingAllowed(var AStart, ALen: TTyRichPos; const AText: UTF8String;
@@ -11304,8 +11250,7 @@ begin
     FDoc.EndRead;
   end;
   // (a drop goes in at a place of its own: the format there, not the selection's)
-  if not ASelect then fmt := TypingFormat
-  else if not EdgeTypingFormat(s, fmt) then fmt := FDoc.TypingFormatAt(s);
+  if ASelect then fmt := FDoc.TypingFormatAt(s) else fmt := TypingFormat;
   waiting := False;
   cmd := nil;
   try

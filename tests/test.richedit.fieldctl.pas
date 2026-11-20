@@ -38,6 +38,7 @@ type
     function Reads: Int64;
     function Searches: Int64;
     function LastTemp: TCursor;
+    function Fires(AShift: TShiftState; AButton: TMouseButton): Boolean;
   end;
 
   { A descendant that makes a plain left click on a link its click, editable or not. }
@@ -264,6 +265,11 @@ function TFieldProbe.LastTemp: TCursor;
 begin
   if Length(TempCursors) = 0 then Exit(crNone);
   Result := TempCursors[High(TempCursors)];
+end;
+
+function TFieldProbe.Fires(AShift: TShiftState; AButton: TMouseButton): Boolean;
+begin
+  Result := LinkClickFires(AShift, AButton);
 end;
 
 function TPlainClickProbe.LinkClickFires(AShift: TShiftState; AButton: TMouseButton): Boolean;
@@ -1320,10 +1326,20 @@ begin
   p := PointIn(5, 1);
   LinkClick(mbRight, [ssCtrl], p);
   AssertEquals('the right button: no click', 0, FClicks);
+  AssertFalse('the rule says no to the right button', FRich.Fires([ssCtrl], mbRight));
+  FRich.ReadOnly := True;
+  AssertFalse('... read-only too', FRich.Fires([], mbRight));
+  FRich.ReadOnly := False;
   FRich.Enabled := False;
   LinkClick(mbLeft, [ssCtrl], p);
   AssertEquals('disabled: no click', 0, FClicks);
   FRich.Enabled := True;
+  // disabled between the press and the release
+  FRich.MDown(mbLeft, [ssLeft, ssCtrl], p.X, p.Y);
+  FRich.Enabled := False;
+  FRich.Enabled := True;
+  FRich.MUp(mbLeft, [ssCtrl], p.X, p.Y);
+  AssertEquals('disabled after the press: no click', 0, FClicks);
   // a drag from the link: a selection, no click
   q := PointIn(10, 2);
   FRich.MDown(mbLeft, [ssLeft, ssCtrl], p.X, p.Y);
@@ -1406,10 +1422,14 @@ begin
   // the first entry of the contents; then its page number, inside the PAGEREF inside the entry
   ClickAndExpect('a contents'' entry', U8([$7B2C]) + Raw(' 1 ') + U8([$7AE0]),
     Raw('#_Toc246044258'));
+  // (the number after the tab, past the page number field's open mark)
   q := PosOfText(#9 + '3') + 1;
+  while Unseen(q) do Inc(q);
   FRich.SelStart := q;
   FClicks := 0;
+  FClickURL := '';
   LinkClick(mbLeft, [ssCtrl], PointIn(q, 1));
+  AssertEquals('the page number: a click', 1, FClicks);
   AssertEquals('the page number: the entry''s link', '#_Toc246044258', FClickURL);
   // a REF is no link
   q := PosOfText(U8([$4E66, $7B7E, $91CC]));
