@@ -762,7 +762,9 @@ begin
       FCut := n;
     end;
     // read before anything changes: a move deletes what it takes
-    content := TTyRichRangeContent.Create(ADoc, FFrom, FCut, not Moves);
+    // (into a cell, a field over a paragraph's end loses its marks: the fragment needs the text)
+    content := TTyRichRangeContent.Create(ADoc, FFrom, FCut, not Moves,
+      ADoc.CellAt(ADoc.Text.ParaOfPos(FTo)) <> nil);
     try
       at := FTo;
       if Moves then

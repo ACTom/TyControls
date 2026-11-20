@@ -903,8 +903,13 @@ type
     FCharCount: Int64;
     procedure TakePara(AIndex: Integer; AData: Pointer; AText: PByte; ALen: PtrInt;
       var AContinue: Boolean);
+    function FieldOverParagraphs: Boolean;
   public
-    constructor Create(ADoc: TTyRichDocument; AFrom, ALen: TTyRichPos; AWiden: Boolean);
+    { AIntoCell: it goes into a table cell - a range that holds a field whose result holds a
+      paragraph's end is then held as text (the fragment takes that field's marks out:
+      TTyRichFragment). }
+    constructor Create(ADoc: TTyRichDocument; AFrom, ALen: TTyRichPos; AWiden: Boolean;
+      AIntoCell: Boolean = False);
     destructor Destroy; override;
     { Paragraphs taken (a part of one counts). }
     property ParaCount: Integer read FCount;
@@ -994,6 +999,7 @@ type
     function MapExtra(const AExtra: TTyOpaqueAttrs; APara: Boolean): TTyOpaqueAttrs;
     function MapCell(ACell: TTyRichCell): TTyRichCell;
     procedure MapObjects(var AText: RawByteString; var ARuns: TTyRunArray; var AChars: Int64);
+    procedure UnfieldOverParagraphs;
     procedure TakePara(AIndex: Integer; AData: Pointer; AText: PByte; ALen: PtrInt;
       var AContinue: Boolean);
     function PartCell(AIndex: Integer): TTyRichCell;
@@ -7309,6 +7315,7 @@ begin
       end;
     end;
     SetLength(FText, FTextLen);
+    if FFlatCell <> nil then UnfieldOverParagraphs;
   finally
     FSrc := nil;
     FFilter := nil;
@@ -7673,6 +7680,133 @@ begin
   AChars := outCh;
 end;
 
+{ Going into a cell: a field whose result holds a paragraph's end goes as its content without
+  its own marks - in a cell a reader keeps such a field as one object, so the document saved
+  would not read back as shown. The fields inside it that fit in a cell (no paragraph end of
+  their own) stay fields. The parts are one to one with the text's runs between its #10s
+  (into a cell nothing goes before the first part). }
+procedure TTyRichFragment.UnfieldOverParagraphs;
+type
+  TMarkAt = record
+    Part, Run: Integer;
+  end;
+var
+  stack: array of TMarkAt;
+  drop: array of array of Boolean;
+  sp, i, j, n: Integer;
+  any: Boolean;
+  runs, nr: TTyRunArray;
+  o: UTF8String;
+  p, q, w, segEnd, k: PtrInt;
+  ch, stop, outCh: Int64;
+  v: TTyRichParaData;
+
+  procedure Mark(APart, ARun: Integer);
+  begin
+    if drop[APart] = nil then SetLength(drop[APart], Length(FParts[APart].FRuns));
+    drop[APart][ARun] := True;
+  end;
+
+begin
+  stack := nil;
+  sp := 0;
+  any := False;
+  drop := nil;
+  SetLength(drop, FCount);
+  for i := 0 to FCount - 1 do
+    if FParts[i] <> nil then
+      for j := 0 to High(FParts[i].FRuns) do
+        if FParts[i].FRuns[j].Obj is TTyRichFieldMark then
+          if TTyRichFieldMark(FParts[i].FRuns[j].Obj).Kind = rfmOpen then
+          begin
+            if sp = Length(stack) then SetLength(stack, sp * 2 + 8);
+            stack[sp].Part := i;
+            stack[sp].Run := j;
+            Inc(sp);
+          end
+          // (a close with no open: InsertFragment refuses the fragment)
+          else if sp > 0 then
+          begin
+            Dec(sp);
+            if stack[sp].Part <> i then
+            begin
+              Mark(stack[sp].Part, stack[sp].Run);
+              Mark(i, j);
+              any := True;
+            end;
+          end;
+  if not any then Exit;
+  if FBody then
+    raise ETyRichModel.Create('A field over a paragraph''s end goes into a cell only from ' +
+      'content read as text (TTyRichRangeContent''s AIntoCell)');
+  o := '';
+  SetLength(o, FTextLen);
+  w := 0;
+  p := 1;
+  for i := 0 to FCount - 1 do
+  begin
+    segEnd := p;
+    while (segEnd <= FTextLen) and (FText[segEnd] <> #10) do Inc(segEnd);
+    if i > 0 then
+    begin
+      Inc(w);
+      o[w] := #10;
+    end;
+    if drop[i] = nil then
+    begin
+      if segEnd > p then Move(FText[p], o[w + 1], segEnd - p);
+      Inc(w, segEnd - p);
+    end
+    else
+    begin
+      runs := FParts[i].FRuns;
+      nr := nil;
+      SetLength(nr, Length(runs));
+      n := 0;
+      q := p;
+      ch := 0;
+      outCh := 0;
+      for j := 0 to High(runs) do
+      begin
+        stop := RunEnd(runs, j, FLens[i]);
+        if drop[i][j] then
+        begin
+          // the mark's one character goes; (anything more of its run stays as text)
+          if (ch < stop) and (q < segEnd) then
+          begin
+            Inc(q, Utf8SeqLen(Byte(FText[q])));
+            Inc(ch);
+          end;
+          if ch < stop then AppendRun(nr, n, outCh, runs[j].Format, nil);
+        end
+        else
+          AppendRun(nr, n, outCh, runs[j].Format, runs[j].Obj);
+        while (ch < stop) and (q < segEnd) do
+        begin
+          k := Utf8SeqLen(Byte(FText[q]));
+          if q + k > segEnd then k := segEnd - q;
+          Move(FText[q], o[w + 1], k);
+          Inc(w, k);
+          Inc(q, k);
+          Inc(ch);
+          Inc(outCh);
+        end;
+      end;
+      if n = 0 then AppendRun(nr, n, 0, runs[0].Format, nil);
+      SetLength(nr, n);
+      v := FDoc.MakeData(FDoc.FormatOfData(FParts[i]), nr, FDoc.CellOfData(FParts[i]));
+      FDoc.AcquireData(v);
+      FDoc.ReleaseData(FParts[i]);
+      FParts[i] := v;
+      FLens[i] := outCh;
+    end;
+    p := segEnd + 1;
+  end;
+  SetLength(o, w);
+  FText := o;
+  FTextLen := w;
+end;
+
 procedure TTyRichFragment.TakePara(AIndex: Integer; AData: Pointer; AText: PByte; ALen: PtrInt;
   var AContinue: Boolean);
 var
@@ -7718,7 +7852,7 @@ end;
 { ---- a stretch of a document's own content ---- }
 
 constructor TTyRichRangeContent.Create(ADoc: TTyRichDocument; AFrom, ALen: TTyRichPos;
-  AWiden: Boolean);
+  AWiden: Boolean; AIntoCell: Boolean);
 var
   t: TTyRichText;
   stop, tFrom, tTo: TTyRichPos;
@@ -7831,10 +7965,58 @@ begin
       if k < FCount then FLens[k] := acc;
     end;
     t.WalkParaTexts(first, last, @TakePara, False);
+    if AIntoCell and not FUseText and FieldOverParagraphs then
+    begin
+      // as text after all: its pieces cannot lose a field's marks
+      for i := 0 to FCount - 1 do
+      begin
+        ADoc.ReleaseData(FValues[i]);
+        FValues[i] := nil;
+      end;
+      for i := 0 to High(FPieces.Pieces) do
+        if (FPieces.Pieces[i].Separator <> rsNone) and (FPieces.Pieces[i].Data <> nil) then
+          ADoc.ReleaseData(TTyRichParaData(FPieces.Pieces[i].Data));
+      FPieces := Default(TTyRichPieces);
+      FUseText := True;
+      t.WalkParaTexts(first, last, @TakePara, False);
+    end;
     if FUseText then SetLength(FText, FTextLen);
   finally
     ADoc.EndRead;
   end;
+end;
+
+// a field opened in one paragraph taken and closed in another
+function TTyRichRangeContent.FieldOverParagraphs: Boolean;
+var
+  opens: array of Integer;
+  sp, i, j: Integer;
+  runs: TTyRunArray;
+  a, e: Int64;
+begin
+  opens := nil;
+  sp := 0;
+  for i := 0 to FCount - 1 do
+  begin
+    if FValues[i] = nil then Continue;
+    runs := FDoc.RunsOfData(FValues[i]);
+    if i = 0 then a := FFirstFrom else a := 0;
+    e := a + FLens[i];
+    for j := 0 to High(runs) do
+      if (runs[j].Start >= a) and (runs[j].Start < e) and (runs[j].Obj is TTyRichFieldMark) then
+        if TTyRichFieldMark(runs[j].Obj).Kind = rfmOpen then
+        begin
+          if sp = Length(opens) then SetLength(opens, sp * 2 + 8);
+          opens[sp] := i;
+          Inc(sp);
+        end
+        else if sp > 0 then
+        begin
+          Dec(sp);
+          if opens[sp] <> i then Exit(True);
+        end;
+  end;
+  Result := False;
 end;
 
 destructor TTyRichRangeContent.Destroy;
@@ -8018,6 +8200,7 @@ begin
         end;
       end;
       if not FBody then SetLength(FText, FTextLen);
+      if FFlatCell <> nil then UnfieldOverParagraphs;
     finally
       // a table made again was held while it was made: the values that use it hold theirs
       for i := 0 to FTabCount - 1 do

@@ -49,6 +49,7 @@ type
     procedure TestAPastedFieldIsAFieldToTheUser;
     procedure TestAnInstructionThatIsNotTextAndTheStateWords;
     procedure TestAPartOfAFieldAndAWholeOneInsideACutOne;
+    procedure TestAFieldOverParagraphsGoesIntoACellAsItsContent;
   end;
 
 { The fields of ADoc, each as its instruction and its content: one line a field (nested ones
@@ -775,6 +776,285 @@ begin
   sig := FieldSignatures(n.Document);
   AssertEquals('the page number a field', 1, CountOf('O:(', sig));
   AssertEquals('... its instruction', 1, CountOf('O:(PAGEREF _Toc1 ' + BS + 'h)', sig));
+end;
+
+const
+  // a table whose first cell holds "a"
+  TableDoc = '{|rtf1|ansi|deff0{|fonttbl{|f0 Times New Roman;}{|f1 Courier New;}}|pard|f1 target text|par' +
+    '|trowd|cellx2000|cellx4000|pard|intbl a|cell b|cell|row|pard tail|par}';
+  // a contents of two paragraphs before a table of the same document
+  TwoParaDoc = '{|rtf1|ansi|deff0{|fonttbl{|f0 Arial;}}|pard|f0 x {|field{|*|fldinst TOC ||o "1-3" ||h}' +
+    '{|fldrslt one|par two}} y|par|trowd|cellx2000|cellx4000|pard|intbl a|cell b|cell|row|pard tail|par}';
+
+// the place after "a" in the cell that holds it
+function AfterCellA(ADoc: TTyRichDocument): TTyRichPos;
+var
+  k: Integer;
+  t: TTyRichText;
+begin
+  t := ADoc.Text;
+  for k := 0 to t.ParaCount - 1 do
+    if (ADoc.CellAt(k) <> nil) and (t.GetText(t.ParaStart(k), t.ParaLength(k)) = 'a') then
+      Exit(t.ParaStart(k) + 1);
+  raise Exception.Create('no cell "a"');
+end;
+
+{ The document as shown: each paragraph (in a cell or not), each character with its format, a
+  field's mark as O:(its instruction) or C. }
+function ShownOf(ADoc: TTyRichDocument): string;
+var
+  t: TTyRichText;
+  k: Integer;
+  q, e: TTyRichPos;
+  m: TTyRichObject;
+  cf: TTyCharFormat;
+begin
+  Result := '';
+  t := ADoc.Text;
+  for k := 0 to t.ParaCount - 1 do
+  begin
+    if ADoc.CellAt(k) <> nil then Result := Result + LineEnding + 'cell: '
+    else Result := Result + LineEnding + 'para: ';
+    q := t.ParaStart(k);
+    e := q + t.ParaLength(k);
+    while q < e do
+    begin
+      m := ADoc.ObjectAt(q);
+      if m is TTyRichFieldMark then
+      begin
+        if TTyRichFieldMark(m).Kind = rfmOpen then
+          Result := Result + 'O:(' + TyRichFieldInstruction(ADoc, TTyRichFieldMark(m)) + ')'
+        else
+          Result := Result + 'C';
+      end
+      else
+      begin
+        cf := ADoc.Formats.CharFormat(ADoc.TypingFormatAt(q + 1));
+        Result := Result + '[' + Hex(t.GetText(q, 1)) + ' ' + cf.FontName + ' ' +
+          IntToStr(cf.SizeHalfPt) + ' ' + IntToHex(cf.Color, 6) + ' ' +
+          BoolToStr(fsBold in cf.Style, 'b', '-') + BoolToStr(fsUnderline in cf.Style, 'u', '-') + ']';
+      end;
+      Inc(q);
+    end;
+  end;
+end;
+
+// no field in a cell holds a paragraph's end: every cell paragraph's marks pair inside it
+function FieldsWholeInCells(ADoc: TTyRichDocument): Boolean;
+var
+  k, i, d: Integer;
+  runs: TTyRunArray;
+begin
+  for k := 0 to ADoc.Text.ParaCount - 1 do
+  begin
+    if ADoc.CellAt(k) = nil then Continue;
+    runs := ADoc.RunsOf(k);
+    d := 0;
+    for i := 0 to High(runs) do
+      if runs[i].Obj is TTyRichFieldMark then
+      begin
+        if TTyRichFieldMark(runs[i].Obj).Kind = rfmOpen then Inc(d) else Dec(d);
+        if d < 0 then Exit(False);
+      end;
+    if d <> 0 then Exit(False);
+  end;
+  Result := True;
+end;
+
+// the fields opened in [AFrom, ATo) whose instruction starts with APrefix
+function OpensIn(ADoc: TTyRichDocument; AFrom, ATo: TTyRichPos; const APrefix: string): Integer;
+var
+  q: TTyRichPos;
+  m: TTyRichObject;
+begin
+  Result := 0;
+  for q := AFrom to ATo - 1 do
+  begin
+    m := ADoc.ObjectAt(q);
+    if (m is TTyRichFieldMark) and (TTyRichFieldMark(m).Kind = rfmOpen) and
+      (Copy(TyRichFieldInstruction(ADoc, TTyRichFieldMark(m)), 1, Length(APrefix)) = APrefix) then
+      Inc(Result);
+  end;
+end;
+
+// the text of [AFrom, ATo) without the marks' characters
+function BareText(ADoc: TTyRichDocument; AFrom, ATo: TTyRichPos): string;
+begin
+  Result := StringReplace(ADoc.Text.GetText(AFrom, ATo - AFrom), #$EF#$BF#$BC, '', [rfReplaceAll]);
+end;
+
+{ A field whose result holds a paragraph's end never stands in a table cell (the reader would
+  not show it there: it keeps such a field in a cell as one object). Pasted, copied or moved
+  into a cell, it goes in as its content without its own marks; the fields inside it that fit
+  in a cell (a contents' entries, each a link with its page number) stay fields. Shown so,
+  saved and read back the same; undone exactly, redone the same. }
+procedure TTyRichFieldPasteTest.TestAFieldOverParagraphsGoesIntoACellAsItsContent;
+var
+  x, y: TFieldProbe;
+  o, cl, at: TTyRichPos;
+  links: Integer;
+  src: string;
+  bytes: TBytes;
+  raw: RawByteString;
+  fs: TFileStream;
+  cmd: TTyRichRangeTransfer;
+  k: Integer;
+  before: string;
+  back: TTyRichDocument;
+
+  function TocOpen(ADoc: TTyRichDocument): TTyRichPos;
+  begin
+    Result := 0;
+    while not ((ADoc.ObjectAt(Result) is TTyRichFieldMark) and
+      (TTyRichFieldMark(ADoc.ObjectAt(Result)).Kind = rfmOpen) and
+      (Copy(TyRichFieldInstruction(ADoc, TTyRichFieldMark(ADoc.ObjectAt(Result))), 1, 3) = 'TOC')) do
+      Inc(Result);
+  end;
+
+  // the entries' links of the field at AOpen: those opened and closed in one paragraph
+  function LinksInside(ADoc: TTyRichDocument; AOpen, AClose: TTyRichPos): Integer;
+  var
+    q: TTyRichPos;
+    m: TTyRichObject;
+  begin
+    Result := 0;
+    for q := AOpen + 1 to AClose - 1 do
+    begin
+      m := ADoc.ObjectAt(q);
+      if (m is TTyRichFieldMark) and (TTyRichFieldMark(m).Kind = rfmOpen) and
+        (ADoc.Text.ParaOfPos(q) = ADoc.Text.ParaOfPos(ADoc.FieldPartner(q))) then
+        Inc(Result);
+    end;
+  end;
+
+  { What went in at [AFrom, ATo) of ARich: the content, no mark of the field itself, its
+    entries' links; the document read back from its save as shown; undone to ABefore, redone
+    to what it was. }
+  procedure CheckIn(const AWhat: string; ARich: TFieldProbe; AFrom, ATo: TTyRichPos;
+    const ABefore, AText: string; ALinks: Integer);
+  var
+    after: string;
+    back: TTyRichDocument;
+  begin
+    AssertTrue(AWhat + ': no field over a paragraph''s end in a cell', FieldsWholeInCells(ARich.Document));
+    AssertEquals(AWhat + ': the field itself is gone', 0, OpensIn(ARich.Document, AFrom, ATo, 'TOC'));
+    AssertEquals(AWhat + ': its content', AText, BareText(ARich.Document, AFrom, ATo));
+    AssertEquals(AWhat + ': the fields inside it that fit in a cell', ALinks,
+      OpensIn(ARich.Document, AFrom, ATo, ''));
+    after := ShownOf(ARich.Document);
+    back := ReadBack(SaveOf(ARich));
+    try
+      AssertEquals(AWhat + ': read back as shown', after, ShownOf(back));
+    finally
+      back.Free;
+    end;
+    ARich.Undo;
+    AssertEquals(AWhat + ': undone', ABefore, ShownOf(ARich.Document));
+    ARich.Redo;
+    AssertEquals(AWhat + ': redone', after, ShownOf(ARich.Document));
+    back := ReadBack(SaveOf(ARich));
+    try
+      AssertEquals(AWhat + ': redone, read back as shown', after, ShownOf(back));
+    finally
+      back.Free;
+    end;
+  end;
+
+  procedure PasteInCell(const AWhat: string; ASrc: TFieldProbe; ATarget: TFieldProbe);
+  var
+    before: string;
+    n0: TTyRichPos;
+  begin
+    o := TocOpen(ASrc.Document);
+    cl := ASrc.Document.FieldPartner(o);
+    links := LinksInside(ASrc.Document, o, cl);
+    AssertTrue(AWhat + ': the source''s entries are links', links > 0);
+    src := BareText(ASrc.Document, o, cl + 1);
+    ASrc.SelStart := o;
+    ASrc.SelLength := cl + 1 - o;
+    ASrc.ClipRtf := '';
+    ASrc.CopyToClipboard;
+    at := AfterCellA(ATarget.Document);
+    before := ShownOf(ATarget.Document);
+    n0 := ATarget.Document.Text.Length;
+    PasteAt(ATarget, at, ASrc.ClipRtf);
+    CheckIn(AWhat, ATarget, at, at + ATarget.Document.Text.Length - n0, before, src, links);
+  end;
+
+begin
+  // Word's contents pasted into another document's cell
+  fs := TFileStream.Create(ExtractFilePath(ParamStr(0)) + '..' + PathDelim + 'tests' + PathDelim +
+    'fixtures' + PathDelim + 'rtf' + PathDelim + 'word-toc.rtf', fmOpenRead or fmShareDenyWrite);
+  try
+    bytes := nil;
+    SetLength(bytes, fs.Size);
+    fs.ReadBuffer(bytes[0], fs.Size);
+  finally
+    fs.Free;
+  end;
+  raw := '';
+  SetLength(raw, Length(bytes));
+  Move(bytes[0], raw[1], Length(bytes));
+  SetCodePage(raw, CP_NONE, False);
+  x := Loaded(raw);
+  PasteInCell('Word''s contents into another document''s cell', x, Loaded(Rtf(TableDoc)));
+  // a field of two paragraphs (no link inside: its content only), inside its own document,
+  // where it keeps its file's bytes: pasted
+  y := Loaded(Rtf(TwoParaDoc));
+  o := TocOpen(y.Document);
+  cl := y.Document.FieldPartner(o);
+  AssertTrue('(its two paragraphs)', y.Document.Text.ParaOfPos(o) <> y.Document.Text.ParaOfPos(cl));
+  src := BareText(y.Document, o, cl + 1);
+  y.SelStart := o;
+  y.SelLength := cl + 1 - o;
+  y.ClipRtf := '';
+  y.CopyToClipboard;
+  at := AfterCellA(y.Document);
+  raw := y.ClipRtf;
+  k := y.Document.Text.Length;
+  before := ShownOf(y.Document);
+  PasteAt(y, at, raw);
+  CheckIn('two paragraphs pasted into a cell of the same document', y, at,
+    at + y.Document.Text.Length - k, before, src, 0);
+  // copied and moved there as a drag does (one command each)
+  for k := 0 to 1 do
+  begin
+    y := Loaded(Rtf(TwoParaDoc));
+    o := TocOpen(y.Document);
+    cl := y.Document.FieldPartner(o);
+    at := AfterCellA(y.Document);
+    before := ShownOf(y.Document);
+    src := BareText(y.Document, o, cl + 1);
+    if k = 0 then cmd := TTyRichCopy.Create(o, cl + 1 - o, at)
+    else cmd := TTyRichMove.Create(o, cl + 1 - o, at);
+    AssertTrue(Format('drag %d: done', [k]), y.Document.Execute(cmd));
+    CheckIn(Format('two paragraphs dragged into a cell (%d)', [k]), y, cmd.Placed.Pos,
+      cmd.Placed.Pos + cmd.Placed.Len, before, src, 0);
+  end;
+  // pasted over a selection of both cells
+  y := Loaded(Rtf(TwoParaDoc));
+  o := TocOpen(y.Document);
+  cl := y.Document.FieldPartner(o);
+  y.SelStart := o;
+  y.SelLength := cl + 1 - o;
+  y.ClipRtf := '';
+  y.CopyToClipboard;
+  raw := y.ClipRtf;
+  at := AfterCellA(y.Document) - 1;
+  y.SelStart := at;
+  y.SelLength := 3;
+  y.ClipText := '';
+  y.ClipRtf := raw;
+  y.PasteFromClipboard;
+  AssertTrue('over a selection of cells: no field over a paragraph''s end in a cell',
+    FieldsWholeInCells(y.Document));
+  src := ShownOf(y.Document);
+  back := ReadBack(SaveOf(y));
+  try
+    AssertEquals('over a selection of cells: read back as shown', src, ShownOf(back));
+  finally
+    back.Free;
+  end;
 end;
 
 initialization
