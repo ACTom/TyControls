@@ -107,6 +107,7 @@ type
     procedure TestPaintSelectionKeepsTheGlyphsInPlace;
     procedure TestPaintedSelectionDoesNotMoveGlyphsOnTheRealDevice;
     procedure TestPaintHighlightUnderlineAndStrike;
+    procedure TestAutomaticTextOverAHighlightContrastsWithIt;
     procedure TestPaintTabLeadersAndTheMarker;
     procedure TestPaintARowsContentsThenItsLines;
     procedure TestPaintDecodesOnlyThePicturesItDraws;
@@ -2908,6 +2909,66 @@ begin
     AssertTrue('not above that', SamePx(Sentinel, bmp.GetPixel(35, 9)));
     AssertTrue('nor under the struck word', SamePx(Sentinel, bmp.GetPixel(35, 18)));
     AssertTrue('nothing struck in the first word', SamePx(yellow, bmp.GetPixel(10, 10)));
+  finally
+    bmp.Free;
+  end;
+end;
+
+{ Text in the automatic colour over a highlight of its own is drawn in whichever of the theme's
+  text colour and its opposite stands out from that highlight: under a dark skin (light text)
+  dark on yellow, under a light skin (dark text) light on navy; its underline with it. Text in
+  a colour of its own is drawn in that colour, and text with no highlight in the theme's. The
+  document keeps its colours (automatic stays automatic). }
+procedure TTyRichLayoutTest.TestAutomaticTextOverAHighlightContrastsWithIt;
+var
+  d: TTyRichDocument;
+  L: TTyParaLayout;
+  bmp: TBGRABitmap;
+  st: TTyRichPaintStyle;
+  f: TTyCharFormat;
+  light, dark, red: TBGRAPixel;
+
+  procedure PaintWith(AText: TBGRAPixel; AHighlight: TColor);
+  begin
+    d := NewDoc('abc def ghi');
+    f := TyDefaultCharFormat;
+    f.HighlightColor := AHighlight;
+    f.Style := [fsUnderline];
+    SetChar(d, 0, 3, [cffHighlight, cffUnderline], f);
+    f := TyDefaultCharFormat;
+    f.HighlightColor := AHighlight;
+    f.Color := clRed;
+    SetChar(d, 4, 3, [cffHighlight, cffColor], f);
+    L := Lay(d, 0, 300);
+    st := TyRichDefaultPaintStyle;
+    st.TextColor := AText;
+    bmp.FillRect(0, 0, bmp.Width, bmp.Height, Sentinel, dmSet);
+    L.Paint(bmp, 0, 0, Rect(0, 0, bmp.Width, bmp.Height), st, 0, 0);
+  end;
+
+begin
+  light := BGRA(230, 230, 230, 255);
+  dark := BGRA(25, 25, 25, 255);
+  red := ColorToBGRA(ColorToRGB(clRed));
+  bmp := TBGRABitmap.Create(140, 30, Sentinel);
+  try
+    // a dark skin: the theme's text is light
+    PaintWith(light, clYellow);
+    AssertTrue('dark skin, yellow: the glyph is dark (the opposite)', SamePx(dark, bmp.GetPixel(5, 8)));
+    AssertTrue('its underline too', SamePx(dark, bmp.GetPixel(0, 18)));
+    AssertTrue('a colour of its own: as it is', SamePx(red, bmp.GetPixel(50, 8)));
+    AssertTrue('no highlight: the theme''s text', SamePx(light, bmp.GetPixel(85, 8)));
+    AssertEquals('the document keeps automatic', clDefault,
+      d.Formats.CharFormat(FragAt(L, 0).Format).Color);
+    // a dark skin over a dark highlight: the theme's own colour already stands out
+    PaintWith(light, clNavy);
+    AssertTrue('dark skin, navy: the theme''s text', SamePx(light, bmp.GetPixel(5, 8)));
+    // a light skin: the theme's text is dark
+    PaintWith(dark, clNavy);
+    AssertTrue('light skin, navy: the glyph is light (the opposite)', SamePx(light, bmp.GetPixel(5, 8)));
+    AssertTrue('a colour of its own: as it is', SamePx(red, bmp.GetPixel(50, 8)));
+    PaintWith(dark, clYellow);
+    AssertTrue('light skin, yellow: the theme''s text', SamePx(dark, bmp.GetPixel(5, 8)));
   finally
     bmp.Free;
   end;

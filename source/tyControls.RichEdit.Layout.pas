@@ -3065,6 +3065,48 @@ begin
   Result := ColorToBGRA(ColorToRGB(AColor));
 end;
 
+{ The relative luminance of a colour (sRGB, linear light), 0 black to 1 white. }
+function Luminance(const C: TBGRAPixel): Double;
+
+  function Lin(V: Byte): Double;
+  begin
+    Result := V / 255;
+    if Result <= 0.04045 then Result := Result / 12.92
+    else Result := Power((Result + 0.055) / 1.055, 2.4);
+  end;
+
+begin
+  Result := 0.2126 * Lin(C.red) + 0.7152 * Lin(C.green) + 0.0722 * Lin(C.blue);
+end;
+
+function ContrastOf(const A, B: TBGRAPixel): Double;
+var
+  la, lb: Double;
+begin
+  la := Luminance(A);
+  lb := Luminance(B);
+  if la < lb then Result := (lb + 0.05) / (la + 0.05)
+  else Result := (la + 0.05) / (lb + 0.05);
+end;
+
+{ The ink of a character in colour AColor: a colour of its own as it is; the automatic colour
+  the theme's text colour - but over a highlight of its own (AHighlight) whichever of the
+  theme's text colour and its opposite stands out more from that highlight, as Word draws
+  automatic text black on a light highlight and white on a dark one. Only what automatic
+  resolves to here, at paint time: the document's colours are not changed. }
+function TextInk(AColor, AHighlight: TColor; const AStyle: TTyRichPaintStyle): TBGRAPixel;
+var
+  back, opposite: TBGRAPixel;
+begin
+  if (AColor <> clDefault) and (AColor <> clNone) then Exit(ColorToBGRA(ColorToRGB(AColor)));
+  Result := AStyle.TextColor;
+  if AHighlight = clNone then Exit;
+  // (the highlight's own fill: clDefault is drawn in the selection's ground)
+  back := PaintColor(AHighlight, AStyle.SelectionBack);
+  opposite := BGRA(255 - Result.red, 255 - Result.green, 255 - Result.blue, Result.alpha);
+  if ContrastOf(opposite, back) > ContrastOf(Result, back) then Result := opposite;
+end;
+
 { The selected stretch [ASelX0, ASelX1) cut out of what is drawn of a fragment: the parts
   left and right of it in the normal colour, the stretch in the selection's - each the whole
   fragment drawn with the clip narrowed to its part, so that no glyph moves between them. }
@@ -3388,7 +3430,8 @@ begin
     if not Visible(f^) then Continue;
     drawn := FragmentText(i);
     if drawn = '' then Continue;
-    ink := PaintColor(PaintFormat(f^.Format).Color, AStyle.TextColor);
+    pf := PaintFormat(f^.Format);
+    ink := TextInk(pf.Color, pf.Highlight, AStyle);
     if hasSel then n := InkParts(AClip, x0, x1, AX + xa, AX + xb, parts)
     else n := InkParts(AClip, x0, x1, 0, 0, parts);
     for k := 0 to n - 1 do
@@ -3412,7 +3455,7 @@ begin
     px := FLayouter.Device.FontPixelHeight(f^.Font);
     th := Max(1, Round(px / 16));
     lineY := base + f^.Shift + Max(1, Round(px / 10));
-    ink := PaintColor(pf.Color, AStyle.TextColor);
+    ink := TextInk(pf.Color, pf.Highlight, AStyle);
     if (f^.Kind = rfkTab) and (f^.Leader <> ttlNone) then
     begin
       if hasSel and SelectedChars(f^) then Leader(f^, AStyle.SelectionText)
@@ -3445,7 +3488,7 @@ begin
       th := Max(1, Round(px / 16));
       lineY := base + f^.Shift + Max(1, Round(px / 10));
       if AStyle.CompositionLine.alpha = 0 then
-        col := PaintColor(PaintFormat(f^.Format).Color, AStyle.TextColor)
+        col := TextInk(PaintFormat(f^.Format).Color, PaintFormat(f^.Format).Highlight, AStyle)
       else
         col := AStyle.CompositionLine;
       k := Max(f^.First, FCompAt);
