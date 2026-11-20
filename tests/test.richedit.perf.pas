@@ -1987,7 +1987,7 @@ end;
   pictures): a place never shown (70 % of the height: never parsed since the index) set and
   painted within 300 ms, and that place again after two dozen others evicted its layouts and
   its parse, within 300 ms - the pictures there parsed without their bytes being converted
-  (asserted: none made from hex digits, none copied), decoded later in the background. }
+  (asserted: none made from hex digits, none copied), decoded later in the idle steps. }
 procedure TTyRichEditPerfTest.TestARtfOf200PicturesAPlaceNeverShownAndAgain;
 var
   path: string;
@@ -2012,7 +2012,7 @@ begin
     load := TyRichRtfLoadOf(FRich.Document);
     AssertTrue('a lazy load', (load <> nil) and not load.Whole);
     total := FRich.Document.Text.TotalHeight;
-    // the middle, and its pictures made ready in the background (not timed)
+    // the middle, and its pictures made ready in the idle steps (not timed)
     FRich.ScrollY := total div 2;
     TPerfRich(FRich).PaintInto(bmp);
     while TPerfRich(FRich).Step do ;

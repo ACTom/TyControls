@@ -4,7 +4,7 @@ unit test.richedit.pictparse;
   parsed: the parse notes where the picture's data lies in the file's bytes and how long it
   is, copies nothing and turns no hex digit into a byte (the load's PictureBytesConverted and
   PictureBytesCopied stay 0), so the parse costs what finding the group's end costs, whatever
-  the picture's size. Its bytes are made when they are asked for (Data, the decode for
+  the picture's size. Its bytes are made when they are asked for (MakeImageData, the decode for
   display, a save of a resized picture) and are those a parser that converts them as it
   reads gives - read lazily, whole, or as a fragment -, for PNG, JPEG, a metafile and \bin.
   Open and save stays the file; an edit beside a picture writes its group as the file
@@ -30,12 +30,34 @@ type
     procedure TestAPictureThatLeavesItsDocumentOwnsItsBytes;
     procedure TestResizeReplaceAndUndoKeepTheFilesBytes;
     procedure TestLazyAndWholeAgreeOnEveryFileWithPictures;
+    procedure TestADecodeMakesAPicturesBytesOnce;
+    procedure TestABinaryPictureResizedIsSavedWithItsBytes;
+    procedure TestWhatMayShowWithoutReadingTheBytes;
+    procedure TestAGroupThatEndsInAWordIsEndedBeforeTheTextAfterIt;
   end;
 
 implementation
 
 uses
-  BGRABitmap, BGRABitmapTypes;
+  Types, Graphics, BGRABitmap, BGRABitmapTypes, tyControls.Controller, tyControls.RichEdit;
+
+type
+  // the control's paint into a bitmap, as a window's (pictures deferred), and its idle step
+  TPictRich = class(TTyRichEdit)
+  public
+    procedure PaintInto(ABitmap: TBitmap);
+    function Step: Boolean;
+  end;
+
+procedure TPictRich.PaintInto(ABitmap: TBitmap);
+begin
+  PaintArea(ABitmap.Canvas, Rect(0, 0, Width, Height), Rect(0, 0, Width, Height), 96, True);
+end;
+
+function TPictRich.Step: Boolean;
+begin
+  Result := StepBackground;
+end;
 
 const
   BS = #92;
@@ -386,9 +408,9 @@ begin
     raise EAssertionFailedError.Create(AMsg + ': the size');
   if A.RawRtf <> B.RawRtf then raise EAssertionFailedError.Create(AMsg + ': the group');
   if A.RawUc <> B.RawUc then raise EAssertionFailedError.Create(AMsg + ': the \uc');
-  if not SameBytes(A.Data, B.Data) then
+  if not SameBytes(A.MakeImageData, B.MakeImageData) then
     raise EAssertionFailedError.CreateFmt('%s: the bytes (%d and %d of them)',
-      [AMsg, Length(A.Data), Length(B.Data)]);
+      [AMsg, Length(A.MakeImageData), Length(B.MakeImageData)]);
   da := A.DisplayData(fa, sa, ca);
   db := B.DisplayData(fb, sb, cb);
   if (da <> db) or (da and ((fa <> fb) or (sa <> sb) or (ca <> cb))) then
@@ -434,7 +456,7 @@ begin
         AssertEquals(IntToStr(i) + ': no picture byte copied', 0, load.PictureBytesCopied);
         parsed[i] := load.ParsedBytes;
         // its bytes when asked for: the file's
-        AssertTrue(IntToStr(i) + ': its bytes', SameBytes(data[i], pic.Data));
+        AssertTrue(IntToStr(i) + ': its bytes', SameBytes(data[i], pic.MakeImageData));
       finally
         d.EndRead;
       end;
@@ -502,6 +524,9 @@ begin
   // Word's pair: the first one is the picture, the second is passed over
   Add('Word''s shppict pair', Bar('{|*|shppict') + PictGroup('|pngblip', HexOf(png, 64, False)) +
     Bar('}{|nonshppict') + PictGroup('|wmetafile8', HexOf(wmf, 64, False)) + '}', png, False);
+  Add('Word''s shppict pair, binary', Bar('{|*|shppict{|pict|pngblip|picw40|pich30|bin' +
+    IntToStr(Length(png)) + ' ') + StrOf(png) + Bar('}}{|nonshppict') +
+    PictGroup('|wmetafile8', HexOf(wmf, 64, False)) + '}', png, False);
   // no data, and data in a group of its own inside the picture
   Add('no data', PictGroup('|pngblip', ''), nil, False);
   Add('data in a group inside it', PictGroup('|pngblip', '{' + HexOf(small, 0, False) + '}'),
@@ -554,7 +579,7 @@ begin
           pc.Release;
         end;
         if c.Bytes <> nil then
-          AssertTrue(c.Name + ': the bytes the file was made of', SameBytes(c.Bytes, pl.Data));
+          AssertTrue(c.Name + ': the bytes the file was made of', SameBytes(c.Bytes, pl.MakeImageData));
         load := TyRichRtfLoadOf(lazy);
         if not c.Converts then
         begin
@@ -659,7 +684,7 @@ begin
       try
         got := FirstPicture(back, para2);
         pic := FirstPicture(d, para);
-        AssertTrue(cs[k].Name + ': read back, the bytes', SameBytes(cs[k].Bytes, got.Data));
+        AssertTrue(cs[k].Name + ': read back, the bytes', SameBytes(cs[k].Bytes, got.MakeImageData));
         CheckSamePicture(cs[k].Name + ': read back', pic, got);
         t := back.Text.GetText(back.Text.ParaStart(para2), back.Text.ParaLength(para2));
         AssertTrue(cs[k].Name + ': the Chinese typed is there', Pos(zh + 'x', t) > 0);
@@ -723,8 +748,8 @@ begin
     AssertTrue('what went to the other document owns its bytes',
       mapped.DataBytes >= mapped.InstanceSize + Length(png));
     FreeAndNil(a);
-    AssertTrue('the clone''s bytes outlive the document', SameBytes(png, TTyRichPicture(cl).Data));
-    AssertTrue('the other''s too', SameBytes(png, TTyRichPicture(mapped).Data));
+    AssertTrue('the clone''s bytes outlive the document', SameBytes(png, TTyRichPicture(cl).MakeImageData));
+    AssertTrue('the other''s too', SameBytes(png, TTyRichPicture(mapped).MakeImageData));
     AssertEquals('the group the clone keeps', PictGroup('|pngblip', HexOf(png, 64, False)),
       TTyRichPicture(cl).RawRtf);
   finally
@@ -766,7 +791,7 @@ begin
     try
       got := FirstPicture(back, para);
       AssertTrue('read back: a picture', got <> nil);
-      AssertTrue('read back: the bytes', SameBytes(png, got.Data));
+      AssertTrue('read back: the bytes', SameBytes(png, got.MakeImageData));
       AssertEquals('read back: the width', 1200, got.WidthTwips);
       AssertEquals('read back: the height', 900, got.HeightTwips);
     finally
@@ -776,7 +801,7 @@ begin
     d.BeginRead;
     try
       got := TTyRichPicture(d.ObjectAt(at));
-      AssertTrue('resized: the same bytes', SameBytes(png, got.Data));
+      AssertTrue('resized: the same bytes', SameBytes(png, got.MakeImageData));
       AssertTrue('resized: where they are in the file, shared', got.InFile and
         (got.DataIdentity = pic.DataIdentity));
     finally
@@ -848,6 +873,163 @@ begin
     end;
   end;
   AssertTrue(Format('pictures compared: %d', [pics]), pics >= Length(cs));
+end;
+
+{ A control shows a PNG and a metafile of one bitmap, both hex digits of its file: the paint
+  makes none of their bytes, the idle steps that decode them make each picture's bytes once -
+  the metafile's too, walked for its bitmap and decoded from the same bytes - and look at no
+  digit only to count it. }
+procedure TTyRichPictureParseTest.TestADecodeMakesAPicturesBytesOnce;
+var
+  png, wmf: TBytes;
+  rtf: RawByteString;
+  ctl: TTyStyleController;
+  rich: TPictRich;
+  bmp: TBitmap;
+  st: TBytesStream;
+  made, counted, decodes: Int64;
+begin
+  png := NoisePng(40, 30, 31337);
+  wmf := SingleBitmapWmf;
+  rtf := Bar(CHead + 'one ') + PictGroup('|pngblip', HexOf(png, 64, False)) + Bar(' two ') +
+    PictGroup('|wmetafile8', HexOf(wmf, 64, False)) + Bar(' three|par') + #13#10 + '}';
+  ctl := TTyStyleController.Create(nil);
+  rich := TPictRich.Create(nil);
+  bmp := TBitmap.Create;
+  st := TBytesStream.Create(BytesOf(rtf));
+  try
+    rich.Controller := ctl;
+    rich.Font.PixelsPerInch := 96;
+    rich.SetBounds(0, 0, 600, 400);
+    bmp.PixelFormat := pf32bit;
+    bmp.SetSize(600, 400);
+    rich.LoadFromStream(st);
+    rich.FinishLoading;
+    made := TyRichPictureBytesMade;
+    counted := TyRichPictureDigitsCounted;
+    decodes := rich.Layouter.PictureDecodes;
+    rich.PaintInto(bmp);
+    AssertEquals('the paint makes no picture''s bytes', made, TyRichPictureBytesMade);
+    while rich.Step do ;
+    rich.PaintInto(bmp);
+    AssertEquals('both decoded', decodes + 2, rich.Layouter.PictureDecodes);
+    AssertEquals('each picture''s bytes made once', Int64(Length(png) + Length(wmf)),
+      TyRichPictureBytesMade - made);
+    AssertEquals('no digit looked at only to count it', counted, TyRichPictureDigitsCounted);
+  finally
+    st.Free;
+    bmp.Free;
+    rich.Free;
+    ctl.Free;
+  end;
+end;
+
+{ A \bin PNG read lazily, resized: saved at the new size, written from the model with the
+  file's bytes as hex, made once for the save; read back, the same bytes. }
+procedure TTyRichPictureParseTest.TestABinaryPictureResizedIsSavedWithItsBytes;
+var
+  png, b, saved: TBytes;
+  d, back: TTyRichDocument;
+  pic, got: TTyRichPicture;
+  para: Integer;
+  at: TTyRichPos;
+  made: Int64;
+begin
+  png := NoisePng(30, 20, 4321);
+  b := DocWith(Bar('{|pict|pngblip|picw30|pich20|picwgoal450|pichgoal300|bin' +
+    IntToStr(Length(png)) + ' ') + StrOf(png) + '}');
+  d := LoadDoc(b, False);
+  back := nil;
+  try
+    d.BeginRead;
+    try
+      pic := FirstPicture(d, para);
+      at := PicturePos(d, para);
+      AssertTrue('in the file', pic.InFile);
+    finally
+      d.EndRead;
+    end;
+    AssertTrue('resized', d.Execute(TTyRichResizeObject.Create(at, 900, 600)));
+    made := TyRichPictureBytesMade;
+    saved := SaveOf(d);
+    AssertEquals('the save makes its bytes once', Int64(Length(png)), TyRichPictureBytesMade - made);
+    back := ReadFragment(saved);
+    back.BeginRead;
+    try
+      got := FirstPicture(back, para);
+      AssertTrue('read back: a picture', got <> nil);
+      AssertEquals('read back: the width', 900, got.WidthTwips);
+      AssertTrue('read back: the bytes', SameBytes(png, got.MakeImageData));
+    finally
+      back.EndRead;
+    end;
+    d.Undo;
+    AssertTrue('undone: the file', SameBytes(b, SaveOf(d)));
+  finally
+    back.Free;
+    d.Free;
+  end;
+end;
+
+{ What a paint asks of a picture of its file's bytes before any decode: one hex digit is no
+  byte (nothing to show), nor is a metafile kind nothing here draws (EMF); two digits of a
+  PNG, and a metafile of hex digits, may show. }
+procedure TTyRichPictureParseTest.TestWhatMayShowWithoutReadingTheBytes;
+
+  function MayShowOf(const AGroup: RawByteString): Boolean;
+  var
+    d: TTyRichDocument;
+    pic: TTyRichPicture;
+    para: Integer;
+  begin
+    d := LoadDoc(DocWith(AGroup), False);
+    try
+      d.BeginRead;
+      try
+        pic := FirstPicture(d, para);
+        AssertTrue('in the file', pic.InFile);
+        Result := pic.MayShow;
+      finally
+        d.EndRead;
+      end;
+    finally
+      d.Free;
+    end;
+  end;
+
+begin
+  AssertFalse('one digit', MayShowOf(PictGroup('|pngblip', ' 8 ')));
+  AssertTrue('two digits', MayShowOf(PictGroup('|pngblip', ' 8 9 ')));
+  AssertFalse('an EMF', MayShowOf(PictGroup('|emfblip', HexOf(SingleBitmapWmf, 64, False))));
+  AssertTrue('a metafile', MayShowOf(PictGroup('|wmetafile8', HexOf(SingleBitmapWmf, 64, False))));
+  AssertFalse('an unknown format', MayShowOf(PictGroup('', '89504e47')));
+end;
+
+{ A picture whose group as read ends in a control word (a file cut off inside it): the text
+  written after it is set apart by an empty group, so the word stays the word it was; one
+  whose group ends in its brace is followed by the text at once. }
+procedure TTyRichPictureParseTest.TestAGroupThatEndsInAWordIsEndedBeforeTheTextAfterIt;
+
+  function Saved(const ARaw: RawByteString): RawByteString;
+  var
+    d: TTyRichDocument;
+  begin
+    d := TTyRichDocument.Create;
+    try
+      AssertTrue('text', d.Execute(TTyRichInsertText.Create(0, 'ab')));
+      AssertTrue('a picture', d.Execute(TTyRichInsertObject.Create(1,
+        TTyRichPicture.Create(rpfPng, NoisePng(2, 2, 7), 300, 300, ARaw))));
+      Result := StrOf(SaveOf(d));
+    finally
+      d.Free;
+    end;
+  end;
+
+begin
+  AssertTrue('a word at its end: ended', Pos(Bar('{|pict|pngblip 89|picscalex100{}b'),
+    Saved(Bar('{|pict|pngblip 89|picscalex100'))) > 0);
+  AssertTrue('a brace at its end: the text at once', Pos(Bar('{|pict|pngblip 89}b'),
+    Saved(Bar('{|pict|pngblip 89}'))) > 0);
 end;
 
 initialization
