@@ -60,6 +60,7 @@ type
     procedure TestTheWholeParseOfFieldsEightDeepIsLinear;
     procedure TestASaveBesideOneFieldAround100MB;
     procedure TestASaveBesideFieldsEightDeepAround30MB;
+    procedure TestA100MBRtfOfEquations;
   private
     procedure SaveBesideFields(ABytes: Int64; ANest: Integer);
   end;
@@ -514,6 +515,90 @@ begin
     buf.Free;
     f.Free;
   end;
+end;
+
+{ About ABytes of RTF of MakeRtf's paragraphs with AEquations of Word's equations among them,
+  one every so many paragraphs: each its own words and the picture Word keeps beside them (a
+  PNG in \*\shppict, a metafile in \nonshppict). AParas: the paragraphs that hold one. }
+procedure MakeEquationsRtf(const APath: string; ABytes: Int64; AEquations: Integer;
+  out AParas: TIntegerDynArray);
+var
+  f: TFileStream;
+  buf: TMemoryStream;
+  n, para, every: Integer;
+  png, eq: RawByteString;
+  data: TBytes;
+  b: TBGRABitmap;
+  st: TBytesStream;
+  i, x: Integer;
+const
+  D: array[0..15] of AnsiChar = '0123456789abcdef';
+begin
+  // a picture of an equation's size: dark strokes on white, as Word renders one
+  b := TBGRABitmap.Create(112, 48, BGRAWhite);
+  st := TBytesStream.Create;
+  try
+    x := 4;
+    while x < 108 do
+    begin
+      b.FillRect(x, 10, x + 3, 38, BGRABlack, dmSet);
+      Inc(x, 9);
+    end;
+    b.SaveToStreamAs(st, ifPng);
+    data := Copy(st.Bytes, 0, st.Size);
+  finally
+    st.Free;
+    b.Free;
+  end;
+  png := '';
+  for i := 0 to High(data) do
+  begin
+    if (i > 0) and (i mod 64 = 0) then png := png + #13#10;
+    png := png + D[data[i] shr 4] + D[data[i] and 15];
+  end;
+  eq := Bar('{|mmath{|*|moMath{|mr|i E=m}{|msSup{|me{|mr c}}{|msup{|mr 2}}}}' +
+    '{|mmathPict{|*|shppict{|pict{|*|picprop|shplid1025{|sp{|sn shapeType}{|sv 75}}}' +
+    '|picscalex100|picscaley100|picw112|pich48|picwgoal840|pichgoal360|pngblip ') + #13#10 + png +
+    Bar('}}{|nonshppict{|pict|picscalex100|picscaley100|picw1482|pich635|picwgoal840|pichgoal360' +
+    '|wmetafile8 010009000003220000000000050000000000040000000301080005000000130200000000' +
+    '030000000000}}}}');
+  SetLength(AParas, AEquations);
+  // (paragraphs are about 120 bytes: the equations are spread over the first 85 MB or so)
+  every := Max(1, (ABytes div 150) div (AEquations + 1));
+  f := TFileStream.Create(APath, fmCreate);
+  buf := TMemoryStream.Create;
+  try
+    WriteRaw(buf, '{\rtf1\ansi\ansicpg936\deff0{\fonttbl{\f0\fswiss\fcharset0 Arial;}' +
+      '{\f1\fnil\fcharset134 SimSun;}{\f34\froman\fcharset0 Cambria Math;}}' + #13#10 +
+      '{\colortbl ;\red200\green0\blue0;}' + #13#10 + '\viewkind4\uc1\pard\f0\fs20 ');
+    n := 0;
+    para := 0;
+    while f.Size + buf.Size < ABytes do
+    begin
+      if (para mod every = every div 2) and (n < AEquations) then
+      begin
+        WriteRaw(buf, 'Paragraph ' + IntToStr(para) + ' holds an equation: ' + eq +
+          ' and more text after it.\par' + #13#10);
+        AParas[n] := para;
+        Inc(n);
+      end
+      else
+        WriteRaw(buf, 'Paragraph ' + IntToStr(para) + ' with \b bold\b0  and \cf1 coloured\cf0  words, ' +
+          '\f1 3?▙1?➗9?㕹7?\f0  and more text.\par' + #13#10);
+      Inc(para);
+      if buf.Size > 1024 * 1024 then
+      begin
+        f.WriteBuffer(buf.Memory^, buf.Size);
+        buf.Clear;
+      end;
+    end;
+    WriteRaw(buf, '}' + #13#10);
+    f.WriteBuffer(buf.Memory^, buf.Size);
+  finally
+    buf.Free;
+    f.Free;
+  end;
+  SetLength(AParas, n);
 end;
 
 function WorkingSetMB: Double;
@@ -1473,6 +1558,107 @@ end;
 procedure TTyRichEditPerfTest.TestASaveBesideFieldsEightDeepAround30MB;
 begin
   SaveBesideFields(30 * 1024 * 1024, 8);
+end;
+
+{ A 100 MB RTF with 2,000 of Word's equations, each shown as the picture the file keeps
+  beside it: the first screen within 3 s, a jump to the middle equation within 300 ms, a key
+  typed right before an equation to the end of its paint within 90 ms. Then the view put on
+  every equation in turn and back to the start: the working set then against what it was
+  after the first screen (printed with the picture cache's bound; asserted: within three
+  times the file). }
+procedure TTyRichEditPerfTest.TestA100MBRtfOfEquations;
+var
+  path: string;
+  bmp: TBitmap;
+  paras: TIntegerDynArray;
+  t0, first, mid, key: Double;
+  t: TTyRichText;
+  at: TTyRichPos;
+  i, p, depth: Integer;
+  w0, w1: Double;
+  look0: Int64;
+begin
+  CheckRoom;
+  path := NewFile('.rtf');
+  MakeEquationsRtf(path, CFileBytes, 2000, paras);
+  AssertEquals('2000 equations written', 2000, Length(paras));
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf32bit;
+    bmp.SetSize(FRich.Width, FRich.Height);
+    look0 := TyRichKeptPictureLookups;
+    t0 := Clock;
+    FRich.LoadFromFile(path);
+    TPerfRich(FRich).PaintInto(bmp);
+    first := Clock - t0;
+    Report(Format('rtf of equations %d MB: load (first slice) and first paint',
+      [SizeOfFile(path) div (1024 * 1024)]), first);
+    t0 := Clock;
+    FRich.FinishLoading;
+    Report(Format('rtf of equations: the rest indexed (%d paragraphs; not asserted)',
+      [FRich.Document.Text.ParaCount]), Clock - t0);
+    TPerfRich(FRich).PaintInto(bmp);
+    while TPerfRich(FRich).Step do ;
+    w0 := WorkingSetMB;
+    t := FRich.Document.Text;
+    // the middle equation: the view put there and painted
+    p := paras[Length(paras) div 2];
+    t0 := Clock;
+    FRich.SelStart := t.ParaStart(p) + 3;
+    FRich.ScrollCaretIntoView;
+    TPerfRich(FRich).PaintInto(bmp);
+    mid := Clock - t0;
+    Report(Format('rtf of equations: a jump to the middle equation (paragraph %d)', [p]), mid);
+    AssertTrue(Format('the view at it (paragraph %d)', [FRich.TopParagraph]),
+      Abs(FRich.TopParagraph - p) < 100);
+    // a key right before the equation
+    at := t.ParaStart(p);
+    while FRich.Document.ObjectAt(at) = nil do Inc(at);
+    FRich.SelStart := at;
+    FRich.ScrollCaretIntoView;
+    TPerfRich(FRich).PaintInto(bmp);
+    while TPerfRich(FRich).Step do ;
+    TPerfRich(FRich).PaintInto(bmp);
+    depth := FRich.Document.UndoDepth;
+    t0 := Clock;
+    TPerfRich(FRich).TypeChar('x');
+    TPerfRich(FRich).PaintInto(bmp);
+    key := Clock - t0;
+    AssertEquals('typed before the equation', depth + 1, FRich.Document.UndoDepth);
+    Report('rtf of equations: a character typed right before an equation, to the end of its paint',
+      key);
+    // every equation in turn, its picture made ready, and back to the start
+    t0 := Clock;
+    for i := 0 to High(paras) do
+    begin
+      FRich.SelStart := t.ParaStart(paras[i]);
+      FRich.ScrollCaretIntoView;
+      TPerfRich(FRich).PaintInto(bmp);
+      while TPerfRich(FRich).Step do ;
+    end;
+    TPerfRich(FRich).Key(VK_HOME, [ssCtrl]);
+    TPerfRich(FRich).PaintInto(bmp);
+    while TPerfRich(FRich).Step do ;
+    Report('rtf of equations: the view put on each of the 2000 equations and back (not asserted)',
+      Clock - t0);
+    w1 := WorkingSetMB;
+    WriteLn(Format('TTyRichEditPerfTest: rtf of equations: working set %.0f MB after the first ' +
+      'screen, %.0f MB after every equation and back (%.0f MB more; the picture cache''s bound ' +
+      '%d MB, held now %.1f MB in %d entries); pictures looked for: %d', [w0, w1, w1 - w0,
+      FRich.Layouter.PictureCacheLimit div (1024 * 1024),
+      FRich.Layouter.PictureCacheBytes / (1024 * 1024), FRich.Layouter.PictureCacheCount,
+      TyRichKeptPictureLookups - look0]));
+    WriteLn('TTyRichEditPerfTest: rtf of equations: peak working set: ' + PeakWorkingSet);
+    AssertTrue(Format('the first screen in %.0f ms', [first]), first <= CFirstScreenMs);
+    AssertTrue(Format('the middle equation in %.0f ms', [mid]), mid <= CScrollMs);
+    AssertTrue(Format('a key before an equation in %.1f ms', [key]), key <= CKeystrokeMs);
+    {$IFDEF MSWINDOWS}
+    AssertTrue(Format('the working set %.0f MB within three times the file', [w1]),
+      w1 <= 3 * SizeOfFile(path) / (1024 * 1024));
+    {$ENDIF}
+  finally
+    bmp.Free;
+  end;
 end;
 
 initialization
