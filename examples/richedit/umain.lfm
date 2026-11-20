@@ -133,6 +133,7 @@ object MainForm: TMainForm
         Top = 4
         Width = 28
         Action = ActBold
+        AllowAllUp = True
         ShowHint = True
         StyleClass = 'ghost'
         IconFont = LucideFont
@@ -146,6 +147,7 @@ object MainForm: TMainForm
         Top = 4
         Width = 28
         Action = ActItalic
+        AllowAllUp = True
         ShowHint = True
         StyleClass = 'ghost'
         IconFont = LucideFont
@@ -159,6 +161,7 @@ object MainForm: TMainForm
         Top = 4
         Width = 28
         Action = ActUnderline
+        AllowAllUp = True
         ShowHint = True
         StyleClass = 'ghost'
         IconFont = LucideFont
@@ -172,6 +175,7 @@ object MainForm: TMainForm
         Top = 4
         Width = 28
         Action = ActStrikeOut
+        AllowAllUp = True
         ShowHint = True
         StyleClass = 'ghost'
         IconFont = LucideFont
@@ -185,6 +189,7 @@ object MainForm: TMainForm
         Top = 4
         Width = 28
         Action = ActSuperscript
+        AllowAllUp = True
         ShowHint = True
         StyleClass = 'ghost'
         IconFont = LucideFont
@@ -198,6 +203,7 @@ object MainForm: TMainForm
         Top = 4
         Width = 28
         Action = ActSubscript
+        AllowAllUp = True
         ShowHint = True
         StyleClass = 'ghost'
         IconFont = LucideFont
@@ -217,6 +223,7 @@ object MainForm: TMainForm
         Top = 4
         Width = 28
         Action = ActAlignLeft
+        AllowAllUp = True
         ShowHint = True
         StyleClass = 'ghost'
         IconFont = LucideFont
@@ -230,6 +237,7 @@ object MainForm: TMainForm
         Top = 4
         Width = 28
         Action = ActAlignCenter
+        AllowAllUp = True
         ShowHint = True
         StyleClass = 'ghost'
         IconFont = LucideFont
@@ -243,6 +251,7 @@ object MainForm: TMainForm
         Top = 4
         Width = 28
         Action = ActAlignRight
+        AllowAllUp = True
         ShowHint = True
         StyleClass = 'ghost'
         IconFont = LucideFont
@@ -256,6 +265,7 @@ object MainForm: TMainForm
         Top = 4
         Width = 28
         Action = ActJustify
+        AllowAllUp = True
         ShowHint = True
         StyleClass = 'ghost'
         IconFont = LucideFont
@@ -275,6 +285,7 @@ object MainForm: TMainForm
         Top = 4
         Width = 28
         Action = ActBullets
+        AllowAllUp = True
         ShowHint = True
         StyleClass = 'ghost'
         IconFont = LucideFont
@@ -288,6 +299,7 @@ object MainForm: TMainForm
         Top = 4
         Width = 28
         Action = ActNumbering
+        AllowAllUp = True
         ShowHint = True
         StyleClass = 'ghost'
         IconFont = LucideFont
@@ -518,50 +530,62 @@ object MainForm: TMainForm
     end
     object ActBold: TTyRichEditBold
       Category = 'Rich edit'
+      GroupIndex = 101
       RichEdit = Editor
     end
     object ActItalic: TTyRichEditItalic
       Category = 'Rich edit'
+      GroupIndex = 102
       RichEdit = Editor
     end
     object ActUnderline: TTyRichEditUnderline
       Category = 'Rich edit'
+      GroupIndex = 103
       RichEdit = Editor
     end
     object ActStrikeOut: TTyRichEditStrikeOut
       Category = 'Rich edit'
+      GroupIndex = 104
       RichEdit = Editor
     end
     object ActSuperscript: TTyRichEditSuperscript
       Category = 'Rich edit'
+      GroupIndex = 105
       RichEdit = Editor
     end
     object ActSubscript: TTyRichEditSubscript
       Category = 'Rich edit'
+      GroupIndex = 106
       RichEdit = Editor
     end
     object ActAlignLeft: TTyRichEditAlignLeft
       Category = 'Rich edit'
+      GroupIndex = 107
       RichEdit = Editor
     end
     object ActAlignCenter: TTyRichEditAlignCenter
       Category = 'Rich edit'
+      GroupIndex = 108
       RichEdit = Editor
     end
     object ActAlignRight: TTyRichEditAlignRight
       Category = 'Rich edit'
+      GroupIndex = 109
       RichEdit = Editor
     end
     object ActJustify: TTyRichEditAlignJustify
       Category = 'Rich edit'
+      GroupIndex = 110
       RichEdit = Editor
     end
     object ActBullets: TTyRichEditBullets
       Category = 'Rich edit'
+      GroupIndex = 111
       RichEdit = Editor
     end
     object ActNumbering: TTyRichEditNumbering
       Category = 'Rich edit'
+      GroupIndex = 112
       RichEdit = Editor
     end
     object ActIndentIncrease: TTyRichEditIndentIncrease
