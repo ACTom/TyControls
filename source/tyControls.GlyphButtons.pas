@@ -130,6 +130,10 @@ type
     { True once anything has WRITTEN ShowCaption on this button. AdoptShowCaption
       (the container default) then leaves it alone forever — see there. }
     FShowCaptionExplicit: Boolean;
+    { #238. True while the container lays its buttons out as icons stacked over captions
+      (AdoptCaptionRow): a stacked button then keeps the caption's line whether or not it
+      draws a caption, so its icon is its neighbours' size, at its neighbours' place. }
+    FCaptionRow: Boolean;
     procedure SetSpacing(AValue: Integer);
     procedure SetIconFont(AValue: TTyIconFont);
     procedure SetGlyphName(const AValue: string);
@@ -180,8 +184,11 @@ type
     { True when the caption is really drawn beside or under the glyph: ShowCaption, and a
       caption to show. What every measurement has to agree with the paint about (#228). }
     function CaptionDrawn: Boolean;
-    { True for a glyph stacked above or below a drawn caption that nothing gave a size: it
-      takes what the box leaves over the caption, and never under TyGlyphStackedMin (#229). }
+    { True when a stacked button has a caption's line to keep: its caption is drawn, or it
+      sits in a row of icons stacked over captions and draws none (#238). }
+    function StackedOverCaptionLine: Boolean;
+    { True for a glyph stacked above or below a caption's line that nothing gave a size: it
+      takes what the box leaves over that line, and never under TyGlyphStackedMin (#229). }
     function StackedAutoGlyph: Boolean;
     { #232. A caption that is not drawn serves as the hint when the button has none. }
     procedure CMHintShow(var Message: TLMessage); message CM_HINTSHOW;
@@ -246,6 +253,14 @@ type
       choice — exactly the bug ApplyToButton had when it re-wrote every child's
       StyleClass on every relayout. }
     procedure AdoptShowCaption(AValue: Boolean);
+    { #238. Told by a container whose row stacks every icon over a caption (TTyToolBar
+      showing captions with List off). On
+      such a row an icon nobody sized is what the caption's line leaves of the button; a
+      button that draws no caption -- it has none, or its host hid it -- would otherwise
+      fill the whole button and stand two or three times as large beside the others. Told
+      this, a stacked button keeps the line: same size, same place. It changes nothing for
+      a button that is not stacked. }
+    procedure AdoptCaptionRow(AValue: Boolean);
   published
     { Inherited from TTyButton and still off by default (a designed button keeps the
       width its .lfm gave it). Re-published only to record what it hugs HERE: the glyph
@@ -678,6 +693,13 @@ begin
   Invalidate;
 end;
 
+procedure TTyGlyphButtonBase.AdoptCaptionRow(AValue: Boolean);
+begin
+  if FCaptionRow = AValue then Exit;
+  FCaptionRow := AValue;
+  Invalidate;
+end;
+
 function TTyGlyphButtonBase.GetGlyphSource(AStates: TTyStateSet): TTyGlyphSource;
 begin
   { The base is state-BLIND on purpose: AStates is accepted and not read, so this answers
@@ -763,10 +785,14 @@ begin
   Result := FShowCaption and (Caption <> '');
 end;
 
+function TTyGlyphButtonBase.StackedOverCaptionLine: Boolean;
+begin
+  Result := (FGlyphLayout in [glTop, glBottom]) and (CaptionDrawn or FCaptionRow);
+end;
+
 function TTyGlyphButtonBase.StackedAutoGlyph: Boolean;
 begin
-  Result := (FGlyphLayout in [glTop, glBottom]) and CaptionDrawn and CanShowGlyph
-    and (GivenGlyphSize <= 0);
+  Result := StackedOverCaptionLine and CanShowGlyph and (GivenGlyphSize <= 0);
 end;
 
 procedure TTyGlyphButtonBase.CMHintShow(var Message: TLMessage);
@@ -834,8 +860,10 @@ begin
     drawn: DrawContent skips the caption rect entirely when Caption is empty, exactly as the
     preferred WIDTH refuses to pay a gap to nothing. Same EffectiveGapPx the paint uses, so
     a per-instance Spacing or a skin retuning the metric moves both together.
-    #228: "really drawn" includes ShowCaption -- a hidden caption used to be paid for. }
-  if CaptionDrawn then
+    #228: "really drawn" includes ShowCaption -- a hidden caption used to be paid for.
+    #238: in a row of icons stacked over captions the line is kept by every button, so the
+    row is one height and an icon does not move when a caption comes or goes. }
+  if StackedOverCaptionLine then
   begin
     gapPx := EffectiveGapPx(APPI);
     Inc(Result, gapPx + lineH);
@@ -966,7 +994,9 @@ begin
     Asked of the PAINTER rather than of Self: DrawContent is handed a painter that was armed
     once in RenderTo, and taking the direction from the same place the text did is what stops
     a slot and its caption from disagreeing about which way this frame reads. }
-  if FShowCaption then
+  { #238: a stacked button that keeps a caption's line it does not draw is split like its
+    neighbours, so its icon sits over where the caption would be and not mid-button. }
+  if FShowCaption or StackedOverCaptionLine then
     TyGlyphButtonSplit(AContentRect, glyphPx, gapPx,
       TyBidiFlipGlyphLayout(FGlyphLayout, APainter.RightToLeft), glyphRect, captionRect)
   else

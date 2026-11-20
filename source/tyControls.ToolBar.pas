@@ -1854,6 +1854,9 @@ begin
       G.Images := FImages;
     // Container default; a no-op on any tool whose ShowCaption the host wrote itself.
     G.AdoptShowCaption(FShowCaptions);
+    { #238: a row of icons stacked over captions -- a tool that draws no caption keeps the
+      caption's line, and with it its neighbours' icon size. }
+    G.AdoptCaptionRow(FShowCaptions and not FList);
     { A tool button whose ImageIndex was set before any collection existed has been holding the
       request; the line above may just have handed it the collection that resolves it. (Private
       is unit-wide in Object Pascal, which is why the button can live in this unit and keep its
