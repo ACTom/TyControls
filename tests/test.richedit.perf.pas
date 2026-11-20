@@ -60,6 +60,7 @@ type
     procedure TestTheWholeParseOfFieldsEightDeepIsLinear;
     procedure TestASaveBesideOneFieldAround100MB;
     procedure TestASaveBesideFieldsEightDeepAround30MB;
+    procedure TestAContentsPastedIntoAnotherDocument;
     procedure TestA100MBRtfOfEquations;
     procedure TestAKeyWithARulerLinked;
   private
@@ -1716,6 +1717,83 @@ begin
     rb.Free;
     bmp.Free;
   end;
+end;
+
+{ A table of contents of 500 and of 5,000 entries (each a link holding its text, a tab and a
+  page number field) copied from its file and pasted into another document - where it is the
+  model's own field -, then that document saved: the times of each, printed; the 5,000 within
+  ten times the 500 and a bit (linear), not asserted against a line of its own. }
+procedure TTyRichEditPerfTest.TestAContentsPastedIntoAnotherDocument;
+const
+  counts: array[0..1] of Integer = (500, 5000);
+var
+  pasteMs, saveMs: array[0..1] of Double;
+  k, i: Integer;
+  s, rtf: RawByteString;
+  src: TTyRichDocument;
+  st, ss: TBytesStream;
+  b: RawByteString;
+  t0: Double;
+  os: TMemoryStream;
+begin
+  for k := 0 to 1 do
+  begin
+    s := '{|rtf1|ansi|ansicpg936|deff0{|fonttbl{|f0|fswiss Arial;}{|f1|fnil|fcharset134 SimSun;}}' +
+      '{|colortbl;|red0|green0|blue255;}|pard|f0 Contents: {|field|fldedit{|*|fldinst TOC ||o "1-3" ||h}{|fldrslt ';
+    for i := 1 to counts[k] do
+    begin
+      s := s + '{|field{|*|fldinst HYPERLINK ||l "_Toc' + IntToStr(i) + '"}{|fldrslt {|cs15|ul|cf1|f1 ' +
+        '|u31532?' + IntToStr(i) + '|u31456? Chapter ' + IntToStr(i) + '|tab {|field{|*|fldinst PAGEREF _Toc' +
+        IntToStr(i) + ' ||h}{|fldrslt ' + IntToStr(3 * i) + '}}}}}';
+      if i < counts[k] then s := s + '|par ';
+    end;
+    s := s + '}} after|par}';
+    src := TTyRichDocument.Create;
+    try
+      b := Bar(s);
+      st := TBytesStream.Create;
+      st.WriteBuffer(b[1], Length(b));
+      st.Position := 0;
+      try
+        TyRichLoadRtfFull(src, st);
+      finally
+        st.Free;
+      end;
+      ss := TBytesStream.Create;
+      try
+        TyRichSaveRtfRange(src, ss, 0, src.Text.Length);
+        rtf := '';
+        SetLength(rtf, ss.Size);
+        Move(ss.Bytes[0], rtf[1], ss.Size);
+        SetCodePage(rtf, CP_NONE, False);
+      finally
+        ss.Free;
+      end;
+    finally
+      src.Free;
+    end;
+    FRich.Lines.Text := 'another document';
+    FRich.SelStart := 0;
+    TPerfRich(FRich).ClipRtf := rtf;
+    t0 := Clock;
+    FRich.PasteFromClipboard;
+    pasteMs[k] := Clock - t0;
+    TPerfRich(FRich).ClipRtf := '';
+    AssertTrue('pasted', FRich.Document.Text.ParaCount >= counts[k]);
+    os := TMemoryStream.Create;
+    try
+      t0 := Clock;
+      FRich.SaveToStream(os, rfRtf);
+      saveMs[k] := Clock - t0;
+      AssertTrue('saved', os.Size > 0);
+    finally
+      os.Free;
+    end;
+    Report(Format('a contents of %d entries pasted into another document', [counts[k]]), pasteMs[k]);
+    Report(Format('... that document saved', [counts[k]]), saveMs[k]);
+  end;
+  WriteLn(Format('TTyRichEditPerfTest: 5000 / 500: the paste %.1f times, the save %.1f times',
+    [pasteMs[1] / Max(0.1, pasteMs[0]), saveMs[1] / Max(0.1, saveMs[0])]));
 end;
 
 initialization
