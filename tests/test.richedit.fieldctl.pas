@@ -117,6 +117,7 @@ type
     procedure TestTheHandFollowsCtrlAndReadOnly;
     procedure TestAPointerMoveReadsNothingAgain;
     procedure TestTheLinkAndFieldQueries;
+    procedure TestALineBreaksAtAFieldOnlyWhereTheCaretRests;
   end;
 
 implementation
@@ -1602,6 +1603,125 @@ begin
   a := -7;
   AssertFalse('outside every field', FRich.GetFieldRange(Doc.Text.Length, a, n, inst));
   AssertEquals('the variables left alone', Int64(-7), a);
+end;
+
+{ A line breaks inside a run of marks only where the caret rests there, and only where the
+  text would break by itself: a link that starts where a line wraps has its open mark on the
+  line of its first character, a link's last character and its close mark stay on one line, and
+  Home inside such a link goes to its start on that same line. Checked over many widths, with
+  Chinese text, Latin words with spaces, a Latin word a link starts in the middle of, and a
+  table of contents' entries. }
+procedure TTyRichFieldControlTest.TestALineBreaksAtAFieldOnlyWhereTheCaretRests;
+var
+  s: RawByteString;
+  k, w, starts, total: Integer;
+  what: string;
+
+  function Top(APos: TTyRichPos): Integer;
+  begin
+    Result := FRich.PositionRect(APos).Top;
+  end;
+
+  procedure CheckAll(const ADoc: string);
+  var
+    q, m: TTyRichPos;
+    t0: Integer;
+  begin
+    for m := 0 to Doc.Text.Length - 1 do
+    begin
+      if IsOpen(m) then
+      begin
+        AssertEquals(Format('%s, width %d: the open mark at %d on its first character''s line',
+          [ADoc, w, m]), Top(m + 1), Top(m));
+        // a link at a line's start: its open mark is the line's first place
+        if (m > 0) and not Unseen(m - 1) and (Top(m) <> Top(m - 1)) then
+        begin
+          Inc(starts);
+          // Home from inside it: its start, on its own line
+          q := m + 1;
+          while Unseen(q) do Inc(q);
+          FRich.SelStart := q + 1;
+          Press(VK_HOME);
+          AssertEquals(Format('%s, width %d: Home inside a link at a line''s start', [ADoc, w]),
+            RestOf(m), FRich.CaretIndex);
+          t0 := FRich.CaretClientRect.Top;
+          AssertEquals(Format('%s, width %d: the caret there on the link''s line', [ADoc, w]),
+            Top(q), t0);
+          // End on the line before ends before the link, Home on it goes to that line's start
+          Press(VK_LEFT);
+          AssertTrue(Format('%s, width %d: Left: the line before', [ADoc, w]),
+            FRich.CaretClientRect.Top < t0);
+          Press(VK_END);
+          AssertTrue(Format('%s, width %d: End on the line before: before the link', [ADoc, w]),
+            FRich.CaretIndex <= m);
+          Press(VK_HOME);
+          AssertTrue(Format('%s, width %d: Home on the line before: that line', [ADoc, w]),
+            FRich.CaretClientRect.Top < t0);
+        end;
+      end
+      // (one at a paragraph's start closes what the paragraph before ended inside)
+      else if IsClose(m) and (m > Doc.Text.ParaStart(Doc.Text.ParaOfPos(m))) and not Unseen(m - 1) then
+        AssertEquals(Format('%s, width %d: the close mark at %d on its last character''s line',
+          [ADoc, w, m]), Top(m - 1), Top(m));
+    end;
+  end;
+
+begin
+  for k := 0 to 3 do
+  begin
+    case k of
+      0:
+        begin
+          what := 'Chinese';
+          s := Head;
+          for w := 1 to 40 do
+            s := s + '|u20013?|u25991?|u23383?{|field{|*|fldinst HYPERLINK "x"}{|fldrslt ' +
+              '|u38142?|u25509?|u25991?}}|u23383?';
+          s := s + '|par}';
+        end;
+      1:
+        begin
+          what := 'Latin words';
+          s := Head;
+          for w := 1 to 40 do
+            s := s + 'some words ' + '{|field{|*|fldinst HYPERLINK "x"}{|fldrslt linked text}} ';
+          s := s + '|par}';
+        end;
+      2:
+        begin
+          what := 'a link inside a word';
+          s := Head;
+          for w := 1 to 30 do
+            s := s + 'abcdefgh{|field{|*|fldinst HYPERLINK "x"}{|fldrslt ijkl}}mnop ';
+          s := s + '|par}';
+        end;
+    else
+      begin
+        what := 'a table of contents';
+        s := Head + '{|field{|*|fldinst TOC ||o "1-3" ||h}{|fldrslt ';
+        for w := 1 to 12 do
+          s := s + '{|field{|*|fldinst HYPERLINK ||l "_Toc' + IntToStr(w) + '"}{|fldrslt Chapter ' +
+            IntToStr(w) + ' with a title long enough to wrap|tab {|field{|*|fldinst PAGEREF _Toc' +
+            IntToStr(w) + ' ||h}{|fldrslt ' + IntToStr(w) + '}}}}|par ';
+        s := s + '}} after|par}';
+      end;
+    end;
+    Load(Rtf(s));
+    starts := 0;
+    total := 0;
+    w := 150;
+    while w <= 460 do
+    begin
+      FRich.SetBounds(0, 0, w, 3000);
+      FRich.UpdateView;
+      CheckAll(what);
+      Inc(total, starts);
+      starts := 0;
+      Inc(w, 11);
+    end;
+    if k in [0, 1] then
+      AssertTrue(what + ': some link began a line', total > 0);
+  end;
 end;
 
 initialization
