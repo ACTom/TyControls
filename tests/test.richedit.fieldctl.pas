@@ -119,6 +119,7 @@ type
     procedure TestTheLinkAndFieldQueries;
     procedure TestALineBreaksAtAFieldOnlyWhereTheCaretRests;
     procedure TestDownAndUpNeverSkipALine;
+    procedure TestAPointerOverALongContentsFindsItOnce;
   end;
 
 implementation
@@ -1953,6 +1954,79 @@ begin
     end;
   finally
     plain.Free;
+  end;
+end;
+
+{ A pointer travelling down a table of contents whose entries are not links (text, a tab, a
+  page number) and back up, over each entry's page number: the contents' own field is found
+  once, however many other fields the pointer met since - for 5,000 entries and for 50,000 the
+  same count, so a move never pays the contents' length again. }
+procedure TTyRichFieldControlTest.TestAPointerOverALongContentsFindsItOnce;
+const
+  Moves = 300;
+var
+  m: TMemoryStream;
+  n, i, e, k, j: Integer;
+  s: RawByteString;
+  s0, r0: Int64;
+  q: TTyRichPos;
+  p: TPoint;
+  url: string;
+  runs: TTyRunArray;
+
+  procedure Put(const S: RawByteString);
+  begin
+    if S <> '' then m.WriteBuffer(S[1], Length(S));
+  end;
+
+begin
+  for k := 0 to 1 do
+  begin
+    if k = 0 then n := 5000 else n := 50000;
+    m := TMemoryStream.Create;
+    try
+      Put(Rtf(Head + '{|field{|*|fldinst TOC ||o "1-3"}{|fldrslt '));
+      for i := 1 to n do
+      begin
+        Put(Rtf('Chapter ' + IntToStr(i) + '|tab {|field{|*|fldinst PAGEREF _Toc' + IntToStr(i) +
+          ' ||h}{|fldrslt ' + IntToStr(i + 2) + '}}'));
+        if i < n then Put(Rtf('|par '));
+      end;
+      Put(Rtf('}} after|par}'));
+      s := '';
+      SetLength(s, m.Size);
+      Move(m.Memory^, s[1], m.Size);
+      SetCodePage(s, CP_NONE, False);
+    finally
+      m.Free;
+    end;
+    Load(s);
+    FRich.ReadOnly := True;
+    s0 := FRich.Searches;
+    r0 := FRich.Reads;
+    for j := 0 to 2 * Moves - 1 do
+    begin
+      // down, then back up the same entries
+      if j < Moves then e := (Int64(j) * n) div Moves else e := (Int64(2 * Moves - 1 - j) * n) div Moves;
+      // the entry's page number: the character after its own open mark
+      runs := Doc.RunsOf(e);
+      q := -1;
+      for i := High(runs) downto 0 do
+        if (runs[i].Obj is TTyRichFieldMark) and (TTyRichFieldMark(runs[i].Obj).Kind = rfmOpen) then
+        begin
+          q := Doc.Text.ParaStart(e) + runs[i].Start + 1;
+          Break;
+        end;
+      AssertTrue(Format('%d entries: entry %d''s page number', [n, e]), q > 0);
+      FRich.SelStart := q;
+      p := PointIn(q, 1);
+      FRich.MMove([], p.X, p.Y);
+      AssertFalse(Format('%d entries: no link at entry %d', [n, e]), FRich.LinkAtPoint(p.X, p.Y, url));
+    end;
+    AssertEquals(Format('%d entries: the contents'' field found once', [n]), Int64(1),
+      FRich.Searches - s0);
+    // (each entry's page number read once, the contents' instruction once)
+    AssertTrue(Format('%d entries: what is read', [n]), FRich.Reads - r0 <= 2 * Moves + 1);
   end;
 end;
 

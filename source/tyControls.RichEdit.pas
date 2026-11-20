@@ -218,6 +218,7 @@ type
     Depth: Integer;
     Link: Boolean;
     URL: string;
+    Used: Int64;   // when it was last asked for
   end;
 
   { What a background search runs: a find (FindNextAsync) or a replace (ReplaceAllAsync). }
@@ -778,6 +779,11 @@ type
     FKnownState: Int64;
     FKnown: array of TTyRichKnownField;
     FKnownCount: Integer;
+    { Bounded: a new field takes the place of the one asked for longest ago - never of one
+      asked for in this look-up (FKnownCall) nor of one the character looked at (FKnownAt) is
+      inside (so the fields around the pointer stay while it is inside them). }
+    FKnownClock, FKnownCall: Int64;
+    FKnownAt: TTyRichPos;
     FLinkReads, FLinkSearches: Int64;
     { A selected object's handles and a resize's outline on the surface: where they are drawn
     (raster pixels of the view, as CaretRaster gives them; empty: none) - the surface's truth,
@@ -5891,7 +5897,12 @@ var
   i: Integer;
 begin
   for i := 0 to FKnownCount - 1 do
-    if FKnown[i].Open = AOpen then Exit(i);
+    if FKnown[i].Open = AOpen then
+    begin
+      Inc(FKnownClock);
+      FKnown[i].Used := FKnownClock;
+      Exit(i);
+    end;
   Result := -1;
 end;
 
@@ -5902,7 +5913,11 @@ begin
   for i := 0 to FKnownCount - 1 do
     if (FKnown[i].Depth = ADepth) and (FKnown[i].Close >= 0) and (FKnown[i].Open < APos) and
       (APos <= FKnown[i].Close) then
+    begin
+      Inc(FKnownClock);
+      FKnown[i].Used := FKnownClock;
       Exit(i);
+    end;
   Result := -1;
 end;
 
@@ -5914,14 +5929,32 @@ const
 var
   o: TTyRichObject;
   url: string;
+  i: Integer;
+  oldest: Int64;
 begin
   Result := KnownField(AOpen);
   if Result < 0 then
   begin
-    if FKnownCount >= CKnownMax then FKnownCount := 0;
-    if FKnownCount >= Length(FKnown) then SetLength(FKnown, FKnownCount * 2 + 8);
-    Result := FKnownCount;
-    Inc(FKnownCount);
+    if FKnownCount >= CKnownMax then
+    begin
+      // the one asked for longest ago that this look-up and the place looked at do not need
+      oldest := FKnownCall;
+      for i := 0 to FKnownCount - 1 do
+        if (FKnown[i].Used < oldest) and not ((FKnown[i].Close >= 0) and
+          (FKnown[i].Open < FKnownAt) and (FKnownAt <= FKnown[i].Close)) then
+        begin
+          oldest := FKnown[i].Used;
+          Result := i;
+        end;
+    end;
+    if Result < 0 then
+    begin
+      if FKnownCount >= Length(FKnown) then SetLength(FKnown, FKnownCount * 2 + 8);
+      Result := FKnownCount;
+      Inc(FKnownCount);
+    end;
+    Inc(FKnownClock);
+    FKnown[Result].Used := FKnownClock;
     FKnown[Result].Open := AOpen;
     FKnown[Result].Close := -1;
     FKnown[Result].Depth := -1;
@@ -5960,6 +5993,10 @@ begin
     FKnownState := FDoc.ContentState;
     FKnownCount := 0;
   end;
+  // (what this look-up asks for from now on is not given up to it)
+  Inc(FKnownClock);
+  FKnownCall := FKnownClock;
+  FKnownAt := AChar;
   p := t.ParaOfPos(AChar);
   ps := t.ParaStart(p);
   FDoc.BeginRead;
