@@ -1334,6 +1334,8 @@ type
       edit there is an edit inside that result, refused as it is - the selection does not
       grow. Reads the two ends' paragraphs; those between by their depths (no parse). }
     function InsideOneResult(AFrom, ATo: TTyRichPos): Boolean;
+    { [AFrom, ATo) holds a field's mark. }
+    function TakesField(AFrom, ATo: TTyRichPos): Boolean;
     // the selection becomes that range, reported (GrowOverFields' and the delete keys')
     procedure ShowCover(AStart, ALen: TTyRichPos);
     { Links. CharBoxAt: the character whose box client point (X, Y) is on (-1: none - the
@@ -9987,7 +9989,41 @@ begin
     ShowCover(s, n);
     Exit;
   end;
+  { A key that would take whole fields (a word that holds them) selects them first too: the
+    next press deletes what is shown selected. }
+  if TakesField(a, b) then
+  begin
+    s := Math.Min(a, reach);
+    ShowCover(s, Math.Max(b, reachEnd) - s);
+    Exit;
+  end;
   if KeyDeleteAllowed(a, b) then DeleteText(a, b, True);
+end;
+
+function TTyCustomRichEdit.TakesField(AFrom, ATo: TTyRichPos): Boolean;
+var
+  s: UTF8String;
+  i, q: PtrInt;
+  c: TTyRichPos;
+begin
+  Result := False;
+  if ATo <= AFrom then Exit;
+  s := FDoc.Text.GetText(AFrom, ATo - AFrom);
+  // (an object's character found in the bytes, its place counted in characters)
+  q := 1;
+  c := AFrom;
+  while q <= Length(s) do
+  begin
+    if (Byte(s[q]) = $EF) and (Copy(s, q, 3) = TyRichObjectChar) and
+      (FDoc.ObjectAt(c) is TTyRichFieldMark) then
+      Exit(True);
+    i := 1;
+    if Byte(s[q]) >= $F0 then i := 4
+    else if Byte(s[q]) >= $E0 then i := 3
+    else if Byte(s[q]) >= $C0 then i := 2;
+    Inc(q, i);
+    Inc(c);
+  end;
 end;
 
 function TTyCustomRichEdit.KeyDeleteAllowed(AFrom, ATo: TTyRichPos): Boolean;

@@ -121,6 +121,7 @@ type
     procedure TestDownAndUpNeverSkipALine;
     procedure TestAPointerOverALongContentsFindsItOnce;
     procedure TestAKeyInsideAResultIsRefusedWhateverMarksAreNear;
+    procedure TestTheWordKeysSelectTheFieldsFirst;
   end;
 
 implementation
@@ -1110,18 +1111,73 @@ begin
   Click(p);
   Click(p, [ssDouble]);
   CheckSelection('a double click: the whole word, marks and all', 0, 8);
-  // Ctrl+Delete from the start: the word holds the field whole - it goes with it
+  { Ctrl+Delete from the start: the word holds the field whole - the word and its space are
+    selected first, the next press deletes them }
   FRich.SelStart := 0;
   Reset;
   Press(VK_DELETE, [ssCtrl]);
-  AssertEquals('the word and its space', 'gh', AllText);
+  CheckSelection('the word and its space selected', 0, 9);
   AssertEquals('nothing told', 0, FRich.Refused);
+  Press(VK_DELETE, [ssCtrl]);
+  AssertEquals('the word and its space', 'gh', AllText);
+  AssertEquals('still nothing told', 0, FRich.Refused);
   FRich.Undo;
   AssertTrue('the field back', IsOpen(2) and IsClose(5));
   // Ctrl+Backspace from the end of the word: the same word
   FRich.SelStart := 8;
   Press(VK_BACK, [ssCtrl]);
+  CheckSelection('back: the word selected', 0, 8);
+  Press(VK_BACK, [ssCtrl]);
   AssertEquals('back over the word', ' gh', AllText);
+end;
+
+{ The word delete keys at fields: a range that would take a field, whole or in part, is first
+  selected, grown to hold every field it cut whole, and nothing is deleted or told; the next
+  press deletes it. Ctrl+Delete at a link's own start, Ctrl+Backspace at its end, and a word
+  that holds three links, from its start, its end and the middle link's edges. }
+procedure TTyRichFieldControlTest.TestTheWordKeysSelectTheFieldsFirst;
+var
+  before: RawByteString;
+  o2, c2, wend: TTyRichPos;
+
+  procedure Twice(const AWhat: string; AAt: TTyRichPos; AKey: Word; AStart, ALen: TTyRichPos;
+    const AAfter: RawByteString);
+  begin
+    FRich.SelStart := AAt;
+    before := AllText;
+    Reset;
+    Press(AKey, [ssCtrl]);
+    CheckSelection(AWhat + ': selected first', AStart, ALen);
+    AssertEquals(AWhat + ': nothing deleted', Hex(before), Hex(AllText));
+    AssertEquals(AWhat + ': no step', 0, Doc.UndoDepth);
+    AssertEquals(AWhat + ': nothing told', 0, FRich.Refused);
+    Press(AKey, [ssCtrl]);
+    AssertEquals(AWhat + ': the second press deletes it', Hex(AAfter), Hex(AllText));
+    AssertEquals(AWhat + ': one step', 1, Doc.UndoDepth);
+    AssertEquals(AWhat + ': still nothing told', 0, FRich.Refused);
+    FRich.Undo;
+    AssertEquals(AWhat + ': undone', Hex(before), Hex(AllText));
+  end;
+
+begin
+  // ab [link] cd: the open mark at 3, the close mark at 8
+  Load(LinkDoc);
+  Twice('Ctrl+Delete at the link''s own start', 3, VK_DELETE, 3, 7, Raw('ab cd'));
+  Load(LinkDoc);
+  Twice('Ctrl+Backspace at the link''s end', 9, VK_BACK, 3, 6, Raw('ab  cd'));
+  // xx[l1][l2][l3]yy zz: one word holding three links
+  Load(Rtf(Head + 'xx{|field{|*|fldinst HYPERLINK "a"}{|fldrslt one}}{|field{|*|fldinst HYPERLINK "b"}' +
+    '{|fldrslt two}}{|field{|*|fldinst HYPERLINK "c"}{|fldrslt six}}yy zz|par}'));
+  o2 := 7;
+  AssertTrue('(the second link''s open mark)', IsOpen(o2));
+  c2 := Doc.FieldPartner(o2);
+  wend := PosOfText(' zz');
+  Twice('the word''s start, Ctrl+Delete', 0, VK_DELETE, 0, wend + 1, Raw('zz'));
+  Twice('the word''s end, Ctrl+Backspace', wend, VK_BACK, 0, wend, Raw(' zz'));
+  Twice('the middle link''s start, Ctrl+Delete', o2, VK_DELETE, o2, wend + 1 - o2,
+    Raw('xx') + OC + Raw('one') + OC + Raw('zz'));
+  Twice('the middle link''s end, Ctrl+Backspace', c2 + 1, VK_BACK, 0, c2 + 1,
+    OC + Raw('six') + OC + Raw('yy zz'));
 end;
 
 { Find: marks are not there - text across a field's edge and inside results is found, the range
