@@ -22,6 +22,8 @@ TTyScrollPanel 是 TyControls 库中的**自动平移滚动容器**，继承自 
 
 **子部件 typeKey：没有。** 视口只有一个盒子样式，两条内嵌滚动条是真正的 `TTyScrollBar` 子控件，走 `TyScrollBar` / `TyScrollThumb`。
 
+**令牌 `--scrollbox-bars` 同样适用**（`both` / `vertical` / `horizontal` / `none`，见 [scrollbox.md](scrollbox.md) §5）：不显示滚动条的那个方向，边缘自动平移照常工作。3.0.5 新增。
+
 ```pascal
 uses tyControls.ScrollPanel;
 ```

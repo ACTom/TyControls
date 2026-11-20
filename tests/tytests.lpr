@@ -17,7 +17,7 @@ uses
   test.calculator, test.calcedit,
   test.bevel, test.divider, test.paintpanel, test.sizebox,
   test.radiogroup, test.checkgroup, test.toolgrouppanel,
-  test.scrollbox, test.scrollpanel, test.expanel,
+  test.scrollbox, test.scrollbox.bars, test.scrollpanel, test.expanel,
   test.gridpanel, test.gridcell, test.relativepanel,
   test.toolbarex, test.controlbar, test.coolbar,
   test.headercontrol, test.listgrouppanel, test.listgrouppanel.entries,

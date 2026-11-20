@@ -13,7 +13,8 @@ type
     'TyScrollBox' typeKey (see GetStyleTypeKey). It hosts
     arbitrary child controls whose bounding box may exceed the viewport; a vertical
     and a horizontal TTyScrollBar (both csNoDesignVisible, owned by Self) appear ONLY
-    when the content overflows on that axis.
+    when the content overflows on that axis -- and the token --scrollbox-bars lets that
+    bar show (#239; an axis whose bar it leaves out scrolls all the same).
 
     A scroll offset (FScrollX/FScrollY, both >= 0) tracks how far the content has been
     scrolled, and it is the SINGLE SOURCE OF TRUTH: on a scrollbar change we commit the
@@ -41,6 +42,16 @@ type
     FScrollY: Integer;           // >= 0 : logical px the content is scrolled up
     FContentW: Integer;          // logical content extent (bounding box of children)
     FContentH: Integer;
+    { #239. WHETHER AN AXIS SCROLLS, apart from whether its bar is in view.
+
+      The two used to be one flag -- the bar's Visible -- read by the clamp, the wheel and
+      the layout area alike. --scrollbox-bars can leave a bar out, and its axis has to scroll
+      all the same, so each question has its own answer now: FAxisV/FAxisH say the content
+      overflows on the axis, FMaxX/FMaxY how far the view can go, and a bar's Visible only
+      that the bar is there and owns a gutter. With no token set, FAxisV = FVScrollBar.Visible
+      and FAxisH = FHScrollBar.Visible at every moment -- they are written side by side. }
+    FAxisV, FAxisH: Boolean;
+    FMaxX, FMaxY: Integer;
     FSyncing: Boolean;           // reentrancy guard while we drive the bars
     FInScrollBy: Boolean;        // guard so re-docking the bars is ignored by range calc
     FInUpdate: Boolean;          // reentrancy guard for UpdateScrollRange (see there)
@@ -87,6 +98,10 @@ type
     procedure Loaded; override;
     { #174: the bars take the new controller at once -- they took it at the next measure. }
     procedure SetController(AValue: TTyStyleController); override;
+    { #239: --scrollbox-bars arrives the way every style value does -- StyleOverride,
+      StyleClass, the controller or the theme changing. The base asks for a layout pass,
+      which measures again wherever one runs; this measures at once. }
+    procedure StyleLayoutChanged; override;
     procedure InsertControl(AControl: TControl; Index: Integer); override;
     { The viewport leaving -- freed, or moved to another parent -- is let go here, the one
       path both take; otherwise the box goes on laying out and scrolling a control it no
@@ -132,7 +147,7 @@ type
       thumb travels, the bar Position changes, and the content never moves. }
     procedure AdjustClientRect(var ARect: TRect); override;
     { Nudge the scroll offset by (ADx, ADy), clamped to the current scrollable range (0 on an
-      axis with no bar), and keep the bar thumbs in sync. For subclasses (e.g. TTyScrollPanel's
+      axis whose content fits), and keep the bar thumbs in sync. For subclasses (e.g. TTyScrollPanel's
       edge auto-pan). Safe to call after the layout has settled (bars configured). }
 
     { A scrollbar is an internal child; keep it out of the range measurement and out of
@@ -251,6 +266,12 @@ function TyScrollThumbPage(AViewport, ARange: Integer): Integer;
   scrollbar Max is set to this. }
 function TyScrollMax(AContentExtent, AViewport: Integer): Integer;
 
+{ #239. Which scroll bars a scroll box may show, from the value of --scrollbox-bars:
+  both | vertical | horizontal | none. Case and surrounding blanks do not matter. An empty
+  value, or one that is none of the four, means both: a word this unit does not know must
+  not cost a form its scroll bars. }
+procedure TyScrollBoxBars(const AText: string; out AVertical, AHorizontal: Boolean);
+
 implementation
 
 { --- Pure functions -------------------------------------------------------------- }
@@ -281,6 +302,15 @@ begin
   // The thumb should size proportionally to the visible fraction; PageSize = viewport.
   Result := AViewport;
   if Result < 1 then Result := 1;
+end;
+
+procedure TyScrollBoxBars(const AText: string; out AVertical, AHorizontal: Boolean);
+var
+  s: string;
+begin
+  s := LowerCase(Trim(AText));
+  AVertical := (s <> 'horizontal') and (s <> 'none');
+  AHorizontal := (s <> 'vertical') and (s <> 'none');
 end;
 
 { TTyScrollBox }
@@ -500,10 +530,13 @@ var
   minL, minT, maxR, maxB: Integer;
   haveChild: Boolean;
   viewW, viewH, thick: Integer;
-  wantV, wantH: Boolean;
-  vMax, hMax: Integer;
+  wantV, wantH: Boolean;     // the content overflows on this axis
+  mayV, mayH: Boolean;       // --scrollbox-bars lets this bar show (#239)
+  showV, showH: Boolean;     // so this bar is in view, and owns a gutter
   oldW, oldH: Integer;
   oldV, oldH2: Boolean;
+  oldAxisV, oldAxisH: Boolean;
+  barsMoved, unseen: Boolean;
   lead: Integer;
   pad, portW, portH: Integer;
 begin
@@ -512,6 +545,8 @@ begin
   oldH := FContentH;
   oldV := FVScrollBar.Visible;
   oldH2 := FHScrollBar.Visible;
+  oldAxisV := FAxisV;
+  oldAxisH := FAxisH;
 
   // 1) Content extent in LOGICAL (un-scrolled) coordinates, measured from the viewport
   //    origin (0,0) out to the far edge of the children. A child's current (scrolled)
@@ -545,28 +580,38 @@ begin
   viewH := Height - 2 * bw;
   if viewW < 0 then viewW := 0;
   if viewH < 0 then viewH := 0;
+  { #239. Whether an axis overflows and whether its bar is in view are two questions. Only a
+    bar in view takes room from the other axis, so one that --scrollbox-bars leaves out
+    cannot call the other up. }
+  TyScrollBoxBars(StyleToken('--scrollbox-bars', ''), mayV, mayH);
   wantV := TyScrollNeeded(FContentH, viewH - 2 * pad);
-  wantH := TyScrollNeeded(FContentW, viewW - 2 * pad - Ord(wantV) * thick);
-  wantV := TyScrollNeeded(FContentH, viewH - 2 * pad - Ord(wantH) * thick);
+  wantH := TyScrollNeeded(FContentW, viewW - 2 * pad - Ord(wantV and mayV) * thick);
+  wantV := TyScrollNeeded(FContentH, viewH - 2 * pad - Ord(wantH and mayH) * thick);
+  showV := wantV and mayV;
+  showH := wantH and mayH;
 
-  viewW := Width - 2 * bw - Ord(wantV) * thick;
-  viewH := Height - 2 * bw - Ord(wantH) * thick;
+  viewW := Width - 2 * bw - Ord(showV) * thick;
+  viewH := Height - 2 * bw - Ord(showH) * thick;
   if viewW < 0 then viewW := 0;
   if viewH < 0 then viewH := 0;
   portW := viewW - 2 * pad;   // the viewport: what the content scrolls in
   portH := viewH - 2 * pad;
   if portW < 0 then portW := 0;
   if portH < 0 then portH := 0;
+  { How far the view can go on each axis. Kept here and not read back from the bars: a bar
+    that is out of view is not configured, and its axis scrolls all the same (#239). }
+  FMaxX := TyScrollMax(FContentW, portW);
+  FMaxY := TyScrollMax(FContentH, portH);
   { LeadingInset cannot be used yet -- it reads FVScrollBar.Visible, and this pass is what
     DECIDES that. Same number, from the decision instead of from the outcome. }
-  if IsRightToLeft and wantV then lead := thick else lead := 0;
+  if IsRightToLeft and showV then lead := thick else lead := 0;
 
   // 3) Clamp the offset to the (possibly reduced) viewport, moving content if needed.
   ScrollContentTo(TyClampScroll(FScrollX, FContentW, portW),
                   TyClampScroll(FScrollY, FContentH, portH));
 
   // 4) Dock + configure the vertical bar.
-  if wantV then
+  if showV then
   begin
     FVScrollBar.Controller := Self.Controller;
     { Keep the bars ABOVE the content. Both are created in the constructor, so they sit at the
@@ -583,23 +628,28 @@ begin
     else
       FVBarRect := Bounds(Width - thick - bw, bw, thick, viewH);
     FVScrollBar.BoundsRect := FVBarRect;
-    vMax := TyScrollMax(FContentH, portH);
     FSyncing := True;
     try
       FVScrollBar.Min := 0;
-      FVScrollBar.Max := vMax;
+      FVScrollBar.Max := FMaxY;
       FVScrollBar.PageSize := TyScrollThumbPage(portH, FContentH);
       FVScrollBar.Position := FScrollY;
     finally
       FSyncing := False;
     end;
+    { The axis flag goes with the bar's Visible, immediately before it: the layout pass the
+      Visible change asks for reads the flag (GetLogicalClientRect). }
+    FAxisV := True;
     FVScrollBar.Visible := True;
   end
-  else if FVScrollBar <> nil then
-    FVScrollBar.Visible := False;
+  else
+  begin
+    FAxisV := wantV;   // True here only with the bar left out by --scrollbox-bars
+    if FVScrollBar <> nil then FVScrollBar.Visible := False;
+  end;
 
   // 5) Dock + configure the horizontal bar (stops short of the vbar corner).
-  if wantH then
+  if showH then
   begin
     FHScrollBar.Controller := Self.Controller;
     FHScrollBar.BringToFront;
@@ -610,20 +660,23 @@ begin
       of its own document. The bar mirrors when the thing it scrolls does. }
     FHBarRect := Bounds(bw + lead, Height - thick - bw, viewW, thick);
     FHScrollBar.BoundsRect := FHBarRect;
-    hMax := TyScrollMax(FContentW, portW);
     FSyncing := True;
     try
       FHScrollBar.Min := 0;
-      FHScrollBar.Max := hMax;
+      FHScrollBar.Max := FMaxX;
       FHScrollBar.PageSize := TyScrollThumbPage(portW, FContentW);
       FHScrollBar.Position := FScrollX;
     finally
       FSyncing := False;
     end;
+    FAxisH := True;
     FHScrollBar.Visible := True;
   end
-  else if FHScrollBar <> nil then
-    FHScrollBar.Visible := False;
+  else
+  begin
+    FAxisH := wantH;
+    if FHScrollBar <> nil then FHScrollBar.Visible := False;
+  end;
 
   { The viewport IS the visible content area: inside the frame, minus whichever bars showed.
     Sizing it here rather than by Align keeps it in step with the very numbers the scroll range
@@ -637,12 +690,23 @@ begin
     FContent.SetScrollOrigin(Point(FScrollX, FScrollY), FContentW, FContentH);
   end;
 
-  Result := (FContentW <> oldW) or (FContentH <> oldH)
-         or (FVScrollBar.Visible <> oldV) or (FHScrollBar.Visible <> oldH2);
+  barsMoved := (FVScrollBar.Visible <> oldV) or (FHScrollBar.Visible <> oldH2);
+  { #239: an axis that started or stopped scrolling while its bar stayed out of view. The
+    layout area changed (GetLogicalClientRect grows to the content on an axis that scrolls)
+    and no Visible changed to tell anyone. }
+  unseen := ((FAxisV <> oldAxisV) and (FVScrollBar.Visible = oldV))
+         or ((FAxisH <> oldAxisH) and (FHScrollBar.Visible = oldH2));
+  Result := (FContentW <> oldW) or (FContentH <> oldH) or barsMoved or unseen;
   // A bar that just appeared/vanished changed ClientRect, and LCL caches that. Drop the
   // cache so the next anchor/align pass reads the new viewport instead of the stale one.
-  if (FVScrollBar.Visible <> oldV) or (FHScrollBar.Visible <> oldH2) then
+  if barsMoved then
     InvalidateClientRectCache(True);
+  { So ask for what a bar coming into view asks for by itself (TControl.SetVisible): another
+    layout pass. Without it an alTop column that outgrew the viewport stays stacked on the
+    last row in view. The layout rect the LCL keeps needs no dropping here -- an axis starts
+    or stops scrolling because a child or the box itself changed its bounds, and both drop it
+    (TControl.DoSetBounds, TWinControl.DoSetBounds). }
+  if unseen then AdjustSize;
 end;
 
 function TTyScrollBox.FrameInset: Integer;
@@ -714,9 +778,11 @@ begin
     BorderWidth is in that sum because the base AdjustClientRect honours it, in device px
     (#115) -- leave it out and an 8px gutter would cost the last row 16px instead of moving it. }
   bw := 2 * (FrameInset + BorderInsetPx);
-  if (FHScrollBar <> nil) and FHScrollBar.Visible and (FContentW > viewW) then
+  { "Scrolls", not "has its bar in view" (#239): the rows of an axis whose bar is left out
+    need somewhere to stack just the same. }
+  if FAxisH and (FContentW > viewW) then
     Result.Right := Result.Left + FContentW + bw;
-  if (FVScrollBar <> nil) and FVScrollBar.Visible and (FContentH > viewH) then
+  if FAxisV and (FContentH > viewH) then
     Result.Bottom := Result.Top + FContentH + bw;
 end;
 
@@ -781,14 +847,12 @@ begin
   // content is reflowing (a live drag) without the caller having re-run UpdateScrollRange, and a
   // stale (too-large) bar Max would otherwise let us scroll past the real content end.
   UpdateScrollRange;
-  // Target offset, clamped to the current per-axis scrollable range (the bar Max; 0 when that axis
-  // has no visible bar).
+  // Target offset, clamped to the current per-axis scrollable range: 0 on an axis whose content
+  // fits, and the same whether or not that axis has its bar in view (#239).
   nx := FScrollX + ADx;
   ny := FScrollY + ADy;
-  if (FHScrollBar = nil) or not FHScrollBar.Visible then nx := 0
-  else if nx > FHScrollBar.Max then nx := FHScrollBar.Max;
-  if (FVScrollBar = nil) or not FVScrollBar.Visible then ny := 0
-  else if ny > FVScrollBar.Max then ny := FVScrollBar.Max;
+  if nx > FMaxX then nx := FMaxX;
+  if ny > FMaxY then ny := FMaxY;
   if nx < 0 then nx := 0;
   if ny < 0 then ny := 0;
   ScrollContentTo(nx, ny);
@@ -874,8 +938,9 @@ end;
   horizontal bar really does end up at (0,-43) after scrolling down 43px.
 
   It is not observable, and that is not a guess either. Every read of a bar's geometry in this
-  unit -- LeadingInset, GetClientRect, AdjustClientRect, the wheel clamp, the offset sync, Paint
-  -- is gated on `.Visible`, and the bar's Left/Top are never read anywhere at all; only
+  unit -- LeadingInset, GetClientRect, AdjustClientRect, the offset sync, Paint
+  -- is gated on `.Visible` (the wheel and the clamp no longer read the bars at all, #239),
+  and the bar's Left/Top are never read anywhere at all; only
   written. The one moment a stale position could show is the moment the bar becomes visible, and
   MeasureAndDock assigns BoundsRect before `Visible := True` in BOTH arms, so it cannot. Pinned
   from both directions by TestHiddenBarIsDockedTheMomentItIsFirstShown (first reveal) and
@@ -939,12 +1004,13 @@ begin
   if WheelDelta > 0 then step := -step;
   // ScrollByDelta re-measures, clamps to the live range and syncs the thumbs, so the wheel
   // can never park the content past its own end.
-  if (FVScrollBar <> nil) and FVScrollBar.Visible then
+  { By which axis scrolls, not by which bar is in view (#239). }
+  if FAxisV then
   begin
     ScrollByDelta(0, step);
     Result := True;
   end
-  else if (FHScrollBar <> nil) and FHScrollBar.Visible then
+  else if FAxisH then
   begin
     ScrollByDelta(step, 0);
     Result := True;
@@ -964,6 +1030,12 @@ begin
   inherited SetController(AValue);
   if FVScrollBar <> nil then FVScrollBar.Controller := Controller;
   if FHScrollBar <> nil then FHScrollBar.Controller := Controller;
+end;
+
+procedure TTyScrollBox.StyleLayoutChanged;
+begin
+  inherited StyleLayoutChanged;
+  UpdateScrollRange;
 end;
 
 end.

@@ -247,7 +247,8 @@ length token it reads -- `--listview-*`, `--row-height` and `--scrollbar-size`; 
 `TTyShellTreeView`), for `--treeview-margin`, `--treeview-icon-gap` and the four tree-line tokens of
 §3.5; `TTyMemo`, for `--memo-tab-size`; `TTyTabSet` and `TTyPageControl`, for the close-button
 tokens of §3.8; `TTyToolBar`, for `--toolbar-icon-size` (§3.9); `TTyTrackBar`, for the three thumb
-tokens of §3.10. Other controls take the theme's values only, for now --
+tokens of §3.10; `TTyScrollBox` (and `TTyScrollPanel`), for `--scrollbox-bars` (§3.11). Other
+controls take the theme's values only, for now --
 except for `--over-parent-chrome` (§3.6), which every control reads.
 Versions before 3.0.4 ignore `--`
 declarations in a control's `StyleOverride`, so a form saved with them still loads there.
@@ -533,6 +534,30 @@ less the focus ring (or the border) and the padding; see section 6 of
 [controls/trackbar.md](controls/trackbar.md).
 
 New in 3.0.5. Earlier versions ignore these tokens, and a track bar does not read `padding` there.
+
+### 3.11 Which scroll bars a scroll box shows
+
+A `TTyScrollBox` (and a `TTyScrollPanel`) shows a scroll bar on each axis its content overflows.
+`--scrollbox-bars` says which of the two it may show; like the tokens of §3.4 it goes in the theme,
+or in the `StyleOverride` of one scroll box.
+
+| Token | Value | Default | Meaning |
+|---|---|---|---|
+| `--scrollbox-bars` | `both` \| `vertical` \| `horizontal` \| `none` | `both` | Which scroll bars the box may show. |
+
+A bar that is left out is never shown and takes no room. Its axis still scrolls, by the wheel and
+from code (`ScrollBy`, `ScrollTo`, `ScrollInView`). A value that is none of the four words means
+`both`.
+
+```text
+--scrollbox-bars: vertical;
+--scrollbox-bars: none;
+```
+
+The first line keeps a box from ever showing a horizontal bar; the second shows neither. See
+section 5 of [controls/scrollbox.md](controls/scrollbox.md).
+
+New in 3.0.5. Earlier versions ignore the token.
 
 ---
 
