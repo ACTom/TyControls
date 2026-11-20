@@ -571,6 +571,10 @@ less the focus ring (or the border) and the padding; see section 6 of
 
 New in 3.0.5. Earlier versions ignore these tokens, and a track bar does not read `padding` there.
 
+The multi-thumb bars of 4.0 (`TTyRangeTrackBar`, `TTyMultiTrackBar`, `TTyGradientTrackBar`) read the
+same three tokens and keep clear of the focus ring and the padding by the same rule; every thumb of
+a bar has that one size.
+
 ---
 
 ## 4. Selectors and Style Resolution

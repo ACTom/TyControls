@@ -371,17 +371,32 @@ type
 
     { The value axis runs the other way: vertical (Max at the top, as TTyTrackBar) xor Reversed. }
     function Inverted: Boolean;
+    { #236. What the frame keeps on each edge (the style's padding, and the wider of the
+      border and the focus ring) and the rectangle left for the parts: TTyTrackBar's rule,
+      from the same two functions. The ONE place the paint and the hit tests take it from. }
+    function FrameInsets(APPI: Integer): TRect;
+    function ContentRectIn(const AClient: TRect; APPI: Integer): TRect;
+    { Where the track starts on its own axis, in client px. }
+    function MainOrigin: Integer;
+    { #237. A thumb's length along the track at APPI: --track-thumb-length, this bar's own
+      StyleOverride then the theme; every thumb of the bar has it. }
+    function ThumbLenAt(APPI: Integer): Integer;
     { Device px of the track along the main axis -- what TyTrackThumbOffset calls AMainLen: the
-      client length less the readout strip, so where a thumb is drawn and where a press lands
-      come from one number, as on TTyTrackBar. }
+      length of the content rectangle less the readout strip, so where a thumb is drawn and
+      where a press lands come from one number, as on TTyTrackBar. }
     function MainLen: Integer;
     { What the readout shows: the selected thumb's value, else the first thumb's; '' with no
       thumbs. }
     function ValueText: string;
-    { Where thumb AIndex's thumb starts along the track, device px from the track's start. }
+    { Where thumb AIndex's thumb starts along the main axis, in CLIENT px: the track's start
+      (MainOrigin) and the thumb's offset on it. It was measured from the track's start
+      while that was the control's edge. }
     function ThumbOffset(AIndex: Integer): Integer;
-    { The thumb's centre along the track, device px from the track's start. }
+    { The thumb's centre along the main axis, in client px. }
     function ThumbCentre(AIndex: Integer): Integer;
+    { Segment AIndex's two ends on a track AMainLen long whose thumbs are AThumbLen long,
+      measured from the track's start. What SegmentSpan and the paint both stand on. }
+    procedure SpanOnTrack(AIndex, AThumbLen, AMainLen: Integer; out ALow, AHigh: Integer);
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     { The bare groove, AGroove in the painter's coordinates (AMainLen long, as MainLen at
       APPI): here TyTrackGroove. Not asked when OnDrawTrack took the track over. }
@@ -2111,10 +2126,37 @@ begin
   Result := (FOrientation = toVertical) xor FReversed;
 end;
 
-function TTyMultiTrackBarBase.MainLen: Integer;
+function TTyMultiTrackBarBase.FrameInsets(APPI: Integer): TRect;
 begin
-  if FOrientation = toVertical then Result := ClientHeight
-  else Result := ClientWidth;
+  Result := TyTrackFrameInsets(CurrentStyle, StyleInState(CurrentStates + [tysFocused]), APPI);
+end;
+
+function TTyMultiTrackBarBase.ContentRectIn(const AClient: TRect; APPI: Integer): TRect;
+begin
+  Result := TyTrackContentRect(AClient, FrameInsets(APPI));
+end;
+
+function TTyMultiTrackBarBase.MainOrigin: Integer;
+var
+  C: TRect;
+begin
+  C := ContentRectIn(Rect(0, 0, ClientWidth, ClientHeight), Font.PixelsPerInch);
+  if FOrientation = toVertical then Result := C.Top else Result := C.Left;
+end;
+
+function TTyMultiTrackBarBase.ThumbLenAt(APPI: Integer): Integer;
+begin
+  Result := MulDiv(StyleMetric('--track-thumb-length', TyTrackThumbLength), APPI, 96);
+  if Result < 1 then Result := 1;
+end;
+
+function TTyMultiTrackBarBase.MainLen: Integer;
+var
+  C: TRect;
+begin
+  C := ContentRectIn(Rect(0, 0, ClientWidth, ClientHeight), Font.PixelsPerInch);
+  if FOrientation = toVertical then Result := C.Bottom - C.Top
+  else Result := C.Right - C.Left;
   Dec(Result, FValueAreaPx);
   if Result < 1 then Result := 1;
 end;
@@ -2163,20 +2205,20 @@ end;
 function TTyMultiTrackBarBase.ThumbOffset(AIndex: Integer): Integer;
 begin
   CheckIndex(AIndex);
-  Result := TyTrackThumbOffset(MainLen, TyTrackThumbLen(Font.PixelsPerInch), FMin, FMax,
-    FValues[AIndex], Inverted);
+  Result := MainOrigin + TyTrackThumbOffset(MainLen, ThumbLenAt(Font.PixelsPerInch), FMin,
+    FMax, FValues[AIndex], Inverted);
 end;
 
 function TTyMultiTrackBarBase.ThumbCentre(AIndex: Integer): Integer;
 begin
-  Result := ThumbOffset(AIndex) + TyTrackThumbLen(Font.PixelsPerInch) div 2;
+  Result := ThumbOffset(AIndex) + ThumbLenAt(Font.PixelsPerInch) div 2;
 end;
 
 function TTyMultiTrackBarBase.ThumbRect(AIndex: Integer): TRect;
 var
   TW, Off: Integer;
 begin
-  TW := TyTrackThumbLen(Font.PixelsPerInch);
+  TW := ThumbLenAt(Font.PixelsPerInch);
   Off := ThumbOffset(AIndex);
   if FOrientation = toVertical then
     Result := Rect(0, Off, ClientWidth, Off + TW)
@@ -2184,52 +2226,70 @@ begin
     Result := Rect(Off, 0, Off + TW, ClientHeight);
 end;
 
-function TTyMultiTrackBarBase.SegmentSpan(AIndex, APPI: Integer; out ALow,
-  AHigh: Integer): Boolean;
+procedure TTyMultiTrackBarBase.SpanOnTrack(AIndex, AThumbLen, AMainLen: Integer;
+  out ALow, AHigh: Integer);
 var
-  TW, MLen, a, b, n: Integer;
+  a, b, n: Integer;
 begin
-  ALow := 0;
-  AHigh := 0;
   n := Length(FValues);
-  Result := (AIndex >= 0) and (AIndex <= n);
-  if not Result then Exit;
-  TW := TyTrackThumbLen(APPI);
-  MLen := MainLen;
   { Each end is a thumb's centre; segment 0 starts and segment n ends at the groove's end on
     the Min / Max side, whichever end of the control that is. }
   if AIndex = 0 then
   begin
-    if Inverted then a := MLen else a := 0;
+    if Inverted then a := AMainLen else a := 0;
   end
   else
-    a := TyTrackThumbOffset(MLen, TW, FMin, FMax, FValues[AIndex - 1], Inverted) + TW div 2;
+    a := TyTrackThumbOffset(AMainLen, AThumbLen, FMin, FMax, FValues[AIndex - 1], Inverted)
+      + AThumbLen div 2;
   if AIndex = n then
   begin
-    if Inverted then b := 0 else b := MLen;
+    if Inverted then b := 0 else b := AMainLen;
   end
   else
-    b := TyTrackThumbOffset(MLen, TW, FMin, FMax, FValues[AIndex], Inverted) + TW div 2;
+    b := TyTrackThumbOffset(AMainLen, AThumbLen, FMin, FMax, FValues[AIndex], Inverted)
+      + AThumbLen div 2;
   if a <= b then begin ALow := a; AHigh := b; end
   else begin ALow := b; AHigh := a; end;
+end;
+
+function TTyMultiTrackBarBase.SegmentSpan(AIndex, APPI: Integer; out ALow,
+  AHigh: Integer): Boolean;
+var
+  org: Integer;
+begin
+  ALow := 0;
+  AHigh := 0;
+  Result := (AIndex >= 0) and (AIndex <= Length(FValues));
+  if not Result then Exit;
+  SpanOnTrack(AIndex, ThumbLenAt(APPI), MainLen, ALow, AHigh);
+  { Client px, as the declaration says: the track starts inside the frame (#236). }
+  org := MainOrigin;
+  Inc(ALow, org);
+  Inc(AHigh, org);
 end;
 
 procedure TTyMultiTrackBarBase.CalculatePreferredSize(var PreferredWidth,
   PreferredHeight: Integer; WithThemeSpace: Boolean);
 var
-  S: TTyStyleSet;
-  ppi, cross: Integer;
+  ppi, thumbW, cross: Integer;
+  ins: TRect;
 begin
   ppi := Font.PixelsPerInch;
   if ppi <= 0 then ppi := 96;
-  S := CurrentStyle;
-  { TTyTrackBar's sum, term by term: thumb, tick, readout, label strip(s), padding. }
-  cross := TyTrackThumbLen(ppi) + MulDiv(4, ppi, 96);
+  { TTyTrackBar's sum, term by term: thumb, tick, readout, label strip(s), frame.
+    #237: a thumb given a thickness asks for that, one that was not for the default
+    thumb's length across. #236: the frame is the padding AND the focus ring, on the
+    two edges across the track. }
+  thumbW := MulDiv(StyleMetric('--track-thumb-thickness', 0), ppi, 96);
+  if thumbW < 1 then thumbW := MulDiv(TyTrackThumbLength, ppi, 96);
+  cross := thumbW + MulDiv(4, ppi, 96);
   if FShowValue and (FValueTextPx > 0) then Inc(cross, FValueTextPx);
   if FTickLabels and (FTickLabelPx > 0) then
     if FTickMarks = ttmBoth then Inc(cross, 2 * FTickLabelPx)
     else Inc(cross, FTickLabelPx);
-  Inc(cross, MulDiv(S.Padding.Top + S.Padding.Bottom, ppi, 96));
+  ins := FrameInsets(ppi);
+  if FOrientation = toVertical then Inc(cross, ins.Left + ins.Right)
+  else Inc(cross, ins.Top + ins.Bottom);
   if cross < 1 then cross := 1;
   if FOrientation = toVertical then
   begin
@@ -2275,9 +2335,9 @@ procedure TTyMultiTrackBarBase.RenderTo(ACanvas: TCanvas; const ARect: TRect; AP
 var
   P: TTyPainter;
   S, St, Rm: TTyStyleSet;
-  R, SlideR, GrooveR, SegR, ThumbR: TRect;
+  R, CR, SlideR, GrooveR, SegR, ThumbR: TRect;
   Ticks: TTyTrackTicks;
-  TW, MLen, Off, i, n, lo, hi, topIdx: Integer;
+  TW, MLen, Off, i, n, lo, hi, topIdx, ThumbTh, ThumbRad: Integer;
   key, cls: string;
   c: TColor;
   vs, vw: TSize;
@@ -2295,6 +2355,8 @@ var
       ThumbR := Rect(SlideR.Left, SlideR.Top + Off, SlideR.Right, SlideR.Top + Off + TW)
     else
       ThumbR := Rect(SlideR.Left + Off, SlideR.Top, SlideR.Left + Off + TW, SlideR.Bottom);
+    { #237: a thickness across the track, when the bar's tokens give one. }
+    TyTrackFitThumbAcross(SlideR, FOrientation, ThumbTh, ThumbR);
     States := [];
     if AIndex = FDragThumb then Include(States, tysActive)
     else if AIndex = FHoverThumb then Include(States, tysHover)
@@ -2309,6 +2371,7 @@ var
     thumbCls := ThumbStyleClass(AIndex);
     if removing then thumbCls := Trim(thumbCls + ' ' + TyTrackRemovingClass);
     St := ActiveController.Model.ResolveStyle('TyTrackThumb', thumbCls, States);
+    if ThumbRad >= 0 then St.BorderRadius := ThumbRad;   // #237
     c := ThumbColor(AIndex);
     if c <> clDefault then
     begin
@@ -2332,7 +2395,13 @@ begin
     oldLabelPx := FTickLabelPx;
     oldTextPx := FValueTextPx;
 
-    TW := TyTrackThumbLen(APPI);
+    { #236. Everything below is laid out in CR, the client rectangle less what the frame
+      keeps -- the focus ring and the style's padding -- as TTyTrackBar lays its parts out.
+      #237: the thumbs' length, thickness and corners from this bar's tokens. }
+    CR := ContentRectIn(R, APPI);
+    TW := ThumbLenAt(APPI);
+    ThumbTh := P.Scale(StyleMetric('--track-thumb-thickness', 0));
+    ThumbRad := StyleMetric('--track-thumb-radius', -1);
     { The readout strip, measured as TTyTrackBar measures it: as wide as the wider of Min and
       Max, so the track keeps its length whatever the value. }
     if FShowValue then
@@ -2351,8 +2420,8 @@ begin
       FValueAreaPx := 0;
       FValueTextPx := 0;
     end;
-    if FOrientation = toVertical then MLen := (R.Bottom - R.Top) - FValueAreaPx
-    else MLen := (R.Right - R.Left) - FValueAreaPx;
+    if FOrientation = toVertical then MLen := (CR.Bottom - CR.Top) - FValueAreaPx
+    else MLen := (CR.Right - CR.Left) - FValueAreaPx;
     if MLen < 1 then MLen := 1;
 
     { The tick band: the same inputs TTyTrackBar hands the shared layout. }
@@ -2376,7 +2445,7 @@ begin
     Ticks.OnFormatLabel := FOnFormatTickLabel;
     TyLayoutTrackTicks(P, Ticks);
     FTickLabelPx := Ticks.LabelBand;
-    SlideR := TyTrackSlideRect(R, FOrientation, FTickMarks, Ticks.TickBand + Ticks.LabelBand,
+    SlideR := TyTrackSlideRect(CR, FOrientation, FTickMarks, Ticks.TickBand + Ticks.LabelBand,
       FValueAreaPx);
 
     { TyTrackGrooveThickness's --track-thickness, read through StyleMetric (#182) so the bar's
@@ -2394,7 +2463,7 @@ begin
     for i := 0 to n do
     begin
       if not dflt then Break;
-      SegmentSpan(i, APPI, lo, hi);
+      SpanOnTrack(i, TW, MLen, lo, hi);
       if FOrientation = toVertical then
         SegR := Rect(GrooveR.Left, SlideR.Top + lo, GrooveR.Right, SlideR.Top + hi)
       else
@@ -2424,22 +2493,20 @@ begin
       if i <> topIdx then DrawThumb(i);
     if topIdx >= 0 then DrawThumb(topIdx);
 
-    TyDrawTrackTicks(P, R, Ticks);
+    TyDrawTrackTicks(P, CR, Ticks);
 
     { The readout, in the strip the track gave up; as TTyTrackBar's, ink and font from the
       bar's own style. }
     if FShowValue and (FValueAreaPx > 0) then
     begin
       if FOrientation = toVertical then
-        P.DrawText(Rect(R.Left, R.Bottom - FValueAreaPx, R.Right, R.Bottom),
+        P.DrawText(Rect(CR.Left, CR.Bottom - FValueAreaPx, CR.Right, CR.Bottom),
           ValueText, S.FontName, ResolveFontSize(S), S.FontWeight, S.TextColor,
           taCenter, tlCenter, False)
       else
         { #236: two px after the number, as TTyTrackBar draws it -- one thumb with the readout
-          is the same picture on both. The REST of #236 is not here yet: TTyTrackBar lays its
-          parts out inside the focus ring and the style's padding (ContentRectIn), these bars
-          still use the whole client rectangle. }
-        P.DrawText(Rect(R.Right - FValueAreaPx, R.Top, R.Right - P.Scale(2), R.Bottom),
+          is the same picture on both. }
+        P.DrawText(Rect(CR.Right - FValueAreaPx, CR.Top, CR.Right - P.Scale(2), CR.Bottom),
           ValueText, S.FontName, ResolveFontSize(S), S.FontWeight, S.TextColor,
           taRightJustify, tlCenter, False);
     end;
@@ -2495,8 +2562,10 @@ function TTyMultiTrackBarBase.ValueAt(APos: Integer): Integer;
 var
   TW: Integer;
 begin
-  TW := TyTrackThumbLen(Font.PixelsPerInch);
-  Result := TyTrackPosFromOffset(MainLen, TW, FMin, FMax, APos - TW div 2, Inverted);
+  TW := ThumbLenAt(Font.PixelsPerInch);
+  { #236: APos is client px, the track starts at MainOrigin. }
+  Result := TyTrackPosFromOffset(MainLen, TW, FMin, FMax, (APos - MainOrigin) - TW div 2,
+    Inverted);
 end;
 
 function TTyMultiTrackBarBase.ValueAtPoint(X, Y: Integer): Integer;
@@ -2926,8 +2995,8 @@ begin
   begin
     { Between two thumbs: the gap, so reaching either thumb asks again. }
     if FOrientation = toVertical then pos := info^.CursorPos.Y else pos := info^.CursorPos.X;
-    lo := 0;
-    hi := MainLen;
+    lo := MainOrigin;          // #236: the track, not the control
+    hi := lo + MainLen;
     for i := 0 to High(FValues) do
     begin
       r := ThumbRect(i);
@@ -4037,7 +4106,7 @@ begin
   g := Gradient;
   { Main-axis offsets of the centres of a thumb at Min and at Max: the gradient runs between
     them, as the stops sit at their thumbs' centres. }
-  TW := TyTrackThumbLen(APPI);
+  TW := ThumbLenAt(APPI);   // #237: the centres of the thumbs this bar draws
   a := TyTrackThumbOffset(AMainLen, TW, Min, Max, Min, Inverted) + TW div 2;
   b := TyTrackThumbOffset(AMainLen, TW, Min, Max, Max, Inverted) + TW div 2;
   if a <= b then

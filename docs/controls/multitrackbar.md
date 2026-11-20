@@ -69,7 +69,7 @@ uses tyControls.MultiTrackBar;
 | `SetThumbValue(AIndex, AValue)` | 从代码移动一个滑块。值会被夹在 `Min..Max` 以及左右邻居 ± `MinGap` 之间；真变了才触发 `OnThumbChange` 和 `OnChange`，不问 `OnThumbChanging`。给集合项赋值走的也是它。拖动、键盘、滚轮按同样的规则夹值，只是先问 `OnThumbChanging`。序号越界抛 `EListError`。 |
 | `SelectedThumb: Integer` | 键盘操作的那个滑块，`-1` = 没有。赋值越界当作 `-1`。 |
 | `RemovingThumb: Integer` | 正被拖出轨道、松手就会删掉的那个滑块，`-1` = 没有（第 5 节）。拖动期间和绘制期间都有效：拖回轨道或者松手后又是 `-1`。自绘滑块时用它画自己的「将被删除」样子。 |
-| `ThumbRect(AIndex): TRect` | 滑块的**命中**矩形（客户区坐标）：沿轨道 12 逻辑像素，横向占满整个控件——和 `TTyTrackBar.ThumbRect` 在同一个值时完全一样。 |
+| `ThumbRect(AIndex): TRect` | 滑块的**命中**矩形（客户区坐标）：沿轨道是滑块的长度（默认 12 逻辑像素，令牌 `--track-thumb-length`），横向占满整个控件——和 `TTyTrackBar.ThumbRect` 在同一个值时完全一样。 |
 | `ThumbAtPoint(X, Y): Integer` | 客户区里一个点下面是哪个滑块，没有就是 `-1`。判断规则和左键按下时完全一样（控件自己按下、悬停、按滑块显示提示都调它）：几个滑块的命中矩形叠在一起时取中心最近的，一样近取值小的。**不可用的滑块也算**——它照样画在那里，应用可能还要对它做点什么（比如右键删除）；按下时不理它的是控件自己。 |
 | `SegmentSpan(AIndex, APPI, out ALow, AHigh): Boolean` | 第 AIndex 段沿主轴的像素范围（见下文「分段」）。只给位置，不管这一段画不画。 |
 | `ValueAtPoint(X, Y): Integer` | 客户区里一个点对应的值：拖到那里的滑块、按在那里时跳过来的滑块，取的就是这个值。跟着 `Orientation` / `Reversed` 走，只看主轴，超出两端时是 `Min` / `Max`。 |
@@ -507,8 +507,13 @@ end;
 |------|------|------|
 | `--track-remove-distance` | `24px` | 滑块垂直于轨道拖出控件边缘多远算「拖出去了」。 |
 | `--track-thickness` | `4px` | 凹槽的粗细，与 `TTyTrackBar` 共用。 |
+| `--track-thumb-length` | `12px` | 滑块沿轨道方向的大小，控件上每个滑块都一样。与 `TTyTrackBar` 共用。 |
+| `--track-thumb-thickness` | 占满滑块所在的带 | 滑块垂直于轨道方向的大小；超过那条带就按带算。与 `TTyTrackBar` 共用。 |
+| `--track-thumb-radius` | `TyTrackThumb` 规则的 `border-radius` | 滑块的圆角，带样式类的滑块也用它。与 `TTyTrackBar` 共用。 |
 
-这两个度量也可以写在单个控件的 `StyleOverride` 里（比如 `--track-remove-distance: 60px;`），只对这一个控件生效。
+这些度量也可以写在单个控件的 `StyleOverride` 里（比如 `--track-remove-distance: 60px;`），只对这一个控件生效。
+
+**内容区。** 和 `TTyTrackBar` 一样，凹槽、滑块、分段、刻度和读数都排在内容区里：客户区四边各让出焦点环（`:focus` 的 `outline`，或者边框，取宽的那个）和样式的 `padding`。不管有没有焦点都让出焦点环的位置，获得焦点时轨道不会移动。命中用的是同一个内容区：`ThumbRect`、`ThumbAtPoint`、`ValueAtPoint`、`SegmentSpan` 给的都是客户区坐标，和画出来的位置一致。`AutoSize` 的厚度把外框也算进去。规则细节见 [trackbar.md 的「内容区」](trackbar.md#内容区焦点环和-padding)。只有「拖出去删除」的距离（`--track-remove-distance`）仍然从控件的边缘量起。
 
 默认主题里的相关规则：
 

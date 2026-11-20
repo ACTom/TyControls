@@ -707,6 +707,7 @@ type
     procedure TestTheTrackKeepsTheFirstAndLastColoursToTheEnds;
     procedure TestGradientIsInOrderWithPositionsFromMinToMax;
     procedure TestGradientFillKinds;
+    procedure TestTheGradientRunsBetweenThumbsOfTheTokensLength;
     procedure TestANewStopTakesTheColourTheGradientHasThere;
     procedure TestANewStopChangesNothingOnTheTrack;
     procedure TestADoubleClickEditsTheStopsColour;
@@ -7841,6 +7842,31 @@ begin
   TBaseAccess(FBar).MouseUp(mbLeft, [], q.X, q.Y);
   AssertEquals('-100:$0000FF;50:def;75:$00FF00;100:$FF0000', StopsText);
   AssertEquals('0.000:FFFF0000 0.875:FF00FF00 1.000:FF0000FF ', GradText);
+end;
+
+{ #237: the gradient runs from the centre of a thumb at Min to the centre of one at Max.
+  With --track-thumb-length that centre moves, and the groove's plain ends with it. }
+procedure TTyGradientTrackBarTest.TestTheGradientRunsBetweenThumbsOfTheTokensLength;
+var
+  b: TBGRABitmap;
+  y: Integer;
+begin
+  SetStops([0, 100], [clRed, clBlue]);
+  FBar.OnDrawTrack := @SeeTrack;
+  FBar.OnDrawThumb := @NoThumbs;
+  FBar.StyleOverride := '--track-thumb-length: 40px;';
+  b := Shot(FBar);
+  try
+    y := (FGroove.Top + FGroove.Bottom) div 2;
+    AssertTrue('setup: the groove was seen', FGroove.Right > FGroove.Left + 100);
+    { A 40 px thumb at Min has its centre 20 px in: up to there, the first stop's colour. }
+    AssertTrue('14 px in: still the first colour, was ' + PxStr(b.GetPixel(FGroove.Left + 14, y)),
+      SamePx(b.GetPixel(FGroove.Left + 14, y), 255, 0, 0));
+    AssertFalse('60 px in the gradient has begun',
+      SamePx(b.GetPixel(FGroove.Left + 60, y), 255, 0, 0));
+  finally
+    b.Free;
+  end;
 end;
 
 procedure TTyGradientTrackBarTest.TestGradientFillKinds;

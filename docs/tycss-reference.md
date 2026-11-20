@@ -542,6 +542,9 @@ typeKey 与文本类控件引用。它们都是普通 `--变量`,可被主题作
 
 3.0.5 新增。更早的版本不认这三个令牌,滑动条也不读 `padding`。
 
+4.0 的多滑块一族(`TTyRangeTrackBar`、`TTyMultiTrackBar`、`TTyGradientTrackBar`)读同样三个令牌,也按同样的
+规则让出焦点环和 `padding`;控件上的每个滑块都用这一组大小。
+
 ---
 
 ## 4. 选择器与样式解析
