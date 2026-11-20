@@ -135,7 +135,8 @@ type
     rdUpr, rdListText,
     // a field whose result is read as content: its group (the result's group is rdNormal)
     rdFieldShown);
-  TTyRtfSlot = (sloNone, sloLoch, sloHich, sloDbch, sloOther);
+  // (the order is the field mark's slot number: TTyRichFieldMark.SetSlot)
+  TTyRtfSlot = (sloNone, sloLoch, sloHich, sloDbch, sloLtr, sloRtl);
   TTyRtfAbsorb = (absNone, absLast, absCurrent);
 
   // One entry of the lists the properties keep (Extra fragments, tab stops, a row's \cellx):
@@ -3956,7 +3957,7 @@ begin
     kwDbch: FS.Props.Slot := sloDbch;
     kwRtlCh, kwLtrCh:
       begin
-        FS.Props.Slot := sloOther;
+        if AKw = kwRtlCh then FS.Props.Slot := sloRtl else FS.Props.Slot := sloLtr;
         if normal then AddCharExtra(FTok.Start, FTok.Stop);
       end;
     // paragraph
@@ -8228,7 +8229,7 @@ begin
   if p.FontNum >= 0 then b.AddWord('f', p.FontNum);
   nodes := ListOf(p.CharExtra);
   split := Length(nodes);
-  if (p.Slot = sloOther) and ((p.LochNum >= 0) or (p.HichNum >= 0) or (p.DbchNum >= 0)) then
+  if (p.Slot in [sloLtr, sloRtl]) and ((p.LochNum >= 0) or (p.HichNum >= 0) or (p.DbchNum >= 0)) then
     for i := High(nodes) downto 0 do
       if TyRtfFragmentIsWord(Fragment(nodes[i]), 'rtlch') or
          TyRtfFragmentIsWord(Fragment(nodes[i]), 'ltrch') then

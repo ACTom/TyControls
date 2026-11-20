@@ -1050,6 +1050,14 @@ begin
   Word('fldrslt');
 end;
 
+{ A step of a search by halves left [ALo, AHi) as wide as it was: the search would never end -
+  an internal error, said at once. }
+procedure NoProgress(ALo, AHi: Integer);
+begin
+  raise ETyRichRtfWrite.CreateFmt('RTF writer: a search by halves over paragraphs %d .. %d ' +
+    'made no progress', [ALo, AHi]);
+end;
+
 { The first paragraph from AIndex (at most ALimit) that does not lie wholly inside a field's
   result. A run of the file's own paragraphs alike in their fields (the load's index) is
   passed at once: one look-up a run, not one a paragraph - a result can only hold the file's
@@ -1057,11 +1065,12 @@ end;
 function TRtfWriter.PastFieldFrom(AIndex, ALimit: Integer): Integer;
 var
   src, n, next, s: Int64;
-  lo, hi, mid: Integer;
+  lo, hi, mid, was, w: Integer;
 begin
   Result := AIndex;
   while (Result < ALimit) and InsideField(Result) do
   begin
+    was := Result;
     if (FLoad = nil) or not FDoc.Text.ParaLazySource(Result, src, n) then
     begin
       Inc(Result);
@@ -1072,13 +1081,19 @@ begin
     // the change (or not the file's) ends it - found by halves
     lo := Result + 1;
     hi := ALimit;
+    w := hi - lo + 1;
     while lo < hi do
     begin
       mid := (lo + hi) shr 1;
       if FDoc.Text.ParaLazySource(mid, s, n) and (s > src) and (s < next) then lo := mid + 1
       else hi := mid;
+      if hi - lo >= w then NoProgress(lo, hi);
+      w := hi - lo;
     end;
     Result := lo;
+    if Result <= was then
+      raise ETyRichRtfWrite.CreateFmt('RTF writer: passing over a field''s paragraphs from %d ' +
+        'made no progress', [was]);
   end;
 end;
 
@@ -1088,7 +1103,7 @@ end;
 function TRtfWriter.BackOverField(AIndex, ALimit: Integer): Integer;
 var
   src, n, first, s: Int64;
-  lo, hi, mid: Integer;
+  lo, hi, mid, w: Integer;
 begin
   Result := AIndex;
   if (FLoad = nil) or not FDoc.Text.ParaLazySource(AIndex, src, n) then Exit;
@@ -1098,11 +1113,14 @@ begin
   // the run: found by halves
   lo := ALimit;
   hi := AIndex;
+  w := hi - lo + 1;
   while lo < hi do
   begin
     mid := (lo + hi) shr 1;
     if FDoc.Text.ParaLazySource(mid, s, n) and (s >= first) and (s < src) then hi := mid
     else lo := mid + 1;
+    if hi - lo >= w then NoProgress(lo, hi);
+    w := hi - lo;
   end;
   Result := lo;
 end;
@@ -1138,16 +1156,13 @@ end;
 
 // Word's three slot fonts in force where a field's group was read (TTyRichFieldMark.SlotName),
 // by this writer's numbers - a font the table here does not have is not named -, then the slot
-// named last: what the group's own \loch \hich \dbch fall back on. When that was \rtlch or
-// \ltrch, the one the mark's run keeps among its words (AFormat's Extra, which the reader put
-// there) is written again: the slot is that one's, as it was.
+// named last: what the group's own \loch \hich \dbch fall back on - \ltrch or \rtlch
+// when that was one of them, the one the mark says (TTyRichFieldMark.Slot); none named, nothing.
 procedure TRtfWriter.WriteMarkSlots(AMark: TTyRichFieldMark; AFormat: Integer);
 const
   Names: array[0..2] of string = ('loch', 'hich', 'dbch');
 var
   i, k, j: Integer;
-  ci: PCharInfo;
-  w: RawByteString;
 begin
   for i := 0 to 2 do
   begin
@@ -1164,19 +1179,11 @@ begin
     Word(Names[i]);
     WordN('af', FFonts[k].Num);
   end;
-  if AMark.Slot in [1..3] then Word(Names[AMark.Slot - 1])
-  else if AMark.Slot = 4 then
-  begin
-    w := '';
-    ci := CharInfo(AFormat);
-    for i := ci^.Fmt.Extra.Count - 1 downto 0 do
-      if TyRtfFragmentIsWord(ci^.Fmt.Extra.Item(i), 'rtlch') or
-         TyRtfFragmentIsWord(ci^.Fmt.Extra.Item(i), 'ltrch') then
-      begin
-        w := ci^.Fmt.Extra.Item(i);
-        Break;
-      end;
-    if w <> '' then Fragment(w) else Word('ltrch');
+  // (the slot the mark says was named last, as it was; none named, nothing)
+  case AMark.Slot of
+    1..3: Word(Names[AMark.Slot - 1]);
+    4: Word('ltrch');
+    5: Word('rtlch');
   end;
 end;
 

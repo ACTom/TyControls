@@ -413,8 +413,8 @@ type
     function InFile: Boolean;
     { Read from RTF: the fonts of Word's three slots in force where its group began - AIndex 0
       \loch\afN, 1 \hich\afN, 2 \dbch\afN: the font's name and charset ('' none named) -
-      and the slot named last (SetSlot: 0 none, 1 \loch, 2 \hich, 3 \dbch, 4 another, \rtlch
-      or \ltrch - which one, the mark's run keeps among its words). The group's own \loch
+      and the slot named last (SetSlot: 0 none, 1 \loch, 2 \hich, 3 \dbch, 4 \ltrch,
+      5 \rtlch). The group's own \loch
       \hich \dbch words fall back on them: a writer that writes the bytes after text of its
       own puts them in force first, by its own numbers. }
     procedure SetSlotFont(AIndex: Integer; const AName: UTF8String; ACharset: Integer);
