@@ -712,6 +712,8 @@ type
     FCheck: TTyRtfGroup;             // ParseWhole: the group being compared with the index
     FCheckBad: Integer;
     FWalk: TTyRtfParser;             // StateAt's own scan, kept to go on from
+    FStateBytes: Int64;              // what it scanned
+    FTextVisits: Int64;              // tree nodes entered putting groups' values in and out
     FVerdicts: TTyRtfFieldVerdicts;  // what the scan decided of large fields
     FPreScanned: Int64;              // what parses' pre-scans read (the scan's own aside)
     { The paragraphs' fields, as the scan found them, by where they begin in the file: an
@@ -843,6 +845,11 @@ type
     property OnLoadProgress: TTyRtfProgressEvent read FOnLoadProgress write FOnLoadProgress;
     // What parsing on demand did (tests and probes)
     property ParsedBytes: Int64 read FParsedBytes;
+    // ... and the bytes StateAt scanned for a writer
+    property StateScannedBytes: Int64 read FStateBytes;
+    // ... and the text's tree nodes entered setting parsed paragraphs' values and taking
+    // them back (a cost of each interval parsed, not of the one who asked)
+    property TextVisits: Int64 read FTextVisits;
     property ParseCount: Integer read FParseCount;
     // The file was parsed as a whole (TyRichLoadRtfFull): one parse from its first byte to
     // its last set every paragraph, and nothing is ever sent back to unparsed.
@@ -6334,9 +6341,12 @@ end;
 procedure TTyRtfLoad.Apply(AGroup: TTyRtfGroup);
 var
   i: Integer;
+  v: Int64;
 begin
+  v := FDoc.Text.NodeVisits;
   for i := 0 to High(AGroup.Recs) do
     if AGroup.States[i] = StateNew then ApplyRec(AGroup, i);
+  Inc(FTextVisits, FDoc.Text.NodeVisits - v);
 end;
 
 // Apply for record AIndex of the group, which is StateNew.
@@ -6468,8 +6478,10 @@ var
   keep: array of Boolean;
   idx: array of Integer;
   text: TTyRichText;
+  v: Int64;
 begin
   text := FDoc.Text;
+  v := text.NodeVisits;
   if AReset and TRtfBuild.DocumentBusy(FDoc) then AReset := False;
   if AGroup.HasValues then CompleteRows(AGroup);
   keep := nil;
@@ -6527,6 +6539,7 @@ begin
     end;
     text.ForgetDecoded(AGroup.Recs[i].Src.Start);
   end;
+  Inc(FTextVisits, text.NodeVisits - v);
   if FUsedGroup = AGroup then FUsedGroup := nil;
   FGroups.Remove(AGroup);
   Dec(FResident, AGroup.LastSnap - AGroup.FirstSnap + 1);
@@ -6800,6 +6813,7 @@ end;
 function TTyRtfLoad.StateAt(APos: Int64; out AState: TTyRtfState): Boolean;
 var
   k: Integer;
+  p: Int64;
 begin
   AState := Default(TTyRtfState);
   if (APos < 0) or (APos > Length(FBytes)) then Exit(False);
@@ -6818,7 +6832,12 @@ begin
       FWalk.Resume(FSnaps[k]);
     end;
   end;
-  if FWalk.Position < APos then FWalk.ParseUntil(APos, -1);
+  if FWalk.Position < APos then
+  begin
+    p := FWalk.Position;
+    FWalk.ParseUntil(APos, -1);
+    Inc(FStateBytes, FWalk.Position - p);
+  end;
   // (a scan that reached the end of the file has closed every group: not a state to go on from)
   Result := (FWalk.Position = APos) and not FWalk.Finished;
   if Result then AState := FWalk.SaveState;

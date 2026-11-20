@@ -1933,11 +1933,13 @@ const
     '{|field{|*|fldinst X}{|fldrslt {|*|ud x}}}',
     '{|field{|*|fldinst X}{|fldrslt {|fldrslt x}}}',
     '{|field{|*|fldinst X}{|fldrslt |pict |shppict }}');
-  Something: array[0..4] of RawByteString = (
+  Something: array[0..6] of RawByteString = (
     '{|field{|*|fldinst X}{|fldrslt |~}}',
     '{|field{|*|fldinst X}{|fldrslt |_}}',
     '{|field{|*|fldinst X}{|fldrslt {|*|bkmkstart b}x{|*|bkmkend b}}}',
     '{|field{|*|fldinst X}{|fldrslt {|*|zzz some text}}}',
+    '{|field{|*|fldinst X}{|fldrslt {|field{|*|fldinst Y}}}}',
+    '{|field{|*|fldinst X}{|fldrslt {|shppict}}}',
     '{|field{|*|fldinst X}{|fldrslt {|*|shppict{|pict|pngblip|picwgoal300|pichgoal200 89504e470d0a1a0a}}}}');
 var
   i: Integer;
@@ -2643,22 +2645,56 @@ procedure TTyRichFieldsTest.TestASaveBesideALargeFieldReadsOnlyItsMarksParagraph
   end;
 
   procedure Check(const AMsg: string; const B: TBytes; const AAt: array of TTyRichPos;
-    const AGroups: array of RawByteString);
+    const AGroups: array of RawByteString; const AFont: string = '');
   var
     d, r: TTyRichDocument;
     load: TTyRtfLoad;
-    i, parses, from, n: Integer;
+    f: TTyCharFormat;
+    runs: TTyRunArray;
+    i, j, k, parses, from, n, edits: Integer;
+    visits, scanned, base, loads: Int64;
     o: TBytes;
   begin
     d := LoadDoc(B, False);
     try
       load := TyRichRtfLoadOf(d);
       load.MaxResidentIntervals := 1;
+      // what a save of the file as it is enters of the text's tree: a walk of the paragraphs
+      base := d.Text.NodeVisits;
+      SaveOut(d);
+      base := d.Text.NodeVisits - base;
+      edits := 0;
       for i := High(AAt) downto 0 do
+      begin
         AssertTrue(AMsg + ': the key', d.Execute(TTyRichInsertText.Create(AAt[i], 'Z')));
+        Inc(edits);
+        // (in a font the file has not: its charset is decided by the text written in it)
+        if AFont <> '' then
+        begin
+          f := TyDefaultCharFormat;
+          f.FontName := AFont;
+          AssertTrue(AMsg + ': the font', d.Execute(TTyRichSetCharFormat.Create(TyRichRange(AAt[i], 1),
+            [cffFontName, cffCharset], f)));
+          Inc(edits);
+        end;
+      end;
       parses := load.ParseCount;
+      visits := d.Text.NodeVisits;
+      scanned := load.StateScannedBytes;
+      loads := load.TextVisits;
       o := SaveOut(d);
       parses := load.ParseCount - parses;
+      visits := d.Text.NodeVisits - visits;
+      scanned := load.StateScannedBytes - scanned;
+      loads := load.TextVisits - loads;
+      // (the field's paragraphs are passed by runs: no look-up, no state asked, for each -
+      // the tree is entered as for the file as it is, but for the paragraphs of the intervals
+      // read going into it and out)
+      AssertTrue(Format('%s: %d tree nodes entered for %d paragraphs (the file as it is: %d; the intervals read: %d)',
+        [AMsg, visits, d.Text.ParaCount, base, loads]),
+        visits - loads <= base + 1000 * Length(AAt));
+      AssertTrue(Format('%s: %d bytes scanned for the states the save asked', [AMsg, scanned]),
+        scanned <= 4 * 65536 * Length(AAt));
       // (Word's file is a few intervals; the others many)
       AssertTrue(Format('%s: a file of many intervals: %d', [AMsg, load.IntervalCount]),
         (Length(B) < 400000) or (load.IntervalCount > 8));
@@ -2673,11 +2709,24 @@ procedure TTyRichFieldsTest.TestASaveBesideALargeFieldReadsOnlyItsMarksParagraph
       CheckBalanced(Self, AMsg, o);
       r := LoadDoc(o, True);
       try
+        // (a font named with no charset is written with the one its text decides: so read)
+        if AFont <> '' then
+          for i := 0 to High(AAt) do
+          begin
+            k := r.Text.ParaOfPos(AAt[i] + i);
+            runs := r.RunsOf(k);
+            j := 0;
+            while (j < High(runs)) and (runs[j + 1].Start <= AAt[i] + i - r.Text.ParaStart(k)) do Inc(j);
+            f := r.Formats.CharFormat(runs[j].Format);
+            AssertEquals(AMsg + ': read back, the key''s font', AFont, f.FontName);
+            f := TyDefaultCharFormat;
+            AssertTrue(r.Execute(TTyRichSetCharFormat.Create(TyRichRange(AAt[i] + i, 1), [cffCharset], f)));
+          end;
         AssertEquals(AMsg + ': read back, the edited document', '', ModelDiff(d, r));
       finally
         r.Free;
       end;
-      for i := 0 to High(AAt) do d.Undo;
+      for i := 1 to edits do d.Undo;
       AssertTrue(AMsg + ': undone, the file', SameBytes(B, SaveOut(d)));
     finally
       d.Free;
@@ -2705,6 +2754,10 @@ begin
   Check('a key before the open mark', b, [openAt], [FieldGroup(s, 1)]);
   Check('a key after the close mark', b, [closeAt], [FieldGroup(s, 1)]);
   Check('both', b, [openAt, closeAt], [FieldGroup(s, 1)]);
+  // the key in a font the file has not, whose charset the text decides: the stretch's text is
+  // looked at - the marks' paragraphs', not the field's
+  Check('a key in a new font before the open mark', b, [openAt], [FieldGroup(s, 1)], 'Meiryo');
+  Check('a key in a new font after the close mark', b, [closeAt], [FieldGroup(s, 1)], 'Meiryo');
   // one field closes and the next opens in one paragraph
   s := Wrapped(1, 2);
   b := BytesOf(s);
