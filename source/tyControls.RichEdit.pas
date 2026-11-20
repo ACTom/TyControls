@@ -511,8 +511,9 @@ type
     Height: Integer;
   end;
 
-  { What a ruler shows of the paragraph the caret is in (TTyCustomRichEdit.CaretParagraphView):
-    the paragraph, its format (twips) and where its text lies on the screen. Its text's left
+  { What a ruler shows of the paragraph a paragraph format change would begin at
+    (TTyCustomRichEdit.ParagraphView): the paragraph, its format (twips) and where its text lies
+    on the screen. Its text's left
     edge is the zero its indents and tab stops count from: the page's or the window's text edge,
     or - in a table - its cell's text edge (InCell). The x of a length L of twips from that zero
     in the control's client pixels is Origin + FloorDiv(ZeroRaster + TyRichTwipsToPx(L, PPI,
@@ -521,8 +522,9 @@ type
     TextWidthRaster: the width the text wraps at, from the zero (CRichNoWrap when it does not
     wrap); ViewRaster: the text area's width. ClipLeft .. ClipRight, ClipTop .. ClipBottom: the
     text clip (client pixels). Editable: a user's paragraph format action would be taken now
-    (ApplyParagraphFormat: not ReadOnly, enabled, the document taking edits, not in its update,
-    not in the designer) - a range it refuses (a field's result) is told at the action. }
+    (CanFormatParagraphs: not ReadOnly, enabled, the document taking edits, not in its update,
+    not in the designer, and not a range ApplyParagraphFormat would refuse - every paragraph in
+    a field's result or in a row that holds a nested table). }
   TTyRichParaView = record
     Para: Integer;
     Format: TTyParaFormat;
@@ -1702,12 +1704,19 @@ type
     FParaViewHandlers: TMethodList;
     FGuideOn: Boolean;
     FGuideX: Integer;
+    { The parents whose Enabled the paragraph view's hearers hear of (an owned helper,
+      TTyRichParentWatch, made with the first hearer): IsEnabled follows them, and they tell
+      a child nothing themselves. }
+    FParentWatch: TComponent;
+    procedure WatchParents;
     procedure ParagraphViewChanged;
     function GetGuideLine: Integer;
     procedure SetGuideLine(AValue: Integer);
     function GuideLineRect: TRect;
     procedure DrawGuideLine(ACanvas: TCanvas);
   protected
+    { (the parents a paragraph view hearer's Enabled follows are watched again) }
+    procedure SetParent(NewParent: TWinControl); override;
     function GetStyleTypeKey: string; override;
     { Caption IS Text, as on LCL's TCustomMemo and the package's Memo: code holding the
       control as a TControl (an action link, a generic text reader) reaches the document. }
@@ -3018,18 +3027,21 @@ type
 
     { ---- the paragraph view: what a ruler (TTyRichEditRuler, or an application's own) needs,
       in public calls only ----
-      CaretParagraphView: the paragraph the caret is in and where its text is on the screen
-      (TTyRichParaView), as the view was last laid out - it lays nothing out and reads only that
-      paragraph's format, so it costs the same in any document. False when there is nothing to
-      show: the view was never laid out, the document is in its update, or the caret's
-      paragraph is in a table cell whose row is not laid out (scrolled away). Markers follow the
-      caret's paragraph also when the selection holds several. }
-    function CaretParagraphView(out AView: TTyRichParaView): Boolean;
+      ParagraphView: the first paragraph a paragraph format change would apply to - the one
+      ApplyParagraphFormat and Paragraph begin at: the caret's with nothing selected, else the
+      first the selection touches (a selection that ends at a paragraph's very start does not
+      touch that one) - and where its text is on the screen (TTyRichParaView), as the view was
+      last laid out. It lays nothing out and reads that paragraph's format and what
+      CanFormatParagraphs reads, so it costs the same in any document. False when there is
+      nothing to show: the view was never laid out, the document is in its update, or the
+      paragraph is in a table cell whose row is not laid out (scrolled away). }
+    function ParagraphView(out AView: TTyRichParaView): Boolean;
     { Who hears that the paragraph view may have changed - the caret or the selection moved,
       the content or a format changed, the view was laid out (a zoom, a scroll, a resize, the
-      wrap mode, the theme, the PPI), ReadOnly or Enabled changed: AHandler(Sender = this
+      wrap mode, the theme, the PPI), ReadOnly or Enabled changed (its own, or a parent's), the
+      format the next typed text gets set with nothing selected: AHandler(Sender = this
       control), not the application's OnChange or OnSelectionChange. It may come when nothing
-      that is shown changed: the hearer asks CaretParagraphView and compares. A handler must not
+      that is shown changed: the hearer asks ParagraphView and compares. A handler must not
       free the control or change the document. }
     procedure AddHandlerOnParagraphView(const AHandler: TNotifyEvent);
     procedure RemoveHandlerOnParagraphView(const AHandler: TNotifyEvent);
@@ -12475,6 +12487,8 @@ begin
       FPendingFmt := FDoc.Formats.InternChar(f);
       FPendingAt := FCaret;
       FHasPendingFmt := True;
+      // (no OnChange for it: the paragraph view's hearers - a toolbar's Bold - are told)
+      ParagraphViewChanged;
     end;
     Exit;
   end;
@@ -19001,7 +19015,7 @@ end;
 
 { ---- the paragraph view ---- }
 
-{ Who hears it (a ruler) asks CaretParagraphView again; inside the document's update the view
+{ Who hears it (a ruler) asks ParagraphView again; inside the document's update the view
   has not heard of the change yet, and the update's end tells. }
 procedure TTyCustomRichEdit.ParagraphViewChanged;
 begin
@@ -19009,11 +19023,11 @@ begin
   FParaViewHandlers.CallNotifyEvents(Self);
 end;
 
-function TTyCustomRichEdit.CaretParagraphView(out AView: TTyRichParaView): Boolean;
+function TTyCustomRichEdit.ParagraphView(out AView: TTyRichParaView): Boolean;
 var
   t: TTyRichText;
   area, clip: TRect;
-  k, i: Integer;
+  k, i, last: Integer;
   row: TTyRowLayout;
   item: TTyRichRowItem;
   caret: TTyRichPos;
@@ -19023,8 +19037,10 @@ begin
   // (never laid out, or the view has not heard of the document's update yet)
   if (FLayoutPPI <= 0) or ViewBehind then Exit;
   t := FDoc.Text;
-  caret := Math.Max(0, Math.Min(FCaret, t.Length));
-  AView.Para := t.ParaOfPos(caret);
+  // the paragraph a paragraph format change begins at (ApplyParagraphFormat's ParasOfRange)
+  ParasOfRange(GetSelStart, GetSelLength, k, last);
+  AView.Para := k;
+  caret := t.ParaStart(k);
   AView.Format := FDoc.Formats.ParaFormat(FDoc.ParaFormatOf(AView.Para));
   area := TextArea(Rect(0, 0, Width, Height), ViewPPI);
   clip := TextWindowRect;
@@ -19055,9 +19071,8 @@ begin
     AView.ZeroRaster := Int64(item.X) - FScrollX;
     AView.TextWidthRaster := item.Layout.LayoutWidth;
   end;
-  // what ApplyParagraphFormat asks before it makes its command
-  AView.Editable := not FReadOnly and IsEnabled and (RefusalReason = '') and
-    not (csDesigning in ComponentState);
+  // what ApplyParagraphFormat asks before it makes its command, the place too
+  AView.Editable := CanFormatParagraphs;
   Result := True;
 end;
 
@@ -19065,6 +19080,99 @@ procedure TTyCustomRichEdit.AddHandlerOnParagraphView(const AHandler: TNotifyEve
 begin
   if FParaViewHandlers = nil then FParaViewHandlers := TMethodList.Create;
   FParaViewHandlers.Add(TMethod(AHandler));
+  WatchParents;
+end;
+
+type
+  { Hears the Enabled of every parent of a rich edit (LCL tells a child nothing when its parent
+    is disabled, though IsEnabled follows it) and tells the rich edit's paragraph view hearers.
+    Owned by the rich edit; FreeNotification on each parent, so a parent that goes is let go. }
+  TTyRichParentWatch = class(TComponent)
+  private
+    FEdit: TTyCustomRichEdit;
+    FParents: TFPList;
+    procedure Heard(Sender: TObject);
+    procedure Unhook;
+  protected
+    procedure Notification(AComponent: TComponent; Operation: TOperation); override;
+  public
+    constructor CreateFor(AEdit: TTyCustomRichEdit);
+    destructor Destroy; override;
+    procedure Hook;
+  end;
+
+constructor TTyRichParentWatch.CreateFor(AEdit: TTyCustomRichEdit);
+begin
+  inherited Create(AEdit);
+  FEdit := AEdit;
+  FParents := TFPList.Create;
+end;
+
+destructor TTyRichParentWatch.Destroy;
+begin
+  Unhook;
+  FreeAndNil(FParents);
+  inherited Destroy;
+end;
+
+procedure TTyRichParentWatch.Unhook;
+var
+  i: Integer;
+  w: TWinControl;
+begin
+  if FParents = nil then Exit;
+  for i := 0 to FParents.Count - 1 do
+  begin
+    w := TWinControl(FParents[i]);
+    w.RemoveHandlerOnEnabledChanged(@Heard);
+    w.RemoveFreeNotification(Self);
+  end;
+  FParents.Clear;
+end;
+
+procedure TTyRichParentWatch.Hook;
+var
+  w: TWinControl;
+begin
+  Unhook;
+  w := FEdit.Parent;
+  while w <> nil do
+  begin
+    FParents.Add(w);
+    w.AddHandlerOnEnabledChanged(@Heard);
+    w.FreeNotification(Self);
+    w := w.Parent;
+  end;
+end;
+
+procedure TTyRichParentWatch.Notification(AComponent: TComponent; Operation: TOperation);
+begin
+  inherited Notification(AComponent, Operation);
+  if (Operation = opRemove) and (FParents <> nil) and (FParents.IndexOf(AComponent) >= 0) then
+  begin
+    // a parent going: none of them is touched any more (the chain is hooked again on a move)
+    TWinControl(AComponent).RemoveHandlerOnEnabledChanged(@Heard);
+    FParents.Remove(AComponent);
+  end;
+end;
+
+procedure TTyRichParentWatch.Heard(Sender: TObject);
+begin
+  FEdit.ParagraphViewChanged;
+end;
+
+procedure TTyCustomRichEdit.WatchParents;
+begin
+  if (FParaViewHandlers = nil) or (csDestroying in ComponentState) then Exit;
+  if FParentWatch = nil then FParentWatch := TTyRichParentWatch.CreateFor(Self);
+  TTyRichParentWatch(FParentWatch).Hook;
+end;
+
+procedure TTyCustomRichEdit.SetParent(NewParent: TWinControl);
+begin
+  inherited SetParent(NewParent);
+  // the parents whose Enabled IsEnabled follows are others now
+  if FParentWatch <> nil then WatchParents;
 end;
 
 procedure TTyCustomRichEdit.RemoveHandlerOnParagraphView(const AHandler: TNotifyEvent);

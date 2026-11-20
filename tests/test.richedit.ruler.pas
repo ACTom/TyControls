@@ -24,7 +24,7 @@ uses
   tyControls.StrConsts,
   tyControls.RichEdit.Text, tyControls.RichEdit.Model, tyControls.RichEdit.Commands,
   tyControls.RichEdit.Layout, tyControls.RichEdit.Attrs, tyControls.RichEdit,
-  tyControls.RichEdit.Ruler, test.richedit.control;
+  tyControls.RichEdit.Ruler, test.richedit.control, test.danglingrefs;
 
 type
   { The ruler's protected parts, the focus it gives, the system's unit it is told. }
@@ -37,6 +37,8 @@ type
     Repaints, Focusings: Integer;
     SysUnit: TTyRulerUnit;
     HeldLeft: Boolean;
+    { the system's own answer (SystemMeasureUnit not replaced) }
+    RealUnit: Boolean;
     procedure Invalidate; override;
     procedure Press(X, Y: Integer; AShift: TShiftState = []);
     procedure MoveTo(X, Y: Integer; AShift: TShiftState = []);
@@ -72,6 +74,11 @@ type
     procedure MarkerChanged(Sender: TObject; AMarker: TTyRulerMarker; ATab: Integer;
       AOldTwips, ANewTwips: Integer);
     procedure FreeOnChange(Sender: TObject);
+    procedure FreeRulerChanging(Sender: TObject; AMarker: TTyRulerMarker; ATab: Integer;
+      AOldTwips, ANewTwips: Integer; var AAllow: Boolean);
+    procedure FreeRulerChanged(Sender: TObject; AMarker: TTyRulerMarker; ATab: Integer;
+      AOldTwips, ANewTwips: Integer);
+    procedure FreeRulerOnChange(Sender: TObject);
     function NewRich(ALeft, ATop: Integer): TRulerRich;
     procedure SetText(const S: string);
     procedure SetPara(AIndex, ALeft, AFirst, ARight: Integer);
@@ -124,9 +131,23 @@ type
     procedure TestTheThemeKeysResolveEverywhere;
     procedure TestACaretMoveCostsNoLayoutAndPaintsOnlyAChange;
     procedure TestTheRulerHearsWithoutTheApplicationsEvents;
+    // after the review
+    procedure TestAWholeParagraphSelectedIsTheOneShownAndDragged;
+    procedure TestNothingMayBeDraggedWhereTheFormatIsRefused;
+    procedure TestTheRulerFreedDuringItsOwnCommand;
+    procedure TestAMovedStopsIndexIsItsIndexAfterTheMove;
+    procedure TestADoubleClickOnAStopsPlaceAddsNone;
+    procedure TestTheRightIndentLeavesRoomForAFirstLineRightOfTheOthers;
+    procedure TestTheSystemsUnitIsTheLocales;
   end;
 
 implementation
+
+{$IFDEF MSWINDOWS}
+// the locale query the test asks itself (not the ruler's own declaration)
+function GetLocaleInfoW(ALocale, AType: LongWord; AData: PWideChar; ALen: LongInt): LongInt;
+  stdcall; external 'kernel32.dll' name 'GetLocaleInfoW';
+{$ENDIF}
 
 const
   BS = #92;
@@ -171,7 +192,8 @@ end;
 
 function TRulerProbe.SystemMeasureUnit: TTyRulerUnit;
 begin
-  Result := SysUnit;
+  if RealUnit then Result := inherited SystemMeasureUnit
+  else Result := SysUnit;
 end;
 
 function TRulerProbe.LeftButtonHeld: Boolean;
@@ -881,8 +903,8 @@ begin
   FRich.SelStart := 1;
   FRich.SelLength := t.ParaStart(2) + 2 - 1;
   FRich.UpdateView;
-  AssertEquals('the caret paragraph''s markers', 2, FRuler.View.Para);
-  AssertEquals('its hanging indent', CharX(t.ParaStart(2)) + Dx + TyRichTwipsToPx(567, 96, 1),
+  AssertEquals('the first paragraph''s markers (where the change begins)', 0, FRuler.View.Para);
+  AssertEquals('its hanging indent', CharX(t.ParaStart(0)) + Dx,
     FRuler.MarkerX(rmkHangingIndent, -1));
   for i := 0 to 2 do first[i] := Fmt(i).LeftIndent + Fmt(i).FirstIndent;
   depth := FRich.Document.UndoDepth;
@@ -890,7 +912,7 @@ begin
   AssertEquals('one step', depth + 1, FRich.Document.UndoDepth);
   for i := 0 to 2 do
   begin
-    AssertEquals(Format('paragraph %d: the other lines', [i]), 1701, Fmt(i).LeftIndent);
+    AssertEquals(Format('paragraph %d: the other lines', [i]), 567, Fmt(i).LeftIndent);
     AssertEquals(Format('paragraph %d: its first line stayed', [i]), first[i],
       Fmt(i).LeftIndent + Fmt(i).FirstIndent);
   end;
@@ -1117,9 +1139,9 @@ begin
   AssertEquals('formatted', 567, Fmt(0).LeftIndent + Fmt(0).FirstIndent);
 end;
 
-{ The caret in a table of contents (a paragraph that ends inside a field's result): the drag's
-  command is refused and told once through OnEditRefused, with the format API's reason;
-  nothing changes, the after-event does not come. }
+{ The caret in a table of contents (a paragraph that ends inside a field's result): the rich
+  edit would refuse the paragraph format there (CanFormatParagraphs), so the markers show
+  disabled and a drag does nothing - nothing asked, nothing told, no step. }
 procedure TTyRichEditRulerTest.TestAFieldsResultRefusesAndIsToldOnce;
 var
   p, i, depth: Integer;
@@ -1138,16 +1160,15 @@ begin
   AssertTrue('a paragraph of the contents', p >= 0);
   CaretTo(p, 1);
   FRuler.CheckView;
-  AssertTrue('editable as far as the ruler can tell', FRuler.CanDrag);
+  AssertFalse('not draggable: the rich edit would refuse it', FRuler.CanDrag);
   before := Fmt(p);
   depth := FRich.Document.UndoDepth;
   FRefusals := 0;
   Drag(rmkFirstIndent, 40);
-  AssertEquals('told once', 1, FRefusals);
-  AssertEquals('the format API''s reason', rsRichEditRefusedField, FReason);
+  AssertEquals('nothing told', 0, FRefusals);
   AssertEquals('no step', depth, FRich.Document.UndoDepth);
   AssertTrue('the format as it was', before.Equals(Fmt(p)));
-  AssertEquals('the change was asked', 1, FChangings);
+  AssertEquals('nothing asked', 0, FChangings);
   AssertEquals('not told as done', 0, FChangeds);
   AssertEquals('the marker where it was', CharX(FRich.Document.Text.ParaStart(p)) + Dx,
     FRuler.MarkerX(rmkFirstIndent, -1));
@@ -1449,6 +1470,243 @@ begin
   AssertEquals('the ruler heard it', 1, FRuler.View.Para);
   Drag(rmkFirstIndent, 40);
   AssertEquals('the application heard the change once', 1, FChanges);
+end;
+
+procedure TTyRichEditRulerTest.FreeRulerChanging(Sender: TObject; AMarker: TTyRulerMarker;
+  ATab: Integer; AOldTwips, ANewTwips: Integer; var AAllow: Boolean);
+begin
+  Inc(FChangings);
+  FRuler := nil;
+  Sender.Free;
+end;
+
+procedure TTyRichEditRulerTest.FreeRulerChanged(Sender: TObject; AMarker: TTyRulerMarker;
+  ATab: Integer; AOldTwips, ANewTwips: Integer);
+begin
+  Inc(FChangeds);
+  FRuler := nil;
+  Sender.Free;
+end;
+
+procedure TTyRichEditRulerTest.FreeRulerOnChange(Sender: TObject);
+begin
+  Inc(FChanges);
+  if FRuler <> nil then
+  begin
+    FreeAndNil(FRuler);
+  end;
+end;
+
+{ A whole paragraph selected forward (the caret at the next paragraph's start, as Shift+Down
+  from a line's start gives) and backward: the ruler shows the selected paragraph - the one
+  Paragraph reads and a drag changes -, and its drag changes what it shows. With nothing
+  selected it is the caret's. }
+procedure TTyRichEditRulerTest.TestAWholeParagraphSelectedIsTheOneShownAndDragged;
+var
+  t: TTyRichText;
+begin
+  SetText('First paragraph'#10'Second paragraph'#10'Third');
+  SetPara(1, 1134, 0, 0);
+  t := FRich.Document.Text;
+  // forward: anchor 0, caret at paragraph 1's start
+  FRich.SelStart := 0;
+  FRich.SelLength := t.ParaStart(1);
+  FRich.UpdateView;
+  AssertEquals('the selected paragraph is shown', 0, FRuler.View.Para);
+  AssertEquals('as Paragraph reads it', 0, FRich.Paragraph.LeftIndent);
+  Drag(rmkLeftIndent, 40);
+  AssertEquals('the shown one moved', 567, Fmt(0).LeftIndent);
+  AssertEquals('the next one did not', 1134, Fmt(1).LeftIndent);
+  AssertEquals('and the ruler shows the move', 567, FRuler.View.Format.LeftIndent);
+  // nothing selected: the caret's
+  CaretTo(1, 2);
+  AssertEquals('the caret''s', 1, FRuler.View.Para);
+end;
+
+{ Where the rich edit would refuse a paragraph format (a paragraph of Word's table of contents,
+  a row that holds a nested table) the markers show in the disabled look and a press starts no
+  drag - asked at the press. }
+procedure TTyRichEditRulerTest.TestNothingMayBeDraggedWhereTheFormatIsRefused;
+var
+  i, p: Integer;
+  pt: TPoint;
+  c: TTyRichCell;
+begin
+  LoadBytes(FixtureFile('word-toc.rtf'));
+  FRich.FinishLoading;
+  FRich.UpdateView;
+  p := -1;
+  for i := 1 to FRich.Document.Text.ParaCount - 1 do
+    if FRich.Document.ParaEndsInField(i) and FRich.Document.ParaEndsInField(i - 1) then
+    begin
+      p := i;
+      Break;
+    end;
+  AssertTrue('a paragraph of the contents', p >= 0);
+  CaretTo(p, 0);
+  FRuler.CheckView;
+  AssertFalse('the control says no', FRich.CanFormatParagraphs);
+  AssertFalse('not draggable', FRuler.CanDrag);
+  pt := FRuler.Mid(rmkFirstIndent);
+  FRuler.Press(pt.X, pt.Y);
+  AssertFalse('a press starts no drag', FRuler.Dragging);
+  FRuler.Release(pt.X, pt.Y);
+  LoadBytes(FixtureFile('hand-word-table-merged.rtf'));
+  FRich.FinishLoading;
+  FRich.UpdateView;
+  p := -1;
+  for i := 0 to FRich.Document.Text.ParaCount - 1 do
+  begin
+    c := FRich.Document.CellAt(i);
+    if (c <> nil) and c.Row.HoldsNestedTable then
+    begin
+      p := i;
+      Break;
+    end;
+  end;
+  AssertTrue('the row that holds the nested table', p >= 0);
+  CaretTo(p, 0);
+  FRuler.CheckView;
+  AssertFalse('there neither', FRuler.CanDrag);
+end;
+
+{ The ruler freed during its own command - by its OnMarkerChanging handler, its
+  OnMarkerChanged handler, or the rich edit's OnChange the command raises: nothing of it is
+  touched afterwards (freed memory poisoned), the rich edit keeps the focus question to itself. }
+procedure TTyRichEditRulerTest.TestTheRulerFreedDuringItsOwnCommand;
+var
+  k: Integer;
+  pt: TPoint;
+begin
+  for k := 0 to 2 do
+  begin
+    if FRuler = nil then
+    begin
+      FRuler := TRulerProbe.Create(nil);
+      FRuler.Controller := FCtl;
+      FRuler.Font.PixelsPerInch := 96;
+      FRuler.AutoSize := False;
+      FRuler.Parent := FForm;
+      FRuler.SetBounds(0, 0, 440, 40);
+      FRuler.SysUnit := ruCentimeters;
+      FRuler.RichEdit := FRich;
+    end;
+    CaretTo(0);
+    case k of
+      0: FRuler.OnMarkerChanging := @FreeRulerChanging;
+      1: FRuler.OnMarkerChanged := @FreeRulerChanged;
+      2: FRich.OnChange := @FreeRulerOnChange;
+    end;
+    pt := FRuler.Mid(rmkFirstIndent);
+    FRuler.Press(pt.X, pt.Y);
+    FRuler.MoveTo(pt.X + 40, pt.Y);
+    BeginPoison;
+    try
+      FRuler.Release(pt.X + 40, pt.Y);
+    finally
+      EndPoison;
+    end;
+    AssertNull(Format('case %d: the ruler was freed', [k]), FRuler);
+    FRich.OnChange := @Changed;
+    // the double click's added stop, freed in its own command
+    if k = 0 then
+    begin
+      FRuler := TRulerProbe.Create(nil);
+      FRuler.Controller := FCtl;
+      FRuler.Font.PixelsPerInch := 96;
+      FRuler.AutoSize := False;
+      FRuler.Parent := FForm;
+      FRuler.SetBounds(0, 0, 440, 40);
+      FRuler.RichEdit := FRich;
+      FRuler.OnMarkerChanged := @FreeRulerChanged;
+      BeginPoison;
+      try
+        FRuler.Press(FRuler.XOfTwips(2835), FRuler.StripTop + 2, [ssDouble]);
+      finally
+        EndPoison;
+      end;
+      AssertNull('the double click: the ruler was freed', FRuler);
+    end;
+  end;
+end;
+
+{ OnMarkerChanged gives a moved stop's index after the move and the sort: the stop moved past
+  another is found at that index. OnMarkerChanging gives its index before. }
+procedure TTyRichEditRulerTest.TestAMovedStopsIndexIsItsIndexAfterTheMove;
+var
+  pt: TPoint;
+begin
+  SetTabs(0, [1134, 2835]);
+  CaretTo(0);
+  pt := FRuler.Mid(rmkTabStop, 0);
+  FRuler.Press(pt.X, pt.Y);
+  FRuler.MoveTo(FRuler.XOfTwips(4252), pt.Y);
+  FRuler.Release(FRuler.XOfTwips(4252), pt.Y);
+  AssertEquals('moved', 1, FChangeds);
+  AssertEquals('its new place', 4252, FLastNew);
+  AssertEquals('its index after the sort', 1, FLastTab);
+  AssertEquals('the stop at that index is it', 4252, Fmt(0).Tabs[FLastTab].Position);
+end;
+
+{ A double click that lands on a place a stop already has adds no second one there. }
+procedure TTyRichEditRulerTest.TestADoubleClickOnAStopsPlaceAddsNone;
+var
+  x, y, tab, depth: Integer;
+begin
+  SetTabs(0, [2835]);
+  CaretTo(0);
+  x := FRuler.XOfTwips(2835);
+  // a height of the ruler where the stop's marker is not (the click is on empty space)
+  y := -1;
+  for tab := 0 to FRuler.Height - 1 do
+    if FRuler.MarkerAt(x, tab, depth) = rmkNone then
+    begin
+      y := tab;
+      Break;
+    end;
+  AssertTrue('empty space above or below the stop', y >= 0);
+  depth := FRich.Document.UndoDepth;
+  FRuler.Press(x, y, [ssDouble]);
+  FRuler.Release(x, y);
+  AssertEquals('one stop still', 1, Length(Fmt(0).Tabs));
+  AssertEquals('no step', depth, FRich.Document.UndoDepth);
+  AssertEquals('nothing asked', 0, FChangings);
+end;
+
+{ The right indent stops short of the first line when that line starts right of the others:
+  CTyRulerMinTextTwips of text is left right of the first line's start. }
+procedure TTyRichEditRulerTest.TestTheRightIndentLeavesRoomForAFirstLineRightOfTheOthers;
+begin
+  SetPara(0, 0, 1440, 0);
+  CaretTo(0);
+  Drag(rmkRightIndent, -2000);
+  AssertTrue(Format('the right indent %d leaves the first line %d twips',
+    [Fmt(0).RightIndent, WT - Fmt(0).RightIndent - 1440]),
+    WT - Fmt(0).RightIndent - 1440 >= CTyRulerMinTextTwips - 20);
+  AssertTrue('and it moved as far as that', Fmt(0).RightIndent > 0);
+end;
+
+{ ruAuto: the system's unit, asked of the system itself (not a test's stand-in) - on Windows the
+  user's locale setting LOCALE_IMEASURE ('1': U.S., inches), read here by the test's own call. }
+procedure TTyRichEditRulerTest.TestTheSystemsUnitIsTheLocales;
+{$IFDEF MSWINDOWS}
+var
+  buf: array[0..3] of WideChar;
+  want: TTyRulerUnit;
+{$ENDIF}
+begin
+  FRuler.RealUnit := True;
+  {$IFDEF MSWINDOWS}
+  FillChar(buf, SizeOf(buf), 0);
+  AssertTrue('the locale answers', GetLocaleInfoW($0400, $000D, @buf[0], Length(buf)) > 0);
+  if buf[0] = '1' then want := ruInches else want := ruCentimeters;
+  AssertTrue('the system''s unit', FRuler.SystemMeasureUnit = want);
+  // what the other answer would be, made true through the property, is what is shown
+  FRuler.MeasureUnit := ruAuto;
+  AssertTrue('ruAuto shows it', FRuler.EffectiveUnit = want);
+  {$ELSE}
+  AssertTrue('one of the two', FRuler.SystemMeasureUnit in [ruCentimeters, ruInches]);
+  {$ENDIF}
 end;
 
 initialization

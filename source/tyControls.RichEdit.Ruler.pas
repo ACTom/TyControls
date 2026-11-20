@@ -1,13 +1,15 @@
 unit tyControls.RichEdit.Ruler;
 
 { TTyRichEditRuler: the horizontal ruler an application puts above a TTyRichEdit and links to
-  it (RichEdit). It shows the paragraph the caret is in - the first line's indent, the indent
+  it (RichEdit). It shows the paragraph a paragraph format change would begin at (the
+  caret's, or the first one the selection touches: the one Paragraph reads and a drag
+  changes) - the first line's indent, the indent
   of its other lines (the hanging marker), a box under that one which moves both, the right
   indent, and the tab stops, each drawn by its kind (left, centre, right, decimal: the kinds
   the document holds) - on a scale of centimetres or inches (MeasureUnit) that follows the
   rich edit's zoom, the screen's PPI and its horizontal scroll. Its zero is the left edge of
   that paragraph's text: the page's text edge (WrapMode rwmPage), the text area's (rwmWindow,
-  rwmNone), or - the caret in a table - its cell's text edge, the ruler dimmed outside the
+  rwmNone), or - in a table - its cell's text edge, the ruler dimmed outside the
   cell's width (and outside the width the text wraps at).
 
   Dragging a marker shows a line through the rich edit where it would put the text (the rich
@@ -19,7 +21,7 @@ unit tyControls.RichEdit.Ruler;
   double click on empty ruler space adds a left tab stop there; a stop dragged off the ruler
   (above or below it by more than its height) goes, one dragged along moves - each one step,
   the stops kept sorted, never two at one place, at most CTyMaxTabStops of them. With several
-  paragraphs selected the markers are the caret paragraph's and a drag gives its one property
+  paragraphs selected the markers are the first one's and a drag gives its one property
   to every paragraph the selection touches (the format API's rule): the first-line marker the
   first lines (RichMemo's FirstLine), the hanging marker the other lines (HeadIndent), the box
   the whole paragraph, each keeping its own offset (Delphi's FirstIndent), the right marker
@@ -27,10 +29,12 @@ unit tyControls.RichEdit.Ruler;
 
   Nothing may be dragged - the markers show, in the theme's disabled look, and do not move -
   while the rich edit is read-only, disabled, loading (or incomplete, or saving), inside its
-  document's update, in the designer, or with no rich edit linked. A plain-text rich edit is
+  document's update, in the designer, with no rich edit linked, or where the rich edit would
+  refuse a paragraph format (CanFormatParagraphs: every paragraph shown in a field's result or a
+  row that holds a nested table) - asked again at every press. A plain-text rich edit is
   formatted as its format API formats it.
 
-  It knows the rich edit through public calls only - CaretParagraphView (what to show, laid
+  It knows the rich edit through public calls only - ParagraphView (what to show, laid
   out by the rich edit; markers are placed with its own twips conversion, so the first line's
   first character stands under the first-line marker to the pixel), AddHandlerOnParagraphView
   (when to look again), GuideLine and ApplyParagraphFormat - so an application's own ruler can
@@ -72,7 +76,11 @@ type
   { A marker's change, before it is applied (AAllow False: nothing happens) and after. Values
     in twips: the first line's place (rmkFirstIndent), the other lines' (rmkHangingIndent,
     rmkLeftIndent), the right indent, a stop's place (ATab its index in the paragraph's stops,
-    -1 for the others); a stop added has AOldTwips CTyRulerNoTab, one removed ANewTwips. }
+    -1 for the others: OnMarkerChanging gives the index the stop has before the change,
+    OnMarkerChanged the index it has after it - the stops sorted, an added one where it went;
+    a removed one the index it had); a stop added has AOldTwips CTyRulerNoTab, one removed
+    ANewTwips. The ruler may be freed by a handler of these events, or by one the rich edit's
+    command runs: nothing of it is touched after that. }
   TTyRulerChangingEvent = procedure(Sender: TObject; AMarker: TTyRulerMarker; ATab: Integer;
     AOldTwips, ANewTwips: Integer; var AAllow: Boolean) of object;
   TTyRulerChangedEvent = procedure(Sender: TObject; AMarker: TTyRulerMarker; ATab: Integer;
@@ -117,6 +125,9 @@ type
     FHoverTab: Integer;
     FOnMarkerChanging: TTyRulerChangingEvent;
     FOnMarkerChanged: TTyRulerChangedEvent;
+    { Set by the destructor: a handler the ruler's command runs freed it (one flag per call
+      that runs handlers, on that call's stack; nested calls pass it on). }
+    FGone: PBoolean;
     procedure SetRichEdit(AValue: TTyCustomRichEdit);
     procedure SetMeasureUnit(AValue: TTyRulerUnit);
     procedure RichEditViewChanged(Sender: TObject);
@@ -124,7 +135,9 @@ type
     procedure AppKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
     procedure FinishDrag(ACommit, AFocus: Boolean);
     procedure CommitDrag;
+    procedure CommitDragIn(var AGone: Boolean);
     procedure AddTabAt(AX: Integer; AShift: TShiftState);
+    procedure AddTabAtIn(AX: Integer; AShift: TShiftState; var AGone: Boolean);
     function RunFormat(AMask: TTyParaFormatMask; const AValue: TTyParaFormat): Boolean;
     procedure ShowGuide;
     function WidthTwips: Integer;
@@ -193,7 +206,7 @@ type
       when it does not). }
     function SpanLeft: Integer;
     function SpanRight: Integer;
-    { The paragraph's format as it is shown: the caret paragraph's, a drag's value applied. }
+    { The paragraph's format as it is shown: ParagraphView's, a drag's value applied. }
     function ShownFormat: TTyParaFormat;
     { Where AMarker is drawn (x: its column) and the box it is drawn and hit in; False when it
       is not shown (no view; the right indent of a text that does not wrap; no such stop). }
@@ -217,7 +230,7 @@ type
     destructor Destroy; override;
     { The ruler never takes the focus (TabStop has no effect, as on the scroll bars). }
     function CanFocus: Boolean; override;
-    { Asks the rich edit what to show (CaretParagraphView) and paints again only when that
+    { Asks the rich edit what to show (ParagraphView) and paints again only when that
       changed. The ruler does it itself whenever the rich edit says its view may have changed. }
     procedure CheckView;
     { Ends a drag with nothing changed (Esc does this). }
@@ -307,6 +320,7 @@ end;
 
 destructor TTyCustomRichEditRuler.Destroy;
 begin
+  if FGone <> nil then FGone^ := True;
   HookKeys(False);
   if FRichEdit <> nil then
   begin
@@ -398,7 +412,7 @@ var
 begin
   Inc(FViewChecks);
   if FRichEdit = nil then has := False
-  else has := FRichEdit.CaretParagraphView(v);
+  else has := FRichEdit.ParagraphView(v);
   if not has then v := Default(TTyRichParaView);
   same := (has = FHasView) and (not has or SameParaView(v, FView));
   if same and (v.Para = FView.Para) then Exit;
@@ -767,14 +781,30 @@ begin
 end;
 
 procedure TTyCustomRichEditRuler.FinishDrag(ACommit, AFocus: Boolean);
+var
+  gone: Boolean;
+  keep: PBoolean;
 begin
   FDragging := False;
   HookKeys(False);
   if FRichEdit <> nil then FRichEdit.GuideLine := -1;
   Invalidate;
-  if ACommit then CommitDrag;
-  // whatever the user's drag did, the keys go to the rich edit after it
-  if AFocus then FocusRichEdit;
+  gone := False;
+  keep := FGone;
+  FGone := @gone;
+  try
+    if ACommit then CommitDrag;
+    if gone then Exit;
+    // whatever the user's drag did, the keys go to the rich edit after it
+    if AFocus then FocusRichEdit;
+  finally
+    if gone then
+    begin
+      if keep <> nil then keep^ := True;
+    end
+    else
+      FGone := keep;
+  end;
 end;
 
 function SortedTabs(const ATabs: TTyTabStops): TTyTabStops;
@@ -800,18 +830,42 @@ function TTyCustomRichEditRuler.RunFormat(AMask: TTyParaFormatMask;
   const AValue: TTyParaFormat): Boolean;
 var
   re: TTyCustomRichEdit;
+  gone: PBoolean;
 begin
   re := FRichEdit;
   if re = nil then Exit(False);
+  // (the caller's flag: a handler the command runs may free this ruler too)
+  gone := FGone;
   Result := re.ApplyParagraphFormat(AMask, AValue);
+  if (gone <> nil) and gone^ then Exit(False);
   // a handler the command ran may have freed the rich edit (the notification unlinked it)
   if FRichEdit <> re then Result := False;
 end;
 
 procedure TTyCustomRichEditRuler.CommitDrag;
 var
+  gone: Boolean;
+  keep: PBoolean;
+begin
+  gone := False;
+  keep := FGone;
+  FGone := @gone;
+  try
+    CommitDragIn(gone);
+  finally
+    if gone then
+    begin
+      if keep <> nil then keep^ := True;
+    end
+    else
+      FGone := keep;
+  end;
+end;
+
+procedure TTyCustomRichEditRuler.CommitDragIn(var AGone: Boolean);
+var
   m: TTyRulerMarker;
-  tab, old, nw, i, j: Integer;
+  tab, old, nw, i, j, after: Integer;
   allow: Boolean;
   v: TTyParaFormat;
   mask: TTyParaFormatMask;
@@ -827,7 +881,8 @@ begin
   if (FRichEdit = nil) or not CanDrag then Exit;
   allow := True;
   DoMarkerChanging(m, tab, old, nw, allow);
-  if not allow or (FRichEdit = nil) or not CanDrag then Exit;
+  if AGone or not allow or (FRichEdit = nil) or not CanDrag then Exit;
+  after := tab;
   v := TyDefaultParaFormat;
   case m of
     rmkFirstIndent:
@@ -846,7 +901,7 @@ begin
     rmkLeftIndent:
       begin
         { The whole paragraph moves, each keeping its own offset (Delphi's FirstIndent): the
-          caret paragraph's first line goes where its other lines' move takes it. }
+          shown paragraph's first line goes where its other lines' move takes it. }
         mask := [pffStartIndent];
         v.LeftIndent := nw;
         v.FirstIndent := FView.Format.FirstIndent;
@@ -879,12 +934,37 @@ begin
           end;
       end;
       v.Tabs := SortedTabs(tabs);
+      // the moved stop's index after the sort (a removed one keeps the index it had)
+      if nw <> CTyRulerNoTab then
+        for i := 0 to High(v.Tabs) do
+          if v.Tabs[i].Position = nw then after := i;
     end;
   end;
-  if RunFormat(mask, v) then DoMarkerChanged(m, FDragTab, old, nw);
+  if not RunFormat(mask, v) or AGone then Exit;
+  DoMarkerChanged(m, after, old, nw);
 end;
 
 procedure TTyCustomRichEditRuler.AddTabAt(AX: Integer; AShift: TShiftState);
+var
+  gone: Boolean;
+  keep: PBoolean;
+begin
+  gone := False;
+  keep := FGone;
+  FGone := @gone;
+  try
+    AddTabAtIn(AX, AShift, gone);
+  finally
+    if gone then
+    begin
+      if keep <> nil then keep^ := True;
+    end
+    else
+      FGone := keep;
+  end;
+end;
+
+procedure TTyCustomRichEditRuler.AddTabAtIn(AX: Integer; AShift: TShiftState; var AGone: Boolean);
 var
   v, i, at: Integer;
   allow: Boolean;
@@ -906,10 +986,11 @@ begin
     if tabs[i].Position = v then at := i;
   allow := True;
   DoMarkerChanging(rmkTabStop, at, CTyRulerNoTab, v, allow);
-  if not allow or not CanDrag then Exit;
+  if AGone or not allow or not CanDrag then Exit;
   f := TyDefaultParaFormat;
   f.Tabs := tabs;
-  if RunFormat([pffTabs], f) then DoMarkerChanged(rmkTabStop, at, CTyRulerNoTab, v);
+  if RunFormat([pffTabs], f) and not AGone then DoMarkerChanged(rmkTabStop, at, CTyRulerNoTab, v);
+  if AGone then Exit;
   FocusRichEdit;
 end;
 
