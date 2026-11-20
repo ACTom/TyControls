@@ -968,6 +968,8 @@ var
   at, depth: Integer;
   box: TRect;
   c: TPoint;
+  rs: TTyRichHandleRects;
+  st: TTyRichPaintStyle;
 begin
   block := EmbeddedObject(RedPict);
   rtf := InPara('{\field{\*\fldinst HYPERLINK "https://example.com/"}{\fldrslt ' + block + '}}');
@@ -984,15 +986,41 @@ begin
   c := Point((box.Left + box.Right) div 2, box.Bottom - 10);
   AssertTrue('its pixels, not ' + PxText(FRich.Surf.GetPixel(c.X, c.Y)),
     SamePx(Red, FRich.Surf.GetPixel(c.X, c.Y)));
+  { A click on it selects it with the field's marks around it: the run of the open mark before
+    it is one place for the caret, before that mark - so the selection is the whole field. }
   FRich.PressAt(c.X, c.Y);
   FRich.ReleaseAt(c.X, c.Y);
-  AssertEquals('a click selects it: start', at, FRich.SelStart);
-  AssertEquals('a click selects it: length', 1, FRich.SelLength);
+  PaintAll;
+  AssertEquals('a click selects it with its field: start', at - 1, FRich.SelStart);
+  AssertEquals('a click selects it with its field: length', 3, FRich.SelLength);
+  // shown selected as an object is - its frame -, but with no resize handles
+  AssertFalse('no handles', FRich.Handles(rs));
+  st := FRich.Style;
+  AssertTrue('the frame', SamePx(st.ObjectFrame, FRich.Surf.GetPixel(box.Left, c.Y)));
+  AssertTrue('the frame on the right', SamePx(st.ObjectFrame,
+    FRich.Surf.GetPixel(box.Right - 1, c.Y)));
   AssertFalse('read-only: it cannot be deleted alone', FRich.Document.CanChange(at, 1));
+  // the selection is the whole field: copied and pasted, the field again
+  FRich.CopyToClipboard;
+  FRich.SelStart := FRich.Document.Text.Length;
+  FRich.PasteFromClipboard;
+  AssertTrue('pasted: the open mark', FRich.Document.ObjectAt(FRich.Document.Text.Length - 3) is
+    TTyRichFieldMark);
+  AssertTrue('pasted: the block', FRich.Document.ObjectAt(FRich.Document.Text.Length - 2) is
+    TTyRichOpaque);
+  AssertTrue('pasted: the close mark', FRich.Document.ObjectAt(FRich.Document.Text.Length - 1) is
+    TTyRichFieldMark);
+  FRich.Undo;
+  AssertTrue('the paste undone: saved as it came', SaveRtf = rtf);
+  // Delete deletes the whole field, one step; the undo brings it back as it came
+  FRich.PressAt(c.X, c.Y);
+  FRich.ReleaseAt(c.X, c.Y);
   depth := FRich.Document.UndoDepth;
   FRich.Press(VK_DELETE, []);
-  AssertEquals('the delete is refused', depth, FRich.Document.UndoDepth);
-  AssertTrue('still there', FRich.Document.ObjectAt(at) is TTyRichOpaque);
+  AssertEquals('deleted, one step', depth + 1, FRich.Document.UndoDepth);
+  AssertFalse('the block went with its field', FRich.Document.ObjectAt(at) is TTyRichOpaque);
+  FRich.Undo;
+  AssertTrue('back', FRich.Document.ObjectAt(at) is TTyRichOpaque);
   AssertTrue('saved as it came', SaveRtf = rtf);
 end;
 
