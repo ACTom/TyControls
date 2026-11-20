@@ -104,6 +104,31 @@ begin
   end;
 end;
 
+// the group of S's first field, with its braces
+function FirstFieldGroup(const S: RawByteString): RawByteString;
+var
+  i, j, d: Integer;
+begin
+  Result := '';
+  i := Pos('{' + BS + 'field', S);
+  if i = 0 then Exit;
+  d := 0;
+  j := i;
+  while j <= Length(S) do
+  begin
+    case S[j] of
+      '\': Inc(j);
+      '{': Inc(d);
+      '}':
+        begin
+          Dec(d);
+          if d = 0 then Exit(Copy(S, i, j - i + 1));
+        end;
+    end;
+    Inc(j);
+  end;
+end;
+
 const
   // the source's tables: Arial, SimSun, Times; red, blue
   HeadX = '{|rtf1|ansi|ansicpg936|deff0{|fonttbl{|f0|fswiss|fcharset0 Arial;}{|f1|fnil|fcharset134 SimSun;}' +
@@ -336,6 +361,8 @@ begin
   PasteAt(x, x.Document.Text.Length, clip);
   saved := SaveOf(x);
   CheckBalanced(AWhat + ', the same document', saved);
+  AssertTrue(AWhat + ', the same document: the field''s bytes twice',
+    CountOf(FirstFieldGroup(Rtf(ABody)), saved) >= 2);
   back := ReadBack(saved);
   try
     AssertEquals(AWhat + ', the same document: every field twice', 2 * nx,
@@ -718,6 +745,22 @@ begin
   PasteAt(n, 0, x.ClipRtf);
   AssertEquals('a part: no field', '', FieldSignatures(n.Document));
   AssertEquals('a part: its text', 'a a l', n.Lines[0]);
+  // the same of a field the model owns (one pasted from elsewhere)
+  x.SelStart := 0;
+  x.SelLength := x.Document.Text.Length;
+  x.CopyToClipboard;
+  n := NewProbe;
+  PasteAt(n, 0, x.ClipRtf);
+  AssertTrue('pasted: a field', FieldSignatures(n.Document) <> '');
+  n.SelStart := 0;
+  n.SelLength := 6;
+  n.ClipRtf := '';
+  n.CopyToClipboard;
+  CheckBalanced('a part of a field the model owns', n.ClipRtf);
+  x := NewProbe;
+  PasteAt(x, 0, n.ClipRtf);
+  AssertEquals('a part of a field the model owns: no field', '', FieldSignatures(x.Document));
+  AssertEquals('... its text', 'a a l', x.Lines[0]);
   // the page number field whole, its entry's link cut
   x := Loaded(Rtf(HeadX + Entry + '|par}'));
   // from inside the entry's text to the end
