@@ -31,6 +31,10 @@ type
   public
     FocusNow: Boolean;
     function Focused: Boolean; override;
+    { LCL's first step of a key in the focused control (TWinControl.DoKeyDownBeforeInterface
+      calls it before any form's shortcut is looked at, and looks at none when it zeroed the
+      key). }
+    procedure KeyFirst(var Key: Word; Shift: TShiftState);
   end;
 
   { The picture action, its dialog replaced by a file name. }
@@ -85,7 +89,7 @@ type
     function UpdatedOn(AAction: TTyRichEditAction): TTyRichEditAction;
     function PngFile: string;
     function FirstParaWhere(AFixedRow: Boolean): Integer;
-    function KeyThroughLcl(AKey: Word; ACtrl: Boolean): Boolean;
+    function KeyThroughLcl(AList: TActionList; AKey: Word; AShift: TShiftState): Boolean;
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -100,6 +104,10 @@ type
     procedure TestAPlainTextDocument;
     procedure TestAFieldsResultIsRefusedAndToldOnce;
     procedure TestTheCharacterDoorIsTheUsers;
+    procedure TestAutoCheckChangesNothing;
+    procedure TestWhatTheActionsShowFollowsAParentAndThePendingFormat;
+    procedure TestTheDoorsOwnRules;
+    procedure TestTheExamplesButtonsShowChecked;
     procedure TestCanInsertPictureReadsThePlace;
     procedure TestAnIdleRoundAsksTheControlNothing;
     procedure TestTheTableActionAsksForItsSize;
@@ -116,14 +124,18 @@ type
 implementation
 
 uses
-  {$IFDEF MSWINDOWS}Windows,{$ENDIF}
-  StrUtils, Menus, Translations, test.designregistry;
+  StrUtils, Menus, Translations, tyControls.GlyphButtons, test.designregistry;
 
 { ---- probes ---- }
 
 function TActRich.Focused: Boolean;
 begin
   Result := FocusNow;
+end;
+
+procedure TActRich.KeyFirst(var Key: Word; Shift: TShiftState);
+begin
+  KeyDownBeforeInterface(Key, Shift);
 end;
 
 function TPictureProbe.AskFileName(var AFileName: string): Boolean;
@@ -282,33 +294,33 @@ begin
   Result := -1;
 end;
 
-{ A key's way through LCL as a widgetset sends it: CN_KEYDOWN (the control's KeyDown, then the
-  forms' shortcuts - their action lists), then LM_KEYDOWN. Ctrl is held through the thread's own
-  keyboard state, which is what LCL reads for it (GetKeyState); put back after. True: taken. }
-function TTyRichEditActionsTest.KeyThroughLcl(AKey: Word; ACtrl: Boolean): Boolean;
-{$IFDEF MSWINDOWS}
+{ A key's way through LCL with the shift state given, not read: the focused control's KeyDown
+  first (KeyDownBeforeInterface, as DoKeyDownBeforeInterface calls it), and only a key it left
+  goes on to the forms' shortcuts - here the action list's, matched as TCustomActionList.IsShortCut
+  matches them (ShortCut or SecondaryShortCuts, then Execute). Not through CN_KEYDOWN with
+  the thread's keyboard state set: on Windows LCL reads Ctrl with GetKeyState, whose state the
+  system may bring back in step with the input queue's at any time (a console host's input, a
+  focus change elsewhere) - a test that sets it fails now and then. True: taken. }
+function TTyRichEditActionsTest.KeyThroughLcl(AList: TActionList; AKey: Word;
+  AShift: TShiftState): Boolean;
 var
-  keep, held: TKeyboardState;
-{$ENDIF}
+  k: Word;
+  sc: TShortCut;
+  i: Integer;
+  a: TCustomAction;
 begin
-  {$IFDEF MSWINDOWS}
-  GetKeyboardState(keep);
-  held := keep;
-  if ACtrl then
-  begin
-    held[VK_CONTROL] := $80;
-    held[VK_LCONTROL] := $80;
-  end;
-  SetKeyboardState(held);
-  try
-  {$ENDIF}
-    Result := FRich.Perform(CN_KEYDOWN, AKey, 0) <> 0;
-    if not Result then Result := FRich.Perform(LM_KEYDOWN, AKey, 0) <> 0;
-  {$IFDEF MSWINDOWS}
-  finally
-    SetKeyboardState(keep);
-  end;
-  {$ENDIF}
+  k := AKey;
+  FRich.KeyFirst(k, AShift);
+  if k = 0 then Exit(True);
+  sc := ShortCut(k, AShift);
+  for i := 0 to AList.ActionCount - 1 do
+    if AList.Actions[i] is TCustomAction then
+    begin
+      a := TCustomAction(AList.Actions[i]);
+      if (a.ShortCut = sc) or (a.SecondaryShortCuts.IndexOfShortCut(sc) >= 0) then
+        Exit(a.Execute);
+    end;
+  Result := False;
 end;
 
 { ---- the plan's two ---- }
@@ -1245,9 +1257,6 @@ var
   undo, bold: TTyRichEditAction;
   depth: Integer;
 begin
-  {$IFNDEF MSWINDOWS}
-  Ignore('Ctrl is held through the Windows thread keyboard state');
-  {$ENDIF}
   AssertEquals('Ctrl+B', ShortCut(VK_B, [ssCtrl]), Make(TTyRichEditBold).ShortCut);
   AssertEquals('Ctrl+I', ShortCut(VK_I, [ssCtrl]), Make(TTyRichEditItalic).ShortCut);
   AssertEquals('Ctrl+U', ShortCut(VK_U, [ssCtrl]), Make(TTyRichEditUnderline).ShortCut);
@@ -1273,14 +1282,14 @@ begin
   Select(6, 4);
   FRich.SelAttributes.Italic := True;
   depth := FRich.Document.UndoDepth;
-  AssertTrue('Ctrl+Z taken', KeyThroughLcl(VK_Z, True));
+  AssertTrue('Ctrl+Z taken', KeyThroughLcl(list, VK_Z, [ssCtrl]));
   AssertEquals('one step undone, not two', depth - 1, FRich.Document.UndoDepth);
   Select(0, 5);
   AssertTrue('the first still italic', FRich.SelAttributes.Italic);
   // Ctrl+B: the action's
   Select(0, 5);
   depth := FRich.Document.UndoDepth;
-  AssertTrue('Ctrl+B taken', KeyThroughLcl(VK_B, True));
+  AssertTrue('Ctrl+B taken', KeyThroughLcl(list, VK_B, [ssCtrl]));
   AssertEquals('bold once', depth + 1, FRich.Document.UndoDepth);
   AssertTrue('bold', FRich.SelAttributes.Bold);
   AssertEquals('nothing typed', 'Plain bold plain', Copy(FRich.Text, 1, 16));
@@ -1394,6 +1403,267 @@ begin
     finally
       a.Free;
     end;
+  end;
+end;
+
+{ AutoCheck turned on or off, run by Execute, by a menu item and by a speed button linked to
+  the action: a style, a script and a list are switched by what the selection has, never by
+  the action's Checked (which AutoCheck turns before the run); Checked is what the next update
+  reads. }
+procedure TTyRichEditActionsTest.TestAutoCheckChangesNothing;
+type
+  TWay = (wExecute, wMenu, wButton);
+var
+  auto: Boolean;
+  way: TWay;
+  i, depth: Integer;
+  a: TTyRichEditAction;
+  item: TMenuItem;
+  menu: TPopupMenu;
+  btn: TTySpeedButton;
+  cls: TTyRichEditActionClass;
+  name: string;
+
+  function Has: Boolean;
+  begin
+    if cls = TTyRichEditBold then Result := FRich.SelAttributes.Bold
+    else if cls = TTyRichEditSuperscript then Result := FRich.SelAttributes.Subscript = sstSuperscript
+    else Result := FRich.Paragraph.Numbering = lkBullet;
+  end;
+
+  procedure Run;
+  begin
+    case way of
+      wExecute: a.Execute;
+      wMenu: item.Click;
+      wButton: btn.Click;
+    end;
+  end;
+
+const
+  Classes3: array[0..2] of TTyRichEditActionClass = (TTyRichEditBold, TTyRichEditSuperscript,
+    TTyRichEditBullets);
+begin
+  menu := TPopupMenu.Create(FForm);
+  for i := 0 to High(Classes3) do
+    for auto := False to True do
+      for way := Low(TWay) to High(TWay) do
+      begin
+        cls := Classes3[i];
+        name := Format('%s, AutoCheck %s, way %d', [cls.ClassName, BoolToStr(auto, True), Ord(way)]);
+        SetText('Alpha beta'#10'Gamma');
+        a := Make(cls);
+        a.AutoCheck := auto;
+        item := TMenuItem.Create(menu);
+        menu.Items.Add(item);
+        item.Action := a;
+        btn := TTySpeedButton.Create(FForm);
+        btn.Parent := FForm;
+        btn.Action := a;
+        Select(0, 5);
+        a.Update;
+        AssertFalse(name + ': off before', Has);
+        AssertFalse(name + ': unchecked before', a.Checked);
+        depth := FRich.Document.UndoDepth;
+        Run;
+        AssertTrue(name + ': on after one run', Has);
+        AssertEquals(name + ': one step', depth + 1, FRich.Document.UndoDepth);
+        a.Update;
+        AssertTrue(name + ': checked after the update', a.Checked);
+        Run;
+        AssertFalse(name + ': off after a second run', Has);
+        a.Update;
+        AssertFalse(name + ': unchecked again', a.Checked);
+        btn.Free;
+        item.Free;
+      end;
+end;
+
+{ Bold's Enabled follows a parent disabled (LCL tells the child nothing; the control's
+  notification does), and its Checked the format the next typed text gets, set by code with
+  nothing selected - at the next update, with no caret move between. }
+procedure TTyRichEditActionsTest.TestWhatTheActionsShowFollowsAParentAndThePendingFormat;
+var
+  panel, other: TWinControl;
+  bold: TTyRichEditAction;
+  f: TTyCharFormat;
+  st: TTyRichEditActionState;
+  r0: Integer;
+begin
+  panel := TWinControl.Create(FForm);
+  panel.Parent := FForm;
+  panel.SetBounds(0, 0, 420, 320);
+  FRich.Parent := panel;
+  FRich.UpdateView;
+  bold := Make(TTyRichEditBold);
+  Select(2, 0);
+  AssertTrue('enabled', UpdatedOn(bold).Enabled);
+  st := TTyRichEditActionState.Find(FRich);
+  r0 := st.Refreshes;
+  panel.Enabled := False;
+  AssertFalse('the control says no', FRich.CanFormatCharacters);
+  AssertFalse('the parent disabled: disabled at the next update', UpdatedOn(bold).Enabled);
+  AssertTrue('heard: asked again', st.Refreshes > r0);
+  panel.Enabled := True;
+  AssertTrue('enabled again', UpdatedOn(bold).Enabled);
+  // the pending format, by code
+  AssertFalse('not bold at the caret', UpdatedOn(bold).Checked);
+  f := TyDefaultCharFormat;
+  Include(f.Style, fsBold);
+  AssertTrue('the door at the caret', FRich.ApplyCharacterFormat([cffBold], f));
+  AssertTrue('checked at the next update', UpdatedOn(bold).Checked);
+  FRich.SelAttributes.Bold := False;
+  AssertFalse('the format API at the caret: unchecked at the next update', UpdatedOn(bold).Checked);
+  // moved to another parent (not one of the old chain): that one is heard
+  other := TWinControl.Create(FForm);
+  other.Parent := FForm;
+  other.SetBounds(0, 0, 420, 320);
+  FRich.Parent := other;
+  AssertTrue('enabled there', UpdatedOn(bold).Enabled);
+  other.Enabled := False;
+  AssertFalse('the new parent disabled: heard', UpdatedOn(bold).Enabled);
+  other.Enabled := True;
+  panel.Enabled := False;
+  AssertTrue('the old parent no more', UpdatedOn(bold).Enabled);
+  panel.Enabled := True;
+end;
+
+{ What the doors do by their own rules, held: ApplyCharacterFormat writes a name or a size that
+  is the base's as none of the text's own (as the format API); the character query counts the
+  paragraph's separator the selection takes (a field's characters and the mark after them are
+  not all the field's); inside the document's update the queries say no (the doors do nothing)
+  and the actions read no format. }
+procedure TTyRichEditActionsTest.TestTheDoorsOwnRules;
+var
+  f: TTyCharFormat;
+  base: string;
+  basesize, i: Integer;
+  runs: TTyRunArray;
+  st: TStringStream;
+  bold: TTyRichEditAction;
+  pf: TTyParaFormat;
+  state: TTyRichEditActionState;
+begin
+  // the base's name and size: none of the text's own (a whole size, so points say it exactly)
+  FRich.DefAttributes.Size := 10;
+  FRich.DefAttributes.Name := 'Arial';
+  base := FRich.DefAttributes.Name;
+  basesize := FRich.DefAttributes.Size;
+  // text with no name or size of its own, the base's written: it keeps none (shows it already)
+  Select(0, 5);
+  f := TyDefaultCharFormat;
+  f.FontName := base;
+  f.SizeHalfPt := basesize * 2;
+  // (nothing changes: the door says so with False)
+  FRich.ApplyCharacterFormat([cffFontName, cffSize], f);
+  runs := FRich.Document.RunsOf(0);
+  for i := 0 to High(runs) do
+    if runs[i].Start < 5 then
+    begin
+      AssertEquals('no name of its own', '',
+        FRich.Document.Formats.CharFormat(runs[i].Format).FontName);
+      AssertEquals('no size of its own', 0,
+        FRich.Document.Formats.CharFormat(runs[i].Format).SizeHalfPt);
+    end;
+  // a link alone in its paragraph, its characters and the paragraph's mark selected
+  st := TStringStream.Create('{\rtf1\ansi{\fonttbl{\f0 Arial;}}' +
+    '{\field{\*\fldinst HYPERLINK "http://example.com"}{\fldrslt link}}\par next\par}');
+  try
+    FRich.LoadFromStream(st, rfRtf);
+  finally
+    st.Free;
+  end;
+  FRich.FinishLoading;
+  FRich.UpdateView;
+  Select(0, FRich.Document.Text.ParaLength(0) + 1);
+  AssertFalse('the field and the mark after it: not all the field''s',
+    FRich.Document.FieldOnly(FRich.SelStart, FRich.SelLength));
+  AssertTrue('so the characters may be formatted', FRich.CanFormatCharacters);
+  // inside the document's update
+  SetText('Plain bold plain'#10'Second');
+  Select(0, 5);
+  FRich.SelAttributes.Bold := True;
+  bold := Make(TTyRichEditBold);
+  AssertTrue('checked', UpdatedOn(bold).Checked);
+  state := TTyRichEditActionState.Find(FRich);
+  FRich.Document.BeginUpdate;
+  try
+    state.Changed;
+    bold.Update;
+    AssertFalse('no format read inside the update', state.Readable);
+    AssertFalse('nothing checked', bold.Checked);
+    AssertFalse('characters: no', FRich.CanFormatCharacters);
+    AssertFalse('paragraphs: no', FRich.CanFormatParagraphs);
+    pf := TyDefaultParaFormat;
+    pf.Align := paraRight;
+    AssertFalse('the paragraph door does nothing', FRich.ApplyParagraphFormat([pffAlign], pf));
+  finally
+    FRich.Document.EndUpdate;
+  end;
+  AssertTrue('after it: checked again', UpdatedOn(bold).Checked);
+end;
+
+{ A speed button shows its action's Checked (Down) when the action has a group of its own and
+  the button may come up again (AllowAllUp) - and the example's toolbar sets both for every
+  checkable action it shows. }
+procedure TTyRichEditActionsTest.TestTheExamplesButtonsShowChecked;
+const
+  Checkable: array[0..11] of string = ('Bold', 'Italic', 'Underline', 'StrikeOut', 'Superscript',
+    'Subscript', 'AlignLeft', 'AlignCenter', 'AlignRight', 'Justify', 'Bullets', 'Numbering');
+var
+  a: TTyRichEditAction;
+  btn: TTySpeedButton;
+  lfm: TStringList;
+  txt, blk: string;
+  i, k, e, g: Integer;
+  groups: TStringList;
+
+  function Block(const AHead: string): string;
+  begin
+    k := Pos(AHead, txt);
+    AssertTrue(AHead + ' in the example', k > 0);
+    e := PosEx('end'#13#10, txt, k);
+    Result := Copy(txt, k, e - k);
+  end;
+
+begin
+  a := Make(TTyRichEditBold);
+  // (in a list: LCL's Checked looks through its list for the group's others)
+  a.ActionList := TActionList.Create(FForm);
+  a.GroupIndex := 101;
+  btn := TTySpeedButton.Create(FForm);
+  btn.Parent := FForm;
+  btn.AllowAllUp := True;
+  btn.Action := a;
+  Select(0, 5);
+  a.Update;
+  AssertFalse('up while plain', btn.Down);
+  a.Execute;
+  a.Update;
+  AssertTrue('down while bold', btn.Down);
+  // the example
+  lfm := TStringList.Create;
+  groups := TStringList.Create;
+  try
+    lfm.LoadFromFile(ExtractFilePath(ParamStr(0)) + '..' + PathDelim + 'examples' + PathDelim +
+      'richedit' + PathDelim + 'umain.lfm');
+    txt := StringReplace(lfm.Text, LineEnding, #13#10, [rfReplaceAll]);
+    for i := 0 to High(Checkable) do
+    begin
+      blk := Block('object Btn' + Checkable[i] + ': TTySpeedButton');
+      AssertTrue(Checkable[i] + ': its button may come up', Pos('AllowAllUp = True', blk) > 0);
+      AssertTrue(Checkable[i] + ': linked', Pos('Action = Act' + Checkable[i], blk) > 0);
+      blk := Block('object Act' + Checkable[i] + ': ');
+      g := Pos('GroupIndex = ', blk);
+      AssertTrue(Checkable[i] + ': its action has a group', g > 0);
+      blk := Trim(Copy(blk, g + 13, 4));
+      AssertTrue(Checkable[i] + ': not group 0', StrToIntDef(Copy(blk, 1, Pos(#13, blk + #13) - 1), 0) <> 0);
+      AssertEquals(Checkable[i] + ': a group of its own', -1, groups.IndexOf(blk));
+      groups.Add(blk);
+    end;
+  finally
+    groups.Free;
+    lfm.Free;
   end;
 end;
 

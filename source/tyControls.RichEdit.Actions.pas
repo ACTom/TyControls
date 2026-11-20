@@ -164,6 +164,9 @@ type
   TTyRichEditStyleAction = class(TTyRichEditAction)
   protected
     function StyleOf: TFontStyle; virtual; abstract;
+    { The selection (the paragraphs) has it now, as the update shows it: what a run decides
+      by (never Checked, which AutoCheck turns before the run). }
+    function IsOn(AState: TTyRichEditActionState): Boolean;
     procedure UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
     procedure ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
   end;
@@ -206,6 +209,9 @@ type
   TTyRichEditScriptAction = class(TTyRichEditAction)
   protected
     function ScriptOf: TTySubscriptType; virtual; abstract;
+    { The selection (the paragraphs) has it now, as the update shows it: what a run decides
+      by (never Checked, which AutoCheck turns before the run). }
+    function IsOn(AState: TTyRichEditActionState): Boolean;
     procedure UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
     procedure ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
   end;
@@ -273,6 +279,9 @@ type
   TTyRichEditListAction = class(TTyRichEditAction)
   protected
     function KindOf: TTyListKind; virtual; abstract;
+    { The selection (the paragraphs) has it now, as the update shows it: what a run decides
+      by (never Checked, which AutoCheck turns before the run). }
+    function IsOn(AState: TTyRichEditActionState): Boolean;
     procedure UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
     procedure ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
   end;
@@ -561,7 +570,8 @@ end;
 
 procedure TTyRichEditActionState.Check;
 begin
-  if FDirty then Refresh;
+  // (asked inside the document's update, which may end with nothing to report: asked again)
+  if FDirty or (not FReadable and not FRich.Document.Updating) then Refresh;
 end;
 
 procedure TTyRichEditActionState.Refresh;
@@ -725,14 +735,20 @@ end;
 
 { TTyRichEditStyleAction }
 
-procedure TTyRichEditStyleAction.UpdateOn(ARich: TTyCustomRichEdit;
-  AState: TTyRichEditActionState);
+function TTyRichEditStyleAction.IsOn(AState: TTyRichEditActionState): Boolean;
 const
   Same: array[TFontStyle] of TTyRichConsistentAttribute = (caBold, caItalic, caUnderline,
     caStrikeOut);
 begin
+  Result := AState.Readable and (StyleOf in AState.Style) and
+    (Same[StyleOf] in AState.CharConsistent);
+end;
+
+procedure TTyRichEditStyleAction.UpdateOn(ARich: TTyCustomRichEdit;
+  AState: TTyRichEditActionState);
+begin
   Enabled := AState.CanFormatCharacters;
-  Checked := AState.Readable and (StyleOf in AState.Style) and (Same[StyleOf] in AState.CharConsistent);
+  Checked := IsOn(AState);
 end;
 
 procedure TTyRichEditStyleAction.ExecuteOn(ARich: TTyCustomRichEdit;
@@ -742,9 +758,10 @@ const
 var
   f: TTyCharFormat;
 begin
-  // SelAttributes' one-style write, through the user's door
+  // SelAttributes' one-style write, through the user's door; on or off by what the selection
+  // has now - never by Checked, which AutoCheck (LCL's Execute) may have turned already
   f := TyDefaultCharFormat;
-  if not Checked then
+  if not IsOn(AState) then
     if StyleOf = fsStrikeOut then f.Strike := True
     else Include(f.Style, StyleOf);
   // asked again after this (a write with nothing selected tells no one)
@@ -805,12 +822,17 @@ end;
 
 { TTyRichEditScriptAction }
 
+function TTyRichEditScriptAction.IsOn(AState: TTyRichEditActionState): Boolean;
+begin
+  Result := AState.Readable and (AState.Subscript = ScriptOf) and
+    (caSubscript in AState.CharConsistent);
+end;
+
 procedure TTyRichEditScriptAction.UpdateOn(ARich: TTyCustomRichEdit;
   AState: TTyRichEditActionState);
 begin
   Enabled := AState.CanFormatCharacters;
-  Checked := AState.Readable and (AState.Subscript = ScriptOf) and
-    (caSubscript in AState.CharConsistent);
+  Checked := IsOn(AState);
 end;
 
 procedure TTyRichEditScriptAction.ExecuteOn(ARich: TTyCustomRichEdit;
@@ -819,7 +841,7 @@ var
   f: TTyCharFormat;
 begin
   f := TyDefaultCharFormat;
-  if Checked then f.VertAlign := vaNone
+  if IsOn(AState) then f.VertAlign := vaNone
   else if ScriptOf = sstSuperscript then f.VertAlign := vaSuper
   else f.VertAlign := vaSub;
   AState.Changed;
@@ -924,12 +946,17 @@ end;
 
 { TTyRichEditListAction }
 
+function TTyRichEditListAction.IsOn(AState: TTyRichEditActionState): Boolean;
+begin
+  Result := AState.Readable and (AState.Numbering = KindOf) and
+    (cpaNumbering in AState.ParaConsistent);
+end;
+
 procedure TTyRichEditListAction.UpdateOn(ARich: TTyCustomRichEdit;
   AState: TTyRichEditActionState);
 begin
   Enabled := AState.CanFormatParagraphs;
-  Checked := AState.Readable and (AState.Numbering = KindOf) and
-    (cpaNumbering in AState.ParaConsistent);
+  Checked := IsOn(AState);
 end;
 
 procedure TTyRichEditListAction.ExecuteOn(ARich: TTyCustomRichEdit;
@@ -939,7 +966,7 @@ var
 begin
   // Paragraph.Numbering's write: the kind only, the indents a list item gets or gives back
   l := TyDefaultParaFormat.List;
-  if Checked then l.Kind := lkNone else l.Kind := KindOf;
+  if IsOn(AState) then l.Kind := lkNone else l.Kind := KindOf;
   ARich.ApplyParagraphFormat([pffListKind, pffListIndents], TyRichListValue(l));
 end;
 
