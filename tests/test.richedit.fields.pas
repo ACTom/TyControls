@@ -16,7 +16,7 @@ unit test.richedit.fields;
 interface
 
 uses
-  Classes, SysUtils, Graphics, fpcunit, testregistry,
+  Classes, SysUtils, StrUtils, Graphics, fpcunit, testregistry,
   tyControls.RichEdit.Text, tyControls.RichEdit.Model, tyControls.RichEdit.Commands,
   tyControls.RichEdit.RtfRead, tyControls.RichEdit.RtfWrite, tyControls.RichEdit.Find;
 
@@ -2119,7 +2119,8 @@ var
   b, o: TBytes;
   d: TTyRichDocument;
   pf: TTyParaFormat;
-  i: Integer;
+  i, k: Integer;
+  s2, before: RawByteString;
 begin
   // a0 b1 _2 [3 链4 接5 x6 y7 ]8 _9 c10 d11
   s := Rtf('{|rtf1|ansi|ansicpg1252|deff0{|fonttbl{|f0|froman Times New Roman;}' +
@@ -2160,6 +2161,26 @@ begin
     end;
     CheckEditKeeps(Self, Format('%s last, typed before the field', [Slots[i]]), b,
       TTyRichInsertText.Create(0, 'Q'), [FieldGroup(s, 1)]);
+    { Both named, the other between: the one named last is the slot, and it is the last of the
+      two written before the field's bytes after an edit. }
+    s2 := Rtf('{|rtf1|ansi|ansicpg1252|deff0{|fonttbl{|f0|froman Times New Roman;}' +
+      '{|f1|fnil|fcharset134 SimSun;}{|f6|fswiss Arial;}}|pard|plain|loch|af0|hich|af6|dbch|af1' +
+      Slots[i] + Slots[1 - i] + Slots[i] + '|f0 ab {|field{|*|fldinst A}{|fldrslt |''e9}} cd|par}');
+    d := LoadDoc(BytesOf(s2), False);
+    try
+      // (the words of the text before it and of its open mark set from code: none)
+      AssertTrue('(the words set from code)', d.Execute(TTyRichSetCharFormat.Create(TyRichRange(0, 4),
+        [cffExtra], TyDefaultCharFormat)));
+      AssertTrue('(a key before it)', d.Execute(TTyRichInsertText.Create(0, 'Q')));
+      o := SaveOut(d);
+      k := Pos(FieldGroup(s2, 1), StrOfBytes(o));
+      AssertTrue(Format('%s last: the field''s bytes', [Slots[i]]), k > 0);
+      before := Copy(StrOfBytes(o), 1, k - 1);
+      AssertTrue(Format('%s named last: the last of the two before the field''s bytes: %s',
+        [Slots[i], before]), RPos(Rtf(Slots[i]), before) > RPos(Rtf(Slots[1 - i]), before));
+    finally
+      d.Free;
+    end;
   end;
   // no slot named around the field: an edit writes no slot word
   b := BytesOf(LinkRtf);
@@ -2698,8 +2719,10 @@ procedure TTyRichFieldsTest.TestASaveBesideALargeFieldReadsOnlyItsMarksParagraph
       // (Word's file is a few intervals; the others many)
       AssertTrue(Format('%s: a file of many intervals: %d', [AMsg, load.IntervalCount]),
         (Length(B) < 400000) or (load.IntervalCount > 8));
+      { The save reads the marks' paragraphs' intervals, not the field's: at most three, and
+        fewer than the file has - for Word's file of a few intervals too. }
       AssertTrue(Format('%s: intervals read for the save: %d of %d', [AMsg, parses, load.IntervalCount]),
-        parses <= 3);
+        (parses <= 3) and (parses < load.IntervalCount));
       n := DiffBytes(StrOfBytes(B), StrOfBytes(o), AGroups, from);
       AssertTrue(Format('%s: the output differs from the file in %d bytes from %d (the groups aside)',
         [AMsg, n, from]), n < 4096 * Length(AAt));
