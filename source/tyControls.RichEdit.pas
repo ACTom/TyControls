@@ -1330,6 +1330,10 @@ type
       selection grows to hold the fields whole and nothing changes (True; the caller tells the
       refusal or not). False when the range cuts no field. }
     function GrowOverFields(AStart, ALen: TTyRichPos): Boolean;
+    { [AFrom, ATo] lies wholly inside one field's result (a caret: AFrom = ATo inside any): an
+      edit there is an edit inside that result, refused as it is - the selection does not
+      grow. Reads the two ends' paragraphs; those between by their depths (no parse). }
+    function InsideOneResult(AFrom, ATo: TTyRichPos): Boolean;
     // the selection becomes that range, reported (GrowOverFields' and the delete keys')
     procedure ShowCover(AStart, ALen: TTyRichPos);
     { Links. CharBoxAt: the character whose box client point (X, Y) is on (-1: none - the
@@ -5092,13 +5096,10 @@ begin
     e0 := e;
     while FDoc.FieldRangeAt(s, o, c) and (c < e) do s := o;
     while FDoc.FieldRangeAt(e, o, c) and (o >= s) do e := c + 1;
+    { (Grown ends are not rested here: a resting place a grown end moves to takes a field's
+      mark only when that field holds the whole range - an edit wholly inside one result, which
+      is refused before (InsideOneResult); the selection shown rests its ends itself.) }
     if (s = s0) and (e = e0) then Break;
-    // grown: its ends put where a caret rests may take a mark beside them - once more from there
-    if not ViewBehind then
-    begin
-      s := Math.Min(s, RestingPlace(s));
-      e := Math.Max(e, RestingPlace(e));
-    end;
   end;
   Result := (s <> AStart) or (e <> AStart + ALen);
   AStart := s;
@@ -5113,6 +5114,58 @@ begin
   n := ALen;
   Result := FieldCover(s, n);
   if Result then ShowCover(s, n);
+end;
+
+function TTyCustomRichEdit.InsideOneResult(AFrom, ATo: TTyRichPos): Boolean;
+var
+  t: TTyRichText;
+  k, ks, ke, i, d, st, low: Integer;
+  runs: TTyRunArray;
+  ps, q: TTyRichPos;
+begin
+  Result := False;
+  t := FDoc.Text;
+  FDoc.BeginRead;
+  try
+    d := FDoc.FieldDepthAt(AFrom);
+    if d <= 0 then Exit;
+    ks := t.ParaOfPos(AFrom);
+    ke := t.ParaOfPos(ATo);
+    k := ks;
+    while k <= ke do
+    begin
+      if (k > ks) and (k < ke) then
+      begin
+        // a paragraph between: the fewest fields open anywhere in it
+        FDoc.ParaFieldDepths(k, st, low);
+        if low <= 0 then Exit;
+        Inc(k);
+        Continue;
+      end;
+      if k > ks then d := FDoc.ParaFieldDepth(k);
+      if d <= 0 then Exit;
+      // every mark in [AFrom, ATo): a close that leaves no field open ends the result
+      runs := FDoc.RunsOf(k);
+      ps := t.ParaStart(k);
+      for i := 0 to High(runs) do
+      begin
+        q := ps + runs[i].Start;
+        if q < AFrom then Continue;
+        if q >= ATo then Break;
+        if runs[i].Obj is TTyRichFieldMark then
+          if TTyRichFieldMark(runs[i].Obj).Kind = rfmOpen then Inc(d)
+          else
+          begin
+            Dec(d);
+            if d <= 0 then Exit;
+          end;
+      end;
+      Inc(k);
+    end;
+    Result := True;
+  finally
+    FDoc.EndRead;
+  end;
 end;
 
 procedure TTyCustomRichEdit.ShowCover(AStart, ALen: TTyRichPos);
@@ -9321,7 +9374,7 @@ begin
       field it cut, whole - the next attempt acts on what is shown selected - and the refusal
       is told once, below. An edit from code is refused as it is. }
     if AUser and (reason = rsRichEditRefusedField) and (APos = GetSelStart) and
-      (ALen = GetSelLength) then
+      (ALen = GetSelLength) and not InsideOneResult(APos, APos + ALen) then
       GrowOverFields(APos, ALen);
   end;
   if (reason = '') and AInsert and not FDoc.CanChange(APos, 0) then
@@ -9854,6 +9907,13 @@ begin
     n := GetSelLength;
     if not EditAllowed(s, n, False, True) or not UserRangeAllowed(s, n) then Exit;
     DeleteText(s, s + n, True);
+    Exit;
+  end;
+  { The caret inside a field's result: the key is an edit inside it, refused and told - not a
+    selection of a field near it. }
+  if InsideOneResult(FCaret, FCaret) then
+  begin
+    Refuse(rsRichEditRefusedField, True);
     Exit;
   end;
   t := FDoc.Text;

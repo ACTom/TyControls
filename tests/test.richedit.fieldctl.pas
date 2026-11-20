@@ -120,6 +120,7 @@ type
     procedure TestALineBreaksAtAFieldOnlyWhereTheCaretRests;
     procedure TestDownAndUpNeverSkipALine;
     procedure TestAPointerOverALongContentsFindsItOnce;
+    procedure TestAKeyInsideAResultIsRefusedWhateverMarksAreNear;
   end;
 
 implementation
@@ -2027,6 +2028,157 @@ begin
       FRich.Searches - s0);
     // (each entry's page number read once, the contents' instruction once)
     AssertTrue(Format('%d entries: what is read', [n]), FRich.Reads - r0 <= 2 * Moves + 1);
+  end;
+end;
+
+{ A key with the caret, or the whole selection, inside a field's result - at any depth, beside
+  any marks - is an edit inside that result: refused and told once, nothing changes, the
+  selection stays as it was (it grows neither to a field inside nor to the one around). Only
+  where the caret or the selection is not wholly inside one result does the key select the
+  fields it would cut first: before a contents' first entry (outside the contents) Delete
+  selects the whole contents, and the next Delete deletes it. Checked at a contents' first, a
+  middle and its last entry, with Backspace after the entry's page number and Delete before
+  the entry. }
+procedure TTyRichFieldControlTest.TestAKeyInsideAResultIsRefusedWhateverMarksAreNear;
+const
+  Pages: array[1..3] of string = ('3', '6', '9');
+var
+  src, before: RawByteString;
+  e, whole: Integer;
+  q, c, s0, n0: TTyRichPos;
+
+  procedure Fresh;
+  begin
+    Load(Rtf(src));
+    before := AllText;
+    whole := Doc.FieldPartner(0) + 1;
+  end;
+
+  // the key refused, told once, and nothing changed: the text, the selection
+  procedure CheckRefused(const AWhat: string);
+  begin
+    AssertEquals(AWhat + ': refused and told once', 1, FRich.Refused);
+    AssertEquals(AWhat + ': ... the field''s reason', rsRichEditRefusedField, FRich.LastReason);
+    AssertEquals(AWhat + ': nothing changed', Hex(before), Hex(AllText));
+    AssertEquals(AWhat + ': the selection''s start stays', s0, FRich.SelStart);
+    AssertEquals(AWhat + ': ... its length', n0, FRich.SelLength);
+  end;
+
+  // the whole contents selected, nothing told; the key again: the contents gone
+  procedure CheckWhole(const AWhat: string; AKey: Word);
+  begin
+    AssertEquals(AWhat + ': nothing told', 0, FRich.Refused);
+    AssertEquals(AWhat + ': nothing changed yet', Hex(before), Hex(AllText));
+    AssertEquals(AWhat + ': the whole contents selected', Int64(0), FRich.SelStart);
+    AssertEquals(AWhat + ': ... all of it', Int64(whole), FRich.SelLength);
+    Press(AKey);
+    AssertEquals(AWhat + ': the second press, nothing told', 0, FRich.Refused);
+    AssertEquals(AWhat + ': ... the contents gone', Hex(' after'), Hex(Copy(AllText, 1, 6)));
+    AssertFalse(AWhat + ': ... no field left', Doc.ObjectAt(0) is TTyRichFieldMark);
+  end;
+
+begin
+  src := Head + '{|field{|*|fldinst TOC ||o "1-3" ||h}{|fldrslt ';
+  for e := 1 to 3 do
+  begin
+    src := src + '{|field{|*|fldinst HYPERLINK ||l "_Toc' + IntToStr(e) + '"}{|fldrslt Chapter ' +
+      IntToStr(e) + '|tab {|field{|*|fldinst PAGEREF _Toc' + IntToStr(e) + ' ||h}{|fldrslt ' +
+      Pages[e] + '}}}}';
+    if e < 3 then src := src + '|par ';
+  end;
+  src := src + '}} after|par}';
+  for e := 1 to 3 do
+  begin
+    // Backspace after the entry's page number
+    Fresh;
+    q := PosOfText(Raw(Pages[e]), Doc.Text.ParaStart(e - 1)) + 1;
+    FRich.SelStart := q;
+    s0 := FRich.SelStart;
+    n0 := 0;
+    Reset;
+    Press(VK_BACK);
+    if e < 3 then
+      CheckRefused(Format('entry %d, Backspace after its page number (inside the contents)', [e]))
+    else
+      // (the last entry's end: the caret rests after the contents' close mark, outside it)
+      CheckWhole('the last entry, Backspace after its page number (after the contents)', VK_BACK);
+    // Delete before the entry
+    Fresh;
+    FRich.SelStart := Doc.Text.ParaStart(e - 1);
+    s0 := FRich.SelStart;
+    n0 := 0;
+    Reset;
+    Press(VK_DELETE);
+    if e = 1 then
+      CheckWhole('the first entry, Delete before it (before the contents)', VK_DELETE)
+    else
+      CheckRefused(Format('entry %d, Delete before it (inside the contents)', [e]));
+    // Ctrl+Backspace and Ctrl+Delete inside: the same
+    Fresh;
+    FRich.SelStart := PosOfText('apter', Doc.Text.ParaStart(e - 1));
+    s0 := FRich.SelStart;
+    n0 := 0;
+    Reset;
+    Press(VK_BACK, [ssCtrl]);
+    CheckRefused(Format('entry %d, Ctrl+Backspace inside its text', [e]));
+    Reset;
+    Press(VK_DELETE, [ssCtrl]);
+    CheckRefused(Format('entry %d, Ctrl+Delete inside its text', [e]));
+    { The whole entry selected, inside the contents: its keys refused, the selection stays (the
+      first entry's text alone: selected whole from its open mark, which rests before the
+      contents' own, it would cut the contents). }
+    Fresh;
+    if e = 1 then
+    begin
+      // (from its second character: a place before its first rests before both open marks)
+      q := 0;
+      while Unseen(q) do Inc(q);
+      FRich.SelStart := q + 1;
+      FRich.SelLength := 8;
+      AssertEquals('(the first entry''s text selected)', Hex('hapter 1'),
+        Hex(Doc.Text.GetText(FRich.SelStart, FRich.SelLength)));
+    end
+    else if e = 3 then
+    begin
+      // its open mark and its text, not its close (which rests after the contents' close)
+      q := Doc.Text.ParaStart(e - 1);
+      FRich.SelStart := q;
+      FRich.SelLength := 10;
+      AssertEquals('(the last entry''s open mark and text selected)', Hex(OC) + Hex('Chapter 3'),
+        Hex(Doc.Text.GetText(FRich.SelStart, FRich.SelLength)));
+    end
+    else
+    begin
+      q := Doc.Text.ParaStart(e - 1);
+      c := Doc.FieldPartner(q);
+      FRich.SelStart := q;
+      FRich.SelLength := c + 1 - q;
+      AssertEquals(Format('(entry %d selected whole)', [e]), q, FRich.SelStart);
+      AssertEquals(Format('(entry %d selected whole, to its close)', [e]), c + 1 - q, FRich.SelLength);
+    end;
+    s0 := FRich.SelStart;
+    n0 := FRich.SelLength;
+    Reset;
+    Press(VK_DELETE);
+    CheckRefused(Format('entry %d''s text selected, Delete', [e]));
+    Reset;
+    Press(VK_BACK);
+    CheckRefused(Format('entry %d''s text selected, Backspace', [e]));
+    Reset;
+    FRich.Key8('x');
+    CheckRefused(Format('entry %d''s text selected, typing', [e]));
+    // a selection from the entry's text to the text after the contents: the whole contents
+    Fresh;
+    q := PosOfText('apter', Doc.Text.ParaStart(e - 1));
+    FRich.SelStart := q;
+    FRich.SelLength := PosOfText('after') + 2 - q;
+    Reset;
+    Press(VK_DELETE);
+    AssertEquals(Format('entry %d to after the contents: the refusal told', [e]), 1, FRich.Refused);
+    AssertEquals(Format('entry %d to after the contents: the selection grown to it', [e]),
+      Int64(0), FRich.SelStart);
+    AssertEquals(Format('entry %d to after the contents: ... its end kept', [e]),
+      PosOfText('after') + 2, FRich.SelStart + FRich.SelLength);
   end;
 end;
 
