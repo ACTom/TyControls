@@ -7267,15 +7267,20 @@ type
     FLight: Boolean;
     FFonts: array of Integer;
     FColorCount: Integer;
-    { The field marks met so far whose field is open: kept (True) or left out with its
-      partner - the two marks of a field go along together or not at all. }
-    FMarks: array of Boolean;
+    { The field marks met so far whose field is open: left out with its partner (0), kept as
+      they are (1), or made the model's own (2, FMarkIds: the new pair's identity) - the two
+      marks of a field go along together, or not at all. }
+    FMarks: array of Integer;
+    FMarkIds: array of Int64;
     FMarkN: Integer;
+    FOwnedFlags: Byte;
     function HasFont(ANum: Integer): Boolean;
     function ForeignWord(ABuf: PByte; const T: TTyRtfToken): Boolean;
     function Foreign(const ABytes: RawByteString; AText: Boolean): Boolean;
     function WithoutForeignWords(const ABytes: RawByteString): RawByteString;
     function FieldInstruction(const ABytes: RawByteString; AUc: Integer): UTF8String;
+    function FieldShell(const ABytes: RawByteString; out AFlags: Byte): Boolean;
+    function OwnedOpen(AMark: TTyRichFieldMark): Integer;
     function ResultPictures(const ABytes: RawByteString): RawByteString;
     function HasForeignText(const ABytes: RawByteString): Boolean;
   public
@@ -7738,17 +7743,38 @@ begin
   Result := AObj;
   if AObj is TTyRichFieldMark then
   begin
-    { A field shown as content keeps its marks only where its bytes mean the same - where the
-      header tables agree and they name nothing the target's file lacks; elsewhere the marks
-      are left out and its result goes along as the formatted text it is (making the field
-      again around its content is not done here). The close mark goes as its open mark went. }
+    { A field shown as content keeps its marks as they are only where its bytes mean the same
+      - where the header tables agree and they name nothing the target's file lacks, and it is
+      in no field made the model's own. Elsewhere it becomes the model's own field
+      (TTyRichFieldMark.CreateOwned): its instruction's text and its state words, its content
+      as the content it is - unless its instruction is more than text (a field or a picture
+      in it): then its marks are left out and its content goes as the formatted text it is.
+      The close mark goes as its open mark went. }
     if TTyRichFieldMark(AObj).Kind = rfmOpen then
     begin
-      if FMarkN = Length(FMarks) then SetLength(FMarks, FMarkN * 2 + 4);
-      FMarks[FMarkN] := FLight and not Foreign(TTyRichFieldMark(AObj).Bytes, True);
-      if not FMarks[FMarkN] then Result := nil
-      // (it leaves the document it was read into: its bytes go with it, not that file's)
-      else if TTyRichFieldMark(AObj).InFile then Result := AObj.Clone;
+      if FMarkN = Length(FMarks) then
+      begin
+        SetLength(FMarks, FMarkN * 2 + 4);
+        SetLength(FMarkIds, Length(FMarks));
+      end;
+      FMarks[FMarkN] := OwnedOpen(TTyRichFieldMark(AObj));
+      FMarkIds[FMarkN] := 0;
+      case FMarks[FMarkN] of
+        0: Result := nil;
+        // (it leaves the document it was read into: its bytes go with it, not that file's)
+        1: if TTyRichFieldMark(AObj).InFile then Result := AObj.Clone;
+      else
+        begin
+          FMarkIds[FMarkN] := TTyRichFieldMark.NewId;
+          if TTyRichFieldMark(AObj).Owned then
+            Result := TTyRichFieldMark.CreateOwned(rfmOpen, FMarkIds[FMarkN],
+              TTyRichFieldMark(AObj).Instruction, TTyRichFieldMark(AObj).Flags)
+          else
+            Result := TTyRichFieldMark.CreateOwned(rfmOpen, FMarkIds[FMarkN],
+              FieldInstruction(TTyRichFieldMark(AObj).Bytes, TTyRichFieldMark(AObj).RawUc),
+              FOwnedFlags);
+        end;
+      end;
       Inc(FMarkN);
     end
     else if FMarkN = 0 then
@@ -7756,7 +7782,10 @@ begin
     else
     begin
       Dec(FMarkN);
-      if not FMarks[FMarkN] then Result := nil;
+      case FMarks[FMarkN] of
+        0: Result := nil;
+        2: Result := TTyRichFieldMark.CreateOwned(rfmClose, FMarkIds[FMarkN]);
+      end;
     end;
     Exit;
   end;
@@ -7790,6 +7819,89 @@ begin
   end;
 end;
 
+{ What an open mark that passes the filter becomes: 0 left out, 1 kept as it is, 2 the
+  model's own (FOwnedFlags then its state words). }
+function TTyRtfForeignFilter.OwnedOpen(AMark: TTyRichFieldMark): Integer;
+var
+  i: Integer;
+  inOwned: Boolean;
+begin
+  FOwnedFlags := 0;
+  // (a field inside one made the model's own is its own too: none is written from bytes there)
+  inOwned := False;
+  for i := 0 to FMarkN - 1 do
+    if FMarks[i] = 2 then inOwned := True;
+  if AMark.Owned then Exit(2);
+  if FLight and not inOwned and not Foreign(AMark.Bytes, True) then Exit(1);
+  if FieldShell(AMark.Bytes, FOwnedFlags) then Result := 2 else Result := 0;
+end;
+
+{ A field's group ABytes as a field the model owns takes it: True when its instruction is text
+  alone once its destinations (\*\datafield, ...) are passed over - no field, no picture, no
+  object in it -, AFlags its own state words (\flddirty \fldedit \fldlock \fldpriv) found at
+  the field's own level. }
+function TTyRtfForeignFilter.FieldShell(const ABytes: RawByteString; out AFlags: Byte): Boolean;
+var
+  lex: TTyRtfLexer;
+  t: TTyRtfToken;
+  buf: PByte;
+  depth, instAt, skipAt: Integer;
+  starting: Boolean;
+
+  function Named(const AName: string): Boolean;
+  begin
+    Result := (t.NameLen = Length(AName)) and CompareMem(@buf[t.NameStart], PChar(AName), t.NameLen);
+  end;
+
+begin
+  AFlags := 0;
+  Result := False;
+  if ABytes = '' then Exit;
+  buf := PByte(PAnsiChar(ABytes));
+  lex.Init(buf, 0, Length(ABytes));
+  depth := 0;
+  instAt := -1;
+  skipAt := -1;
+  starting := False;
+  while lex.Next(t) do
+  begin
+    case t.Kind of
+      rtkGroupStart:
+        begin
+          Inc(depth);
+          starting := True;
+          Continue;
+        end;
+      rtkGroupEnd:
+        begin
+          if depth = skipAt then skipAt := -1;
+          if depth = instAt then Break;
+          Dec(depth);
+        end;
+      rtkWord:
+        if depth = 1 then
+        begin
+          if Named('flddirty') then AFlags := AFlags or CTyRichFieldDirty
+          else if Named('fldedit') then AFlags := AFlags or CTyRichFieldEdit
+          else if Named('fldlock') then AFlags := AFlags or CTyRichFieldLock
+          else if Named('fldpriv') then AFlags := AFlags or CTyRichFieldPriv;
+        end
+        else if (instAt < 0) and Named('fldinst') then
+          instAt := depth
+        else if (instAt >= 0) and (skipAt < 0) then
+        begin
+          if starting and (t.Start > 0) and (buf[t.Start - 1] = Ord('*')) then
+            skipAt := depth
+          else if Named('field') or Named('pict') or Named('object') or Named('shp') or
+            Named('shppict') or Named('nonshppict') or Named('result') then
+            Exit(False);
+        end;
+    end;
+    if not ((t.Kind = rtkSymbol) and (t.Value = Ord('*'))) then starting := False;
+  end;
+  Result := instAt >= 0;
+end;
+
 function TyRichFieldInstruction(ADoc: TTyRichDocument; AMark: TTyRichFieldMark): UTF8String;
 var
   lex: TTyRtfLexer;
@@ -7803,6 +7915,8 @@ var
 begin
   Result := '';
   if (AMark = nil) or (AMark.Kind <> rfmOpen) then Exit;
+  // a field the model owns keeps its instruction as text
+  if AMark.Owned then Exit(AMark.Instruction);
   buf := AMark.BytesData;
   len := PtrInt(AMark.BytesLength);
   if (buf = nil) or (len <= 0) then Exit;

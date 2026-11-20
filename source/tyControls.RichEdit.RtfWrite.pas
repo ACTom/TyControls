@@ -343,6 +343,18 @@ type
     FLastWalked: Integer;    // ... the paragraph it wrote (or looked at) last
     FWalkStop: Boolean;      // ... and it stopped there for that
     FPrevCell: TTyRichCell;  // its cell
+    { Fields the model owns (TTyRichFieldMark.Owned) are written as a group built here around
+      their content, which is written from the model as any content is: the shells open now
+      (written True, or a mark whose partner is not written False) and the paragraph each began
+      in. A whole document's save first finds the paragraphs that begin inside such a field
+      (FOwnedFirst / FOwnedLast, rising runs): those are never passed over as a field written
+      as its bytes is, and their depths count no field for the writer's passes. }
+    FShells: array of Boolean;
+    FShellParas: array of Integer;
+    FShellN: Integer;
+    FOwnedFirst, FOwnedLast: array of Integer;
+    FOwnedN: Integer;
+    FOwnedDepth: Integer;
     // a range (TyRichSaveRtfRange): its paragraphs, what of its end paragraphs goes out
     FRange: Boolean;
     FCopy: TTyRichCopyRange;
@@ -370,6 +382,11 @@ type
     procedure WriteMarkSlots(AMark: TTyRichFieldMark; AFormat: Integer);
     function InsideField(AIndex: Integer): Boolean;
     function FieldStartDepth(AIndex: Integer): Integer;
+    procedure FindOwned;
+    procedure OwnedWalk(AIndex: Integer; AData: Pointer; ASrcOffset, ASrcBytes: Int64;
+      var AContinue: Boolean);
+    function OwnedAt(AIndex: Integer): Boolean;
+    procedure WriteShell(AMark: TTyRichFieldMark);
     function PastFieldFrom(AIndex, ALimit: Integer): Integer;
     function BackOverField(AIndex, ALimit: Integer): Integer;
     procedure WalkStretch(AFirst, ALast: Integer; ALook: Boolean);
@@ -926,6 +943,8 @@ var
   s, low: Integer;
 begin
   if FRange then Exit(False);
+  // (one inside a field the model owns is written: that field has no bytes)
+  if (FOwnedN > 0) and OwnedAt(AIndex) then Exit(False);
   FDoc.ParaFieldDepths(AIndex, s, low);
   Result := (s > 0) and (low > 0);
 end;
@@ -934,7 +953,101 @@ function TRtfWriter.FieldStartDepth(AIndex: Integer): Integer;
 var
   low: Integer;
 begin
+  if (FOwnedN > 0) and OwnedAt(AIndex) then Exit(0);
   FDoc.ParaFieldDepths(AIndex, Result, low);
+end;
+
+{ The paragraphs that begin inside a field the model owns, found in one walk of the paragraphs'
+  values (nothing parsed: such a field is never a file's own, so a paragraph not parsed is in
+  none) - only when such marks live at all. A field the model owns holds none written as its
+  bytes, nor is it inside one, so a paragraph's fields at its start are all of one kind. }
+procedure TRtfWriter.FindOwned;
+begin
+  FOwnedN := 0;
+  FOwnedDepth := 0;
+  if FRange or (TTyRichFieldMark.OwnedAlive = 0) then Exit;
+  FDoc.Text.WalkParas(0, @OwnedWalk);
+end;
+
+procedure TRtfWriter.OwnedWalk(AIndex: Integer; AData: Pointer; ASrcOffset, ASrcBytes: Int64;
+  var AContinue: Boolean);
+var
+  fmt: TTyParaFormatId;
+  runs: TTyRunArray;
+  cell: TTyRichCell;
+  r: Integer;
+  m: TTyRichFieldMark;
+begin
+  if FOwnedDepth > 0 then
+    if (FOwnedN > 0) and (FOwnedLast[FOwnedN - 1] = AIndex - 1) then
+      FOwnedLast[FOwnedN - 1] := AIndex
+    else
+    begin
+      if FOwnedN = Length(FOwnedFirst) then
+      begin
+        SetLength(FOwnedFirst, FOwnedN * 2 + 8);
+        SetLength(FOwnedLast, Length(FOwnedFirst));
+      end;
+      FOwnedFirst[FOwnedN] := AIndex;
+      FOwnedLast[FOwnedN] := AIndex;
+      Inc(FOwnedN);
+    end;
+  if (AData = nil) or not FDoc.ReadValue(AData, fmt, runs, cell) then Exit;
+  for r := 0 to High(runs) do
+    if runs[r].Obj is TTyRichFieldMark then
+    begin
+      m := TTyRichFieldMark(runs[r].Obj);
+      if not m.Owned then Continue;
+      if m.Kind = rfmOpen then Inc(FOwnedDepth)
+      else if FOwnedDepth > 0 then Dec(FOwnedDepth);
+    end;
+end;
+
+function TRtfWriter.OwnedAt(AIndex: Integer): Boolean;
+var
+  lo, hi, mid: Integer;
+begin
+  lo := 0;
+  hi := FOwnedN - 1;
+  while lo <= hi do
+  begin
+    mid := (lo + hi) shr 1;
+    if AIndex < FOwnedFirst[mid] then hi := mid - 1
+    else if AIndex > FOwnedLast[mid] then lo := mid + 1
+    else Exit(True);
+  end;
+  Result := False;
+end;
+
+{ A field the model owns: its group built here - the state words it keeps, its instruction as
+  text (no formatting of its own), and its result's group, whose content is then written
+  from the model (WritePara) and closed at its close mark. }
+procedure TRtfWriter.WriteShell(AMark: TTyRichFieldMark);
+var
+  s: UTF8String;
+  p, n: PtrInt;
+  code: Cardinal;
+begin
+  Sym('{');
+  Word('field');
+  if AMark.Flags and CTyRichFieldDirty <> 0 then Word('flddirty');
+  if AMark.Flags and CTyRichFieldEdit <> 0 then Word('fldedit');
+  if AMark.Flags and CTyRichFieldLock <> 0 then Word('fldlock');
+  if AMark.Flags and CTyRichFieldPriv <> 0 then Word('fldpriv');
+  Sym('{\*');
+  Word('fldinst');
+  // (the instruction in no symbol font: its characters are themselves)
+  FCurSymbol := False;
+  s := AMark.Instruction;
+  p := 0;
+  while p < Length(s) do
+  begin
+    n := TyRichNextChar(PByte(PAnsiChar(s)) + p, Length(s) - p, code);
+    WriteChar(code);
+    Inc(p, n);
+  end;
+  Sym('}{');
+  Word('fldrslt');
 end;
 
 { The first paragraph from AIndex (at most ALimit) that does not lie wholly inside a field's
@@ -1447,7 +1560,7 @@ begin
     bal := 0;
     marked := False;
     for r := 0 to High(runs) do
-      if runs[r].Obj is TTyRichFieldMark then
+      if (runs[r].Obj is TTyRichFieldMark) and not TTyRichFieldMark(runs[r].Obj).Owned then
       begin
         marked := True;
         if TTyRichFieldMark(runs[r].Obj).Kind = rfmOpen then Inc(bal) else Dec(bal);
@@ -1929,6 +2042,12 @@ begin
   // (a paragraph not parsed: the load's index by its offset, no look-up of the paragraph)
   if (AData = nil) and (ASrcOffset >= 0) then FLoad.ParaFieldDepths(ASrcOffset, ds, dl)
   else FDoc.ValueFieldDepths(AData, AIndex, ds, dl);
+  // (inside a field the model owns: no field of the file's)
+  if (FOwnedN > 0) and OwnedAt(AIndex) then
+  begin
+    ds := 0;
+    dl := 0;
+  end;
   if own and (ds = 0) and CleanAt(ASrcOffset) and
      ((FStretchFirst = AIndex) or RowStartsAt(AIndex, True)) then
   begin
@@ -1997,6 +2116,7 @@ begin
   FHavePrev := False;
   FPrevCell := nil;
   FSkip := 0;
+  FShellN := 0;
   FPrevInField := False;
   WalkStretch(AFirst, AFirst + ACount - 1, False);
   // (one that ended inside a field written as its bytes: they ended it)
@@ -2201,6 +2321,42 @@ begin
           begin
             FCurPara := -1;
             Props;
+          end;
+        end;
+      end
+      else if m.Owned then
+      begin
+        // a field the model owns: a group built here, its content written as any content is
+        if m.Kind = rfmOpen then
+        begin
+          if FShellN = Length(FShells) then
+          begin
+            SetLength(FShells, FShellN * 2 + 8);
+            SetLength(FShellParas, Length(FShells));
+          end;
+          FShells[FShellN] := FieldWhole(AIndex, ch);
+          FShellParas[FShellN] := AIndex;
+          Inc(FShellN);
+          if FShells[FShellN - 1] then
+          begin
+            if ARuns[r].Format <> FCurChar then WriteCharFormat(ARuns[r].Format);
+            WriteShell(m);
+          end;
+        end
+        else if FShellN > 0 then
+        begin
+          Dec(FShellN);
+          if FShells[FShellN] then
+          begin
+            Sym('}}');
+            // as after a field's bytes: the character state not known, the paragraph's
+            // properties again where the field began in another paragraph
+            FCurChar := -1;
+            if AIndex <> FShellParas[FShellN] then
+            begin
+              FCurPara := -1;
+              Props;
+            end;
           end;
         end;
       end
@@ -2820,6 +2976,7 @@ begin
   // the interval they belong to back to unparsed
   FDoc.BeginRead;
   try
+    FindOwned;
     if FLoad <> nil then SaveFile else SaveOurs;
     Flush;
   finally

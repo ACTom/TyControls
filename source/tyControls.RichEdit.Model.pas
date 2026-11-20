@@ -369,6 +369,9 @@ type
     FSlotNames: array[0..2] of UTF8String;
     FSlotCharsets: array[0..2] of Integer;
     FSlot: Byte;
+    FOwned: Boolean;
+    FInstruction: UTF8String;
+    FFlags: Byte;
     function GetBytes: RawByteString;
   public
     { ABytes and ARawUc: the open mark's (a close mark keeps none). }
@@ -378,6 +381,17 @@ type
       kept, nothing copied. }
     constructor CreateInFile(AId: Int64; const AFile: TBytes; AStart, ALen: Int64;
       ARawUc: Integer = 1);
+    { A mark of a field the model owns: one that came from elsewhere (a paste, a drop) whose
+      file bytes could not be right here. It keeps no bytes - the open mark the instruction's
+      text (decoded) and the field's own state words (AFlags: CTyRichFieldDirty ...) - and the
+      writer builds the field's group around its content, written from the model. A close
+      mark of such a field is owned too. }
+    constructor CreateOwned(AKind: TTyRichFieldMarkKind; AId: Int64;
+      const AInstruction: UTF8String = ''; AFlags: Byte = 0);
+    destructor Destroy; override;
+    { How many owned marks live now, in any document or history (a writer that finds none
+      need not look for their fields). }
+    class function OwnedAlive: Int64;
     { The same kind, field and bytes - its own copy of them when this one's are a file's. }
     function Clone: TTyRichObject; override;
     { Its bytes when it owns them; nothing of a file's buffer, which the document keeps for
@@ -409,8 +423,20 @@ type
     function SlotName(AIndex: Integer): UTF8String;
     function SlotCharset(AIndex: Integer): Integer;
     property Slot: Byte read FSlot;
+    property Owned: Boolean read FOwned;
+    // an owned open mark's instruction and state words ('' and 0 for any other mark)
+    property Instruction: UTF8String read FInstruction;
+    property Flags: Byte read FFlags;
   end;
 
+const
+  // an owned field's state words (TTyRichFieldMark.Flags)
+  CTyRichFieldDirty = 1;   // \flddirty
+  CTyRichFieldEdit = 2;    // \fldedit
+  CTyRichFieldLock = 4;    // \fldlock
+  CTyRichFieldPriv = 8;    // \fldpriv
+
+type
   TTyRichTable = class;
   TTyRichRow = class;
   TTyRichEdges = array of Integer;
@@ -3115,6 +3141,33 @@ end;
 
 var
   GNextFieldId: Int64 = 0;
+  GOwnedMarks: Int64 = 0;
+
+constructor TTyRichFieldMark.CreateOwned(AKind: TTyRichFieldMarkKind; AId: Int64;
+  const AInstruction: UTF8String; AFlags: Byte);
+begin
+  inherited Create;
+  FKind := AKind;
+  FId := AId;
+  FOwned := True;
+  if AKind = rfmOpen then
+  begin
+    FInstruction := AInstruction;
+    FFlags := AFlags;
+  end;
+  Inc(GOwnedMarks);
+end;
+
+destructor TTyRichFieldMark.Destroy;
+begin
+  if FOwned then Dec(GOwnedMarks);
+  inherited Destroy;
+end;
+
+class function TTyRichFieldMark.OwnedAlive: Int64;
+begin
+  Result := GOwnedMarks;
+end;
 
 constructor TTyRichFieldMark.Create(AKind: TTyRichFieldMarkKind; AId: Int64;
   const ABytes: RawByteString; ARawUc: Integer);
@@ -3196,6 +3249,7 @@ function TTyRichFieldMark.Clone: TTyRichObject;
 var
   i: Integer;
 begin
+  if FOwned then Exit(TTyRichFieldMark.CreateOwned(FKind, FId, FInstruction, FFlags));
   Result := TTyRichFieldMark.Create(FKind, FId, GetBytes, FRawUc);
   for i := 0 to 2 do TTyRichFieldMark(Result).SetSlotFont(i, FSlotNames[i], FSlotCharsets[i]);
   TTyRichFieldMark(Result).FSlot := FSlot;
@@ -3203,7 +3257,7 @@ end;
 
 function TTyRichFieldMark.DataBytes: Int64;
 begin
-  Result := InstanceSize + Length(FBytes);
+  Result := InstanceSize + Length(FBytes) + Length(FInstruction);
 end;
 
 function TTyRichFieldMark.SharedData(out ABytes: Int64): Pointer;
