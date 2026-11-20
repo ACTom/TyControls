@@ -161,6 +161,7 @@ msgid "Find Next"
 msgstr ""
 
 #: tycontrols.strconsts.rsdlgfindtitle
+msgctxt "tycontrols.strconsts.rsdlgfindtitle"
 msgid "Find"
 msgstr ""
 
@@ -177,6 +178,7 @@ msgid "Apply"
 msgstr ""
 
 #: tycontrols.strconsts.rsdlgfontbold
+msgctxt "tycontrols.strconsts.rsdlgfontbold"
 msgid "Bold"
 msgstr ""
 
@@ -190,6 +192,7 @@ msgid "Family"
 msgstr ""
 
 #: tycontrols.strconsts.rsdlgfontitalic
+msgctxt "tycontrols.strconsts.rsdlgfontitalic"
 msgid "Italic"
 msgstr ""
 
@@ -210,6 +213,7 @@ msgid "Font"
 msgstr ""
 
 #: tycontrols.strconsts.rsdlgfontunderline
+msgctxt "tycontrols.strconsts.rsdlgfontunderline"
 msgid "Underline"
 msgstr ""
 
@@ -667,262 +671,12 @@ msgstr ""
 msgid "More groups"
 msgstr ""
 
-#: tycontrols.strconsts.rsrichundocharformat
-msgid "Font formatting"
+#: tycontrols.strconsts.rsrichactaligncenter
+msgid "&Center"
 msgstr ""
 
-#: tycontrols.strconsts.rsrichundodelete
-msgctxt "tycontrols.strconsts.rsrichundodelete"
-msgid "Delete"
-msgstr ""
-
-#: tycontrols.strconsts.rsrichundoedit
-msgid "Edit"
-msgstr ""
-
-#: tycontrols.strconsts.rsrichundoinsertobject
-msgid "Insert object"
-msgstr ""
-
-#: tycontrols.strconsts.rsrichundopaste
-msgid "Paste"
-msgstr ""
-
-#: tycontrols.strconsts.rsrichundoreplace
-msgctxt "tycontrols.strconsts.rsrichundoreplace"
-msgid "Replace"
-msgstr ""
-
-#: tycontrols.strconsts.rsrichundoinserttable
-msgid "Insert table"
-msgstr ""
-
-#: tycontrols.strconsts.rsrichundoinsertrow
-msgid "Insert row"
-msgstr ""
-
-#: tycontrols.strconsts.rsrichundodeleterow
-msgid "Delete row"
-msgstr ""
-
-#: tycontrols.strconsts.rsrichundoinsertcolumn
-msgid "Insert column"
-msgstr ""
-
-#: tycontrols.strconsts.rsrichundodeletecolumn
-msgid "Delete column"
-msgstr ""
-
-#: tycontrols.strconsts.rsrichundodeletetable
-msgid "Delete table"
-msgstr ""
-
-#: tycontrols.strconsts.rsrichundoinsertpicture
-msgid "Insert picture"
-msgstr ""
-
-#: tycontrols.strconsts.rsrichundoresizeobject
-msgid "Resize object"
-msgstr ""
-
-#: tycontrols.strconsts.rsrichundomove
-msgid "Move"
-msgstr ""
-
-#: tycontrols.strconsts.rsrichundocopy
-msgid "Copy"
-msgstr ""
-
-#: tycontrols.strconsts.rsricheditincomplete
-msgid "The document was not loaded completely, so it cannot be saved."
-msgstr ""
-
-#: tycontrols.strconsts.rsricheditcannotchange
-msgid "The document cannot be changed now: it is still loading, incomplete or being saved."
-msgstr ""
-
-#: tycontrols.strconsts.rsricheditcannotreplace
-msgid "The file %s could not be replaced; it was left as it was."
-msgstr ""
-
-#: tycontrols.strconsts.rsricheditcannotwrite
-msgid "The file %s cannot be written; it was left as it was."
-msgstr ""
-
-#: tycontrols.strconsts.rsricheditbusy
-msgid "The document cannot be replaced now: it is being loaded or saved."
-msgstr ""
-
-#: tycontrols.strconsts.rsricheditreplaceinedit
-msgid "The document cannot be replaced between BeginEdit and EndEdit: the block is one undo step, and a new content has no undo."
-msgstr ""
-
-#: tycontrols.strconsts.rsricheditrefusedloading
-msgid "The document is still being loaded: it cannot be changed yet."
-msgstr ""
-
-#: tycontrols.strconsts.rsricheditrefusedincomplete
-msgid "The document holds only a part of its file (the load was cancelled): it cannot be changed."
-msgstr ""
-
-#: tycontrols.strconsts.rsricheditrefusedsaving
-msgid "The document is being saved: it cannot be changed meanwhile."
-msgstr ""
-
-#: tycontrols.strconsts.rsricheditrefusedfixedrow
-msgid "This table row holds a nested table and is kept as the file has it: its text cannot be changed."
-msgstr ""
-
-#: tycontrols.strconsts.rsricheditrefusedrange
-msgid "This part of the document cannot be edited."
-msgstr ""
-
-#: tycontrols.strconsts.rsricheditrefusedcells
-msgid "A selection across table cells cannot be deleted or typed over (whole rows can)."
-msgstr ""
-
-#: tycontrols.strconsts.rsricheditrefusedlongpara
-msgid "This paragraph is too long to edit here: what is typed past the part shown would not be seen."
-msgstr ""
-
-#: tycontrols.strconsts.rsricheditrefusedpicture
-msgid "The picture is too large to go into the document."
-msgstr ""
-
-#: tycontrols.strconsts.rsricheditrefusedplainpaste
-msgid "A plain text document takes only text: a picture or formatted text cannot be pasted into it."
-msgstr ""
-
-#: tycontrols.strconsts.rsricheditrefusedmemory
-msgid "There is not enough memory to paste this."
-msgstr ""
-
-#: tycontrols.strconsts.rsricheditrefusedpasterows
-msgid "Table rows cannot be pasted over rows of a table: paste them outside the table, or into a cell as its text."
-msgstr ""
-
-#: tycontrols.strconsts.rsricheditrefusedfield
-msgid "This text is a field's result (a link, a page number, a table of contents). It cannot be changed here; select the whole field to delete it."
-msgstr ""
-
-#: tycontrols.strconsts.rsricheditrefusedplainpicture
-msgid "A plain text document cannot hold a picture."
-msgstr ""
-
-#: tycontrols.strconsts.rsricheditrefusedmetafile
-msgid "A metafile (WMF or EMF) cannot be inserted as a picture."
-msgstr ""
-
-#: tycontrols.strconsts.rsricheditrefusednopicture
-msgid "This is not a picture that can be read."
-msgstr ""
-
-#: tycontrols.strconsts.rsricheditrefusedpicturefile
-#, object-pascal-format
-msgid "The picture file cannot be read: %s"
-msgstr ""
-
-#: tycontrols.strconsts.rsricheditrefusedplaintable
-msgid "A plain text document cannot hold a table."
-msgstr ""
-
-#: tycontrols.strconsts.rsricheditrefusednotable
-msgid "The caret is not in a table."
-msgstr ""
-
-#: tycontrols.strconsts.rsricheditrefusedtableintable
-msgid "A table cannot be inserted into a table."
-msgstr ""
-
-#: tycontrols.strconsts.rsricheditrefusedmergedcells
-msgid "This table has merged cells: its rows and columns cannot be inserted or deleted."
-msgstr ""
-
-#: tycontrols.strconsts.rsricheditrefusednestedtable
-msgid "This table has a table inside one of its cells: its rows and columns cannot be inserted or deleted."
-msgstr ""
-
-#: tycontrols.strconsts.rsricheditrefusedtablenotwhole
-msgid "This table is too large, or not complete in its file, for its rows and columns to be inserted or deleted."
-msgstr ""
-
-#: tycontrols.strconsts.rsricheditrefuseddeletenotwhole
-msgid "This table is too large, or not complete in its file, to be deleted as a whole."
-msgstr ""
-
-#: tycontrols.strconsts.rsricheditrefusedirregularrows
-msgid "The rows of this table do not all have the same number of cells: its columns cannot be inserted or deleted."
-msgstr ""
-
-#: tycontrols.strconsts.rsricheditrefusedtablesize
-#, object-pascal-format
-msgid "A table can have 1 to %d rows and 1 to %d columns."
-msgstr ""
-
-#: tycontrols.strconsts.rsricheditrefusedtablecolumns
-#, object-pascal-format
-msgid "This table has as many columns as a table can have (%d)."
-msgstr ""
-
-#: tycontrols.strconsts.rsrichmodelnestedrow
-msgid "This row holds a nested table and is kept as the file has it: its text cannot be changed"
-msgstr ""
-
-#: tycontrols.strconsts.rsrichmodelpartrefused
-#, object-pascal-format
-msgid "Part %d of the command (%s) cannot be carried out"
-msgstr ""
-
-#: tycontrols.strconsts.rsricheditparanotshown
-msgid "%s more characters of this paragraph are not shown."
-msgstr ""
-
-#: tycontrols.strconsts.rsrichactbold
-msgid "&Bold"
-msgstr ""
-
-#: tycontrols.strconsts.rsrichactboldhint
-msgid "Bold"
-msgstr ""
-
-#: tycontrols.strconsts.rsrichactitalic
-msgid "&Italic"
-msgstr ""
-
-#: tycontrols.strconsts.rsrichactitalichint
-msgid "Italic"
-msgstr ""
-
-#: tycontrols.strconsts.rsrichactunderline
-msgid "&Underline"
-msgstr ""
-
-#: tycontrols.strconsts.rsrichactunderlinehint
-msgid "Underline"
-msgstr ""
-
-#: tycontrols.strconsts.rsrichactstrikeout
-msgid "Stri&kethrough"
-msgstr ""
-
-#: tycontrols.strconsts.rsrichactstrikeouthint
-msgid "Strikethrough"
-msgstr ""
-
-#: tycontrols.strconsts.rsrichactsuperscript
-msgid "Su&perscript"
-msgstr ""
-
-#: tycontrols.strconsts.rsrichactsuperscripthint
-msgid "Superscript"
-msgstr ""
-
-#: tycontrols.strconsts.rsrichactsubscript
-msgid "Subs&cript"
-msgstr ""
-
-#: tycontrols.strconsts.rsrichactsubscripthint
-msgid "Subscript"
+#: tycontrols.strconsts.rsrichactaligncenterhint
+msgid "Center"
 msgstr ""
 
 #: tycontrols.strconsts.rsrichactalignleft
@@ -933,14 +687,6 @@ msgstr ""
 msgid "Align left"
 msgstr ""
 
-#: tycontrols.strconsts.rsrichactaligncenter
-msgid "&Center"
-msgstr ""
-
-#: tycontrols.strconsts.rsrichactaligncenterhint
-msgid "Center"
-msgstr ""
-
 #: tycontrols.strconsts.rsrichactalignright
 msgid "Align &Right"
 msgstr ""
@@ -949,12 +695,17 @@ msgstr ""
 msgid "Align right"
 msgstr ""
 
-#: tycontrols.strconsts.rsrichactjustify
-msgid "&Justify"
+#: tycontrols.strconsts.rsrichactallfiles
+msgid "All files"
 msgstr ""
 
-#: tycontrols.strconsts.rsrichactjustifyhint
-msgid "Justify"
+#: tycontrols.strconsts.rsrichactbold
+msgid "&Bold"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactboldhint
+msgctxt "tycontrols.strconsts.rsrichactboldhint"
+msgid "Bold"
 msgstr ""
 
 #: tycontrols.strconsts.rsrichactbullets
@@ -965,20 +716,13 @@ msgstr ""
 msgid "Bulleted list"
 msgstr ""
 
-#: tycontrols.strconsts.rsrichactnumbering
-msgid "&Numbering"
+#: tycontrols.strconsts.rsrichactfind
+msgid "&Find..."
 msgstr ""
 
-#: tycontrols.strconsts.rsrichactnumberinghint
-msgid "Numbered list"
-msgstr ""
-
-#: tycontrols.strconsts.rsrichactindentincrease
-msgid "&Increase Indent"
-msgstr ""
-
-#: tycontrols.strconsts.rsrichactindentincreasehint
-msgid "Increase indent"
+#: tycontrols.strconsts.rsrichactfindhint
+msgctxt "tycontrols.strconsts.rsrichactfindhint"
+msgid "Find"
 msgstr ""
 
 #: tycontrols.strconsts.rsrichactindentdecrease
@@ -987,6 +731,14 @@ msgstr ""
 
 #: tycontrols.strconsts.rsrichactindentdecreasehint
 msgid "Decrease indent"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactindentincrease
+msgid "&Increase Indent"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactindentincreasehint
+msgid "Increase indent"
 msgstr ""
 
 #: tycontrols.strconsts.rsrichactinsertpicture
@@ -1005,28 +757,39 @@ msgstr ""
 msgid "Insert a table"
 msgstr ""
 
-#: tycontrols.strconsts.rsrichactfind
-msgid "&Find..."
+#: tycontrols.strconsts.rsrichactitalic
+msgid "&Italic"
 msgstr ""
 
-#: tycontrols.strconsts.rsrichactfindhint
-msgid "Find"
+#: tycontrols.strconsts.rsrichactitalichint
+msgctxt "tycontrols.strconsts.rsrichactitalichint"
+msgid "Italic"
 msgstr ""
 
-#: tycontrols.strconsts.rsrichactreplace
-msgid "&Replace..."
+#: tycontrols.strconsts.rsrichactjustify
+msgid "&Justify"
 msgstr ""
 
-#: tycontrols.strconsts.rsrichactreplacehint
-msgid "Replace"
+#: tycontrols.strconsts.rsrichactjustifyhint
+msgid "Justify"
 msgstr ""
 
-#: tycontrols.strconsts.rsrichactundo
-msgid "&Undo"
+#: tycontrols.strconsts.rsrichactnotfound
+#, object-pascal-format
+msgid "Cannot find \"%s\"."
 msgstr ""
 
-#: tycontrols.strconsts.rsrichactundohint
-msgid "Undo"
+#: tycontrols.strconsts.rsrichactnumbering
+msgid "&Numbering"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactnumberinghint
+msgid "Numbered list"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactpicturefiles
+#, object-pascal-format
+msgid "Pictures (%s)"
 msgstr ""
 
 #: tycontrols.strconsts.rsrichactredo
@@ -1034,7 +797,59 @@ msgid "&Redo"
 msgstr ""
 
 #: tycontrols.strconsts.rsrichactredohint
+msgctxt "tycontrols.strconsts.rsrichactredohint"
 msgid "Redo"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactreplace
+msgid "&Replace..."
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactreplacehint
+msgctxt "tycontrols.strconsts.rsrichactreplacehint"
+msgid "Replace"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactstrikeout
+msgid "Stri&kethrough"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactstrikeouthint
+msgid "Strikethrough"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactsubscript
+msgid "Subs&cript"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactsubscripthint
+msgid "Subscript"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactsuperscript
+msgid "Su&perscript"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactsuperscripthint
+msgid "Superscript"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactunderline
+msgid "&Underline"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactunderlinehint
+msgctxt "tycontrols.strconsts.rsrichactunderlinehint"
+msgid "Underline"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactundo
+msgid "&Undo"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactundohint
+msgctxt "tycontrols.strconsts.rsrichactundohint"
+msgid "Undo"
 msgstr ""
 
 #: tycontrols.strconsts.rsrichactzoomin
@@ -1061,26 +876,227 @@ msgstr ""
 msgid "Zoom to 100%"
 msgstr ""
 
-#: tycontrols.strconsts.rsrichactnotfound
-#, object-pascal-format
-msgid "Cannot find \"%s\"."
+#: tycontrols.strconsts.rsricheditbusy
+msgid "The document cannot be replaced now: it is being loaded or saved."
 msgstr ""
 
-#: tycontrols.strconsts.rsrichactpicturefiles
-#, object-pascal-format
-msgid "Pictures (%s)"
+#: tycontrols.strconsts.rsricheditcannotchange
+msgid "The document cannot be changed now: it is still loading, incomplete or being saved."
 msgstr ""
 
-#: tycontrols.strconsts.rsrichactallfiles
-msgid "All files"
+#: tycontrols.strconsts.rsricheditcannotreplace
+#, object-pascal-format
+msgid "The file %s could not be replaced; it was left as it was."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditcannotwrite
+#, object-pascal-format
+msgid "The file %s cannot be written; it was left as it was."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditincomplete
+msgid "The document was not loaded completely, so it cannot be saved."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditparanotshown
+#, object-pascal-format
+msgid "%s more characters of this paragraph are not shown."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditrefusedcells
+msgid "A selection across table cells cannot be deleted or typed over (whole rows can)."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditrefuseddeletenotwhole
+msgid "This table is too large, or not complete in its file, to be deleted as a whole."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditrefusedfield
+msgid "This text is a field's result (a link, a page number, a table of contents). It cannot be changed here; select the whole field to delete it."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditrefusedfixedrow
+msgid "This table row holds a nested table and is kept as the file has it: its text cannot be changed."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditrefusedincomplete
+msgid "The document holds only a part of its file (the load was cancelled): it cannot be changed."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditrefusedirregularrows
+msgid "The rows of this table do not all have the same number of cells: its columns cannot be inserted or deleted."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditrefusedloading
+msgid "The document is still being loaded: it cannot be changed yet."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditrefusedlongpara
+msgid "This paragraph is too long to edit here: what is typed past the part shown would not be seen."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditrefusedmemory
+msgid "There is not enough memory to paste this."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditrefusedmergedcells
+msgid "This table has merged cells: its rows and columns cannot be inserted or deleted."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditrefusedmetafile
+msgid "A metafile (WMF or EMF) cannot be inserted as a picture."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditrefusednestedtable
+msgid "This table has a table inside one of its cells: its rows and columns cannot be inserted or deleted."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditrefusednopicture
+msgid "This is not a picture that can be read."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditrefusednotable
+msgid "The caret is not in a table."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditrefusedpasterows
+msgid "Table rows cannot be pasted over rows of a table: paste them outside the table, or into a cell as its text."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditrefusedpicture
+msgid "The picture is too large to go into the document."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditrefusedpicturefile
+#, object-pascal-format
+msgid "The picture file cannot be read: %s"
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditrefusedplainpaste
+msgid "A plain text document takes only text: a picture or formatted text cannot be pasted into it."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditrefusedplainpicture
+msgid "A plain text document cannot hold a picture."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditrefusedplaintable
+msgid "A plain text document cannot hold a table."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditrefusedrange
+msgid "This part of the document cannot be edited."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditrefusedsaving
+msgid "The document is being saved: it cannot be changed meanwhile."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditrefusedtablecolumns
+#, object-pascal-format
+msgid "This table has as many columns as a table can have (%d)."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditrefusedtableintable
+msgid "A table cannot be inserted into a table."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditrefusedtablenotwhole
+msgid "This table is too large, or not complete in its file, for its rows and columns to be inserted or deleted."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditrefusedtablesize
+#, object-pascal-format
+msgid "A table can have 1 to %d rows and 1 to %d columns."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditreplaceinedit
+msgid "The document cannot be replaced between BeginEdit and EndEdit: the block is one undo step, and a new content has no undo."
+msgstr ""
+
+#: tycontrols.strconsts.rsrichmodelnestedrow
+msgid "This row holds a nested table and is kept as the file has it: its text cannot be changed"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichmodelpartrefused
+#, object-pascal-format
+msgid "Part %d of the command (%s) cannot be carried out"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichundocharformat
+msgid "Font formatting"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichundocopy
+msgctxt "tycontrols.strconsts.rsrichundocopy"
+msgid "Copy"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichundodelete
+msgctxt "tycontrols.strconsts.rsrichundodelete"
+msgid "Delete"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichundodeletecolumn
+msgid "Delete column"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichundodeleterow
+msgid "Delete row"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichundodeletetable
+msgid "Delete table"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichundoedit
+msgid "Edit"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichundoinsertcolumn
+msgid "Insert column"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichundoinsertobject
+msgid "Insert object"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichundoinsertpicture
+msgid "Insert picture"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichundoinsertrow
+msgid "Insert row"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichundoinserttable
+msgid "Insert table"
 msgstr ""
 
 #: tycontrols.strconsts.rsrichundoinserttext
 msgid "Insert text"
 msgstr ""
 
+#: tycontrols.strconsts.rsrichundomove
+msgid "Move"
+msgstr ""
+
 #: tycontrols.strconsts.rsrichundoparaformat
 msgid "Paragraph formatting"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichundopaste
+msgctxt "tycontrols.strconsts.rsrichundopaste"
+msgid "Paste"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichundoreplace
+msgctxt "tycontrols.strconsts.rsrichundoreplace"
+msgid "Replace"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichundoresizeobject
+msgid "Resize object"
 msgstr ""
 
 #: tycontrols.strconsts.rsrichundotyping
@@ -1232,6 +1248,7 @@ msgid "UTF-16 text is not supported; save the file as UTF-8"
 msgstr ""
 
 #: tycontrols.strconsts.rstextmenucopy
+msgctxt "tycontrols.strconsts.rstextmenucopy"
 msgid "Copy"
 msgstr ""
 
@@ -1240,10 +1257,12 @@ msgid "Cut"
 msgstr ""
 
 #: tycontrols.strconsts.rstextmenupaste
+msgctxt "tycontrols.strconsts.rstextmenupaste"
 msgid "Paste"
 msgstr ""
 
 #: tycontrols.strconsts.rstextmenuredo
+msgctxt "tycontrols.strconsts.rstextmenuredo"
 msgid "Redo"
 msgstr ""
 
@@ -1252,6 +1271,7 @@ msgid "Select All"
 msgstr ""
 
 #: tycontrols.strconsts.rstextmenuundo
+msgctxt "tycontrols.strconsts.rstextmenuundo"
 msgid "Undo"
 msgstr ""
 
