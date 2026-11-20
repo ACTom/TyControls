@@ -131,6 +131,8 @@ type
     property List;
     property Wrapable;
     property ShowCaptions;
+    property Display;
+    property IconSize;
     property Flat;
     property Images;
     property HotImages;
@@ -188,12 +190,19 @@ type
   { The tools moved into the flyout are still the bar's tools, and a glyph button asks its
     PARENT for the icon size (ITyGlyphSizeHost) -- so the flyout answers with the bar's.
     Without this a tool lost --toolbar-icon-size for as long as it sat in the flyout (#231). }
-  TTyToolFlyout = class(TTyPopupSurface, ITyGlyphSizeHost)
+  TTyToolFlyout = class(TTyPopupSurface, ITyGlyphSizeHost, ITyGlyphDisplayHost)
   private
     FBar: TTyCustomToolBar;
   public
     function HostGlyphSize(AFor: TControl): Integer;
+    { #234: and with the bar's word on text only. }
+    function HostHidesGlyph(AFor: TControl): Boolean;
   end;
+
+function TTyToolFlyout.HostHidesGlyph(AFor: TControl): Boolean;
+begin
+  Result := (FBar <> nil) and FBar.HostHidesGlyph(AFor);
+end;
 
 function TTyToolFlyout.HostGlyphSize(AFor: TControl): Integer;
 begin

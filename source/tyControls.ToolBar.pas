@@ -8,6 +8,7 @@ uses
   tyControls.GlyphButtons, tyControls.ImageCollection,
   tyControls.DropButtons,       // TyDropArrowHit — ONE arrow-zone hit rule for the whole library
   tyControls.Menu,              // TTyPopupMenu — the themed menu a tool button drops
+  tyControls.Css.Parser,        // TyOverrideWith -- Display / IconSize write StyleOverride (#234)
   tyControls.Controller;
 
 const
@@ -485,6 +486,13 @@ type
     use, so the LCL-ported handler works unchanged. }
   TTyToolBarOnPaintButton = procedure(Sender: TTyCustomToolButton; AState: Integer) of object;
 
+  { #234. How a bar shows its tools: the word of the token --toolbar-display, and the value
+    of the Display property that writes it. tbdTheme is "nothing said here". As the
+    property's value: this bar's own StyleOverride does not set the token. As the display in
+    force (DisplayInForce): no layer sets it, and ShowCaptions and List decide as they did
+    before there was a token. }
+  TTyToolBarDisplay = (tbdTheme, tbdIconOnly, tbdTextOnly, tbdTextBesideIcon, tbdTextUnderIcon);
+
   { What the bar remembers about a button it laid out wider than the button was: the width
     the button had (Natural) and the width its content needed (Lent). See
     TTyCustomToolBar.ContentFlooredWidth. }
@@ -493,7 +501,8 @@ type
     Natural, Lent: Integer;
   end;
 
-  TTyCustomToolBar = class(TTyCustomControl, ITyChromeHost, ITyGlyphSizeHost)
+  TTyCustomToolBar = class(TTyCustomControl, ITyChromeHost, ITyGlyphSizeHost,
+    ITyGlyphDisplayHost)
   private
     FButtonHeight: Integer;
     FButtonHeightExplicit: Boolean;
@@ -523,10 +532,16 @@ type
     { #231: the icon size last told to the tools (HostGlyphSize), so that a change -- the
       theme, the controller's or this bar's own StyleOverride -- is noticed and passed on. }
     FSeenGlyphSize: Integer;
+    { #234: the display the tools were last told (DisplayInForce), noticed the same way. }
+    FSeenDisplay: TTyToolBarDisplay;
     { #228: the width bookkeeping of the buttons that are not tool buttons (those keep
       their own, FBarLentWidth / FBarNaturalWidth): one record per such child. }
     FLends: array of TTyToolWidthLend;
     function ContentFlooredWidth(ACtl: TControl): Integer;
+    function GetDisplay: TTyToolBarDisplay;
+    procedure SetDisplay(AValue: TTyToolBarDisplay);
+    function GetIconSize: Integer;
+    procedure SetIconSize(AValue: Integer);
     function GetButtonHeight: Integer;
     function GetButtonWidth: Integer;
     function GetButtonCount: Integer;
@@ -570,8 +585,13 @@ type
       without needing a window handle and a live align pass. }
     procedure ApplyToButton(B: TTyCustomButton);
     { Push Images + ShowCaptions (and, to tool buttons, List's glyph layout) onto every tool
-      that can draw an icon. Protected for the same reason. }
+      that can draw an icon. Protected for the same reason.
+      #234: where --toolbar-display names a display, the captions and the layout pushed are
+      that display's, not ShowCaptions' and List's. }
     procedure ApplyToolProperties;
+    { #234. The display --toolbar-display names for this bar: its own StyleOverride, then the
+      theme. tbdTheme when no layer names one. }
+    function DisplayInForce: TTyToolBarDisplay;
     { The width the LAYOUT gives ACtl this pass: its own (natural) width, raised to
       ButtonWidth for a real tool button (TyToolFloorWidth's rule), with the lend recorded on
       the button so lowering ButtonWidth later can find the natural width again. Protected
@@ -617,8 +637,12 @@ type
       then sized from its button, as it always was. AFor is the button that asks; a
       descendant answers 0 for a part of its own (TTyToolBarEx, for its overflow chevron). }
     function HostGlyphSize(AFor: TControl): Integer; virtual;
-    { Every repaint is where a changed --toolbar-icon-size is noticed: the tools measure by
-      it, and a measurement they remember has to be taken again. }
+    { #234, ITyGlyphDisplayHost: True while the bar shows captions only (--toolbar-display:
+      text). A button with no caption to show keeps its icon; that is the button's rule
+      (TTyGlyphButtonBase.CanShowGlyph), so the overflow chevron needs no exception here. }
+    function HostHidesGlyph(AFor: TControl): Boolean; virtual;
+    { Every repaint is where a changed --toolbar-icon-size or --toolbar-display is noticed:
+      the tools measure by them, and a measurement they remember has to be taken again. }
     procedure Invalidate; override;
     { The bar's TTyToolButton children, in child order — LCL's TToolBar.ButtonCount /
       Buttons[] (comctrls.pp:2367), and the index space TTyToolButton.Index, Grouped and
@@ -705,6 +729,29 @@ type
       at all and is untouched, and a glyph tool with no icon keeps its caption rather than
       painting an empty box — so the False default can never blank an existing toolbar. }
     property ShowCaptions: Boolean read FShowCaptions write SetShowCaptions default False;
+    { #234. Icons, text, or both -- one setting in place of ShowCaptions and List, and the
+      only way to text alone. It is a VIEW of the token --toolbar-display in this bar's own
+      StyleOverride and keeps no state: tbdTextOnly writes '--toolbar-display: text',
+      tbdTheme takes the declaration out, and a word written into StyleOverride by hand
+      shows here. Hence `stored False`: the form file holds StyleOverride and nothing else,
+      so the two cannot disagree (TTyTabCloseButton is the precedent, #226).
+
+      tbdTheme is this bar saying nothing: the theme's --toolbar-display then decides -- one
+      line in the theme or in the controller's StyleOverride switches every bar of an
+      application -- and where no layer sets the token, ShowCaptions and List decide as
+      before. Where the token IS set it wins over both.
+
+      A tool whose own ShowCaption or GlyphLayout was written keeps it (the adopt contract).
+      Under text only, a tool with no caption drawn keeps its icon. Beside or under reaches
+      tool buttons only, as List does; whether icon and caption show reaches every icon
+      button on the bar. }
+    property Display: TTyToolBarDisplay read GetDisplay write SetDisplay stored False
+      default tbdTheme;
+    { #235. The icon size of the bar's buttons, in logical px: a view of --toolbar-icon-size
+      in this bar's own StyleOverride (#231), as Display is of its token. -1 = not set
+      here, the theme's size if it has one. 0 is a size of its own: this bar's icons are
+      sized from their buttons, whatever the theme says. A button's own GlyphSize wins. }
+    property IconSize: Integer read GetIconSize write SetIconSize stored False default -1;
     property Flat: Boolean read FFlat write SetFlat default True;
     { The icon source the tools draw from: a child glyph button that has no Images of its
       own is LENT this collection, so tools only need an ImageName. A tool carrying its own
@@ -816,6 +863,8 @@ type
     property List;
     property Wrapable;
     property ShowCaptions;
+    property Display;
+    property IconSize;
     property Flat;
     property Images;
     property HotImages;
@@ -1985,23 +2034,95 @@ begin
     Controls[i].Invalidate;
 end;
 
+const
+  TyToolBarDisplayToken = '--toolbar-display';
+  TyToolBarIconSizeToken = '--toolbar-icon-size';
+  TyToolBarDisplayWords: array[TTyToolBarDisplay] of string =
+    ('', 'icon', 'text', 'text-beside-icon', 'text-under-icon');
+
+{ #234. The display a word of --toolbar-display names. Any other word, and none, names no
+  display (tbdTheme). }
+function TyToolBarDisplayOf(const AText: string): TTyToolBarDisplay;
+var
+  v: string;
+  d: TTyToolBarDisplay;
+begin
+  v := LowerCase(AText);   // the token readers hand a word over trimmed
+  for d := Succ(tbdTheme) to High(TTyToolBarDisplay) do
+    if v = TyToolBarDisplayWords[d] then Exit(d);
+  Result := tbdTheme;
+end;
+
+function TTyCustomToolBar.DisplayInForce: TTyToolBarDisplay;
+begin
+  Result := TyToolBarDisplayOf(StyleToken(TyToolBarDisplayToken, ''));
+end;
+
+function TTyCustomToolBar.HostHidesGlyph(AFor: TControl): Boolean;
+begin
+  Result := DisplayInForce = tbdTextOnly;
+end;
+
+function TTyCustomToolBar.GetDisplay: TTyToolBarDisplay;
+var
+  s: string;
+begin
+  if OwnStyleToken(TyToolBarDisplayToken, s) then
+    Result := TyToolBarDisplayOf(s)     // read as the bar reads it
+  else
+    Result := tbdTheme;
+end;
+
+procedure TTyCustomToolBar.SetDisplay(AValue: TTyToolBarDisplay);
+begin
+  { Set to the value it shows, nothing is rewritten: the Object Inspector, a copy and Assign
+    all do that, and a word written by hand -- another case, a var() -- has to survive it. }
+  if GetDisplay = AValue then Exit;
+  StyleOverride := TyOverrideWith(StyleOverride, TyToolBarDisplayToken,
+    TyToolBarDisplayWords[AValue]);
+end;
+
+function TTyCustomToolBar.GetIconSize: Integer;
+begin
+  if not OwnStyleMetric(TyToolBarIconSizeToken, Result) then Result := -1;
+end;
+
+procedure TTyCustomToolBar.SetIconSize(AValue: Integer);
+begin
+  if GetIconSize = AValue then Exit;   // see SetDisplay
+  if AValue < 0 then
+    StyleOverride := TyOverrideWith(StyleOverride, TyToolBarIconSizeToken, '')
+  else
+    StyleOverride := TyOverrideWith(StyleOverride, TyToolBarIconSizeToken,
+      IntToStr(AValue) + 'px');
+end;
+
 function TTyCustomToolBar.HostGlyphSize(AFor: TControl): Integer;
 begin
-  Result := StyleMetric('--toolbar-icon-size', 0);
+  Result := StyleMetric(TyToolBarIconSizeToken, 0);
   if Result < 0 then Result := 0;
 end;
 
 procedure TTyCustomToolBar.Invalidate;
 var
   i, cur: Integer;
+  disp: TTyToolBarDisplay;
 begin
   inherited Invalidate;
   if [csDestroying, csLoading] * ComponentState <> [] then Exit;
   cur := HostGlyphSize(nil);
-  if cur = FSeenGlyphSize then Exit;
+  disp := DisplayInForce;
+  if (cur = FSeenGlyphSize) and (disp = FSeenDisplay) then Exit;
   { Recorded BEFORE the tools are told: a tool that re-fits invalidates its surroundings,
     and coming back in here must find nothing left to do. }
   FSeenGlyphSize := cur;
+  { #234. A display that changed has captions and a layout to hand out anew; whether the
+    icons show the tools ask for themselves, and re-fit below like for a new icon size. }
+  if disp <> FSeenDisplay then
+  begin
+    FSeenDisplay := disp;
+    ApplyToolProperties;
+  end;
   { A glyph button's Invalidate is where it re-fits and moves its height floor
     (TTyButton.Invalidate), which is exactly what a new icon size calls for. It forgets a
     remembered preferred size only when it is auto-sized, so that is said here for all. }
@@ -2041,8 +2162,20 @@ procedure TTyCustomToolBar.ApplyToolProperties;
 var
   i: Integer;
   G: TTyGlyphButtonBase;
+  captions, beside: Boolean;
 begin
   if csDestroying in ComponentState then Exit;
+  { #234. ShowCaptions and List, unless --toolbar-display names a display: that one then
+    says both. (Text only also takes the icons away; a tool asks the bar for that itself,
+    HostHidesGlyph, so there is nothing to push and nothing to take back.) }
+  captions := FShowCaptions;
+  beside := FList;
+  case DisplayInForce of
+    tbdIconOnly: captions := False;
+    tbdTextOnly: captions := True;
+    tbdTextBesideIcon: begin captions := True; beside := True; end;
+    tbdTextUnderIcon:  begin captions := True; beside := False; end;
+  end;
   for i := 0 to ControlCount - 1 do
   begin
     // Only a glyph button has an icon model to point at a collection; a plain TTyButton
@@ -2055,7 +2188,7 @@ begin
     if (G.Images = nil) or (G.Images = FLentImages) then
       G.Images := FImages;
     // Container default; a no-op on any tool whose ShowCaption the host wrote itself.
-    G.AdoptShowCaption(FShowCaptions);
+    G.AdoptShowCaption(captions);
     { A tool button whose ImageIndex was set before any collection existed has been holding the
       request; the line above may just have handed it the collection that resolves it. (Private
       is unit-wide in Object Pascal, which is why the button can live in this unit and keep its
@@ -2065,7 +2198,7 @@ begin
       { List reaches TOOL buttons only — LCL's List reaches only its FButtons — and through
         the same adopt contract ShowCaption uses: a tool whose GlyphLayout the host wrote is
         never touched. A TTySpeedButton on the bar keeps its own published GlyphLayout. }
-      TTyCustomToolButton(G).AdoptGlyphLayout(TyToolListLayout[FList]);
+      TTyCustomToolButton(G).AdoptGlyphLayout(TyToolListLayout[beside]);
       TTyCustomToolButton(G).ResolveImageIndex;
     end;
   end;

@@ -10533,6 +10533,8 @@ type
     property List;
     property Wrapable;
     property ShowCaptions;
+    property Display;
+    property IconSize;
     property Flat;
     property Images;
     property HotImages;
@@ -10602,6 +10604,8 @@ type
     property List;
     property Wrapable;
     property ShowCaptions;
+    property Display;
+    property IconSize;
     property Flat;
     property Images;
     property HotImages;

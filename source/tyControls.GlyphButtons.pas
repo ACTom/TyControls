@@ -110,6 +110,17 @@ type
     function HostGlyphSize(AFor: TControl): Integer;
   end;
 
+  { #234. A container that can have its icon buttons show their captions only: TTyToolBar,
+    under --toolbar-display: text. Asked of the Parent like ITyGlyphSizeHost, whenever the
+    button measures or paints -- so a button taken off the container is an icon button
+    again with nothing to undo. }
+  ITyGlyphDisplayHost = interface
+    ['{6E0C5B7A-41D3-4F0E-9A52-3B8D7C1F2E64}']
+    { True when AFor, a button on the container, is to draw no icon. The button keeps its
+      icon all the same when it has no caption to show in its place (CanShowGlyph). }
+    function HostHidesGlyph(AFor: TControl): Boolean;
+  end;
+
   { Shared base: TTyCustomButton + an icon-font glyph placed per GlyphLayout. Usable on
     its own (it defaults to glyph-left) but primarily the parent of the three
     concrete controls below; it is NOT registered on the palette itself. }
@@ -177,6 +188,12 @@ type
       container's (ContainerGlyphSize). 0 = neither, and the glyph is then sized from the
       box. }
     function GivenGlyphSize: Integer;
+    { True when this button has an icon to draw at all: a painter glyph, an image, or a
+      font glyph. Whether it IS drawn is CanShowGlyph, which asks the container too. }
+    function HasOwnGlyph: Boolean;
+    { True when the container this button sits on has its buttons show captions only
+      (ITyGlyphDisplayHost -- a tool bar under --toolbar-display: text, #234). }
+    function ContainerHidesGlyph: Boolean;
     { True when the caption is really drawn beside or under the glyph: ShowCaption, and a
       caption to show. What every measurement has to agree with the paint about (#228). }
     function CaptionDrawn: Boolean;
@@ -237,7 +254,10 @@ type
       tool bar's row height, or to align a column of captions — and had to subclass to find
       out. LCL's takes an AWithShowMode flag for its Application.ShowButtonGlyphs mechanism;
       that mechanism does not exist here, so the parameter is OMITTED rather than accepted
-      and ignored, which would be the same lie in a smaller box. }
+      and ignored, which would be the same lie in a smaller box.
+
+      #234: False as well on a container that shows captions only (a tool bar under
+      --toolbar-display: text), for a button whose caption is drawn. }
     function CanShowGlyph: Boolean;
     { Container DEFAULT for ShowCaption (TTyToolBar.ShowCaptions calls this on every
       tool it hosts). A no-op once the host has written ShowCaption on this button
@@ -947,13 +967,32 @@ begin
     Result := TBGRABitmap.Create(ASizePx, ASizePx);   // empty (guarded by DrawContent)
 end;
 
+function TTyGlyphButtonBase.HasOwnGlyph: Boolean;
+begin
+  Result := FHasGlyphKind
+         or ((FImages <> nil) and (FImageName <> ''))
+         or ((FIconFont <> nil) and (FGlyphName <> ''));
+end;
+
+function TTyGlyphButtonBase.ContainerHidesGlyph: Boolean;
+var
+  host: ITyGlyphDisplayHost;
+begin
+  Result := (Parent <> nil) and Supports(Parent, ITyGlyphDisplayHost, host)
+    and host.HostHidesGlyph(Self);
+end;
+
 function TTyGlyphButtonBase.CanShowGlyph: Boolean;
 begin
   // The exact negation of the condition DrawContent falls through to the plain
   // caption on — the two must never disagree about whether a glyph exists.
-  Result := FHasGlyphKind
-         or ((FImages <> nil) and (FImageName <> ''))
-         or ((FIconFont <> nil) and (FGlyphName <> ''));
+  Result := HasOwnGlyph;
+  { #234. A container that shows captions only takes the icon away -- from a button whose
+    caption IS drawn. A button with no caption, or one its host told to hide it, has
+    nothing to show in the icon's place and keeps it: text only trades an icon for a
+    caption, as ShowCaption = False only ever trades a caption for an icon. }
+  if Result and CaptionDrawn and ContainerHidesGlyph then
+    Result := False;
 end;
 
 function TTyGlyphButtonBase.MeasureGlyphSlot(APPI: Integer; const AStyle: TTyStyleSet): Integer;

@@ -7,7 +7,10 @@ unit test.toolbar.display;
     #229  an icon stacked above its caption leaves room for the caption;
     #230  ButtonHeight sizes the buttons and the separators, not only the row;
     #231  --toolbar-icon-size gives every icon button on a bar one icon size;
-    #232  a caption that is not drawn serves as the hint.
+    #232  a caption that is not drawn serves as the hint;
+    #234  --toolbar-display and the Display property: icons, text, or both, for a bar or
+          for every bar, and text only;
+    #235  the IconSize property is the bar's own --toolbar-icon-size.
 
   The icon is a painter glyph (GlyphKind), so no test here depends on a font. Sizes are read
   through the measuring methods the paint uses: LCL's AutoSize does nothing while the form
@@ -16,7 +19,7 @@ unit test.toolbar.display;
 interface
 
 uses
-  Classes, SysUtils, Types, Math, Controls, Forms, Graphics, ActnList, LCLType, LMessages,
+  Classes, SysUtils, Types, Math, TypInfo, Controls, Forms, Graphics, ActnList, LCLType, LMessages,
   fpcunit, testregistry,
   tyControls.Types, tyControls.Controller, tyControls.Base, tyControls.Painter, tyControls.IconFont,
   tyControls.Button, tyControls.GlyphButtons, tyControls.ToolBar, tyControls.ToolBarEx,
@@ -110,6 +113,40 @@ type
     procedure AWrittenHintIsKept;
     procedure ACaptionThatIsDrawnAddsNoHint;
     procedure AButtonWithNoIconAddsNoHint;
+    { #234 }
+    procedure TextOnlyDrawsTheCaptionAndNoIcon;
+    procedure TextOnlyAsksNoRoomForTheIcon;
+    procedure UnderTextOnlyAToolWithoutACaptionKeepsItsIcon;
+    procedure UnderTextOnlyAToolToldToHideItsCaptionKeepsItsIcon;
+    procedure IconOnlyHidesTheCaptionsWhateverShowCaptionsSays;
+    procedure TextBesideIconSetsBothWhateverListSays;
+    procedure TextUnderIconStacksTheTools;
+    procedure TheThemesDisplayReachesEveryBarAndABarsOwnWins;
+    procedure AWordTheTokenDoesNotKnowIsNoDisplay;
+    procedure TheDisplayWordIsReadWhateverItsCase;
+    procedure AToolsOwnLayoutIsKeptUnderTheDisplay;
+    procedure ASpeedButtonFollowsTextOnlyButKeepsItsLayout;
+    procedure AToolJoiningLaterTakesTheDisplay;
+    procedure AToolTakenOffATextOnlyBarShowsItsIconAgain;
+    procedure AToolInTheOverflowFlyoutStaysTextOnly;
+    procedure TheOverflowChevronKeepsItsIcon;
+    procedure UnderTextOnlyTheBarsIconSizeAsksNoHeight;
+    procedure TheHintFollowsTheDisplay;
+    procedure AFixedWidthToolFollowsTheDisplayAndComesBack;
+    procedure TextUnderIconMakesTheRowTallEnough;
+    procedure DisplayFollowsTheThemeUntilSet;
+    procedure SettingDisplayWritesTheBarsOwnOverride;
+    procedure DisplayReadsWhatWasWrittenByHand;
+    procedure SettingDisplayToWhatItShowsChangesNothing;
+    procedure DisplayBackToTheThemeTakesTheDeclarationOut;
+    procedure DisplayIsPublishedAndNotStored;
+    { #235 }
+    procedure IconSizeFollowsTheThemeUntilSet;
+    procedure SettingIconSizeWritesTheBarsOwnOverride;
+    procedure IconSizeNoughtSizesIconsFromTheirButtons;
+    procedure IconSizeReadsWhatWasWrittenByHand;
+    procedure SettingIconSizeToWhatItShowsChangesNothing;
+    procedure IconSizeIsPublishedAndNotStored;
   end;
 
 implementation
@@ -1427,6 +1464,477 @@ begin
   b := AddTool('&Save', False);
   b.ShowCaption := False;   // no icon: the caption is drawn regardless
   AssertEquals('its caption is drawn, so it is no hint', '', HintOf(b));
+end;
+
+{ ---- #234: one display for a bar (--toolbar-display, Display), and text only ---- }
+
+procedure TToolbarDisplayTest.TextOnlyDrawsTheCaptionAndNoIcon;
+var
+  b: TTyToolButton;
+begin
+  b := AddTool('Save');
+  b.Height := 24;
+  AssertFalse('setup: the icon is drawn', IsRectEmpty(IconBox(b)));
+  FBar.StyleOverride := '--toolbar-display: text;';
+  AssertTrue('no icon is drawn: ' + BoxText(IconBox(b)), IsRectEmpty(IconBox(b)));
+  AssertTrue('the caption shows, though ShowCaptions is off', b.ShowCaption);
+  AssertFalse('and ShowCaptions itself was not written', FBar.ShowCaptions);
+end;
+
+procedure TToolbarDisplayTest.TextOnlyAsksNoRoomForTheIcon;
+var
+  b, plain: TTyToolButton;
+begin
+  b := AddTool('Save all changes');
+  plain := AddTool('Save all changes', False);
+  b.Height := 24;
+  plain.Height := 24;
+  FBar.ShowCaptions := True;
+  AssertTrue('setup: the icon is paid for', PrefW(b) > PrefW(plain));
+  FBar.StyleOverride := '--toolbar-display: text;';
+  AssertEquals('as wide as a tool that never had an icon', PrefW(plain), PrefW(b));
+end;
+
+{ Text only trades an icon for a caption. With no caption to show there is nothing to trade
+  it for, and the tool would be an empty box. }
+procedure TToolbarDisplayTest.UnderTextOnlyAToolWithoutACaptionKeepsItsIcon;
+var
+  b: TTyToolButton;
+begin
+  b := AddTool('');
+  b.Height := 24;
+  FBar.StyleOverride := '--toolbar-display: text;';
+  AssertFalse('nothing else to show: the icon stays', IsRectEmpty(IconBox(b)));
+end;
+
+procedure TToolbarDisplayTest.UnderTextOnlyAToolToldToHideItsCaptionKeepsItsIcon;
+var
+  told, other: TTyToolButton;
+begin
+  told := AddTool('Save');
+  other := AddTool('Open');
+  told.Height := 24;
+  other.Height := 24;
+  told.ShowCaption := False;   // the host's own word for this tool
+  FBar.StyleOverride := '--toolbar-display: text;';
+  AssertFalse('the tool keeps what it was told', told.ShowCaption);
+  AssertFalse('and so stays an icon', IsRectEmpty(IconBox(told)));
+  AssertTrue('its neighbour is text only', IsRectEmpty(IconBox(other)));
+end;
+
+procedure TToolbarDisplayTest.IconOnlyHidesTheCaptionsWhateverShowCaptionsSays;
+var
+  b: TTyToolButton;
+begin
+  b := AddTool('Save');
+  b.Height := 24;
+  FBar.ShowCaptions := True;
+  AssertTrue('setup: the caption shows', b.ShowCaption);
+  FBar.StyleOverride := '--toolbar-display: icon;';
+  AssertFalse('the token decides', b.ShowCaption);
+  AssertTrue('the property keeps what it was given', FBar.ShowCaptions);
+  AssertFalse('the icon is drawn', IsRectEmpty(IconBox(b)));
+  FBar.StyleOverride := '';
+  AssertTrue('taken away: ShowCaptions decides again', b.ShowCaption);
+end;
+
+procedure TToolbarDisplayTest.TextBesideIconSetsBothWhateverListSays;
+var
+  b: TTyToolButton;
+begin
+  b := AddTool('Save');
+  b.Height := 24;
+  FBar.List := False;
+  AssertEquals('setup: stacked', Ord(glTop), Ord(b.GlyphLayout));
+  AssertFalse('setup: no caption', b.ShowCaption);
+  FBar.StyleOverride := '--toolbar-display: text-beside-icon;';
+  AssertTrue('the caption shows', b.ShowCaption);
+  AssertEquals('beside its icon', Ord(glLeft), Ord(b.GlyphLayout));
+  AssertFalse('which is drawn', IsRectEmpty(IconBox(b)));
+  AssertFalse('List keeps what it was given', FBar.List);
+  FBar.StyleOverride := '';
+  AssertFalse('taken away: ShowCaptions', b.ShowCaption);
+  AssertEquals('and List', Ord(glTop), Ord(b.GlyphLayout));
+end;
+
+procedure TToolbarDisplayTest.TextUnderIconStacksTheTools;
+var
+  b: TTyToolButton;
+begin
+  b := AddTool('Save');
+  AssertEquals('setup: beside', Ord(glLeft), Ord(b.GlyphLayout));
+  FBar.StyleOverride := '--toolbar-display: text-under-icon;';
+  AssertTrue('the caption shows', b.ShowCaption);
+  AssertEquals('under its icon', Ord(glTop), Ord(b.GlyphLayout));
+  b.Height := 48;
+  AssertFalse('which is drawn', IsRectEmpty(IconBox(b)));
+  AssertTrue('List keeps what it was given', FBar.List);
+end;
+
+procedure TToolbarDisplayTest.TheThemesDisplayReachesEveryBarAndABarsOwnWins;
+var
+  here, there: TTyToolButton;
+  second: TTyToolBar;
+begin
+  here := AddTool('One');
+  second := NewBar;
+  there := AddTool('Two', True, second);
+  FCtl.StyleOverride := ':root { --toolbar-display: text-under-icon; }';
+  AssertTrue('this bar', here.ShowCaption);
+  AssertEquals('this bar, stacked', Ord(glTop), Ord(here.GlyphLayout));
+  AssertTrue('the other bar', there.ShowCaption);
+  AssertEquals('the other bar, stacked', Ord(glTop), Ord(there.GlyphLayout));
+  FBar.StyleOverride := '--toolbar-display: icon;';
+  AssertFalse('the bar that says so', here.ShowCaption);
+  AssertTrue('the other bar keeps the theme''s', there.ShowCaption);
+  FBar.StyleOverride := '';
+  AssertTrue('taken away: the theme''s again', here.ShowCaption);
+  FCtl.StyleOverride := '';
+  AssertFalse('no token anywhere: ShowCaptions', here.ShowCaption);
+  AssertEquals('and List', Ord(glLeft), Ord(here.GlyphLayout));
+end;
+
+procedure TToolbarDisplayTest.AWordTheTokenDoesNotKnowIsNoDisplay;
+var
+  b: TTyToolButton;
+begin
+  b := AddTool('Save');
+  b.Height := 24;
+  FBar.ShowCaptions := True;
+  FBar.StyleOverride := '--toolbar-display: sideways;';
+  AssertTrue('ShowCaptions still decides', b.ShowCaption);
+  AssertFalse('and the icon is drawn', IsRectEmpty(IconBox(b)));
+  AssertEquals('the property shows no display', Ord(tbdTheme), Ord(FBar.Display));
+end;
+
+procedure TToolbarDisplayTest.TheDisplayWordIsReadWhateverItsCase;
+var
+  b: TTyToolButton;
+begin
+  b := AddTool('Save');
+  b.Height := 24;
+  FBar.StyleOverride := '--toolbar-display:  TEXT ;';
+  AssertTrue('text only', IsRectEmpty(IconBox(b)));
+  FBar.StyleOverride := '--toolbar-display: Text-Under-Icon;';
+  AssertEquals('stacked', Ord(glTop), Ord(b.GlyphLayout));
+end;
+
+procedure TToolbarDisplayTest.AToolsOwnLayoutIsKeptUnderTheDisplay;
+var
+  own, other: TTyToolButton;
+begin
+  own := AddTool('One');
+  other := AddTool('Two');
+  own.GlyphLayout := glRight;
+  FBar.StyleOverride := '--toolbar-display: text-under-icon;';
+  AssertEquals('the layout the tool was given', Ord(glRight), Ord(own.GlyphLayout));
+  AssertEquals('its neighbour takes the bar''s', Ord(glTop), Ord(other.GlyphLayout));
+end;
+
+{ Beside or under reaches tool buttons only, as List does. Whether the icon and the caption
+  show reaches every icon button on the bar. }
+procedure TToolbarDisplayTest.ASpeedButtonFollowsTextOnlyButKeepsItsLayout;
+var
+  speed: TTySpeedButton;
+  before: TTyGlyphLayout;
+begin
+  speed := TTySpeedButton.Create(FForm);
+  speed.Controller := FCtl;
+  speed.Font.PixelsPerInch := 96;
+  speed.GlyphKind := tgCheck;
+  TGlyphCrack(speed).Caption := 'Go';
+  speed.SetBounds(0, 0, 60, 24);
+  speed.Parent := FBar;
+  before := TGlyphCrack(speed).GlyphLayout;
+  AssertFalse('setup: the layout a stacked bar would not give', before = glTop);
+  FBar.StyleOverride := '--toolbar-display: text-under-icon;';
+  AssertTrue('captions reach it', TGlyphCrack(speed).ShowCaption);
+  AssertEquals('its layout is its own', Ord(before), Ord(TGlyphCrack(speed).GlyphLayout));
+  AssertFalse('setup: its icon is drawn', IsRectEmpty(IconBox(speed)));
+  FBar.StyleOverride := '--toolbar-display: text;';
+  AssertTrue('text only reaches it', IsRectEmpty(IconBox(speed)));
+end;
+
+procedure TToolbarDisplayTest.AToolJoiningLaterTakesTheDisplay;
+var
+  b: TTyToolButton;
+begin
+  FBar.StyleOverride := '--toolbar-display: text;';
+  b := AddTool('Save');
+  b.Height := 24;
+  AssertTrue('its caption shows', b.ShowCaption);
+  AssertTrue('and no icon', IsRectEmpty(IconBox(b)));
+end;
+
+procedure TToolbarDisplayTest.AToolTakenOffATextOnlyBarShowsItsIconAgain;
+var
+  b: TTyToolButton;
+begin
+  FBar.StyleOverride := '--toolbar-display: text;';
+  b := AddTool('Save');
+  b.Height := 24;
+  AssertTrue('setup: text only on the bar', IsRectEmpty(IconBox(b)));
+  b.Parent := FForm;
+  AssertFalse('on the form it is an icon button again', IsRectEmpty(IconBox(b)));
+end;
+
+procedure TToolbarDisplayTest.AToolInTheOverflowFlyoutStaysTextOnly;
+var
+  ex: TTyToolBarEx;
+  b: TTyToolButton;
+begin
+  ex := NewEx(700);
+  b := AddTool('Save', True, ex);
+  b.Height := 24;
+  ex.StyleOverride := '--toolbar-display: text;';
+  AssertTrue('on the bar', IsRectEmpty(IconBox(b)));
+  b.Parent := TExCrack(ex).EnsureFlyout;   // what opening the flyout does to an overflowed tool
+  try
+    AssertTrue('in the flyout', IsRectEmpty(IconBox(b)));
+  finally
+    b.Parent := ex;
+  end;
+end;
+
+procedure TToolbarDisplayTest.TheOverflowChevronKeepsItsIcon;
+var
+  ex: TTyToolBarEx;
+  chevron: TTyGlyphButtonBase;
+  i: Integer;
+begin
+  ex := NewEx(130);
+  for i := 1 to 5 do AddTool('Tool', True, ex);
+  ex.StyleOverride := '--toolbar-display: text;';
+  Layout(ex);
+  AssertTrue('setup: the bar overflows', ex.OverflowVisible);
+  chevron := nil;
+  for i := 0 to ex.ControlCount - 1 do
+    if ex.Controls[i] is TTyGlyphButton then chevron := TTyGlyphButtonBase(ex.Controls[i]);
+  AssertNotNull('setup: the chevron', chevron);
+  AssertFalse('the chevron is still drawn', IsRectEmpty(IconBox(chevron)));
+end;
+
+procedure TToolbarDisplayTest.UnderTextOnlyTheBarsIconSizeAsksNoHeight;
+var
+  b, plain: TTyToolButton;
+begin
+  b := AddTool('Save');
+  plain := AddTool('Save', False);
+  FBar.StyleOverride := '--toolbar-icon-size: 40px;';
+  AssertTrue('setup: a large icon makes its tool taller', Floor(b) > Floor(plain));
+  FBar.StyleOverride := '--toolbar-icon-size: 40px; --toolbar-display: text;';
+  AssertEquals('an icon that is not drawn asks for nothing', Floor(plain), Floor(b));
+end;
+
+procedure TToolbarDisplayTest.TheHintFollowsTheDisplay;
+var
+  b: TTyToolButton;
+begin
+  b := AddTool('&Save');
+  FBar.ShowCaptions := True;
+  AssertEquals('setup: the caption is on the button', '', HintOf(b));
+  FBar.StyleOverride := '--toolbar-display: icon;';
+  AssertEquals('icons only: the caption is the hint', 'Save', HintOf(b));
+  FBar.StyleOverride := '--toolbar-display: text;';
+  AssertEquals('text only: it is on the button', '', HintOf(b));
+end;
+
+{ The display goes through the bar's layout the way ShowCaptions does: a tool of a fixed
+  width is laid out as wide as what it now draws, and comes back to its own width. }
+procedure TToolbarDisplayTest.AFixedWidthToolFollowsTheDisplayAndComesBack;
+var
+  b, plain: TTyToolButton;
+  narrow: Integer;
+begin
+  b := AddTool('Save all changes');
+  plain := AddTool('Save all changes', False);
+  b.Width := 10;
+  plain.Width := 10;
+  Layout;
+  narrow := b.Width;
+  AssertEquals('setup: icon only, as wide as its floor', b.Constraints.MinWidth, narrow);
+  FBar.Display := tbdTextBesideIcon;
+  Layout;
+  AssertTrue(Format('wider for its caption (%d against %d)', [b.Width, narrow]),
+    b.Width > narrow + 40);
+  AssertTrue(Format('and the icon beside it is paid for (%d against %d)', [b.Width, plain.Width]),
+    b.Width > plain.Width);
+  FBar.Display := tbdTextOnly;
+  Layout;
+  AssertEquals('text only: as wide as the tool that has no icon', plain.Width, b.Width);
+  FBar.Display := tbdTheme;
+  Layout;
+  AssertEquals('and back to the width it had', narrow, b.Width);
+end;
+
+procedure TToolbarDisplayTest.TextUnderIconMakesTheRowTallEnough;
+var
+  b: TTyToolButton;
+  low: Integer;
+begin
+  b := AddTool('Save');
+  Layout;
+  low := b.Height;
+  FBar.Display := tbdTextUnderIcon;
+  Layout;
+  AssertTrue(Format('the row grew for the icon over its caption (%d against %d)', [b.Height, low]),
+    b.Height > low);
+  AssertTrue('to what the tool has to draw', b.Height >= Floor(b) + PadY(b));
+  FBar.Display := tbdTheme;
+  Layout;
+  AssertEquals('and back', low, b.Height);
+end;
+
+{ ---- #234: the Display property is the bar's own --toolbar-display ---- }
+
+procedure TToolbarDisplayTest.DisplayFollowsTheThemeUntilSet;
+begin
+  AssertEquals('a new bar', Ord(tbdTheme), Ord(FBar.Display));
+  FCtl.StyleOverride := ':root { --toolbar-display: text; }';
+  AssertEquals('the theme''s word is not this bar''s own', Ord(tbdTheme), Ord(FBar.Display));
+end;
+
+procedure TToolbarDisplayTest.SettingDisplayWritesTheBarsOwnOverride;
+var
+  b: TTyToolButton;
+begin
+  b := AddTool('Save');
+  b.Height := 24;
+  FBar.StyleOverride := 'color: #FF0000;';
+  FBar.Display := tbdTextOnly;
+  AssertEquals('color: #FF0000; --toolbar-display: text;', FBar.StyleOverride);
+  AssertTrue('and the tools follow', IsRectEmpty(IconBox(b)));
+  FBar.Display := tbdIconOnly;
+  AssertEquals('color: #FF0000; --toolbar-display: icon;', FBar.StyleOverride);
+  AssertFalse('icon only', b.ShowCaption);
+  FBar.Display := tbdTextBesideIcon;
+  AssertEquals('color: #FF0000; --toolbar-display: text-beside-icon;', FBar.StyleOverride);
+  FBar.Display := tbdTextUnderIcon;
+  AssertEquals('color: #FF0000; --toolbar-display: text-under-icon;', FBar.StyleOverride);
+  AssertEquals('stacked', Ord(glTop), Ord(b.GlyphLayout));
+end;
+
+procedure TToolbarDisplayTest.DisplayReadsWhatWasWrittenByHand;
+begin
+  FBar.StyleOverride := '--toolbar-display: icon;';
+  AssertEquals('icon', Ord(tbdIconOnly), Ord(FBar.Display));
+  FBar.StyleOverride := '--toolbar-display: text;';
+  AssertEquals('text', Ord(tbdTextOnly), Ord(FBar.Display));
+  FBar.StyleOverride := '--toolbar-display: text-beside-icon;';
+  AssertEquals('text-beside-icon', Ord(tbdTextBesideIcon), Ord(FBar.Display));
+  FBar.StyleOverride := '--toolbar-display: text-under-icon;';
+  AssertEquals('text-under-icon', Ord(tbdTextUnderIcon), Ord(FBar.Display));
+  FCtl.StyleOverride := ':root { --mode: text; }';
+  FBar.StyleOverride := '--toolbar-display: var(--mode);';
+  AssertEquals('through a var()', Ord(tbdTextOnly), Ord(FBar.Display));
+end;
+
+{ The Object Inspector, a copy and Assign all set a property to the value it already shows.
+  That must not rewrite what was written by hand. }
+procedure TToolbarDisplayTest.SettingDisplayToWhatItShowsChangesNothing;
+const
+  S = '--toolbar-display:  TEXT ;';
+begin
+  FBar.StyleOverride := S;
+  FBar.Display := tbdTextOnly;
+  AssertEquals(S, FBar.StyleOverride);
+end;
+
+procedure TToolbarDisplayTest.DisplayBackToTheThemeTakesTheDeclarationOut;
+begin
+  FBar.StyleOverride := 'color: #FF0000; --toolbar-display: text;';
+  FBar.Display := tbdTheme;
+  AssertEquals('color: #FF0000;', FBar.StyleOverride);
+  AssertEquals(Ord(tbdTheme), Ord(FBar.Display));
+end;
+
+procedure TToolbarDisplayTest.DisplayIsPublishedAndNotStored;
+var
+  ex: TTyToolBarEx;
+begin
+  AssertNotNull('TTyToolBar', GetPropInfo(FBar, 'Display'));
+  FBar.Display := tbdTextOnly;
+  AssertFalse('only StyleOverride goes into the form file', IsStoredProp(FBar, 'Display'));
+  ex := NewEx(300);
+  AssertNotNull('TTyToolBarEx', GetPropInfo(ex, 'Display'));
+  ex.Display := tbdTextOnly;
+  AssertFalse('nor on the overflow bar', IsStoredProp(ex, 'Display'));
+end;
+
+{ ---- #235: the IconSize property is the bar's own --toolbar-icon-size ---- }
+
+procedure TToolbarDisplayTest.IconSizeFollowsTheThemeUntilSet;
+begin
+  AssertEquals('a new bar', -1, FBar.IconSize);
+  FCtl.StyleOverride := ':root { --toolbar-icon-size: 20px; }';
+  AssertEquals('the theme''s size is not this bar''s own', -1, FBar.IconSize);
+end;
+
+procedure TToolbarDisplayTest.SettingIconSizeWritesTheBarsOwnOverride;
+var
+  b: TTyToolButton;
+begin
+  b := AddTool('Save');
+  b.Height := 40;
+  FBar.IconSize := 24;
+  AssertEquals('--toolbar-icon-size: 24px;', FBar.StyleOverride);
+  AssertEquals('and the tools follow', 24, Slot(b));
+  AssertEquals(24, FBar.IconSize);
+  FBar.IconSize := -1;
+  AssertEquals('taken out', '', FBar.StyleOverride);
+  FBar.IconSize := 24;
+  FBar.IconSize := -7;
+  AssertEquals('any negative number takes it out', '', FBar.StyleOverride);
+  AssertEquals(-1, FBar.IconSize);
+end;
+
+{ 0 is a size of its own: this bar's icons are sized from their buttons, whatever the theme
+  gives the other bars. }
+procedure TToolbarDisplayTest.IconSizeNoughtSizesIconsFromTheirButtons;
+var
+  b: TTyToolButton;
+begin
+  b := AddTool('Save');
+  b.ShowCaption := False;
+  b.Height := 40;
+  FCtl.StyleOverride := ':root { --toolbar-icon-size: 20px; }';
+  AssertEquals('setup: the theme''s size', 20, Slot(b));
+  FBar.IconSize := 0;
+  AssertEquals('--toolbar-icon-size: 0px;', FBar.StyleOverride);
+  AssertEquals('the box again', b.ClientHeight - PadY(b), Slot(b));
+  AssertEquals(0, FBar.IconSize);
+end;
+
+procedure TToolbarDisplayTest.IconSizeReadsWhatWasWrittenByHand;
+begin
+  FBar.StyleOverride := '--toolbar-icon-size: 28px;';
+  AssertEquals(28, FBar.IconSize);
+  FCtl.StyleOverride := ':root { --big: 32px; }';
+  FBar.StyleOverride := '--toolbar-icon-size: var(--big);';
+  AssertEquals('through a var()', 32, FBar.IconSize);
+end;
+
+procedure TToolbarDisplayTest.SettingIconSizeToWhatItShowsChangesNothing;
+const
+  S = '--toolbar-icon-size:var(--big);';
+begin
+  FCtl.StyleOverride := ':root { --big: 32px; }';
+  FBar.StyleOverride := S;
+  FBar.IconSize := 32;
+  AssertEquals(S, FBar.StyleOverride);
+end;
+
+procedure TToolbarDisplayTest.IconSizeIsPublishedAndNotStored;
+var
+  ex: TTyToolBarEx;
+begin
+  AssertNotNull('TTyToolBar', GetPropInfo(FBar, 'IconSize'));
+  FBar.IconSize := 24;
+  AssertFalse('only StyleOverride goes into the form file', IsStoredProp(FBar, 'IconSize'));
+  ex := NewEx(300);
+  AssertNotNull('TTyToolBarEx', GetPropInfo(ex, 'IconSize'));
+  ex.IconSize := 24;
+  AssertFalse('nor on the overflow bar', IsStoredProp(ex, 'IconSize'));
 end;
 
 initialization
