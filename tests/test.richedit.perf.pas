@@ -1393,7 +1393,8 @@ begin
   for w := 0 to 1 do
   begin
     Report(Format('%d MB of paragraphs, %d fields deep, a key %s them: the save (no field: %.1f ms)',
-      [ABytes div (1024 * 1024), ANest, BoolToStr(w = 0, 'before', 'after')]), times[1, w]);
+      [ABytes div (1024 * 1024), ANest, BoolToStr(w = 0, 'before', 'after'), times[0, w]]),
+      times[1, w]);
     AssertTrue(Format('a key %s the fields: the save in %.0f ms, %.0f ms with no field',
       [BoolToStr(w = 0, 'before', 'after'), times[1, w], times[0, w]]),
       times[1, w] <= 1.5 * times[0, w] + 100);

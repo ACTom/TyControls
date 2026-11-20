@@ -2588,7 +2588,7 @@ begin
   for c := #33 to #126 do
     if not (c in ['a'..'z', 'A'..'Z', '0'..'9', '''', '|']) then Check(Rtf('|' + c), False);
   Check(Rtf('||'), False);
-  Check(Rtf('|') + #13#10, False);
+  Check(Rtf('|' + #13#10), False);
   for i := 0 to High(Bytes) do Check(Rtf(Bytes[i]), False);
   AssertEquals('results shown as the body shows them:' + report, 0, bad);
 end;
