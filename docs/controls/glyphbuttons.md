@@ -86,7 +86,7 @@ uses tyControls.IconFont, tyControls.GlyphButtons;
 
 | 方法 | 返回 | 说明 |
 |------|------|------|
-| `CanShowGlyph` | `Boolean` | 这个按钮此刻是否真的会画图标（`Images` + `ImageName`，或 `IconFont` + `GlyphName`）。以前叫 `HasGlyphSource` 且是 protected，外部布局代码（决定工具条行高、对齐一列标题）够不着。对应 LCL 的 `TCustomBitBtn.CanShowGlyph`（`buttons.pp:214`，public）。**LCL 的签名带一个 `AWithShowMode` 参数，服务于它的 `Application.ShowButtonGlyphs` 机制；本库没有那套机制，所以参数是省略掉的，而不是收下再忽略。** |
+| `CanShowGlyph` | `Boolean` | 这个按钮此刻是否真的会画图标（`Images` + `ImageName`，或 `IconFont` + `GlyphName`）。以前叫 `HasGlyphSource` 且是 protected，外部布局代码（决定工具条行高、对齐一列标题）够不着。对应 LCL 的 `TCustomBitBtn.CanShowGlyph`（`buttons.pp:214`，public）。**LCL 的签名带一个 `AWithShowMode` 参数，服务于它的 `Application.ShowButtonGlyphs` 机制；本库没有那套机制，所以参数是省略掉的，而不是收下再忽略。** 4.0 起，按钮放在只显示文字的工具条上（`--toolbar-display: text`）、标题又画得出来时，它也答 `False`：图标不画，也不占位置。 |
 
 ### 3.2 `TTySpeedButton` 额外新增
 

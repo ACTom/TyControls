@@ -515,6 +515,30 @@ icons with text) are properties of the tool bar; see section 3.1.3 of
 New in 3.0.5. Earlier versions ignore the token, and the icon size can only be set on each button,
 with `GlyphSize`.
 
+4.0 adds a second token, `--toolbar-display`, which says whether a tool bar shows icons, text, or
+both:
+
+| Value | Shows |
+|---|---|
+| `icon` | icons only |
+| `text` | captions only |
+| `text-beside-icon` | icon and caption, side by side |
+| `text-under-icon` | icon and caption, stacked |
+
+```css
+/* the whole application: icons with text */
+:root { --toolbar-display: text-beside-icon; }
+```
+
+It is written where `--toolbar-icon-size` is: in the theme or the controller for every tool bar, in
+one bar's `StyleOverride` for that bar. Where no layer sets it, the bar's `ShowCaptions` and `List`
+properties decide; where it is set, the token does. Any other word counts as not set. Under `text`,
+a tool with no caption still draws its icon.
+
+A 4.0 tool bar also has two properties, `Display` and `IconSize`, which set these two tokens in the
+bar's own `StyleOverride` from the Object Inspector; see section 3.1.4 of
+[controls/toolbar.md](controls/toolbar.md).
+
 ---
 
 ## 4. Selectors and Style Resolution

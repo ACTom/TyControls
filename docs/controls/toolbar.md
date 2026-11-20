@@ -67,6 +67,8 @@ uses tyControls.ToolBar, tyControls.Button;
 | `Indent` | `Integer` | `4` | 工具条**前缘**（每行第一项之前）的留白，仅此而已。改值触发 `Relayout`。**曾经它还兼任上下内边距**，工具条自动增高时算的是 `Indent*2 + rows`，于是 `Indent := 24`（在 LCL 里是再普通不过的取值，用来给一个 logo 或前置标签让位）会静悄悄地把工具条撑高 48px、把所有工具往下推 24px——那不是任何 LCL 窗体设这个值时想要的。纵向留白现在是它自己的值（主题令牌 `--toolbar-pad-y`，缺省 4 = 原来 `Indent` 的缺省），两个旋钮各走各的。与 LCL 仍有一处不同：`TToolBar.Indent` 的缺省是 1，这里是 4。这一点是**有意保留**的——`default` 指令决定的是所有省略了该值的既有 `.lfm` 怎么被读回，改掉它等于给现存的每一条工具条重新缩进。从 LCL 移植、依赖缺省 1 的窗体请显式写 `Indent := 1`。 |
 | `Wrapable` | `Boolean` | `True` | 为 `True` 时，一行放不下的工具项自动折到下一行；`Align in [alTop, alBottom]` 时工具条随行数自动增高。改值触发 `Relayout`。**这只管"宽度不够时自动换行"这一条规则**，与"某一项强制另起一行"是两回事——后者走排布函数的 `ABreakBefore` 参数（见 [第 5.1 节](#51-排布函数-tytoolbarlayout)），且**两种模式下都生效**。 |
 | `ShowCaptions` | `Boolean` | `False` | 与 LCL 一致：`False`（默认）让工具项**只显示图标**，`True` 才画标题。它下发到每个**能画图标**的子控件（`TTyGlyphButtonBase` 一族：`TTyGlyphButton` / `TTySpeedButton` / `TTyGlyphContainerButton`），走 `AdoptShowCaption`——对已被宿主自己写过 `ShowCaption` 的工具项是空操作。普通 `TTyButton` 没有图标模型，不受影响；**解析不出图标的工具项保留标题**（否则画出来是个空盒子），所以 `False` 这个默认值不会把现有的纯文字工具条抹白。`AutoSize` 的工具宽度跟着变：只显示图标时是图标加内边距（3.0.5 以前仍按带标题算，#228）。标题没画出来的工具，`Hint` 留空时拿标题当提示（#232）。改值触发 `Relayout`。 |
+| `Display` | `TTyToolBarDisplay` | `tbdTheme` | 显示方式：只图标、只文字、图标加文字（并排或上下）。一个属性顶替 `ShowCaptions` 和 `List` 的搭配，也是「只显示文字」唯一的开关。读写的是本工具条 `StyleOverride` 里的令牌 `--toolbar-display`，自己不存值。见 [第 3.1.4 节](#314-display-和-iconsize在对象检查器里定显示方式)。4.0 起。 |
+| `IconSize` | `Integer` | `-1` | 条上图标按钮的图标边长（逻辑像素）。读写的是本工具条 `StyleOverride` 里的令牌 `--toolbar-icon-size`，自己不存值。`-1` 是这条没设，主题给了大小就用主题的。见 [第 3.1.4 节](#314-display-和-iconsize在对象检查器里定显示方式)。4.0 起。 |
 | `Flat` | `Boolean` | `True` | 为 `True` 时，工具条把子 `TTyButton` 的 `StyleClass` 设为 `'ghost'`（平面外观）——但**只在它还是空串时**；为 `False` 时只把 `'ghost'` 改回 `''`。宿主自己写的 `StyleClass := 'primary'` 会保留下来。改值触发 `Relayout`。 |
 | `Images` | `TTyCustomImageCollection` | `nil` | 工具项的图标来源：**没有自己 `Images` 的子图标按钮由工具条把这个集合借给它**，于是工具项只需设 `ImageName`。已经自带集合的工具项不受影响——工具条只管自己借出去的那一份引用（重新指向或收回）。用 `FreeNotification` 挂钩，集合被释放时连同"借出标记"一起置 `nil`。改值触发 `Relayout`。 |
 | `HotImages` | `TTyCustomImageCollection` | `nil` | **悬停时的替换图**，用**同一个 `ImageName`** 去这份集合里取。运行时换掉它（或 `DisabledImages`）会重画每个工具按钮。见下方 [3.1.2 节](#312-hotimages--disabledimages按状态换形状不换颜色)。 |
@@ -142,7 +144,7 @@ uses tyControls.ToolBar, tyControls.Button;
 | 图标在左、文字在右 | `ShowCaptions := True`，`List := True`（默认） |
 | 图标在上、文字在下 | `ShowCaptions := True`，`List := False` |
 | 小图标 / 大图标 | 令牌 `--toolbar-icon-size`，比如 `16px` / `24px` / `32px` |
-| 只显示文字 | 3.0 没有这个开关；没有图标的工具本来就只显示标题 |
+| 只显示文字 | 4.0 起：`Display := tbdTextOnly`，见 [第 3.1.4 节](#314-display-和-iconsize在对象检查器里定显示方式)。3.0 没有这个开关；没有图标的工具本来就只显示标题 |
 
 **图标大小。** `--toolbar-icon-size` 是工具条上图标按钮的图标边长（逻辑像素，3.0.5 新增，#231）。写在主题或控制器的 `StyleOverride` 里管所有工具条，写进某一条工具条自己的 `StyleOverride` 只管这一条：
 
@@ -170,6 +172,58 @@ MainBar.StyleOverride := '--toolbar-icon-size: 32px;';                        //
 **大图标要有大图。** 图标字体任何尺寸都清楚。位图集合里一个名字只有一张小图的话，放大了会糊，请给它加上对应尺寸的母版（见 [imagecollection.md](imagecollection.md) 的多分辨率母版）。
 
 密度（经典 / 现代）改的是按钮的高度。没设图标大小时图标跟着按钮的高度走，也就跟着密度变；设了 `--toolbar-icon-size` 就不受密度影响。
+
+### 3.1.4 `Display` 和 `IconSize`：在对象检查器里定显示方式
+
+4.0 起，显示方式可以用一个属性定下来，不用再记 `ShowCaptions` 和 `List` 怎么搭配。`TTyToolBar` 和 `TTyToolBarEx` 都有。
+
+| `Display` 的值 | 显示 | 写进 `StyleOverride` 的声明 |
+|---|---|---|
+| `tbdTheme`（默认） | 这条工具条自己不说，见下面「没设的时候」 | 没有 |
+| `tbdIconOnly` | 只有图标 | `--toolbar-display: icon` |
+| `tbdTextOnly` | 只有文字 | `--toolbar-display: text` |
+| `tbdTextBesideIcon` | 图标加文字，并排 | `--toolbar-display: text-beside-icon` |
+| `tbdTextUnderIcon` | 图标加文字，上下 | `--toolbar-display: text-under-icon` |
+
+`IconSize` 是图标边长，逻辑像素，对应令牌 `--toolbar-icon-size`（见上一节）：
+
+| `IconSize` 的值 | 意思 |
+|---|---|
+| `-1`（默认） | 这条工具条自己不说：主题给了大小就用主题的，没给就按按钮的高度算 |
+| `0` | 这条工具条的图标按按钮的高度算，不管主题给了多大 |
+| 正数 | 这条工具条的图标就是这么大 |
+
+这两个属性自己不存值，读写的就是本工具条 `StyleOverride` 里对应的那条声明：
+
+```pascal
+MainBar.Display := tbdTextUnderIcon;   // StyleOverride 里多了一条 --toolbar-display: text-under-icon;
+MainBar.IconSize := 32;                // 又多了一条 --toolbar-icon-size: 32px;
+MainBar.Display := tbdTheme;           // --toolbar-display 那条删掉了
+```
+
+- 属性和 `StyleOverride` 是同一份数据。在 `StyleOverride` 里手写令牌，属性跟着变；改属性，`StyleOverride` 跟着变，里面的其他内容原样不动。
+- 窗体文件里只存 `StyleOverride`，不存这两个属性。
+- 属性显示的是这条工具条自己设的值，不是主题的值。主题里写了 `--toolbar-display: text` 而这条没写，`Display` 仍然是 `tbdTheme`。
+
+**全应用一起切换。** 令牌写在主题或控制器的 `StyleOverride` 里，所有工具条一起变；哪条工具条自己设了 `Display`，以它自己的为准：
+
+```pascal
+TyDefaultController.StyleOverride := ':root { --toolbar-display: text-beside-icon; }';  // 所有工具条
+SideBar.Display := tbdIconOnly;                                                        // 这一条例外
+```
+
+做「工具栏显示方式」菜单时，改控制器的这一处就够了；用户选了什么存在哪里，由应用自己定。
+
+**没设的时候。** 哪一层都没写 `--toolbar-display` 时，`ShowCaptions` 和 `List` 照旧起作用，以前做的窗体外观不变。令牌有值时听令牌的，这两个属性保持原值，只是暂时不起作用；把令牌去掉，它们又管事。
+
+**只显示文字。** 工具的图标不画，也不占宽度和高度；从工具条上拿下来的按钮照常画图标。两种工具仍然画图标，因为不画就成了空框：
+
+- 没有标题的工具；
+- 自己写了 `ShowCaption := False` 的工具（见下一条）。
+
+`TTyToolBarEx` 的溢出箭头不受影响；溢出到弹出层里的工具和条上的一样，只显示文字。
+
+**个别工具例外。** 和 `ShowCaptions` / `List` 一样，工具自己写过的 `ShowCaption` / `GlyphLayout` / `GlyphSize` 优先于工具条。并排还是上下只下发给 `TTyToolButton`；条上别的图标按钮（`TTySpeedButton`、`TTyGlyphButton`）只跟着显示或隐藏文字和图标，布局用自己的 `GlyphLayout`。这和 `List` 的范围一致。
 
 ### 3.2 TTyToolButton（工具按钮）
 

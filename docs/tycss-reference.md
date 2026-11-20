@@ -491,6 +491,27 @@ typeKey 与文本类控件引用。它们都是普通 `--变量`,可被主题作
 
 3.0.5 新增。更早的版本不认这个令牌,图标大小只能在每个按钮上用 `GlyphSize` 设。
 
+4.0 起多一个令牌 `--toolbar-display`,定工具条显示图标、文字还是两样都显示:
+
+| 取值 | 显示 |
+|---|---|
+| `icon` | 只有图标 |
+| `text` | 只有文字 |
+| `text-beside-icon` | 图标加文字,并排 |
+| `text-under-icon` | 图标加文字,上下 |
+
+```css
+/* 整个应用:图标加文字 */
+:root { --toolbar-display: text-beside-icon; }
+```
+
+写法和 `--toolbar-icon-size` 一样:写在主题或控制器里管所有工具条,写在某条工具条的 `StyleOverride` 里只管
+那一条。哪一层都没写时,由工具条的 `ShowCaptions` 和 `List` 属性决定;写了就听令牌的。别的词不算数,
+等于没写。`text` 时没有标题的工具仍然画图标。
+
+4.0 的工具条另有两个属性 `Display` 和 `IconSize`,在对象检查器里改的就是工具条自己 `StyleOverride` 里的
+这两个令牌,见 [controls/toolbar.md](controls/toolbar.md) 第 3.1.4 节。
+
 ---
 
 ## 4. 选择器与样式解析
