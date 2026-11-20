@@ -1216,6 +1216,29 @@ begin
 end;
 {$POP}
 
+{ A word of a section's properties (RTF's "section formatting": \sectd and what follows it -
+  breaks, columns, line numbers, page numbers, the section's page size and margins, its
+  vertical alignment, its direction, footnotes and endnotes, page borders). }
+function IsSectionWord(P: PByte; ALen: Integer): Boolean;
+const
+  Prefixes: array[0..14] of string = ('sect', 'sbk', 'sftn', 'saftn', 'pgn', 'pgbrdr', 'cols',
+    'colno', 'colw', 'vertal', 'linebetcol', 'linex', 'linemod', 'linestart', 'lineppage');
+  Exact: array[0..10] of string = ('linerestart', 'linecont', 'headery', 'footery', 'titlepg',
+    'ltrsect', 'rtlsect', 'endnhere', 'stextflow', 'srauth', 'srdate');
+var
+  i: Integer;
+  s: string;
+begin
+  SetString(s, PAnsiChar(P), ALen);
+  for i := 0 to High(Prefixes) do
+    if (ALen >= Length(Prefixes[i])) and CompareMem(P, PChar(Prefixes[i]), Length(Prefixes[i])) then
+      Exit(True);
+  for i := 0 to High(Exact) do
+    if s = Exact[i] then Exit(True);
+  // \pgwsxn \pghsxn \marglsxn ... \guttersxn \binfsxn \lndscpsxn: the section's page
+  Result := (ALen > 3) and (s[ALen - 2] = 's') and (s[ALen - 1] = 'x') and (s[ALen] = 'n');
+end;
+
 function TyRtfKnownWordCount: Integer;
 begin
   Result := Length(WordTable);
@@ -4076,6 +4099,11 @@ begin
     begin
       if FS.InRowDef then FS.RowDef.Raw.Stop := FTok.Stop;
     end
+    else if (FS.Fields > 0) and IsSectionWord(@FBuf[FTok.NameStart], FTok.NameLen) then
+      { A section's properties restated inside a field's result (Word writes \sectd and the
+        section's words before a table of contents' entries, the section's state given back
+        by a group's end): no character's and no paragraph's - text copied out of the
+        result does not take them along. The field's bytes keep them. }
     else if (normal and FS.BodyStarted) or inPn then
     begin
       if inPn or IsParaPrefixWord(@FBuf[FTok.NameStart], FTok.NameLen) then
