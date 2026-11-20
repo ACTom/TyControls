@@ -72,6 +72,18 @@ const
   CTyRichKeyZoomIn = $4000 + VK_OEM_PLUS;
   CTyRichKeyZoomOut = $4000 + VK_OEM_MINUS;
   CTyRichKeyZoomReset = $4000 + VK_0;
+  CTyRichKeyCut = $4000 + VK_X;
+  CTyRichKeyCopy = $4000 + VK_C;
+  CTyRichKeyPaste = $4000 + VK_V;
+  CTyRichKeySelectAll = $4000 + VK_A;
+  CTyRichKeyFontGrow = $4000 + $2000 + VK_OEM_PERIOD;
+  CTyRichKeyFontShrink = $4000 + $2000 + VK_OEM_COMMA;
+  CTyRichKeyClearFormat = $4000 + VK_SPACE;
+  { The text colour and the highlight Color actions are made with. }
+  CTyRichDefaultTextColor = clRed;
+  CTyRichDefaultHighlight = clYellow;
+  { The size a font size action is made with (points). }
+  CTyRichDefaultFontSize = 11;
   { How far Increase / Decrease Indent move a paragraph: to the next multiple of half an inch
     (Word's default tab stops), twips. }
   CTyRichIndentStep = 720;
@@ -96,6 +108,10 @@ type
     FList: TTyListKind;
     FParaSame: TTyRichConsistentParaAttributes;
     FCanTable, FCanPicture: Boolean;
+    FFontName: string;
+    FFontSize: Integer;
+    FSpacing: TTyLineSpacing;
+    FCanRowIns, FCanColIns, FCanRowDel, FCanColDel, FCanTableDel: Boolean;
     procedure ViewChanged(Sender: TObject);
     procedure Refresh;
   public
@@ -129,6 +145,16 @@ type
     property ParaConsistent: TTyRichConsistentParaAttributes read FParaSame;
     property CanInsertTable: Boolean read FCanTable;
     property CanInsertPicture: Boolean read FCanPicture;
+    { SelAttributes.Name / Size (points) and Paragraph.LineSpacingRule (meaningful with
+      Readable); the table queries CanInsertRow .. CanDeleteTable. }
+    property FontName: string read FFontName;
+    property FontSize: Integer read FFontSize;
+    property LineSpacing: TTyLineSpacing read FSpacing;
+    property CanInsertRow: Boolean read FCanRowIns;
+    property CanInsertColumn: Boolean read FCanColIns;
+    property CanDeleteRow: Boolean read FCanRowDel;
+    property CanDeleteColumn: Boolean read FCanColDel;
+    property CanDeleteTable: Boolean read FCanTableDel;
   end;
 
   { The base of the rich edit's actions: the target (RichEdit, else the focused rich edit) and
@@ -480,11 +506,259 @@ type
     property ShortCut default CTyRichKeyZoomReset;
   end;
 
+  { ---- the clipboard and the selection: the control's own commands, as its text menu runs
+    them (ITyTextEditActions answers what they may do) ---- }
+
+  TTyRichEditCut = class(TTyRichEditAction)
+  protected
+    procedure UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+    procedure ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+  public
+    constructor Create(AOwner: TComponent); override;
+  published
+    property ShortCut default CTyRichKeyCut;
+  end;
+
+  TTyRichEditCopy = class(TTyRichEditAction)
+  protected
+    procedure UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+    procedure ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+  public
+    constructor Create(AOwner: TComponent); override;
+  published
+    property ShortCut default CTyRichKeyCopy;
+  end;
+
+  { Enabled: CanPaste, asked at each update (the clipboard tells the control nothing when it
+    changes; the question lists its formats, it reads no content). }
+  TTyRichEditPaste = class(TTyRichEditAction)
+  protected
+    procedure UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+    procedure ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+  public
+    constructor Create(AOwner: TComponent); override;
+  published
+    property ShortCut default CTyRichKeyPaste;
+  end;
+
+  TTyRichEditSelectAll = class(TTyRichEditAction)
+  protected
+    procedure UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+    procedure ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+  public
+    constructor Create(AOwner: TComponent); override;
+  published
+    property ShortCut default CTyRichKeySelectAll;
+  end;
+
+  { The selection deleted (ClearSelection, the user's Delete). No shortcut of its own: the
+    Delete key is the focused control's. }
+  TTyRichEditDelete = class(TTyRichEditAction)
+  protected
+    procedure UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+    procedure ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+  public
+    constructor Create(AOwner: TComponent); override;
+  end;
+
+  { ---- colours ---- }
+
+  { Before a colour goes in: the colour it will be (a dialog may change it); AApply False
+    applies nothing. }
+  TTyRichColorEvent = procedure(Sender: TObject; var AColor: TColor; var AApply: Boolean) of object;
+
+  { Color to the selection (with nothing selected, to the text typed next), through
+    ApplyCharacterFormat; OnChooseColor first. Enabled: CanFormatCharacters. }
+  TTyRichEditColorAction = class(TTyRichEditAction)
+  private
+    FColor: TColor;
+    FOnChooseColor: TTyRichColorEvent;
+  protected
+    { The field and the value Color gives it. }
+    procedure FormatOf(AColor: TColor; out AMask: TTyCharFormatMask; out AValue: TTyCharFormat);
+      virtual; abstract;
+    procedure ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+  published
+    property OnChooseColor: TTyRichColorEvent read FOnChooseColor write FOnChooseColor;
+  end;
+
+  { The text colour: Color (clDefault or clWindowText: automatic - the theme's text colour,
+    the text keeping no colour of its own). }
+  TTyRichEditTextColor = class(TTyRichEditColorAction)
+  protected
+    procedure FormatOf(AColor: TColor; out AMask: TTyCharFormatMask; out AValue: TTyCharFormat);
+      override;
+  public
+    constructor Create(AOwner: TComponent); override;
+  published
+    property Color: TColor read FColor write FColor default CTyRichDefaultTextColor;
+  end;
+
+  { The highlight (the text's background): Color (clNone, clDefault or clWindow: none). }
+  TTyRichEditHighlightColor = class(TTyRichEditColorAction)
+  protected
+    procedure FormatOf(AColor: TColor; out AMask: TTyCharFormatMask; out AValue: TTyCharFormat);
+      override;
+  public
+    constructor Create(AOwner: TComponent); override;
+  published
+    property Color: TColor read FColor write FColor default CTyRichDefaultHighlight;
+  end;
+
+  { ---- the font ---- }
+
+  { FontName to the selection (or the text typed next). Checked: the whole selection has that
+    font (SelAttributes.Name, caFace). A name LCL takes for its default ('default', '') makes
+    the text follow the control's font again. }
+  TTyRichEditFontName = class(TTyRichEditAction)
+  private
+    FFontName: string;
+  protected
+    procedure UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+    procedure ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+  public
+    constructor Create(AOwner: TComponent); override;
+  published
+    property FontName: string read FFontName write FFontName;
+  end;
+
+  { Size (points) to the selection. Checked: the whole selection has that size (caSize). The
+    control keeps half points; this action writes whole ones (ApplyCharacterFormat takes a
+    half point, SizeHalfPt, for a program that needs one). }
+  TTyRichEditFontSize = class(TTyRichEditAction)
+  private
+    FSize: Integer;
+  protected
+    procedure UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+    procedure ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+  public
+    constructor Create(AOwner: TComponent); override;
+  published
+    property Size: Integer read FSize write FSize default CTyRichDefaultFontSize;
+  end;
+
+  { The font one step larger / smaller on the usual scale (8, 9, 10, 11, 12, 14, 16, 18, 20,
+    22, 24, 26, 28, 36, 48, 72), from the selection's first character's size, given to the
+    whole selection. Enabled: CanFormatCharacters, short of the scale's end. }
+  TTyRichEditFontStepAction = class(TTyRichEditAction)
+  protected
+    function Direction: Integer; virtual; abstract;
+    procedure UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+    procedure ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+  end;
+
+  TTyRichEditFontGrow = class(TTyRichEditFontStepAction)
+  protected
+    function Direction: Integer; override;
+  public
+    constructor Create(AOwner: TComponent); override;
+  published
+    property ShortCut default CTyRichKeyFontGrow;
+  end;
+
+  TTyRichEditFontShrink = class(TTyRichEditFontStepAction)
+  protected
+    function Direction: Integer; override;
+  public
+    constructor Create(AOwner: TComponent); override;
+  published
+    property ShortCut default CTyRichKeyFontShrink;
+  end;
+
+  { Every character attribute of the selection back to none of its own (the document's
+    default: the control's font and the theme's colour, no style, no highlight, no script),
+    one undo step. Attributes the control keeps but does not show (a file's opaque ones) stay. }
+  TTyRichEditClearFormat = class(TTyRichEditAction)
+  protected
+    procedure ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+  public
+    constructor Create(AOwner: TComponent); override;
+  published
+    property ShortCut default CTyRichKeyClearFormat;
+  end;
+
+  { The paragraphs' line spacing rule: Spacing (single, 1.15, 1.5, double; an exact or an
+    at-least spacing keeps its height, a paragraph with none takes the line's own). Checked:
+    the first paragraph the selection touches has that rule (the format API reads no
+    consistency for spacing). Enabled: CanFormatParagraphs. }
+  TTyRichEditLineSpacing = class(TTyRichEditAction)
+  private
+    FSpacing: TTyLineSpacing;
+  protected
+    procedure UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+    procedure ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+  public
+    constructor Create(AOwner: TComponent); override;
+  published
+    property Spacing: TTyLineSpacing read FSpacing write FSpacing default lsSingle;
+  end;
+
+  { ---- table operations: the control's own, Enabled by its own Can... at the caret ---- }
+
+  TTyRichEditTableKind = (rtkRowAbove, rtkRowBelow, rtkColumnLeft, rtkColumnRight,
+    rtkDeleteRow, rtkDeleteColumn, rtkDeleteTable);
+
+  TTyRichEditTableAction = class(TTyRichEditAction)
+  protected
+    function KindOf: TTyRichEditTableKind; virtual; abstract;
+    procedure UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+    procedure ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+  end;
+
+  TTyRichEditInsertRowAbove = class(TTyRichEditTableAction)
+  protected
+    function KindOf: TTyRichEditTableKind; override;
+  public
+    constructor Create(AOwner: TComponent); override;
+  end;
+
+  TTyRichEditInsertRowBelow = class(TTyRichEditTableAction)
+  protected
+    function KindOf: TTyRichEditTableKind; override;
+  public
+    constructor Create(AOwner: TComponent); override;
+  end;
+
+  TTyRichEditInsertColumnLeft = class(TTyRichEditTableAction)
+  protected
+    function KindOf: TTyRichEditTableKind; override;
+  public
+    constructor Create(AOwner: TComponent); override;
+  end;
+
+  TTyRichEditInsertColumnRight = class(TTyRichEditTableAction)
+  protected
+    function KindOf: TTyRichEditTableKind; override;
+  public
+    constructor Create(AOwner: TComponent); override;
+  end;
+
+  TTyRichEditDeleteRow = class(TTyRichEditTableAction)
+  protected
+    function KindOf: TTyRichEditTableKind; override;
+  public
+    constructor Create(AOwner: TComponent); override;
+  end;
+
+  TTyRichEditDeleteColumn = class(TTyRichEditTableAction)
+  protected
+    function KindOf: TTyRichEditTableKind; override;
+  public
+    constructor Create(AOwner: TComponent); override;
+  end;
+
+  TTyRichEditDeleteTable = class(TTyRichEditTableAction)
+  protected
+    function KindOf: TTyRichEditTableKind; override;
+  public
+    constructor Create(AOwner: TComponent); override;
+  end;
+
   TTyRichEditActionClass = class of TTyRichEditAction;
 
 const
   { Every action of this unit, in the order the IDE lists them. }
-  CTyRichEditActions: array[0..22] of TTyRichEditActionClass = (
+  CTyRichEditActions: array[0..42] of TTyRichEditActionClass = (
     TTyRichEditBold, TTyRichEditItalic, TTyRichEditUnderline, TTyRichEditStrikeOut,
     TTyRichEditSuperscript, TTyRichEditSubscript,
     TTyRichEditAlignLeft, TTyRichEditAlignCenter, TTyRichEditAlignRight,
@@ -492,7 +766,17 @@ const
     TTyRichEditIndentIncrease, TTyRichEditIndentDecrease,
     TTyRichEditInsertPicture, TTyRichEditInsertTable,
     TTyRichEditFind, TTyRichEditReplace, TTyRichEditUndo, TTyRichEditRedo,
-    TTyRichEditZoomIn, TTyRichEditZoomOut, TTyRichEditZoomReset);
+    TTyRichEditZoomIn, TTyRichEditZoomOut, TTyRichEditZoomReset,
+    TTyRichEditCut, TTyRichEditCopy, TTyRichEditPaste, TTyRichEditSelectAll, TTyRichEditDelete,
+    TTyRichEditTextColor, TTyRichEditHighlightColor, TTyRichEditFontName, TTyRichEditFontSize,
+    TTyRichEditFontGrow, TTyRichEditFontShrink, TTyRichEditClearFormat, TTyRichEditLineSpacing,
+    TTyRichEditInsertRowAbove, TTyRichEditInsertRowBelow, TTyRichEditInsertColumnLeft,
+    TTyRichEditInsertColumnRight, TTyRichEditDeleteRow, TTyRichEditDeleteColumn,
+    TTyRichEditDeleteTable);
+
+  { The font sizes the grow and shrink actions step through (points). }
+  CTyRichFontSizes: array[0..15] of Integer = (8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28,
+    36, 48, 72);
 
 { An open dialog's filter of the picture files a rich edit reads (InsertPictureFromFile):
   every format the LCL reads (the formats registered with TPicture - PNG and JPEG are kept
@@ -598,7 +882,10 @@ begin
     FAlign := FRich.Paragraph.ParaAlign;
     FList := FRich.Paragraph.Numbering;
     FParaSame := FRich.Paragraph.ConsistentAttributes;
-    Inc(FQueries, 7);
+    FFontName := FRich.SelAttributes.Name;
+    FFontSize := FRich.SelAttributes.Size;
+    FSpacing := FRich.Paragraph.LineSpacingRule;
+    Inc(FQueries, 10);
   end
   else
   begin
@@ -609,10 +896,18 @@ begin
     FAlign := paraLeft;
     FList := lkNone;
     FParaSame := [];
+    FFontName := '';
+    FFontSize := 0;
+    FSpacing := lsSingle;
   end;
   FCanTable := FRich.CanInsertTable;
   FCanPicture := FRich.CanInsertPicture;
-  Inc(FQueries, 2);
+  FCanRowIns := FRich.CanInsertRow;
+  FCanColIns := FRich.CanInsertColumn;
+  FCanRowDel := FRich.CanDeleteRow;
+  FCanColDel := FRich.CanDeleteColumn;
+  FCanTableDel := FRich.CanDeleteTable;
+  Inc(FQueries, 7);
 end;
 
 { TTyRichEditAction }
@@ -1405,6 +1700,432 @@ procedure TTyRichEditZoomReset.ExecuteOn(ARich: TTyCustomRichEdit;
   AState: TTyRichEditActionState);
 begin
   ARich.Zoom := 100;
+end;
+
+{ ---- the clipboard and the selection ---- }
+
+constructor TTyRichEditCut.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  Caption := rsRichActCut;
+  Hint := rsRichActCutHint;
+  ShortCut := CTyRichKeyCut;
+end;
+
+procedure TTyRichEditCut.UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState);
+begin
+  // the text menu's answer for Cut
+  Enabled := ARich.TeHasSelection and not ARich.TeIsReadOnly;
+  Checked := False;
+end;
+
+procedure TTyRichEditCut.ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState);
+begin
+  ARich.CutToClipboard;
+end;
+
+constructor TTyRichEditCopy.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  Caption := rsRichActCopy;
+  Hint := rsRichActCopyHint;
+  ShortCut := CTyRichKeyCopy;
+end;
+
+procedure TTyRichEditCopy.UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState);
+begin
+  Enabled := ARich.TeHasSelection;
+  Checked := False;
+end;
+
+procedure TTyRichEditCopy.ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState);
+begin
+  ARich.CopyToClipboard;
+end;
+
+constructor TTyRichEditPaste.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  Caption := rsRichActPaste;
+  Hint := rsRichActPasteHint;
+  ShortCut := CTyRichKeyPaste;
+end;
+
+procedure TTyRichEditPaste.UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState);
+begin
+  Enabled := ARich.CanPaste;
+  Checked := False;
+end;
+
+procedure TTyRichEditPaste.ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState);
+begin
+  ARich.PasteFromClipboard;
+end;
+
+constructor TTyRichEditSelectAll.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  Caption := rsRichActSelectAll;
+  Hint := rsRichActSelectAllHint;
+  ShortCut := CTyRichKeySelectAll;
+end;
+
+procedure TTyRichEditSelectAll.UpdateOn(ARich: TTyCustomRichEdit;
+  AState: TTyRichEditActionState);
+begin
+  Enabled := ARich.TeHasText;
+  Checked := False;
+end;
+
+procedure TTyRichEditSelectAll.ExecuteOn(ARich: TTyCustomRichEdit;
+  AState: TTyRichEditActionState);
+begin
+  ARich.SelectAll;
+end;
+
+constructor TTyRichEditDelete.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  Caption := rsRichActDelete;
+  Hint := rsRichActDeleteHint;
+end;
+
+procedure TTyRichEditDelete.UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState);
+begin
+  Enabled := ARich.TeHasSelection and not ARich.TeIsReadOnly;
+  Checked := False;
+end;
+
+procedure TTyRichEditDelete.ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState);
+begin
+  ARich.ClearSelection;
+end;
+
+{ ---- colours ---- }
+
+procedure TTyRichEditColorAction.ExecuteOn(ARich: TTyCustomRichEdit;
+  AState: TTyRichEditActionState);
+var
+  c: TColor;
+  go: Boolean;
+  m: TTyCharFormatMask;
+  f: TTyCharFormat;
+begin
+  if not AState.CanFormatCharacters then Exit;
+  c := FColor;
+  go := True;
+  if Assigned(FOnChooseColor) then FOnChooseColor(Self, c, go);
+  if not go or (csDestroying in ARich.ComponentState) then Exit;
+  // the chosen colour is the action's from now on (a button shows it, the next click applies it)
+  FColor := c;
+  FormatOf(c, m, f);
+  AState.Changed;
+  ARich.ApplyCharacterFormat(m, f);
+end;
+
+constructor TTyRichEditTextColor.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  Caption := rsRichActTextColor;
+  Hint := rsRichActTextColorHint;
+  FColor := CTyRichDefaultTextColor;
+end;
+
+procedure TTyRichEditTextColor.FormatOf(AColor: TColor; out AMask: TTyCharFormatMask;
+  out AValue: TTyCharFormat);
+begin
+  AMask := [cffColor];
+  AValue := TyDefaultCharFormat;
+  AValue.Color := TyRichTextColorIn(AColor);
+end;
+
+constructor TTyRichEditHighlightColor.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  Caption := rsRichActHighlightColor;
+  Hint := rsRichActHighlightColorHint;
+  FColor := CTyRichDefaultHighlight;
+end;
+
+procedure TTyRichEditHighlightColor.FormatOf(AColor: TColor; out AMask: TTyCharFormatMask;
+  out AValue: TTyCharFormat);
+begin
+  AMask := [cffHighlight];
+  AValue := TyDefaultCharFormat;
+  AValue.HighlightColor := TyRichBackColorIn(AColor);
+end;
+
+{ ---- the font ---- }
+
+constructor TTyRichEditFontName.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  Caption := rsRichActFontName;
+  Hint := rsRichActFontNameHint;
+end;
+
+procedure TTyRichEditFontName.UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState);
+begin
+  Enabled := AState.CanFormatCharacters;
+  Checked := AState.Readable and (caFace in AState.CharConsistent) and (FFontName <> '') and
+    SameText(AState.FontName, FFontName);
+end;
+
+procedure TTyRichEditFontName.ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState);
+var
+  f: TTyCharFormat;
+begin
+  f := TyDefaultCharFormat;
+  f.FontName := TyRichFontNameIn(FFontName);
+  AState.Changed;
+  ARich.ApplyCharacterFormat([cffFontName], f);
+end;
+
+constructor TTyRichEditFontSize.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  Caption := rsRichActFontSize;
+  Hint := rsRichActFontSizeHint;
+  FSize := CTyRichDefaultFontSize;
+end;
+
+procedure TTyRichEditFontSize.UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState);
+begin
+  Enabled := AState.CanFormatCharacters and (FSize > 0);
+  Checked := AState.Readable and (caSize in AState.CharConsistent) and (AState.FontSize = FSize);
+end;
+
+procedure TTyRichEditFontSize.ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState);
+var
+  f: TTyCharFormat;
+begin
+  if FSize <= 0 then Exit;
+  f := TyDefaultCharFormat;
+  f.SizeHalfPt := FSize * 2;
+  AState.Changed;
+  ARich.ApplyCharacterFormat([cffSize], f);
+end;
+
+{ The next size on the scale beyond APoints in ADirection; 0 past its end. }
+function NextFontSize(APoints, ADirection: Integer): Integer;
+var
+  i: Integer;
+begin
+  Result := 0;
+  if ADirection > 0 then
+  begin
+    for i := 0 to High(CTyRichFontSizes) do
+      if CTyRichFontSizes[i] > APoints then Exit(CTyRichFontSizes[i]);
+  end
+  else
+    for i := High(CTyRichFontSizes) downto 0 do
+      if CTyRichFontSizes[i] < APoints then Exit(CTyRichFontSizes[i]);
+end;
+
+procedure TTyRichEditFontStepAction.UpdateOn(ARich: TTyCustomRichEdit;
+  AState: TTyRichEditActionState);
+begin
+  Enabled := AState.CanFormatCharacters and AState.Readable and
+    (NextFontSize(AState.FontSize, Direction) > 0);
+  Checked := False;
+end;
+
+procedure TTyRichEditFontStepAction.ExecuteOn(ARich: TTyCustomRichEdit;
+  AState: TTyRichEditActionState);
+var
+  f: TTyCharFormat;
+  n: Integer;
+begin
+  if not AState.Readable then Exit;
+  n := NextFontSize(AState.FontSize, Direction);
+  if n <= 0 then Exit;
+  f := TyDefaultCharFormat;
+  f.SizeHalfPt := n * 2;
+  AState.Changed;
+  ARich.ApplyCharacterFormat([cffSize], f);
+end;
+
+function TTyRichEditFontGrow.Direction: Integer;
+begin
+  Result := 1;
+end;
+
+constructor TTyRichEditFontGrow.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  Caption := rsRichActFontGrow;
+  Hint := rsRichActFontGrowHint;
+  ShortCut := CTyRichKeyFontGrow;
+end;
+
+function TTyRichEditFontShrink.Direction: Integer;
+begin
+  Result := -1;
+end;
+
+constructor TTyRichEditFontShrink.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  Caption := rsRichActFontShrink;
+  Hint := rsRichActFontShrinkHint;
+  ShortCut := CTyRichKeyFontShrink;
+end;
+
+constructor TTyRichEditClearFormat.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  Caption := rsRichActClearFormat;
+  Hint := rsRichActClearFormatHint;
+  ShortCut := CTyRichKeyClearFormat;
+end;
+
+procedure TTyRichEditClearFormat.ExecuteOn(ARich: TTyCustomRichEdit;
+  AState: TTyRichEditActionState);
+begin
+  // the default character format: no name, no size, no style, automatic colour, no highlight
+  AState.Changed;
+  ARich.ApplyCharacterFormat([cffFontName, cffCharset, cffSize, cffBold, cffItalic,
+    cffUnderline, cffStrike, cffVertAlign, cffColor, cffHighlight], TyDefaultCharFormat);
+end;
+
+constructor TTyRichEditLineSpacing.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  Caption := rsRichActLineSpacing;
+  Hint := rsRichActLineSpacingHint;
+  FSpacing := lsSingle;
+end;
+
+procedure TTyRichEditLineSpacing.UpdateOn(ARich: TTyCustomRichEdit;
+  AState: TTyRichEditActionState);
+begin
+  Enabled := AState.CanFormatParagraphs;
+  Checked := AState.Readable and (AState.LineSpacing = FSpacing);
+end;
+
+procedure TTyRichEditLineSpacing.ExecuteOn(ARich: TTyCustomRichEdit;
+  AState: TTyRichEditActionState);
+var
+  f: TTyParaFormat;
+begin
+  f := TyDefaultParaFormat;
+  f.LineSpacing := FSpacing;
+  ARich.ApplyParagraphFormat([pffSpacingRule], f);
+end;
+
+{ ---- tables ---- }
+
+procedure TTyRichEditTableAction.UpdateOn(ARich: TTyCustomRichEdit;
+  AState: TTyRichEditActionState);
+begin
+  case KindOf of
+    rtkRowAbove, rtkRowBelow: Enabled := AState.CanInsertRow;
+    rtkColumnLeft, rtkColumnRight: Enabled := AState.CanInsertColumn;
+    rtkDeleteRow: Enabled := AState.CanDeleteRow;
+    rtkDeleteColumn: Enabled := AState.CanDeleteColumn;
+  else
+    Enabled := AState.CanDeleteTable;
+  end;
+  Checked := False;
+end;
+
+procedure TTyRichEditTableAction.ExecuteOn(ARich: TTyCustomRichEdit;
+  AState: TTyRichEditActionState);
+begin
+  case KindOf of
+    rtkRowAbove: ARich.InsertRow(False);
+    rtkRowBelow: ARich.InsertRow(True);
+    rtkColumnLeft: ARich.InsertColumn(False);
+    rtkColumnRight: ARich.InsertColumn(True);
+    rtkDeleteRow: ARich.DeleteRow;
+    rtkDeleteColumn: ARich.DeleteColumn;
+  else
+    ARich.DeleteTable;
+  end;
+end;
+
+function TTyRichEditInsertRowAbove.KindOf: TTyRichEditTableKind;
+begin
+  Result := rtkRowAbove;
+end;
+
+constructor TTyRichEditInsertRowAbove.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  Caption := rsRichActRowAbove;
+  Hint := rsRichActRowAboveHint;
+end;
+
+function TTyRichEditInsertRowBelow.KindOf: TTyRichEditTableKind;
+begin
+  Result := rtkRowBelow;
+end;
+
+constructor TTyRichEditInsertRowBelow.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  Caption := rsRichActRowBelow;
+  Hint := rsRichActRowBelowHint;
+end;
+
+function TTyRichEditInsertColumnLeft.KindOf: TTyRichEditTableKind;
+begin
+  Result := rtkColumnLeft;
+end;
+
+constructor TTyRichEditInsertColumnLeft.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  Caption := rsRichActColumnLeft;
+  Hint := rsRichActColumnLeftHint;
+end;
+
+function TTyRichEditInsertColumnRight.KindOf: TTyRichEditTableKind;
+begin
+  Result := rtkColumnRight;
+end;
+
+constructor TTyRichEditInsertColumnRight.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  Caption := rsRichActColumnRight;
+  Hint := rsRichActColumnRightHint;
+end;
+
+function TTyRichEditDeleteRow.KindOf: TTyRichEditTableKind;
+begin
+  Result := rtkDeleteRow;
+end;
+
+constructor TTyRichEditDeleteRow.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  Caption := rsRichActDeleteRow;
+  Hint := rsRichActDeleteRowHint;
+end;
+
+function TTyRichEditDeleteColumn.KindOf: TTyRichEditTableKind;
+begin
+  Result := rtkDeleteColumn;
+end;
+
+constructor TTyRichEditDeleteColumn.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  Caption := rsRichActDeleteColumn;
+  Hint := rsRichActDeleteColumnHint;
+end;
+
+function TTyRichEditDeleteTable.KindOf: TTyRichEditTableKind;
+begin
+  Result := rtkDeleteTable;
+end;
+
+constructor TTyRichEditDeleteTable.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  Caption := rsRichActDeleteTable;
+  Hint := rsRichActDeleteTableHint;
 end;
 
 end.

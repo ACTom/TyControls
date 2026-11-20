@@ -1073,6 +1073,166 @@ msgstr ""
 msgid "Insert table"
 msgstr ""
 
+#: tycontrols.strconsts.rsrichactcut
+msgid "&Cut"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactcuthint
+msgid "Cut"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactcopy
+msgid "&Copy"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactcopyhint
+msgid "Copy"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactpaste
+msgid "&Paste"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactpastehint
+msgid "Paste"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactselectall
+msgid "Select &All"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactselectallhint
+msgid "Select all"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactdelete
+msgid "&Delete"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactdeletehint
+msgid "Delete the selection"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichacttextcolor
+msgid "Text &Color"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichacttextcolorhint
+msgid "Text color"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichacthighlightcolor
+msgid "&Highlight"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichacthighlightcolorhint
+msgid "Highlight color"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactfontname
+msgid "&Font"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactfontnamehint
+msgid "Font"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactfontsize
+msgid "Font &Size"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactfontsizehint
+msgid "Font size"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactfontgrow
+msgid "&Grow Font"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactfontgrowhint
+msgid "Larger font"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactfontshrink
+msgid "S&hrink Font"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactfontshrinkhint
+msgid "Smaller font"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactclearformat
+msgid "Clear &Formatting"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactclearformathint
+msgid "Clear formatting"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactlinespacing
+msgid "Line &Spacing"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactlinespacinghint
+msgid "Line spacing"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactrowabove
+msgid "Insert Row &Above"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactrowabovehint
+msgid "Insert a row above"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactrowbelow
+msgid "Insert Row &Below"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactrowbelowhint
+msgid "Insert a row below"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactcolumnleft
+msgid "Insert Column &Left"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactcolumnlefthint
+msgid "Insert a column on the left"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactcolumnright
+msgid "Insert Column &Right"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactcolumnrighthint
+msgid "Insert a column on the right"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactdeleterow
+msgid "Delete &Row"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactdeleterowhint
+msgid "Delete the row"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactdeletecolumn
+msgid "Delete &Column"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactdeletecolumnhint
+msgid "Delete the column"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactdeletetable
+msgid "Delete &Table"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactdeletetablehint
+msgid "Delete the table"
+msgstr ""
+
 #: tycontrols.strconsts.rsrichundoinserttext
 msgid "Insert text"
 msgstr ""

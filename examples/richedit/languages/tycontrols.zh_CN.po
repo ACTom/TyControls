@@ -1236,6 +1236,166 @@ msgstr "图片 (%s)"
 msgid "All files"
 msgstr "所有文件"
 
+#: tycontrols.strconsts.rsrichactcut
+msgid "&Cut"
+msgstr "剪切(&T)"
+
+#: tycontrols.strconsts.rsrichactcuthint
+msgid "Cut"
+msgstr "剪切"
+
+#: tycontrols.strconsts.rsrichactcopy
+msgid "&Copy"
+msgstr "复制(&C)"
+
+#: tycontrols.strconsts.rsrichactcopyhint
+msgid "Copy"
+msgstr "复制"
+
+#: tycontrols.strconsts.rsrichactpaste
+msgid "&Paste"
+msgstr "粘贴(&P)"
+
+#: tycontrols.strconsts.rsrichactpastehint
+msgid "Paste"
+msgstr "粘贴"
+
+#: tycontrols.strconsts.rsrichactselectall
+msgid "Select &All"
+msgstr "全选(&A)"
+
+#: tycontrols.strconsts.rsrichactselectallhint
+msgid "Select all"
+msgstr "全选"
+
+#: tycontrols.strconsts.rsrichactdelete
+msgid "&Delete"
+msgstr "删除(&D)"
+
+#: tycontrols.strconsts.rsrichactdeletehint
+msgid "Delete the selection"
+msgstr "删除选中的内容"
+
+#: tycontrols.strconsts.rsrichacttextcolor
+msgid "Text &Color"
+msgstr "文字颜色(&C)"
+
+#: tycontrols.strconsts.rsrichacttextcolorhint
+msgid "Text color"
+msgstr "文字颜色"
+
+#: tycontrols.strconsts.rsrichacthighlightcolor
+msgid "&Highlight"
+msgstr "突出显示(&H)"
+
+#: tycontrols.strconsts.rsrichacthighlightcolorhint
+msgid "Highlight color"
+msgstr "突出显示颜色"
+
+#: tycontrols.strconsts.rsrichactfontname
+msgid "&Font"
+msgstr "字体(&F)"
+
+#: tycontrols.strconsts.rsrichactfontnamehint
+msgid "Font"
+msgstr "字体"
+
+#: tycontrols.strconsts.rsrichactfontsize
+msgid "Font &Size"
+msgstr "字号(&S)"
+
+#: tycontrols.strconsts.rsrichactfontsizehint
+msgid "Font size"
+msgstr "字号"
+
+#: tycontrols.strconsts.rsrichactfontgrow
+msgid "&Grow Font"
+msgstr "增大字号(&G)"
+
+#: tycontrols.strconsts.rsrichactfontgrowhint
+msgid "Larger font"
+msgstr "增大字号"
+
+#: tycontrols.strconsts.rsrichactfontshrink
+msgid "S&hrink Font"
+msgstr "减小字号(&H)"
+
+#: tycontrols.strconsts.rsrichactfontshrinkhint
+msgid "Smaller font"
+msgstr "减小字号"
+
+#: tycontrols.strconsts.rsrichactclearformat
+msgid "Clear &Formatting"
+msgstr "清除格式(&F)"
+
+#: tycontrols.strconsts.rsrichactclearformathint
+msgid "Clear formatting"
+msgstr "清除格式"
+
+#: tycontrols.strconsts.rsrichactlinespacing
+msgid "Line &Spacing"
+msgstr "行距(&S)"
+
+#: tycontrols.strconsts.rsrichactlinespacinghint
+msgid "Line spacing"
+msgstr "行距"
+
+#: tycontrols.strconsts.rsrichactrowabove
+msgid "Insert Row &Above"
+msgstr "在上方插入行(&A)"
+
+#: tycontrols.strconsts.rsrichactrowabovehint
+msgid "Insert a row above"
+msgstr "在上方插入一行"
+
+#: tycontrols.strconsts.rsrichactrowbelow
+msgid "Insert Row &Below"
+msgstr "在下方插入行(&B)"
+
+#: tycontrols.strconsts.rsrichactrowbelowhint
+msgid "Insert a row below"
+msgstr "在下方插入一行"
+
+#: tycontrols.strconsts.rsrichactcolumnleft
+msgid "Insert Column &Left"
+msgstr "在左侧插入列(&L)"
+
+#: tycontrols.strconsts.rsrichactcolumnlefthint
+msgid "Insert a column on the left"
+msgstr "在左侧插入一列"
+
+#: tycontrols.strconsts.rsrichactcolumnright
+msgid "Insert Column &Right"
+msgstr "在右侧插入列(&R)"
+
+#: tycontrols.strconsts.rsrichactcolumnrighthint
+msgid "Insert a column on the right"
+msgstr "在右侧插入一列"
+
+#: tycontrols.strconsts.rsrichactdeleterow
+msgid "Delete &Row"
+msgstr "删除行(&R)"
+
+#: tycontrols.strconsts.rsrichactdeleterowhint
+msgid "Delete the row"
+msgstr "删除这一行"
+
+#: tycontrols.strconsts.rsrichactdeletecolumn
+msgid "Delete &Column"
+msgstr "删除列(&C)"
+
+#: tycontrols.strconsts.rsrichactdeletecolumnhint
+msgid "Delete the column"
+msgstr "删除这一列"
+
+#: tycontrols.strconsts.rsrichactdeletetable
+msgid "Delete &Table"
+msgstr "删除表格(&T)"
+
+#: tycontrols.strconsts.rsrichactdeletetablehint
+msgid "Delete the table"
+msgstr "删除整个表格"
+
 #: tycontrols.strconsts.rstoolbarmorecommands
 msgid "More commands"
 msgstr "更多命令"

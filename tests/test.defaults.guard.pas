@@ -64,7 +64,7 @@ uses
   tyControls.TyLabel, tyControls.UpDown, tyControls.URLEdit, tyControls.ValueListEditor;
 
 const
-  Palette: array[0..221] of TComponentClass = (
+  Palette: array[0..241] of TComponentClass = (
     TTyAboutDialog, TTyAccordion, TTyActivityBar, TTyActivityIndicator,
     TTyAdvancedComboBox, TTyAdvancedListBox, TTyAlert, TTyAnalogClock,
     TTyArrow, TTyBadge, TTyBalloonHint, TTyBevel,
@@ -110,6 +110,12 @@ const
     TTyRichEditIndentIncrease, TTyRichEditIndentDecrease, TTyRichEditInsertPicture,
     TTyRichEditInsertTable, TTyRichEditFind, TTyRichEditReplace, TTyRichEditUndo,
     TTyRichEditRedo, TTyRichEditZoomIn, TTyRichEditZoomOut, TTyRichEditZoomReset,
+    TTyRichEditCut, TTyRichEditCopy, TTyRichEditPaste, TTyRichEditSelectAll, TTyRichEditDelete,
+    TTyRichEditTextColor, TTyRichEditHighlightColor, TTyRichEditFontName, TTyRichEditFontSize,
+    TTyRichEditFontGrow, TTyRichEditFontShrink, TTyRichEditClearFormat, TTyRichEditLineSpacing,
+    TTyRichEditInsertRowAbove, TTyRichEditInsertRowBelow, TTyRichEditInsertColumnLeft,
+    TTyRichEditInsertColumnRight, TTyRichEditDeleteRow, TTyRichEditDeleteColumn,
+    TTyRichEditDeleteTable,
     TTySaveDialog, TTySavePictureDialog, TTySavePreviewDialog, TTyScrollBar,
     TTyScrollBox, TTyScrollPanel, TTySegmented, TTySelectPathDialog,
     TTySelectValueDialog, TTyShadowLabel, TTyShape, TTyShellComboBox,

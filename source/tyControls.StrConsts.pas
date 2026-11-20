@@ -412,6 +412,46 @@ resourcestring
   { The insert picture action's file filter: %s = the file masks of every picture format read }
   rsRichActPictureFiles      = 'Pictures (%s)';
   rsRichActAllFiles          = 'All files';
+  rsRichActCut               = '&Cut';
+  rsRichActCutHint           = 'Cut';
+  rsRichActCopy              = '&Copy';
+  rsRichActCopyHint          = 'Copy';
+  rsRichActPaste             = '&Paste';
+  rsRichActPasteHint         = 'Paste';
+  rsRichActSelectAll         = 'Select &All';
+  rsRichActSelectAllHint     = 'Select all';
+  rsRichActDelete            = '&Delete';
+  rsRichActDeleteHint        = 'Delete the selection';
+  rsRichActTextColor         = 'Text &Color';
+  rsRichActTextColorHint     = 'Text color';
+  rsRichActHighlightColor    = '&Highlight';
+  rsRichActHighlightColorHint= 'Highlight color';
+  rsRichActFontName          = '&Font';
+  rsRichActFontNameHint      = 'Font';
+  rsRichActFontSize          = 'Font &Size';
+  rsRichActFontSizeHint      = 'Font size';
+  rsRichActFontGrow          = '&Grow Font';
+  rsRichActFontGrowHint      = 'Larger font';
+  rsRichActFontShrink        = 'S&hrink Font';
+  rsRichActFontShrinkHint    = 'Smaller font';
+  rsRichActClearFormat       = 'Clear &Formatting';
+  rsRichActClearFormatHint   = 'Clear formatting';
+  rsRichActLineSpacing       = 'Line &Spacing';
+  rsRichActLineSpacingHint   = 'Line spacing';
+  rsRichActRowAbove          = 'Insert Row &Above';
+  rsRichActRowAboveHint      = 'Insert a row above';
+  rsRichActRowBelow          = 'Insert Row &Below';
+  rsRichActRowBelowHint      = 'Insert a row below';
+  rsRichActColumnLeft        = 'Insert Column &Left';
+  rsRichActColumnLeftHint    = 'Insert a column on the left';
+  rsRichActColumnRight       = 'Insert Column &Right';
+  rsRichActColumnRightHint   = 'Insert a column on the right';
+  rsRichActDeleteRow         = 'Delete &Row';
+  rsRichActDeleteRowHint     = 'Delete the row';
+  rsRichActDeleteColumn      = 'Delete &Column';
+  rsRichActDeleteColumnHint  = 'Delete the column';
+  rsRichActDeleteTable       = 'Delete &Table';
+  rsRichActDeleteTableHint   = 'Delete the table';
 
   { --- TTyTerminalView context menu ------------------------------------------
     The terminal's own four-item menu reuses Copy / Paste / Select All above; this is

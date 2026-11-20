@@ -85,6 +85,8 @@ type
     procedure Refused(Sender: TObject; const AReason: string);
     procedure ChooseSize(Sender: TObject; var ARows, AColumns: Integer; var AInsert: Boolean);
     procedure NotFound(Sender: TObject; const AText: string);
+    procedure ChooseBlue(Sender: TObject; var AColor: TColor; var AApply: Boolean);
+    procedure ChooseNothing(Sender: TObject; var AColor: TColor; var AApply: Boolean);
     function Make(AClass: TTyRichEditActionClass): TTyRichEditAction;
     function UpdatedOn(AAction: TTyRichEditAction): TTyRichEditAction;
     function PngFile: string;
@@ -108,6 +110,12 @@ type
     procedure TestWhatTheActionsShowFollowsAParentAndThePendingFormat;
     procedure TestTheDoorsOwnRules;
     procedure TestTheExamplesButtonsShowChecked;
+    procedure TestTheClipboardActions;
+    procedure TestTheColorActions;
+    procedure TestTheFontActions;
+    procedure TestClearFormattingGivesTheDefaultBack;
+    procedure TestTheLineSpacingAction;
+    procedure TestTheTableOperations;
     procedure TestCanInsertPictureReadsThePlace;
     procedure TestAnIdleRoundAsksTheControlNothing;
     procedure TestTheTableActionAsksForItsSize;
@@ -1665,6 +1673,284 @@ begin
     groups.Free;
     lfm.Free;
   end;
+end;
+
+procedure TTyRichEditActionsTest.ChooseBlue(Sender: TObject; var AColor: TColor;
+  var AApply: Boolean);
+begin
+  Inc(FChooseCalls);
+  AColor := clBlue;
+  AApply := True;
+end;
+
+procedure TTyRichEditActionsTest.ChooseNothing(Sender: TObject; var AColor: TColor;
+  var AApply: Boolean);
+begin
+  Inc(FChooseCalls);
+  AApply := False;
+end;
+
+{ Cut, copy, paste, select all, delete: the control's own commands; Enabled as its text menu
+  answers them (a selection; not read-only; something to paste; text to select). Each edit is
+  one undo step. The clipboard is the test's (the probe's), never the system's. }
+procedure TTyRichEditActionsTest.TestTheClipboardActions;
+var
+  aCut, aCopy, aPaste, aAll, aDel: TTyRichEditAction;
+  depth: Integer;
+begin
+  aCut := Make(TTyRichEditCut);
+  aCopy := Make(TTyRichEditCopy);
+  aPaste := Make(TTyRichEditPaste);
+  aAll := Make(TTyRichEditSelectAll);
+  aDel := Make(TTyRichEditDelete);
+  FRich.ClipText := '';
+  FRich.ClipRtf := '';
+  Select(2, 0);
+  AssertFalse('nothing selected: no cut', UpdatedOn(aCut).Enabled);
+  AssertFalse('nor copy', UpdatedOn(aCopy).Enabled);
+  AssertFalse('nor delete', UpdatedOn(aDel).Enabled);
+  AssertFalse('an empty clipboard: no paste', UpdatedOn(aPaste).Enabled);
+  AssertTrue('text: select all', UpdatedOn(aAll).Enabled);
+  Select(0, 5);
+  AssertTrue('copy', UpdatedOn(aCopy).Enabled);
+  aCopy.Execute;
+  AssertEquals('copied', 'Plain', FRich.ClipText);
+  AssertTrue('something to paste', UpdatedOn(aPaste).Enabled);
+  depth := FRich.Document.UndoDepth;
+  AssertTrue('cut', UpdatedOn(aCut).Enabled);
+  aCut.Execute;
+  AssertEquals('cut: one step', depth + 1, FRich.Document.UndoDepth);
+  AssertEquals('cut out', ' bold plain', Copy(FRich.Text, 1, 11));
+  Select(0, 0);
+  aPaste.Execute;
+  AssertEquals('pasted', 'Plain bold plain', Copy(FRich.Text, 1, 16));
+  Select(0, 6);
+  depth := FRich.Document.UndoDepth;
+  aDel.Execute;
+  AssertEquals('deleted: one step', depth + 1, FRich.Document.UndoDepth);
+  AssertEquals('deleted', 'bold plain', Copy(FRich.Text, 1, 10));
+  aAll.Execute;
+  AssertEquals('all selected', 0, FRich.SelStart);
+  AssertEquals('to the end', FRich.Document.Text.Length, FRich.SelLength);
+  FRich.ReadOnly := True;
+  AssertFalse('read-only: no cut', UpdatedOn(aCut).Enabled);
+  AssertFalse('read-only: no delete', UpdatedOn(aDel).Enabled);
+  AssertFalse('read-only: no paste', UpdatedOn(aPaste).Enabled);
+  AssertTrue('read-only: copy', UpdatedOn(aCopy).Enabled);
+end;
+
+{ The text colour and the highlight: Color to the selection, one undo step; OnChooseColor may
+  change it (and the action keeps the new one) or cancel; clDefault is automatic, clNone no
+  highlight. Disabled where the control would refuse a character format. }
+procedure TTyRichEditActionsTest.TestTheColorActions;
+var
+  tc: TTyRichEditTextColor;
+  hc: TTyRichEditHighlightColor;
+  depth: Integer;
+begin
+  tc := TTyRichEditTextColor(Make(TTyRichEditTextColor));
+  hc := TTyRichEditHighlightColor(Make(TTyRichEditHighlightColor));
+  AssertEquals('red by default', clRed, tc.Color);
+  AssertEquals('yellow by default', clYellow, hc.Color);
+  Select(0, 5);
+  depth := FRich.Document.UndoDepth;
+  AssertTrue('enabled', UpdatedOn(tc).Enabled);
+  tc.Execute;
+  AssertEquals('one step', depth + 1, FRich.Document.UndoDepth);
+  AssertEquals('named as the format API''s', rsRichUndoCharFormat, FRich.Document.UndoDescription);
+  AssertEquals('red', clRed, FRich.SelAttributes.Color);
+  tc.OnChooseColor := @ChooseBlue;
+  tc.Execute;
+  AssertEquals('asked', 1, FChooseCalls);
+  AssertEquals('blue', clBlue, FRich.SelAttributes.Color);
+  AssertEquals('kept as the action''s', clBlue, tc.Color);
+  tc.OnChooseColor := @ChooseNothing;
+  depth := FRich.Document.UndoDepth;
+  tc.Execute;
+  AssertEquals('cancelled: no step', depth, FRich.Document.UndoDepth);
+  tc.OnChooseColor := nil;
+  tc.Color := clDefault;
+  tc.Execute;
+  AssertEquals('automatic again', clDefault, FRich.SelAttributes.Color);
+  hc.Execute;
+  AssertEquals('highlighted', clYellow, FRich.SelAttributes.BackColor);
+  hc.Color := clNone;
+  hc.Execute;
+  AssertEquals('no highlight', clNone, FRich.SelAttributes.BackColor);
+  FRich.ReadOnly := True;
+  AssertFalse('read-only: disabled', UpdatedOn(tc).Enabled);
+  AssertFalse('read-only: disabled too', UpdatedOn(hc).Enabled);
+end;
+
+{ The font name and size: FontName / Size to the selection, Checked when the whole selection
+  has that value (a mixed one: not); grow and shrink step on the usual scale. }
+procedure TTyRichEditActionsTest.TestTheFontActions;
+var
+  fn: TTyRichEditFontName;
+  fs: TTyRichEditFontSize;
+  grow, shrink: TTyRichEditAction;
+  depth: Integer;
+begin
+  fn := TTyRichEditFontName(Make(TTyRichEditFontName));
+  fn.FontName := 'Courier New';
+  fs := TTyRichEditFontSize(Make(TTyRichEditFontSize));
+  fs.Size := 14;
+  grow := Make(TTyRichEditFontGrow);
+  shrink := Make(TTyRichEditFontShrink);
+  Select(0, 5);
+  AssertFalse('not that font yet', UpdatedOn(fn).Checked);
+  depth := FRich.Document.UndoDepth;
+  fn.Execute;
+  AssertEquals('one step', depth + 1, FRich.Document.UndoDepth);
+  AssertEquals('the font', 'Courier New', FRich.SelAttributes.Name);
+  AssertTrue('checked', UpdatedOn(fn).Checked);
+  Select(3, 6);
+  AssertFalse('mixed fonts: not checked', UpdatedOn(fn).Checked);
+  Select(0, 5);
+  fs.Execute;
+  AssertEquals('the size', 14, FRich.SelAttributes.Size);
+  AssertTrue('size checked', UpdatedOn(fs).Checked);
+  grow.Execute;
+  AssertEquals('one step up', 16, FRich.SelAttributes.Size);
+  shrink.Execute;
+  shrink.Execute;
+  AssertEquals('two steps down', 12, FRich.SelAttributes.Size);
+  fs.Size := 72;
+  fs.Execute;
+  AssertFalse('no larger than the scale', UpdatedOn(grow).Enabled);
+  AssertTrue('smaller still', UpdatedOn(shrink).Enabled);
+  // the default name: none of its own again
+  fn.FontName := 'default';
+  fn.Execute;
+  AssertEquals('the control''s font again', FRich.DefAttributes.Name, FRich.SelAttributes.Name);
+end;
+
+{ Clear formatting: every character attribute back to none of its own - the document's
+  default - in one undo step. }
+procedure TTyRichEditActionsTest.TestClearFormattingGivesTheDefaultBack;
+var
+  a: TTyRichEditAction;
+  depth: Integer;
+begin
+  Select(0, 5);
+  FRich.SelAttributes.Bold := True;
+  FRich.SelAttributes.Italic := True;
+  FRich.SelAttributes.Color := clRed;
+  FRich.SelAttributes.BackColor := clYellow;
+  FRich.SelAttributes.Size := 20;
+  FRich.SelAttributes.Name := 'Courier New';
+  FRich.SelAttributes.Subscript := sstSuperscript;
+  a := Make(TTyRichEditClearFormat);
+  AssertTrue('enabled', UpdatedOn(a).Enabled);
+  depth := FRich.Document.UndoDepth;
+  a.Execute;
+  AssertEquals('one step', depth + 1, FRich.Document.UndoDepth);
+  AssertFalse('not bold', FRich.SelAttributes.Bold);
+  AssertFalse('not italic', FRich.SelAttributes.Italic);
+  AssertEquals('automatic colour', clDefault, FRich.SelAttributes.Color);
+  AssertEquals('no highlight', clNone, FRich.SelAttributes.BackColor);
+  AssertEquals('the base size', FRich.DefAttributes.Size, FRich.SelAttributes.Size);
+  AssertEquals('the base font', FRich.DefAttributes.Name, FRich.SelAttributes.Name);
+  AssertTrue('no script', FRich.SelAttributes.Subscript = sstNone);
+  AssertEquals('as the text after it', FRich.Document.Formats.CharFormat(
+    FRich.Document.RunsOf(0)[High(FRich.Document.RunsOf(0))].Format).FontName,
+    FRich.Document.Formats.CharFormat(FRich.Document.RunsOf(0)[0].Format).FontName);
+end;
+
+{ Line spacing: Spacing to the paragraphs, one step; Checked when the first paragraph has it. }
+procedure TTyRichEditActionsTest.TestTheLineSpacingAction;
+var
+  one, half: TTyRichEditLineSpacing;
+  depth: Integer;
+begin
+  one := TTyRichEditLineSpacing(Make(TTyRichEditLineSpacing));
+  half := TTyRichEditLineSpacing(Make(TTyRichEditLineSpacing));
+  half.Spacing := ls15;
+  Select(2, 0);
+  AssertTrue('single now', UpdatedOn(one).Checked);
+  AssertFalse('not 1.5', UpdatedOn(half).Checked);
+  depth := FRich.Document.UndoDepth;
+  half.Execute;
+  AssertEquals('one step', depth + 1, FRich.Document.UndoDepth);
+  AssertEquals('named as the format API''s', rsRichUndoParaFormat, FRich.Document.UndoDescription);
+  AssertTrue('1.5', FRich.Paragraph.LineSpacingRule = ls15);
+  AssertTrue('checked', UpdatedOn(half).Checked);
+  AssertFalse('single unchecked', UpdatedOn(one).Checked);
+end;
+
+{ The table operations: the control's own, each one undo step named as the control names it;
+  Enabled as the control's Can... answers at the caret - none outside a table, none that
+  change the structure of a table that holds merged cells. }
+procedure TTyRichEditActionsTest.TestTheTableOperations;
+type
+  TOp = record
+    C: TTyRichEditActionClass;
+    Name: string;
+    Rows, Cols: Integer;
+    { where the caret goes (the control: into the new row's first cell, the new column's
+      cell): the row's index for a row, the cell's for a column; -1 not looked at }
+    RowAt, CellAt: Integer;
+  end;
+const
+  Ops: array[0..5] of TOp = (
+    (C: TTyRichEditInsertRowAbove; Name: 'Insert row'; Rows: 4; Cols: 3; RowAt: 0; CellAt: -1),
+    (C: TTyRichEditInsertRowBelow; Name: 'Insert row'; Rows: 4; Cols: 3; RowAt: 1; CellAt: -1),
+    (C: TTyRichEditInsertColumnLeft; Name: 'Insert column'; Rows: 3; Cols: 4; RowAt: -1; CellAt: 0),
+    (C: TTyRichEditInsertColumnRight; Name: 'Insert column'; Rows: 3; Cols: 4; RowAt: -1; CellAt: 1),
+    (C: TTyRichEditDeleteRow; Name: 'Delete row'; Rows: 2; Cols: 3; RowAt: -1; CellAt: -1),
+    (C: TTyRichEditDeleteColumn; Name: 'Delete column'; Rows: 3; Cols: 2; RowAt: -1; CellAt: -1));
+var
+  i, depth, p: Integer;
+  a: TTyRichEditAction;
+  c: TTyRichCell;
+  st: TStringStream;
+begin
+  for i := 0 to High(Ops) do
+  begin
+    SetText('Before'#10'After');
+    Select(2, 0);
+    a := Make(Ops[i].C);
+    AssertFalse(Ops[i].C.ClassName + ' outside a table: disabled', UpdatedOn(a).Enabled);
+    FRich.InsertTable(3, 3);
+    AssertTrue(Ops[i].C.ClassName + ' in a table: enabled', UpdatedOn(a).Enabled);
+    depth := FRich.Document.UndoDepth;
+    a.Execute;
+    AssertEquals(Ops[i].C.ClassName + ': one step', depth + 1, FRich.Document.UndoDepth);
+    AssertEquals(Ops[i].C.ClassName + ': its name', Ops[i].Name, FRich.Document.UndoDescription);
+    c := FRich.Document.CellAt(FRich.Document.Text.ParaOfPos(FRich.SelStart));
+    AssertNotNull(Ops[i].C.ClassName + ': still in the table', c);
+    AssertEquals(Ops[i].C.ClassName + ': rows', Ops[i].Rows, c.Row.Table.RowCount);
+    AssertEquals(Ops[i].C.ClassName + ': columns', Ops[i].Cols, c.Row.CellCount);
+    if Ops[i].RowAt >= 0 then
+      AssertEquals(Ops[i].C.ClassName + ': the caret''s row', Ops[i].RowAt, c.Row.Index);
+    if Ops[i].CellAt >= 0 then
+      AssertEquals(Ops[i].C.ClassName + ': the caret''s cell', Ops[i].CellAt, c.Index);
+  end;
+  a := Make(TTyRichEditDeleteTable);
+  AssertTrue('delete table enabled', UpdatedOn(a).Enabled);
+  a.Execute;
+  AssertFalse('the table gone', FRich.InTable);
+  AssertFalse('then disabled', UpdatedOn(a).Enabled);
+  LoadFixture('hand-word-table-merged.rtf');
+  p := FirstParaWhere(False);
+  Select(FRich.Document.Text.ParaStart(p), 0);
+  AssertFalse('merged cells: no row', UpdatedOn(Make(TTyRichEditInsertRowBelow)).Enabled);
+  AssertFalse('merged cells: no column', UpdatedOn(Make(TTyRichEditDeleteColumn)).Enabled);
+  // rows of different numbers of cells: rows yes, columns no (each its own answer)
+  st := TStringStream.Create('{\rtf1\ansi{\fonttbl{\f0 Arial;}}' +
+    '\trowd\cellx1000\cellx2000 a\cell b\cell\row' +
+    '\trowd\cellx1000\cellx2000\cellx3000 c\cell d\cell e\cell\row x\par}');
+  try
+    FRich.LoadFromStream(st, rfRtf);
+  finally
+    st.Free;
+  end;
+  FRich.FinishLoading;
+  FRich.UpdateView;
+  Select(0, 0);
+  AssertTrue('in the table', FRich.InTable);
+  AssertTrue('a row may go in', UpdatedOn(Make(TTyRichEditInsertRowBelow)).Enabled);
+  AssertFalse('a column may not', UpdatedOn(Make(TTyRichEditInsertColumnRight)).Enabled);
 end;
 
 initialization

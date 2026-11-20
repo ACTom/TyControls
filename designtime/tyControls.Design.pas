@@ -251,7 +251,13 @@ begin
      TTyRichEditIndentIncrease, TTyRichEditIndentDecrease,
      TTyRichEditInsertPicture, TTyRichEditInsertTable,
      TTyRichEditFind, TTyRichEditReplace, TTyRichEditUndo, TTyRichEditRedo,
-     TTyRichEditZoomIn, TTyRichEditZoomOut, TTyRichEditZoomReset], nil);
+     TTyRichEditZoomIn, TTyRichEditZoomOut, TTyRichEditZoomReset,
+     TTyRichEditCut, TTyRichEditCopy, TTyRichEditPaste, TTyRichEditSelectAll, TTyRichEditDelete,
+     TTyRichEditTextColor, TTyRichEditHighlightColor, TTyRichEditFontName, TTyRichEditFontSize,
+     TTyRichEditFontGrow, TTyRichEditFontShrink, TTyRichEditClearFormat, TTyRichEditLineSpacing,
+     TTyRichEditInsertRowAbove, TTyRichEditInsertRowBelow, TTyRichEditInsertColumnLeft,
+     TTyRichEditInsertColumnRight, TTyRichEditDeleteRow, TTyRichEditDeleteColumn,
+     TTyRichEditDeleteTable], nil);
   { The three sibling units own everything else. }
   RegisterPropertyEditors;
   RegisterComponentEditors;
