@@ -84,6 +84,7 @@ type
     procedure TestAStopBetweenTouchingWholeWords;
     procedure TestALineOfTouchingMatchesIsReplacedInBoundedParts;
     procedure TestAPartOfEachKindTakesItsShareOfMatches;
+    procedure TestANeedleAcrossParagraphsThatHoldWholeLinks;
   end;
 
 implementation
@@ -3675,6 +3676,59 @@ begin
     AssertTrue('...undone, one step', (LinesOf(doc) = s) and (doc.UndoDepth = 0));
   finally
     doc.Free;
+  end;
+end;
+
+{ A needle with paragraph ends across paragraphs that hold whole links: a field's marks are not
+  there for a match, so a middle paragraph longer than its segment may still be it - the same
+  matches whether its paragraphs were parsed or not: read whole, read lazily with nothing
+  parsed, and with one interval resident. }
+procedure TTyRichFindTest.TestANeedleAcrossParagraphsThatHoldWholeLinks;
+var
+  s: RawByteString;
+  i: Integer;
+  bytes: TBytes;
+  full, lazy: TTyRichDocument;
+  f: TTyRichFinder;
+  k: Integer;
+  needle, want, got: string;
+const
+  Needles: array[0..2] of string = ('row' + #13#10 + 'middle', 'row' + #13#10 + 'middle' +
+    #13#10 + 'end', 'middle' + #13#10 + 'end of' + #13#10 + 'start');
+begin
+  s := '{|rtf1|ansi|deff0{|fonttbl{|f0 Arial;}}|pard|f0 ';
+  for i := 1 to 1500 do
+    s := s + 'start of row|par {|field{|*|fldinst HYPERLINK "http://x.test/' + IntToStr(i) +
+      '"}{|fldrslt middle}}|par end of|par ';
+  s := s + 'last|par}';
+  bytes := BytesOf(Rtf(s));
+  full := LoadRtf(bytes, True);
+  try
+    for k := 0 to High(Needles) do
+    begin
+      needle := Needles[k];
+      want := WholePositions(full, needle, []);
+      AssertTrue(Format('needle %d: found in the whole read', [k]), want <> '');
+      AssertEquals(Format('needle %d: read lazily', [k]), want, LazyPositions(bytes, needle, []));
+      lazy := LoadRtf(bytes, False);
+      try
+        // one interval resident: its paragraphs parsed, the others not
+        lazy.RunsOf(3);
+        f := TTyRichFinder.Create(lazy, needle, []);
+        try
+          f.Collect := True;
+          AssertTrue('collected to the end', f.Run = rfrNotFound);
+          got := Joined(f);
+        finally
+          f.Free;
+        end;
+      finally
+        lazy.Free;
+      end;
+      AssertEquals(Format('needle %d: one interval resident', [k]), want, got);
+    end;
+  finally
+    full.Free;
   end;
 end;
 
