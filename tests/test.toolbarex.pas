@@ -60,6 +60,10 @@ type
     procedure TestSteadyRelayoutDoesNotReshowOverflow;
     procedure TestSpaceHolderIsNotGivenTheGhostVariant;
     procedure TestOverflowFitUsesFlooredWidths;
+    procedure TestNoToolReachesUnderTheChevronForTheSpacing;
+    procedure TestNoToolReachesUnderTheChevronForTheIndent;
+    procedure TestARowThatExactlyFitsNeedsNoChevron;
+    procedure TestARowTooWideForItsSpacingOverflows;
     { The reported border overpaint, as two halves of one invariant: the PAINT side (the
       hairline really is the last BottomBorderPx rows) and the LAYOUT side (no child ever
       reaches into them). Split because each half has its own way of going wrong. }
@@ -709,6 +713,111 @@ begin
   TB.ForceLayout;
   AssertEquals('no overflow once the floor is lowered', 0, TB.OverflowCount);
   AssertEquals('and the natural width comes back', 30, B1.Width);
+end;
+
+{ ── #233: the fit counts what the row takes ────────────────────────────────────
+  The tools are placed with ButtonSpacing between them and the chevron sits Indent in from
+  the right edge. The fit added up the widths alone, so the last tool it kept could reach
+  under the chevron. }
+procedure TToolBarExControlTest.TestNoToolReachesUnderTheChevronForTheSpacing;
+var
+  TB: TTyToolBarExAccess;
+  B: array[1..5] of TTyButton;
+  i, chevronLeft, lastRight: Integer;
+begin
+  TB := TTyToolBarExAccess.Create(FForm);
+  TB.Parent := FForm;
+  TB.Font.PixelsPerInch := 96;
+  TB.Align := alNone;
+  TB.Wrapable := False;
+  TB.Indent := 0;
+  TB.ButtonSpacing := 10;
+  TB.ButtonHeight := 24;
+  TB.Width := 200;   // the chevron starts at 170
+  for i := 1 to 5 do B[i] := MakeBtn(TB, 50);
+  TB.ForceLayout;
+
+  AssertTrue('setup: the bar overflows', TB.OverflowVisible);
+  chevronLeft := TB.ClientWidth - 30;
+  lastRight := 0;
+  for i := 1 to 5 do
+    if B[i].Visible then lastRight := B[i].Left + B[i].Width;
+  AssertTrue(Format('the last tool ends before the chevron (%d against %d)', [lastRight, chevronLeft]),
+    lastRight <= chevronLeft);
+  // 50 + 10 + 50 + 10 + 50 = 170 fits exactly; the widths alone (150) had room to spare anyway
+  AssertEquals('three stay, two overflow', 2, TB.OverflowCount);
+  TB.ButtonSpacing := 11;   // now the third would end at 172
+  TB.ForceLayout;
+  AssertEquals('one px of spacing more: two stay, three overflow', 3, TB.OverflowCount);
+end;
+
+procedure TToolBarExControlTest.TestNoToolReachesUnderTheChevronForTheIndent;
+var
+  TB: TTyToolBarExAccess;
+  B: array[1..5] of TTyButton;
+  i, chevronLeft, lastRight: Integer;
+begin
+  TB := TTyToolBarExAccess.Create(FForm);
+  TB.Parent := FForm;
+  TB.Font.PixelsPerInch := 96;
+  TB.Align := alNone;
+  TB.Wrapable := False;
+  TB.Indent := 8;
+  TB.ButtonSpacing := 0;
+  TB.ButtonHeight := 24;
+  TB.Width := 180;   // the chevron starts at 180 - 30 - 8 = 142
+  for i := 1 to 5 do B[i] := MakeBtn(TB, 46);
+  TB.ForceLayout;
+
+  AssertTrue('setup: the bar overflows', TB.OverflowVisible);
+  chevronLeft := TB.ClientWidth - 30 - 8;
+  lastRight := 0;
+  for i := 1 to 5 do
+    if B[i].Visible then lastRight := B[i].Left + B[i].Width;
+  // three would end at 8 + 138 = 146, four px under the chevron
+  AssertTrue(Format('the last tool ends before the chevron (%d against %d)', [lastRight, chevronLeft]),
+    lastRight <= chevronLeft);
+  AssertEquals('two stay, three overflow', 3, TB.OverflowCount);
+end;
+
+procedure TToolBarExControlTest.TestARowThatExactlyFitsNeedsNoChevron;
+var
+  TB: TTyToolBarExAccess;
+  i: Integer;
+begin
+  TB := TTyToolBarExAccess.Create(FForm);
+  TB.Parent := FForm;
+  TB.Font.PixelsPerInch := 96;
+  TB.Align := alNone;
+  TB.Wrapable := False;
+  TB.Indent := 0;
+  TB.ButtonSpacing := 10;
+  TB.ButtonHeight := 24;
+  TB.Width := 200;
+  for i := 1 to 3 do MakeBtn(TB, 60);   // 60 + 10 + 60 + 10 + 60 = 200
+  TB.ForceLayout;
+  AssertEquals('all three fit: the last one has no spacing after it', 0, TB.OverflowCount);
+  AssertFalse('so no chevron', TB.OverflowVisible);
+end;
+
+procedure TToolBarExControlTest.TestARowTooWideForItsSpacingOverflows;
+var
+  TB: TTyToolBarExAccess;
+  i: Integer;
+begin
+  TB := TTyToolBarExAccess.Create(FForm);
+  TB.Parent := FForm;
+  TB.Font.PixelsPerInch := 96;
+  TB.Align := alNone;
+  TB.Wrapable := False;
+  TB.Indent := 0;
+  TB.ButtonSpacing := 10;
+  TB.ButtonHeight := 24;
+  TB.Width := 199;
+  for i := 1 to 3 do MakeBtn(TB, 60);   // the widths are 180, the row is 200
+  TB.ForceLayout;
+  AssertTrue('one px short of the row: it overflows', TB.OverflowVisible);
+  AssertTrue('and a tool went into the overflow', TB.OverflowCount >= 1);
 end;
 
 initialization
