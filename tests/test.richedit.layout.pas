@@ -108,6 +108,7 @@ type
     procedure TestPaintedSelectionDoesNotMoveGlyphsOnTheRealDevice;
     procedure TestPaintHighlightUnderlineAndStrike;
     procedure TestAutomaticTextOverAHighlightContrastsWithIt;
+    procedure TestSingleSpacingIsTheFontsOwnLineSpacing;
     procedure TestPaintTabLeadersAndTheMarker;
     procedure TestPaintARowsContentsThenItsLines;
     procedure TestPaintDecodesOnlyThePicturesItDraws;
@@ -2973,6 +2974,79 @@ begin
     bmp.Free;
   end;
 end;
+
+{ Single line spacing is the font's own recommended line spacing: its ascent, its descent and
+  the gap it asks for between lines (Windows: tmExternalLeading), read at the size it is drawn
+  at. SimSun keeps its whole gap there (16 px at 12 pt and 96 PPI: ascent 14, descent 2, gap 2),
+  so its lines stand 18 px apart, 27 at 144 PPI; Calibri asks for none (19), Arial for 1
+  (18 + 1). The gap goes below the descent: the baseline stays where the text's own height puts
+  it. An exact spacing is exact (the gap not added, the baseline where it was); a line of two
+  fonts takes the larger ascent, descent and gap. Real fonts: Windows only. }
+procedure TTyRichLayoutTest.TestSingleSpacingIsTheFontsOwnLineSpacing;
+{$IFDEF MSWINDOWS}
+var
+  dev: TTyRichBgraDevice;
+  lo: TTyRichLayouter;
+  base: Integer;
+
+  function Pitch(const AFont: string; APPI: Integer; AExactTwips: Integer = 0;
+    const ASecondFont: string = ''): Integer;
+  var
+    d: TTyRichDocument;
+    L: TTyParaLayout;
+    f: TTyCharFormat;
+    pf: TTyParaFormat;
+  begin
+    d := NewDoc('ab'#11'cd');
+    f := TyDefaultCharFormat;
+    f.FontName := AFont;
+    SetChar(d, 0, 5, [cffFontName], f);
+    if ASecondFont <> '' then
+    begin
+      f.FontName := ASecondFont;
+      SetChar(d, 1, 1, [cffFontName], f);
+    end;
+    if AExactTwips > 0 then
+    begin
+      pf := TyDefaultParaFormat;
+      pf.LineSpacing := lsExact;
+      pf.LineSpacingValue := AExactTwips;
+      SetPara(d, 0, [pffSpacingRule], pf);
+    end;
+    L := lo.LayoutPara(d, 0, 2000, APPI, 1);
+    try
+      AssertEquals(AFont + ': two lines', 2, L.LineCount);
+      AssertEquals(AFont + ': the first line is as tall as the pitch',
+        L.Lines[1].Top - L.Lines[0].Top, L.Lines[0].Height);
+      Result := L.Lines[1].Top - L.Lines[0].Top;
+      base := L.Lines[0].Baseline - L.Lines[0].Top;
+    finally
+      L.Release;
+    end;
+  end;
+
+begin
+  dev := TTyRichBgraDevice.Create;
+  lo := TTyRichLayouter.Create(dev, True);
+  try
+    lo.BaseFontSizeHalfPt := 24;
+    AssertEquals('SimSun 12 pt at 96 PPI: 16 + its gap of 2', 18, Pitch('SimSun', 96));
+    AssertEquals('the gap below the descent: the baseline at the ascent', 14, base);
+    AssertEquals('at 144 PPI: 24 + 3', 27, Pitch('SimSun', 144));
+    AssertEquals('Calibri: no gap of its own', 19, Pitch('Calibri', 96));
+    AssertEquals('Arial: 18 + 1', 19, Pitch('Arial', 96));
+    AssertEquals('an exact 18 pt is 24 px, whatever the font asks', 24, Pitch('SimSun', 96, 360));
+    AssertEquals('its baseline where it was: the descent above the bottom', 22, base);
+    // SimSun 14 / 2 / gap 2 and Calibri 15 / 4 / gap 0: 15 + 4 + 2
+    AssertEquals('a line of both: the larger of each', 21, Pitch('SimSun', 96, 0, 'Calibri'));
+  finally
+    lo.Free;
+  end;
+end;
+{$ELSE}
+begin
+end;
+{$ENDIF}
 
 { A tab's leader across the tab (dots every quarter of the font, a line), and a list item's
   marker where the layout put it, on the first line's baseline. }

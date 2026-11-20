@@ -209,7 +209,8 @@ type
     height and style for the device's whole life. }
   TTyRichFontId = Integer;
 
-  { Pixels: above the baseline, below it, and the gap the font asks for below that. }
+  { Pixels: above the baseline, below it, and the gap the font asks for below that (its
+    external leading: the font's own line spacing is the three together). }
   TTyRichFontMetrics = record
     Ascent: Integer;
     Descent: Integer;
@@ -1966,6 +1967,7 @@ end;
 function TTyRichBgraDevice.DoMetrics(AFont: TTyRichFontId): TTyRichFontMetrics;
 var
   tm: TLCLTextMetric;
+  ttm: TTextMetric;
 begin
   // the measuring font's one set-up, given the pixel height as a px size at 96 PPI
   TyConfigureMeasureFont(FMetricsBmp.Canvas, FontName(AFont),
@@ -1977,7 +1979,13 @@ begin
   begin
     Result.Ascent := tm.Ascender;
     Result.Descent := tm.Descender;
-    Result.Leading := Max(0, tm.Height - tm.Ascender - tm.Descender);
+    { The gap between lines the font asks for, as the platform reports it at this size (the
+      font is resolved per pixel height, so zoom and PPI are in it already): Windows its
+      tmExternalLeading (SimSun keeps its whole gap there), Qt QFontMetrics.leading; GTK and
+      Cocoa report none. The internal leading is inside the ascent already. }
+    FillChar(ttm, SizeOf(ttm), 0);
+    if LCLIntf.GetTextMetrics(FMetricsBmp.Canvas.Handle, ttm) then
+      Result.Leading := Max(0, ttm.tmExternalLeading);
   end;
   if Result.Ascent + Result.Descent <= 0 then
   begin
@@ -4681,8 +4689,10 @@ begin
     ln^.Count := AEnd - AStart;
     ln^.Top := ATop;
     ln^.Height := h;
-    // what the spacing adds goes above the text
-    ln^.Baseline := ATop + h - maxD - maxL;
+    { what the spacing adds goes above the text; the font's gap (maxL) below its descent - an
+      exact spacing has none, its text keeps the descent above the bottom }
+    if Pf.LineSpacing = lsExact then ln^.Baseline := ATop + h - maxD
+    else ln^.Baseline := ATop + h - maxD - maxL;
     ln^.Left := ALeft + off;
     ln^.ContentWidth := contentRight - ALeft;
     // a centred or right-aligned first line takes its marker along (as Word and WordPad do)
