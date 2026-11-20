@@ -50,6 +50,9 @@ type
     function ChevronWidthPx: Integer;
     function IsInternalChild(AControl: TControl): Boolean;
   protected
+    { The overflow flyout, made on first use. Protected so that a test reaches it without
+      putting a window on the screen. }
+    function EnsureFlyout: TTyPopupSurface;
     procedure AlignControls(AControl: TControl; var ARect: TRect); override;
     procedure Notification(AComponent: TComponent; Operation: TOperation); override;
   public
@@ -60,6 +63,9 @@ type
     function OverflowCount: Integer;
     { True when the "»" chevron is currently shown. }
     function OverflowVisible: Boolean;
+    { #231: the chevron is a part of the bar, not one of its tools -- it keeps the size it
+      takes from its cell, whatever --toolbar-icon-size says. }
+    function HostGlyphSize(AFor: TControl): Integer; override;
     { #108: the value the constructor sets, so the designer can store the other ones. }
     property Wrapable default False;
   end;
@@ -176,6 +182,28 @@ begin
 end;
 
 // ===========================================================================
+// The overflow flyout
+// ===========================================================================
+type
+  { The tools moved into the flyout are still the bar's tools, and a glyph button asks its
+    PARENT for the icon size (ITyGlyphSizeHost) -- so the flyout answers with the bar's.
+    Without this a tool lost --toolbar-icon-size for as long as it sat in the flyout (#231). }
+  TTyToolFlyout = class(TTyPopupSurface, ITyGlyphSizeHost)
+  private
+    FBar: TTyCustomToolBar;
+  public
+    function HostGlyphSize(AFor: TControl): Integer;
+  end;
+
+function TTyToolFlyout.HostGlyphSize(AFor: TControl): Integer;
+begin
+  if FBar <> nil then
+    Result := FBar.HostGlyphSize(AFor)
+  else
+    Result := 0;
+end;
+
+// ===========================================================================
 // TTyCustomToolBarEx
 // ===========================================================================
 constructor TTyCustomToolBarEx.Create(AOwner: TComponent);
@@ -216,6 +244,26 @@ end;
 function TTyCustomToolBarEx.IsInternalChild(AControl: TControl): Boolean;
 begin
   Result := (AControl <> nil) and (AControl = FMoreBtn);
+end;
+
+function TTyCustomToolBarEx.HostGlyphSize(AFor: TControl): Integer;
+begin
+  if IsInternalChild(AFor) then
+    Result := 0
+  else
+    Result := inherited HostGlyphSize(AFor);
+end;
+
+function TTyCustomToolBarEx.EnsureFlyout: TTyPopupSurface;
+begin
+  if FPopup = nil then
+  begin
+    FPopup := TTyToolFlyout.CreateNew(Self);
+    TTyToolFlyout(FPopup).FBar := Self;
+    FPopup.StyleKey := 'TyToolBar';          // reuse the bar's themed surface/border
+    FPopup.OnPopupClose := @PopupClosed;
+  end;
+  Result := FPopup;
 end;
 
 procedure TTyCustomToolBarEx.EnsureMoreButton;
@@ -443,12 +491,7 @@ begin
   SetLength(FPopupItems, Length(FOverflow));
   for i := 0 to High(FOverflow) do FPopupItems[i] := FOverflow[i];
 
-  if FPopup = nil then
-  begin
-    FPopup := TTyPopupSurface.CreateNew(Self);
-    FPopup.StyleKey := 'TyToolBar';          // reuse the bar's themed surface/border
-    FPopup.OnPopupClose := @PopupClosed;
-  end;
+  EnsureFlyout;
 
   { Device px, like the row they came from. The stride has to be the height the items will
     really HAVE: SetBounds clamps a button up to its own floor, so a flyout pitched at the

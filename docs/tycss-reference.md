@@ -241,7 +241,7 @@ typeKey 与文本类控件引用。它们都是普通 `--变量`,可被主题作
 `--listview-*`、`--row-height` 和 `--scrollbar-size`;`TTyTreeView`(含 `TTyShellTreeView`)的
 `--treeview-margin`、`--treeview-icon-gap` 和 §3.5 的四个树线令牌;`TTyMemo` 的 `--memo-tab-size`;
 `TTyPopover` 的六个 `--popover-*` 令牌(它不是控件,但 `StyleOverride` 的规则相同);
-`TTyTabSet` 和 `TTyPageControl` 的关闭按钮令牌(§3.8)。
+`TTyTabSet` 和 `TTyPageControl` 的关闭按钮令牌(§3.8);`TTyToolBar` 的 `--toolbar-icon-size`(§3.9)。
 其他控件暂时只认主题里的值。另外,每个控件都认 §3.6 的 `--over-parent-chrome`。
 3.0.4 以前的版本会忽略控件 `StyleOverride` 里的 `--` 声明,用新版本保存的窗体在旧版本里照样能打开。
 
@@ -462,6 +462,33 @@ typeKey 与文本类控件引用。它们都是普通 `--变量`,可被主题作
 
 4.0 起,`TTyTabSet`、`TTyPageControl`、`TTyRibbon` 有一个 `CloseButton` 属性,在对象检查器里就能改这些令牌
 (`--glyph-tab-close` 除外)。它读写的是控件自己 `StyleOverride` 里的声明,见 `controls/tabset.md` §5。
+
+### 3.9 工具条的图标大小
+
+`--toolbar-icon-size` 是 `TTyToolBar`(含 `TTyToolBarEx`)上图标按钮的图标边长,逻辑像素。应用里常见的
+「小图标 / 大图标」就是改这一个值。
+
+| 令牌 | 取值 | 默认 | 含义 |
+|---|---|---|---|
+| `--toolbar-icon-size` | 长度 | 没有 | 工具条上图标按钮的图标边长。没设时图标按按钮的高度算。 |
+
+```css
+/* 整个应用:大图标 */
+:root { --toolbar-icon-size: 24px; }
+```
+
+只改一条工具条,在它的 `StyleOverride` 里写:
+
+```text
+--toolbar-icon-size: 32px;
+```
+
+管到的是工具条上能画图标、自己又没设 `GlyphSize` 的按钮:`TTyToolButton`、`TTyGlyphButton`、
+`TTySpeedButton`。自己设了 `GlyphSize` 的按钮用自己的。图标比行高的时候,行自己长高;`AutoSize` 的
+工具宽度也跟着变。不在工具条上的按钮不读这个令牌。显示方式的其他搭配(只显示图标、图标配文字)是
+工具条的属性,见 [controls/toolbar.md](controls/toolbar.md) 第 3.1.3 节。
+
+3.0.5 新增。更早的版本不认这个令牌,图标大小只能在每个按钮上用 `GlyphSize` 设。
 
 ---
 

@@ -1014,9 +1014,12 @@ begin
     AssertEquals('an auto glyph never raises the floor with the box it was given',
       atSixtyFour, C.Constraints.MinHeight);
 
+    { #229: stacked on a caption that is drawn, an auto glyph does ask for something -- the
+      least it can be, with the gap and the caption's line, so the caption is not left without
+      room. That is a number of its own, not one read off the box, so it is still no ratchet. }
     C.CallMeasure(96, tw, th);
-    AssertEquals('the floor is exactly the caption line plus the theme padding',
-      th + 8, atSixtyFour);
+    AssertEquals('the floor is the least stacked glyph, the gap, the caption line and the padding',
+      TyGlyphStackedMin + TyGlyphButtonGap + th + 8, atSixtyFour);
   finally
     C.Free; Icons.Free; Ctl.Free;
   end;

@@ -247,7 +247,7 @@ length token it reads -- `--listview-*`, `--row-height` and `--scrollbar-size`; 
 `TTyShellTreeView`), for `--treeview-margin`, `--treeview-icon-gap` and the four tree-line tokens of
 §3.5; `TTyMemo`, for `--memo-tab-size`; `TTyPopover`, for its six `--popover-*` tokens (it is not a
 control, but its `StyleOverride` follows the same rule); `TTyTabSet` and `TTyPageControl`, for the
-close-button tokens of §3.8. Other controls take the theme's values only,
+close-button tokens of §3.8; `TTyToolBar`, for `--toolbar-icon-size` (§3.9). Other controls take the theme's values only,
 for now -- except for `--over-parent-chrome` (§3.6), which every control reads.
 Versions before 3.0.4 ignore `--`
 declarations in a control's `StyleOverride`, so a form saved with them still loads there.
@@ -482,6 +482,36 @@ tokens (all but `--glyph-tab-close`) from the Object Inspector. It reads and wri
 the control's own `StyleOverride` and stores nothing itself: `Visibility` (`tcvTheme`, `tcvAlways`,
 `tcvActive`, `tcvHover`), `Color`, `Background`, `HoverColor`, `HoverBackground` (`clDefault` follows the
 theme, `clNone` is `transparent`), `Radius` and `Size` (`-1` follows the theme).
+
+### 3.9 The icon size of a tool bar
+
+`--toolbar-icon-size` is the size, in logical px, of the icons on a `TTyToolBar` (and a
+`TTyToolBarEx`). It is what an application's "small icons / large icons" setting changes.
+
+| Token | Value | Default | Meaning |
+|---|---|---|---|
+| `--toolbar-icon-size` | length | none | The edge of the icon of the icon buttons on a tool bar. Without it an icon is sized from the height of its button. |
+
+```css
+/* the whole application: large icons */
+:root { --toolbar-icon-size: 24px; }
+```
+
+For one tool bar, in its own `StyleOverride`:
+
+```text
+--toolbar-icon-size: 32px;
+```
+
+It applies to the buttons on the bar that draw an icon and have no `GlyphSize` of their own:
+`TTyToolButton`, `TTyGlyphButton`, `TTySpeedButton`. A button with its own `GlyphSize` keeps it. When
+the icon is taller than the row, the row grows, and a tool with `AutoSize` changes its width too. A
+button that is not on a tool bar does not read this token. The other display choices (icons only,
+icons with text) are properties of the tool bar; see section 3.1.3 of
+[controls/toolbar.md](controls/toolbar.md).
+
+New in 3.0.5. Earlier versions ignore the token, and the icon size can only be set on each button,
+with `GlyphSize`.
 
 ---
 
