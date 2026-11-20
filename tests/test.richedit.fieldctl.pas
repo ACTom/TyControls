@@ -123,6 +123,7 @@ type
     procedure TestAKeyInsideAResultIsRefusedWhateverMarksAreNear;
     procedure TestTheWordKeysSelectTheFieldsFirst;
     procedure TestPositionsReadFromCodeAreRestingPlaces;
+    procedure TestALinkOverTwoParagraphsEndsAtItsClose;
   end;
 
 implementation
@@ -2271,6 +2272,36 @@ begin
   // what is typed next goes there
   Chars('Q');
   AssertEquals('typed where it was read', Hex(Raw('xyab Q') + OC), Hex(Copy(AllText, 1, 9)));
+end;
+
+{ A link whose result holds a paragraph's end is a link on both its paragraphs, and only up to
+  its close mark: the text after it in the second paragraph is no link (no hand, no click). }
+procedure TTyRichFieldControlTest.TestALinkOverTwoParagraphsEndsAtItsClose;
+var
+  url: string;
+  p: TPoint;
+  q, c: TTyRichPos;
+begin
+  Load(Rtf(Head + 'x {|field{|*|fldinst HYPERLINK "http://two.test/"}{|fldrslt one|par two}} tail|par}'));
+  FRich.ReadOnly := True;
+  q := PosOfText('ne');
+  p := PointIn(q, 1);
+  AssertTrue('its first paragraph: the link', FRich.LinkAtPoint(p.X, p.Y, url));
+  AssertEquals('... its target', 'http://two.test/', url);
+  q := Doc.Text.ParaStart(1);
+  p := PointIn(q, 1);
+  AssertTrue('its second paragraph: the link', FRich.LinkAtPoint(p.X, p.Y, url));
+  c := q;
+  while not IsClose(c) do Inc(c);
+  AssertTrue('(its close mark in the second paragraph)', Doc.Text.ParaOfPos(c) = 1);
+  for q := c + 1 to Doc.Text.ParaStart(1) + Doc.Text.ParaLength(1) - 1 do
+  begin
+    p := PointIn(q, 1);
+    AssertFalse(Format('after its close, character %d: no link', [q]), FRich.LinkAtPoint(p.X, p.Y, url));
+    FClicks := 0;
+    LinkClick(mbLeft, [], p);
+    AssertEquals(Format('after its close, character %d: no click', [q]), 0, FClicks);
+  end;
 end;
 
 initialization

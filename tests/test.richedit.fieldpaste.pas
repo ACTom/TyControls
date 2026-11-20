@@ -50,6 +50,7 @@ type
     procedure TestAnInstructionThatIsNotTextAndTheStateWords;
     procedure TestAPartOfAFieldAndAWholeOneInsideACutOne;
     procedure TestAFieldOverParagraphsGoesIntoACellAsItsContent;
+    procedure TestAFieldInsideOneMadeTheModelsOwnIsOwnedToo;
   end;
 
 { The fields of ADoc, each as its instruction and its content: one line a field (nested ones
@@ -1052,6 +1053,51 @@ begin
   back := ReadBack(SaveOf(y));
   try
     AssertEquals('over a selection of cells: read back as shown', src, ShownOf(back));
+  finally
+    back.Free;
+  end;
+end;
+
+{ Pasted where the two files' tables agree, a field whose own bytes name a font the target's
+  file lacks is made the model's own; a field in its result whose bytes would mean the same in
+  the target is made the model's own too - never its file's bytes inside a field written
+  afresh. Saved and read back: both fields, with their instructions and content. }
+procedure TTyRichFieldPasteTest.TestAFieldInsideOneMadeTheModelsOwnIsOwnedToo;
+var
+  y: TFieldProbe;
+  clip, saved: RawByteString;
+  q: TTyRichPos;
+  m: TTyRichObject;
+  opens, owned: Integer;
+  back: TTyRichDocument;
+  sig: string;
+begin
+  // the target's file: Arial alone; the clipboard's: Arial the same, and SimSun
+  y := Loaded(Rtf('{|rtf1|ansi|deff0{|fonttbl{|f0|fswiss|fcharset0 Arial;}}|pard|f0 target|par}'));
+  clip := Rtf('{|rtf1|ansi|deff0{|fonttbl{|f0|fswiss|fcharset0 Arial;}{|f1|fnil|fcharset134 SimSun;}}' +
+    '|pard|f0 {|field{|*|fldinst {|f1 HYPERLINK} "http://o.test/"}{|fldrslt see ' +
+    '{|field{|*|fldinst PAGE}{|fldrslt 3}} here}}|par}');
+  PasteAt(y, 0, clip);
+  opens := 0;
+  owned := 0;
+  for q := 0 to y.Document.Text.Length - 1 do
+  begin
+    m := y.Document.ObjectAt(q);
+    if (m is TTyRichFieldMark) and (TTyRichFieldMark(m).Kind = rfmOpen) then
+    begin
+      Inc(opens);
+      if TTyRichFieldMark(m).Owned then Inc(owned);
+    end;
+  end;
+  AssertEquals('both fields pasted', 2, opens);
+  AssertEquals('both the model''s own (the inner one too)', 2, owned);
+  saved := SaveOf(y);
+  CheckBalanced('a field inside one the model owns', saved);
+  back := ReadBack(saved);
+  try
+    sig := FieldSignatures(back);
+    AssertEquals('read back: the outer field', 1, CountOf('O:(HYPERLINK "http://o.test/")', sig));
+    AssertEquals('... the inner one, inside it', 2, CountOf('O:(PAGE)', sig));
   finally
     back.Free;
   end;
