@@ -10,7 +10,9 @@ unit test.toolbar.display;
     #232  a caption that is not drawn serves as the hint;
     #234  --toolbar-display and the Display property: icons, text, or both, for a bar or
           for every bar, and text only;
-    #235  the IconSize property is the bar's own --toolbar-icon-size.
+    #235  the IconSize property is the bar's own --toolbar-icon-size;
+    #238  on a bar that stacks icons over captions, a tool with no caption drawn has an
+          icon of its neighbours' size.
 
   The icon is a painter glyph (GlyphKind), so no test here depends on a font. Sizes are read
   through the measuring methods the paint uses: LCL's AutoSize does nothing while the form
@@ -147,6 +149,16 @@ type
     procedure IconSizeReadsWhatWasWrittenByHand;
     procedure SettingIconSizeToWhatItShowsChangesNothing;
     procedure IconSizeIsPublishedAndNotStored;
+    { #238 }
+    procedure OnAStackedBarAToolWithoutACaptionHasItsNeighboursIconSize;
+    procedure OnAStackedBarEveryIconIsDrawnAtTheSamePlace;
+    procedure OnAStackedBarAToolWithoutACaptionKeepsTheRowsHeight;
+    procedure OnAnIconOnlyBarStackedIconsStillFillTheirButtons;
+    procedure BesideTheirCaptionsAToolWithoutOneIsSizedAsBefore;
+    procedure TheStackedRowIsToldAgainWhenTheBarChanges;
+    procedure UnderTheDisplayTokenTheStackedRowIsTheSame;
+    procedure OnAStackedBarAGivenIconSizeIsAnchoredAlike;
+    procedure BesideItsCaptionAnIconStaysAtTheStart;
   end;
 
 implementation
@@ -1935,6 +1947,165 @@ begin
   AssertNotNull('TTyToolBarEx', GetPropInfo(ex, 'IconSize'));
   ex.IconSize := 24;
   AssertFalse('nor on the overflow bar', IsStoredProp(ex, 'IconSize'));
+end;
+
+{ ---- #238: on a bar that stacks icons over captions, every icon is one size ---- }
+
+procedure TToolbarDisplayTest.OnAStackedBarAToolWithoutACaptionHasItsNeighboursIconSize;
+var
+  a, none, hidden: TTyToolButton;
+begin
+  FBar.ShowCaptions := True;
+  FBar.List := False;
+  FBar.ButtonHeight := 70;
+  a := AddTool('Save');
+  none := AddTool('');
+  hidden := AddTool('Pin');
+  hidden.ShowCaption := False;   // the host's own word for this tool
+  Layout;
+  AssertTrue('setup: the row holds more than the least icon', Slot(a) > TyGlyphStackedMin);
+  AssertTrue('setup: and less than the whole button', Slot(a) < a.ClientHeight - PadY(a));
+  AssertEquals('a tool with no caption', Slot(a), Slot(none));
+  AssertEquals('a tool whose caption its host hid', Slot(a), Slot(hidden));
+end;
+
+procedure TToolbarDisplayTest.OnAStackedBarEveryIconIsDrawnAtTheSamePlace;
+var
+  a, none, hidden: TTyToolButton;
+  boxA, boxNone, boxHidden: TRect;
+begin
+  FBar.ShowCaptions := True;
+  FBar.List := False;
+  FBar.ButtonHeight := 70;
+  a := AddTool('Save');
+  none := AddTool('');
+  hidden := AddTool('Pin');
+  hidden.ShowCaption := False;
+  Layout;
+  boxA := IconBox(a);
+  boxNone := IconBox(none);
+  boxHidden := IconBox(hidden);
+  AssertFalse('setup: an icon is drawn', IsRectEmpty(boxA));
+  AssertEquals('no caption: as tall as its neighbour''s', boxA.Bottom - boxA.Top,
+    boxNone.Bottom - boxNone.Top);
+  AssertEquals('no caption: at the same height in the row', boxA.Top, boxNone.Top);
+  AssertEquals('hidden caption: as tall', boxA.Bottom - boxA.Top, boxHidden.Bottom - boxHidden.Top);
+  AssertEquals('hidden caption: at the same height', boxA.Top, boxHidden.Top);
+end;
+
+{ The caption's line is kept for a tool that has no caption, so a row of such tools is as
+  tall as one with captions and the icons do not move when a caption comes or goes. }
+procedure TToolbarDisplayTest.OnAStackedBarAToolWithoutACaptionKeepsTheRowsHeight;
+var
+  a, none: TTyToolButton;
+begin
+  FBar.ShowCaptions := True;
+  FBar.List := False;
+  a := AddTool('Save');
+  none := AddTool('');
+  AssertEquals(Floor(a), Floor(none));
+end;
+
+procedure TToolbarDisplayTest.OnAnIconOnlyBarStackedIconsStillFillTheirButtons;
+var
+  b: TTyToolButton;
+  beside: Integer;
+begin
+  FBar.ShowCaptions := False;
+  b := AddTool('Save');
+  b.Height := 40;
+  beside := Floor(b);
+  FBar.List := False;
+  b.Height := 40;
+  AssertEquals('setup: the tool is stacked', Ord(glTop), Ord(b.GlyphLayout));
+  AssertEquals('stacked, but no captions on the bar: the icon is the box',
+    b.ClientHeight - PadY(b), Slot(b));
+  AssertEquals('and it owes no caption line: the floor it had', beside, Floor(b));
+end;
+
+procedure TToolbarDisplayTest.BesideTheirCaptionsAToolWithoutOneIsSizedAsBefore;
+var
+  none: TTyToolButton;
+begin
+  FBar.ShowCaptions := True;   // List stays True: beside
+  none := AddTool('');
+  none.GlyphLayout := glTop;   // stacked by its own choice, on a bar that is not
+  none.Height := 40;
+  AssertEquals('the icon is the box', none.ClientHeight - PadY(none), Slot(none));
+end;
+
+procedure TToolbarDisplayTest.TheStackedRowIsToldAgainWhenTheBarChanges;
+var
+  a, none: TTyToolButton;
+begin
+  a := AddTool('Save');
+  none := AddTool('');
+  none.Height := 70;
+  AssertEquals('setup: icons only, the icon is the box', none.ClientHeight - PadY(none), Slot(none));
+  FBar.ShowCaptions := True;
+  FBar.List := False;
+  a.Height := 70;
+  none.Height := 70;
+  AssertEquals('stacked over captions: its neighbour''s size', Slot(a), Slot(none));
+  FBar.List := True;
+  none.Height := 70;
+  AssertEquals('beside again: the box', none.ClientHeight - PadY(none), Slot(none));
+  FBar.List := False;
+  FBar.ShowCaptions := False;
+  none.Height := 70;
+  AssertEquals('captions off again: the box', none.ClientHeight - PadY(none), Slot(none));
+end;
+
+procedure TToolbarDisplayTest.UnderTheDisplayTokenTheStackedRowIsTheSame;
+var
+  a, none: TTyToolButton;
+begin
+  a := AddTool('Save');
+  none := AddTool('');
+  FBar.Display := tbdTextUnderIcon;
+  a.Height := 70;
+  none.Height := 70;
+  AssertTrue('setup: less than the whole button', Slot(a) < a.ClientHeight - PadY(a));
+  AssertEquals('text under icon: its neighbour''s size', Slot(a), Slot(none));
+  FBar.Display := tbdTextBesideIcon;
+  none.Height := 70;
+  AssertEquals('text beside icon: the box', none.ClientHeight - PadY(none), Slot(none));
+  FBar.Display := tbdTextUnderIcon;
+  FBar.Display := tbdIconOnly;
+  none.Height := 70;
+  AssertEquals('icons only: the box', none.ClientHeight - PadY(none), Slot(none));
+end;
+
+{ A size that was given is the size; what the stacked row adds is the place: over where the
+  caption would be, as on its neighbours, not in the middle of the button. }
+procedure TToolbarDisplayTest.OnAStackedBarAGivenIconSizeIsAnchoredAlike;
+var
+  a, hidden: TTyToolButton;
+begin
+  FBar.ShowCaptions := True;
+  FBar.List := False;
+  FBar.StyleOverride := '--toolbar-icon-size: 20px;';
+  a := AddTool('Save');
+  hidden := AddTool('Pin');
+  hidden.ShowCaption := False;
+  Layout;
+  AssertEquals('the given size', 20, Slot(hidden));
+  AssertEquals('at its neighbour''s height in the row', IconBox(a).Top, IconBox(hidden).Top);
+end;
+
+{ The split of #238 is for stacked buttons. Beside its caption an icon stays at the side the
+  caption starts at, and is not centred as on an icon-only button. }
+procedure TToolbarDisplayTest.BesideItsCaptionAnIconStaysAtTheStart;
+var
+  t: TTyToolButton;
+  box: TRect;
+begin
+  FBar.ShowCaptions := True;
+  t := AddTool('Save');
+  t.SetBounds(0, 0, 200, 30);
+  box := IconBox(t);
+  AssertFalse('setup: an icon is drawn', IsRectEmpty(box));
+  AssertTrue(Format('in the first quarter of the button (%s)', [BoxText(box)]), box.Right < 50);
 end;
 
 initialization
