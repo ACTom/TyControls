@@ -28,7 +28,7 @@ uses
   test.listbox, test.listbox.scroll,
   test.progressbar,
   test.toggleswitch,
-  test.trackbar,
+  test.trackbar, test.trackbar.frame,
   test.groupbox,
   test.tabstrip, test.tabstrip.axis, test.tabstrip.multiline, test.tabstrip.close, test.toolbar.display,
   test.defaulttheme, test.spinedit, test.memo, test.memo.selection, test.memo.undo,

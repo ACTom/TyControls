@@ -240,7 +240,8 @@ typeKey 与文本类控件引用。它们都是普通 `--变量`,可被主题作
 目前按控件读令牌的是:`TTyListView`(含 `TTyShellListView`)读的全部尺寸令牌,即
 `--listview-*`、`--row-height` 和 `--scrollbar-size`;`TTyTreeView`(含 `TTyShellTreeView`)的
 `--treeview-margin`、`--treeview-icon-gap` 和 §3.5 的四个树线令牌;`TTyMemo` 的 `--memo-tab-size`;
-`TTyTabSet` 和 `TTyPageControl` 的关闭按钮令牌(§3.8);`TTyToolBar` 的 `--toolbar-icon-size`(§3.9)。
+`TTyTabSet` 和 `TTyPageControl` 的关闭按钮令牌(§3.8);`TTyToolBar` 的 `--toolbar-icon-size`(§3.9);
+`TTyTrackBar` 的三个滑块令牌(§3.10)。
 其他控件暂时只认主题里的值。另外,每个控件都认 §3.6 的 `--over-parent-chrome`。
 3.0.4 以前的版本会忽略控件 `StyleOverride` 里的 `--` 声明,用新版本保存的窗体在旧版本里照样能打开。
 
@@ -482,6 +483,35 @@ typeKey 与文本类控件引用。它们都是普通 `--变量`,可被主题作
 工具条的属性,见 [controls/toolbar.md](controls/toolbar.md) 第 3.1.3 节。
 
 3.0.5 新增。更早的版本不认这个令牌,图标大小只能在每个按钮上用 `GlyphSize` 设。
+
+### 3.10 滑动条的滑块
+
+`TTyTrackBar` 的滑块默认 12 像素长、占满滑轨所在的带,形状是胶囊。下面三个令牌改它的大小和圆角;和 §3.4 的
+令牌一样,可以写在主题里,也可以只写进某一个滑动条的 `StyleOverride`。
+
+| 令牌 | 取值 | 默认 | 含义 |
+|---|---|---|---|
+| `--track-thumb-length` | 长度 | `12px` | 滑块沿滑轨方向的大小。 |
+| `--track-thumb-thickness` | 长度 | 占满滑轨所在的带 | 滑块垂直于滑轨方向的大小。超过那条带就按带算。 |
+| `--track-thumb-radius` | 长度 | `TyTrackThumb` 规则的 `border-radius` | 滑块的圆角。 |
+
+圆形:长和厚相等,圆角用默认值。
+
+```text
+--track-thumb-length: 16px; --track-thumb-thickness: 16px;
+```
+
+方形、窄条:
+
+```text
+--track-thumb-length: 14px; --track-thumb-thickness: 14px; --track-thumb-radius: 0px;
+--track-thumb-length: 6px; --track-thumb-radius: 2px;
+```
+
+滑块的颜色仍由 `TyTrackThumb` 规则的 `background` 决定。滑动条还认样式的 `padding`:滑轨、刻度和读数排在
+客户区减去焦点环(或边框)和 `padding` 之后的区域里,见 [controls/trackbar.md](controls/trackbar.md) 第 6 节。
+
+3.0.5 新增。更早的版本不认这三个令牌,滑动条也不读 `padding`。
 
 ---
 

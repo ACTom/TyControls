@@ -246,8 +246,8 @@ Controls that read their tokens this way so far: `TTyListView` (and `TTyShellLis
 length token it reads -- `--listview-*`, `--row-height` and `--scrollbar-size`; `TTyTreeView` (and
 `TTyShellTreeView`), for `--treeview-margin`, `--treeview-icon-gap` and the four tree-line tokens of
 §3.5; `TTyMemo`, for `--memo-tab-size`; `TTyTabSet` and `TTyPageControl`, for the close-button
-tokens of §3.8; `TTyToolBar`, for `--toolbar-icon-size` (§3.9). Other controls take the theme's
-values only, for now --
+tokens of §3.8; `TTyToolBar`, for `--toolbar-icon-size` (§3.9); `TTyTrackBar`, for the three thumb
+tokens of §3.10. Other controls take the theme's values only, for now --
 except for `--over-parent-chrome` (§3.6), which every control reads.
 Versions before 3.0.4 ignore `--`
 declarations in a control's `StyleOverride`, so a form saved with them still loads there.
@@ -501,6 +501,38 @@ icons with text) are properties of the tool bar; see section 3.1.3 of
 
 New in 3.0.5. Earlier versions ignore the token, and the icon size can only be set on each button,
 with `GlyphSize`.
+
+### 3.10 The thumb of a track bar
+
+The thumb of a `TTyTrackBar` is 12 px long by default, as thick as the band its track runs in, and
+pill-shaped. Three tokens set its size and its corners; like the tokens of §3.4 they go in the theme,
+or in the `StyleOverride` of one track bar.
+
+| Token | Value | Default | Meaning |
+|---|---|---|---|
+| `--track-thumb-length` | length | `12px` | The size of the thumb along the track. |
+| `--track-thumb-thickness` | length | fills the track's band | The size of the thumb across the track. More than the band is the band. |
+| `--track-thumb-radius` | length | the `border-radius` of the `TyTrackThumb` rule | The corner radius of the thumb. |
+
+A circle: as long as it is thick, with the default radius.
+
+```text
+--track-thumb-length: 16px; --track-thumb-thickness: 16px;
+```
+
+A square, and a narrow bar:
+
+```text
+--track-thumb-length: 14px; --track-thumb-thickness: 14px; --track-thumb-radius: 0px;
+--track-thumb-length: 6px; --track-thumb-radius: 2px;
+```
+
+The colour of the thumb still comes from the `background` of the `TyTrackThumb` rule. A track bar also
+honours the style's `padding`: the track, the ticks and the value are laid out in the client rectangle
+less the focus ring (or the border) and the padding; see section 6 of
+[controls/trackbar.md](controls/trackbar.md).
+
+New in 3.0.5. Earlier versions ignore these tokens, and a track bar does not read `padding` there.
 
 ---
 

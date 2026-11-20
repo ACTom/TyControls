@@ -59,10 +59,12 @@ TTyTrackBar 继承自 `TTyCustomControl`（`tyControls.Base`）的通用状态�
 
 #### `function ThumbRect: TRect`
 
-返回滑块在控件客户区坐标系中的当前像素矩形（以 `Font.PixelsPerInch` 为 DPI 基准），**随 `Orientation` 切换主轴**。滑块沿主轴的厚度固定为 12 逻辑像素（DPI 缩放后）：
+返回滑块在控件客户区坐标系中的当前像素矩形（以 `Font.PixelsPerInch` 为 DPI 基准），**随 `Orientation` 切换主轴**。这是**命中**矩形：沿主轴和画出来的滑块一样长，垂直于主轴占满整个控件（比画出来的滑块宽容，指针在滑块那一列的任何位置都能抓住它）。
 
-- **水平：** 主轴为宽度（`MainLen = ClientWidth`），滑块宽 12 逻辑像素、高 = `ClientHeight`，沿左右移动（左=Min、右=Max）。
-- **垂直：** 主轴为高度（`MainLen = ClientHeight`），滑块高 12 逻辑像素、宽 = `ClientWidth`，沿上下移动；坐标系**反转**（`Inverted = True`），使顶部对应 `Max`、底部对应 `Min`。
+滑轨排在**内容区**里：客户区减去焦点环（或边框）和样式的 `padding`，见 [第 6 节](#内容区焦点环和-padding)。滑块沿主轴的长度默认 12 逻辑像素，可用令牌 `--track-thumb-length` 改。
+
+- **水平：** 主轴为宽度（`MainLen` = 内容区宽度，开了 `ShowValue` 再减去读数那一条），滑块沿左右移动（左=Min、右=Max）。
+- **垂直：** 主轴为高度（`MainLen` = 内容区高度，同样减去读数），滑块沿上下移动；坐标系**反转**（`Inverted = True`），使顶部对应 `Max`、底部对应 `Min`。
 
 偏移量由内部纯函数 `TyTrackThumbOffset(MainLen, ThumbW, Min, Max, Position, Inverted)` 计算（四舍五入），按 `Inverted` 标志处理垂直反转。
 
@@ -107,6 +109,40 @@ TTyTrackBar 继承自 `TTyCustomControl`（`tyControls.Base`）的通用状态�
 | `:focus` | 获得键盘焦点 |
 | `:active` | 鼠标左键按下（任意位置） |
 | `:disabled` | `Enabled = False` |
+
+### 内容区：焦点环和 padding
+
+滑轨、滑块、刻度和读数都排在**内容区**里，内容区是客户区四边各让出两样东西之后剩下的部分：
+
+- **外框**：焦点环（`TyTrackBar:focus` 的 `outline`，含 `outline-offset`）和边框里宽的那个。不管控件有没有焦点都让出焦点环的位置，所以获得焦点时滑轨不会移动。主题既没有焦点环也没有边框时不让。
+- **padding**：样式的 `padding`，内置主题是 0。想让滑轨离边远一点，或者让读数后面多留些空，在控件的 `StyleOverride` 里写，比如 `padding: 0px 8px;`。
+
+拖动和命中用的是同一个内容区，画在哪儿、点了算多少不会对不上。`AutoSize` 的厚度也把这两样算进去。
+
+> 3.0.5 以前各部件排在整个客户区里：滑轨穿过焦点环，滑块和刻度压在环上，读数贴着环，`padding` 不起作用（#236）。升级后，在有焦点环的主题上（内置主题都有 2 像素的环）滑轨四周各向里收 2 像素。
+
+### 滑块的大小和圆角
+
+三个令牌，每个滑动条自己读（先读自己的 `StyleOverride`，再读主题），3.0.5 新增（#237）：
+
+| 令牌 | 默认 | 含义 |
+|---|---|---|
+| `--track-thumb-length` | `12px` | 滑块沿滑轨方向的大小。 |
+| `--track-thumb-thickness` | 占满滑轨所在的带 | 滑块垂直于滑轨方向的大小；超过那条带就按带算。 |
+| `--track-thumb-radius` | `TyTrackThumb` 规则的 `border-radius` | 滑块的圆角。 |
+
+```pascal
+// 圆形滑块：长和厚相等，圆角用主题默认的胶囊值
+Bar.StyleOverride := '--track-thumb-length: 16px; --track-thumb-thickness: 16px;';
+// 方形
+Bar.StyleOverride := '--track-thumb-length: 14px; --track-thumb-thickness: 14px; --track-thumb-radius: 0px;';
+// 窄条
+Bar.StyleOverride := '--track-thumb-length: 6px; --track-thumb-radius: 2px;';
+// 所有滑动条
+TyDefaultController.StyleOverride := ':root { --track-thumb-length: 16px; --track-thumb-thickness: 16px; }';
+```
+
+方向换成垂直时，“长”仍然沿着滑轨、“厚”仍然垂直于滑轨。滑块的颜色仍由主题的 `TyTrackThumb` 规则决定。三角形和自绘滑块 3.0 没有。
 
 ### 滑块子部件：typeKey `TyTrackThumb`
 
@@ -210,7 +246,7 @@ end;
 2. **拖动跨出边界：** 鼠标移出控件范围时，`MouseLeave` 不会终止拖动（仅清除 hover 状态），这使得"按住不放，拖出后再拖回"的体验连贯。拖动只在 `MouseUp` 时结束。
 3. **OnChange 防重入：** `SetPosition` 先夹紧值，若夹紧后与原值相同则不调用 `OnChange`，回调中无需过滤重复值。
 4. **Min/Max 修改时 Position 静默校正：** 修改范围后 `Position` 会被自动校正，但不触发 `OnChange`（仅触发 `Invalidate`）。
-5. **滑块沿主轴厚度固定：** 滑块沿主轴的厚度固定为 12 逻辑像素（DPI 缩放后），不可通过属性调整；横向尺寸跟随控件另一边（水平=控件高、垂直=控件宽）。如需更宽的滑块，需继承并重写渲染逻辑。
+5. **滑块的大小走令牌：** 滑块沿主轴默认 12 逻辑像素（DPI 缩放后），垂直于主轴默认占满滑轨所在的带；两者和圆角都能用令牌改（`--track-thumb-length` / `--track-thumb-thickness` / `--track-thumb-radius`，见 [第 6 节](#滑块的大小和圆角)），没有对应的属性。
 6. **垂直方向约定：** `Orientation = toVertical` 时，**顶部为 `Max`、底部为 `Min`，值向上增大**——向上拖动、`↑`、`PageUp` 都增大 `Position`。切换 `Orientation` 时控件的宽/高会**自动对调**（仅当当前尺寸与新方向不符时）：以前不换，于是一个 200×30 的横条切成垂直后仍是 200 宽 30 高、里面画着一条竖轨道，每个调用方都得自己再改一次尺寸。流式载入期间不动，`.lfm` 里的显式尺寸优先。
 7. **刻度由 TickStyle + Frequency + TickMarks 共同决定（API parity 新增）：** `TickStyle` 选**哪些值**有刻度（自动 / 不画 / 只画手工放的），`TickMarks` 选**画在哪一侧**。`ttsManual` 配合 `SetTick` 才能表达不等距刻度（gamma 曲线、一组档位）；`ClearTicks` 清空，`TickCount` 读数量。超出 `[Min,Max]` 的手工刻度不会被接受，也不会在范围改变后被夹到端头凭空造出一条刻度。
 8. **刷一遍默认值差异（有意保留）：** `Max` 默认 `100`（LCL 是 `10`）、`PageSize` 默认 `10`（LCL 是 `2`）。两者**不跟随 LCL**：这两个只是量级默认值，不改变任何语义；而 published 默认值一旦改动，**所有现有 `.lfm`（恰恰因为值等于默认而没有存盘）会静默改变含义** —— 正是这条指控本身担心的那种失败，只不过受害者变成了本库的使用者。从 Lazarus 批量移植时请显式写清楚这两个属性。

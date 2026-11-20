@@ -54,6 +54,16 @@ type
     procedure SetShowValue(const AValue: Boolean);
     function  ValueText: string;
     function ThumbWAtPPI(APPI: Integer): Integer;
+    { #236. What the frame keeps on each edge, in device px at APPI (a TRect used as four
+      insets): the style's padding, and the wider of the border and the FOCUS RING. The ring
+      is kept room for whether the bar has the focus now or not -- a track that moved when it
+      was focused would be worse than a ring that is drawn over. }
+    function FrameInsets(APPI: Integer): TRect;
+    { The rectangle the groove, the thumb, the ticks and the value are laid out in: AClient
+      less FrameInsets. The ONE place both the paint and the hit test take it from. }
+    function ContentRectIn(const AClient: TRect; APPI: Integer): TRect;
+    { Where the track starts on its own axis, in client px. }
+    function MainOrigin: Integer;
     function MainLen: Integer;
     function Inverted: Boolean;
     procedure EnsureTimer;
@@ -249,14 +259,67 @@ end;
 
 function TTyTrackBar.ThumbWAtPPI(APPI: Integer): Integer;
 begin
-  Result := MulDiv(12, APPI, 96);
+  { #237: the thumb's size ALONG the track -- this bar's own StyleOverride, then the theme. }
+  Result := MulDiv(StyleMetric('--track-thumb-length', TyTrackThumbLength), APPI, 96);
   if Result < 1 then Result := 1;
 end;
 
-function TTyTrackBar.MainLen: Integer;
+function TTyTrackBar.FrameInsets(APPI: Integer): TRect;
+var
+  S, F: TTyStyleSet;
+  edge, ring: Integer;
 begin
-  if FOrientation = toVertical then Result := ClientHeight
-  else Result := ClientWidth;
+  S := CurrentStyle;
+  edge := 0;
+  if TyBorderVisible(S) then edge := MulDiv(S.BorderWidth, APPI, 96);
+  F := StyleInState(CurrentStates + [tysFocused]);
+  if (tpOutline in F.Present) and (F.OutlineWidth > 0) then
+  begin
+    ring := MulDiv(F.OutlineWidth, APPI, 96);
+    if F.OutlineOffset > 0 then Inc(ring, MulDiv(F.OutlineOffset, APPI, 96));
+    if ring > edge then edge := ring;
+  end;
+  Result.Left   := edge + MulDiv(S.Padding.Left, APPI, 96);
+  Result.Top    := edge + MulDiv(S.Padding.Top, APPI, 96);
+  Result.Right  := edge + MulDiv(S.Padding.Right, APPI, 96);
+  Result.Bottom := edge + MulDiv(S.Padding.Bottom, APPI, 96);
+end;
+
+function TTyTrackBar.ContentRectIn(const AClient: TRect; APPI: Integer): TRect;
+var
+  ins: TRect;
+begin
+  ins := FrameInsets(APPI);
+  Result := Rect(AClient.Left + ins.Left, AClient.Top + ins.Top,
+                 AClient.Right - ins.Right, AClient.Bottom - ins.Bottom);
+  { A bar too small for its frame keeps its parts rather than turning them inside out. }
+  if Result.Right <= Result.Left then
+  begin
+    Result.Left := AClient.Left;
+    Result.Right := AClient.Right;
+  end;
+  if Result.Bottom <= Result.Top then
+  begin
+    Result.Top := AClient.Top;
+    Result.Bottom := AClient.Bottom;
+  end;
+end;
+
+function TTyTrackBar.MainOrigin: Integer;
+var
+  C: TRect;
+begin
+  C := ContentRectIn(Rect(0, 0, ClientWidth, ClientHeight), Font.PixelsPerInch);
+  if FOrientation = toVertical then Result := C.Top else Result := C.Left;
+end;
+
+function TTyTrackBar.MainLen: Integer;
+var
+  C: TRect;
+begin
+  C := ContentRectIn(Rect(0, 0, ClientWidth, ClientHeight), Font.PixelsPerInch);
+  if FOrientation = toVertical then Result := C.Bottom - C.Top
+  else Result := C.Right - C.Left;
   { 读数占掉的那一条不属于滑轨。收口在这里,ThumbRect 与 DragTo 都走它,
     于是"画在哪"和"点了算多少"不会各算各的。 }
   Dec(Result, FValueAreaPx);
@@ -332,13 +395,15 @@ end;
 procedure TTyTrackBar.CalculatePreferredSize(var PreferredWidth,
   PreferredHeight: Integer; WithThemeSpace: Boolean);
 var
-  S: TTyStyleSet;
   ppi, thumbW, tickLen, cross: Integer;
+  ins: TRect;
 begin
   ppi := Font.PixelsPerInch;
   if ppi <= 0 then ppi := 96;
-  S := CurrentStyle;
-  thumbW := ThumbWAtPPI(ppi);
+  { #237: a thumb that was given a thickness asks for that; one that was not still asks
+    for the default thumb's length across, as it always did. }
+  thumbW := MulDiv(StyleMetric('--track-thumb-thickness', 0), ppi, 96);
+  if thumbW < 1 then thumbW := MulDiv(TyTrackThumbLength, ppi, 96);
   { The thumb spans the whole cross axis, so it sets the floor; the ticks are drawn
     against the far edge (4 device-independent px, the constant RenderTo scales) and
     would otherwise be painted straight over the thumb. }
@@ -349,7 +414,11 @@ begin
     Before the first paint it is 0, so an AutoSize'd bar settles on its second layout --
     the same first-frame caveat MainLen already carries. }
   if FShowValue and (FValueTextPx > 0) then Inc(cross, FValueTextPx);
-  Inc(cross, MulDiv(S.Padding.Top + S.Padding.Bottom, ppi, 96));
+  { #236: the frame on the two edges ACROSS the track -- the padding and the focus ring. It
+    used to be the top and bottom padding whichever way the bar ran, and no ring at all. }
+  ins := FrameInsets(ppi);
+  if FOrientation = toVertical then Inc(cross, ins.Left + ins.Right)
+  else Inc(cross, ins.Top + ins.Bottom);
   if cross < 1 then cross := 1;
   { CROSS AXIS ONLY: 0 means "no preference" to LCL, so the track keeps whatever length
     the form gave it and only the thickness follows the theme. }
@@ -425,6 +494,7 @@ begin
     marks, but a pointer anywhere in the control's column should still grab it. A hit target
     larger than the mark is the forgiving direction, and it is what every platform slider
     does; shrinking this to the painted band would make the ticks a dead strip. }
+  Inc(Off, MainOrigin);   // #236: the track starts inside the frame
   if FOrientation = toVertical then
     Result := Rect(0, Off, ClientWidth, Off + TW)
   else
@@ -438,7 +508,7 @@ var
 begin
   PPI := Font.PixelsPerInch;
   TW := ThumbWAtPPI(PPI);
-  Off := APos - TW div 2;
+  Off := (APos - MainOrigin) - TW div 2;
   Position := TyTrackPosFromOffset(MainLen, TW, FMin, FMax, Off, Inverted);
 end;
 
@@ -698,9 +768,9 @@ procedure TTyTrackBar.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integ
 var
   P: TTyPainter;
   S, ThumbS, GrooveS: TTyStyleSet;
-  R, SlideR, GrooveR, ThumbR: TRect;
+  R, C, SlideR, GrooveR, ThumbR: TRect;
   ThumbStates: TTyStateSet;
-  TW, MLen, Off: Integer;
+  TW, MLen, Off, ThumbTh, ThumbRad: Integer;
   TickFill: TTyFill;
   TickLen, TickW, TickOff, Idx: Integer;
   V, Stride: Int64;
@@ -715,20 +785,20 @@ var
     if FOrientation = toVertical then
     begin
       if FTickMarks in [ttmBottomRight, ttmBoth] then
-        P.FillBackground(Rect(R.Right - TickLen, R.Top + AC,
-          R.Right, R.Top + AC + TickW), TickFill, 0);
+        P.FillBackground(Rect(C.Right - TickLen, C.Top + AC,
+          C.Right, C.Top + AC + TickW), TickFill, 0);
       if FTickMarks in [ttmTopLeft, ttmBoth] then
-        P.FillBackground(Rect(R.Left, R.Top + AC,
-          R.Left + TickLen, R.Top + AC + TickW), TickFill, 0);
+        P.FillBackground(Rect(C.Left, C.Top + AC,
+          C.Left + TickLen, C.Top + AC + TickW), TickFill, 0);
     end
     else
     begin
       if FTickMarks in [ttmBottomRight, ttmBoth] then
-        P.FillBackground(Rect(R.Left + AC, R.Bottom - TickLen,
-          R.Left + AC + TickW, R.Bottom), TickFill, 0);
+        P.FillBackground(Rect(C.Left + AC, C.Bottom - TickLen,
+          C.Left + AC + TickW, C.Bottom), TickFill, 0);
       if FTickMarks in [ttmTopLeft, ttmBoth] then
-        P.FillBackground(Rect(R.Left + AC, R.Top,
-          R.Left + AC + TickW, R.Top + TickLen), TickFill, 0);
+        P.FillBackground(Rect(C.Left + AC, C.Top,
+          C.Left + AC + TickW, C.Top + TickLen), TickFill, 0);
     end;
   end;
 
@@ -739,12 +809,15 @@ begin
     P.BeginPaint(ACanvas, ARect, APPI);
     S := CurrentStyle;
     DrawFrame(P, R, S);
+    { #236. Everything below is laid out in C, the client rect less what the frame keeps.
+      It used to be R: the groove ran through the focus ring, the thumb and the ticks sat on
+      it, the value touched it, and the style's padding moved nothing. }
+    C := ContentRectIn(R, APPI);
 
     // Compute thumb geometry using APPI for pixel-exact rendering.
     // Horizontal goes through the non-inverted branch of TyTrackThumbOffset,
     // which equals the legacy formula exactly (pixel regression).
-    TW := MulDiv(12, APPI, 96);
-    if TW < 1 then TW := 1;
+    TW := ThumbWAtPPI(APPI);
     { 读数条:先量出它要多宽(按 Min/Max 里更宽的那个算,免得拖动时滑轨长度
       跟着位数变来变去、滑块自己抖),再把滑轨缩短同样多。 }
     if FShowValue then
@@ -765,9 +838,9 @@ begin
     end;
 
     if FOrientation = toVertical then
-      MLen := (R.Bottom - R.Top) - FValueAreaPx
+      MLen := (C.Bottom - C.Top) - FValueAreaPx
     else
-      MLen := (R.Right - R.Left) - FValueAreaPx;
+      MLen := (C.Right - C.Left) - FValueAreaPx;
     if MLen < 1 then MLen := 1;
 
     { THE TICK BAND. Ticks are drawn flush against the control's outer edge on whichever side
@@ -776,7 +849,7 @@ begin
       were painted into the same pixels -- the reported "the ruler covers the slider". }
     TickLen := P.Scale(4);
     if FTickStyle = ttsNone then Band := 0 else Band := TickLen + P.Scale(2);
-    SlideR := R;
+    SlideR := C;
     if FOrientation = toVertical then
     begin
       if FTickMarks in [ttmTopLeft, ttmBoth]     then Inc(SlideR.Left,  Band);
@@ -790,8 +863,8 @@ begin
       Dec(SlideR.Right, FValueAreaPx);
     end;
     { A control too short to hold both bands keeps the slider rather than inverting it. }
-    if SlideR.Right <= SlideR.Left then SlideR := R;
-    if SlideR.Bottom <= SlideR.Top then SlideR := R;
+    if SlideR.Right <= SlideR.Left then SlideR := C;
+    if SlideR.Bottom <= SlideR.Top then SlideR := C;
 
     { THE GROOVE. Its own theme key, because the recess is a part of the control and not the
       control: TyTrackBar itself now declares no background and inherits the parent surface. }
@@ -832,7 +905,30 @@ begin
       Include(ThumbStates, tysNormal);
     ThumbS := ActiveController.Model.ResolveStyle('TyTrackThumb', '', ThumbStates);
 
-    TyFillSubElement(P, ThumbR, ThumbS, TyUniformCorners(ThumbS.BorderRadius));
+    { #237. The thumb's size across the track and its corners, from this bar's tokens. No
+      thickness given: it fills the slider band, as it always did. One given: that, centred
+      on the groove and never more than the band. }
+    ThumbTh := P.Scale(StyleMetric('--track-thumb-thickness', 0));
+    if ThumbTh > 0 then
+    begin
+      if FOrientation = toVertical then
+      begin
+        if ThumbTh < ThumbR.Right - ThumbR.Left then
+        begin
+          ThumbR.Left := Mid - ThumbTh div 2;
+          ThumbR.Right := ThumbR.Left + ThumbTh;
+        end;
+      end
+      else if ThumbTh < ThumbR.Bottom - ThumbR.Top then
+      begin
+        ThumbR.Top := Mid - ThumbTh div 2;
+        ThumbR.Bottom := ThumbR.Top + ThumbTh;
+      end;
+    end;
+    ThumbRad := StyleMetric('--track-thumb-radius', -1);
+    if ThumbRad < 0 then ThumbRad := ThumbS.BorderRadius;
+
+    TyFillSubElement(P, ThumbR, ThumbS, TyUniformCorners(ThumbRad));
 
     { Tick marks. Which VALUES get one is TickStyle's call (auto = every Frequency
       units, manual = only the hand-placed ones); which SIDE they are drawn on is
@@ -872,12 +968,15 @@ begin
     { 读数。画在滑轨让出来的那一条里,颜色/字体全走本体样式,不硬编码。 }
     if FShowValue and (FValueAreaPx > 0) then
     begin
+      { #236: in the content rect, and with two px after the number -- flush against the
+        edge it touched the ring. The strip is the widest value plus eight, so the number
+        still stands clear of the track. }
       if FOrientation = toVertical then
-        P.DrawText(Rect(R.Left, R.Bottom - FValueAreaPx, R.Right, R.Bottom),
+        P.DrawText(Rect(C.Left, C.Bottom - FValueAreaPx, C.Right, C.Bottom),
           ValueText, S.FontName, ResolveFontSize(S), S.FontWeight, S.TextColor,
           taCenter, tlCenter, False)
       else
-        P.DrawText(Rect(R.Right - FValueAreaPx, R.Top, R.Right, R.Bottom),
+        P.DrawText(Rect(C.Right - FValueAreaPx, C.Top, C.Right - P.Scale(2), C.Bottom),
           ValueText, S.FontName, ResolveFontSize(S), S.FontWeight, S.TextColor,
           taRightJustify, tlCenter, False);
     end;
