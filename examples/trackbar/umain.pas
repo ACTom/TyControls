@@ -10,6 +10,7 @@ unit umain;
   - ShowValue: the bar paints its own number (right end horizontal, under the track vertical)
   - LineSize: a bar whose arrow-key / wheel step is 5 instead of 1
   - AnimationsEnabled toggled from code (it is public, not published, so no .lfm can set it)
+  - OnDrawThumb: a bar whose thumb is a triangle, drawn in the event in the theme's colour
 
   Right, several thumbs (TTyRangeTrackBar / TTyMultiTrackBar / TTyGradientTrackBar), with the
   bars' own adding, removing and dragging switched on in umain.lfm:
@@ -67,6 +68,8 @@ type
     LblKeys1: TTyLabel;
     LblKeys2: TTyLabel;
     LblKeys3: TTyLabel;
+    LblOwnThumb: TTyLabel;
+    Track6: TTyTrackBar;
     DivMulti: TTyDivider;
     LblRange: TTyLabel;
     Range1: TTyRangeTrackBar;
@@ -93,6 +96,9 @@ type
     procedure Track3Change(Sender: TObject);
     procedure Track4Change(Sender: TObject);
     procedure Track5Change(Sender: TObject);
+    procedure Track6DrawThumb(Sender: TObject; APainter: TTyPainter; AIndex: Integer;
+      const ARect: TRect; const AStyle: TTyStyleSet; AStates: TTyStateSet;
+      var ADefaultDraw: Boolean);
     procedure AnimSwitchChange(Sender: TObject);
     procedure Range1Change(Sender: TObject);
     procedure StopsChange(Sender: TObject);
@@ -204,6 +210,24 @@ end;
 procedure TMainForm.Track5Change(Sender: TObject);
 begin
   LblStatus.Caption := Format(rsFineFmt, [(Sender as TTyTrackBar).Position]);
+end;
+
+{ OnDrawThumb: the thumb is whatever this draws. ARect is where the bar would have painted
+  its own thumb (16 px along the track here, --track-thumb-length in the bar's StyleOverride),
+  and AStyle is the style it would have used -- so the triangle takes the theme's thumb
+  colour, and follows it on hover, while it is dragged, and when the theme is switched. The
+  thumb is still grabbed by its rectangle. }
+procedure TMainForm.Track6DrawThumb(Sender: TObject; APainter: TTyPainter; AIndex: Integer;
+  const ARect: TRect; const AStyle: TTyStyleSet; AStates: TTyStateSet;
+  var ADefaultDraw: Boolean);
+begin
+  ADefaultDraw := False;
+  APainter.BeginPath;
+  APainter.MoveTo(ARect.Left, ARect.Top);
+  APainter.LineTo(ARect.Right, ARect.Top);
+  APainter.LineTo((ARect.Left + ARect.Right) / 2, ARect.Bottom);
+  APainter.ClosePath;
+  APainter.FillPath(AStyle.Background.Color);
 end;
 
 { AnimationsEnabled is PUBLIC, not published, so no .lfm can reach it -- only code.

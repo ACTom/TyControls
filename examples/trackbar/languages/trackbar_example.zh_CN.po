@@ -71,6 +71,10 @@ msgstr "PageUp/PageDown 按 PageSize 步进；Home/End 跳到 Min/Max。"
 msgid "The wheel steps by LineSize; a click jumps the thumb there."
 msgstr "滚轮按 LineSize 步进；点击轨道滑块直接跳过去。"
 
+#: tmainform.lblownthumb.caption
+msgid "A thumb you draw yourself (OnDrawThumb): a triangle"
+msgstr "自己画的滑块（OnDrawThumb）：三角形"
+
 #: tmainform.bar.caption
 msgid "TrackBar  · TyControls"
 msgstr "TrackBar  · TyControls"

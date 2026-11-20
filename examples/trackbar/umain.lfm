@@ -212,6 +212,25 @@ object MainForm: TMainForm
       Width = 430
       Caption = 'The wheel steps by LineSize; a click jumps the thumb there.'
     end
+    object LblOwnThumb: TTyLabel
+      Left = 16
+      Height = 20
+      Top = 522
+      Width = 430
+      Caption = 'A thumb you draw yourself (OnDrawThumb): a triangle'
+    end
+    object Track6: TTyTrackBar
+      Left = 16
+      Height = 24
+      Top = 544
+      Width = 300
+      StyleOverride = '--track-thumb-length: 16px;'
+      Min = 0
+      Max = 100
+      Position = 30
+      TickStyle = ttsNone
+      OnDrawThumb = Track6DrawThumb
+    end
     object DivMulti: TTyDivider
       Left = 480
       Height = 22
