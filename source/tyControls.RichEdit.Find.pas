@@ -779,20 +779,16 @@ begin
 end;
 
 { A paragraph whose length says it cannot be a middle segment may still be one when marks
-  stand in it: known from its value, else from its depths (a paragraph inside a field's
-  result - a table of contents' entry). A paragraph at depth 0 not parsed yet is taken as
-  holding none (its length decides, as before). }
+  stand in it: known from its value, else from the loader's index without parsing it
+  (TTyRichDocument.ParaHoldsMarks) - a paragraph parsed or not answers alike. }
 function TTyRichFinder.MayHoldMarks(AIndex: Integer; AData: Pointer): Boolean;
-var
-  s, low: Integer;
 begin
   if AData <> nil then
   begin
     FindMarks(AIndex, AData);
     Exit(FMarkCount > 0);
   end;
-  FDoc.ParaFieldDepths(AIndex, s, low);
-  Result := s > 0;
+  Result := FDoc.ParaHoldsMarks(AIndex);
 end;
 
 procedure TTyRichFinder.ClearMatches;

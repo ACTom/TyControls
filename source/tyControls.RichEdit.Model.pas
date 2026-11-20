@@ -793,6 +793,10 @@ type
       field. False by default: not known (the paragraph is parsed to tell). }
     function ParaFieldDepths(ADoc: TTyRichDocument; AIndex: Integer;
       out AStart, ALow: Integer): Boolean; virtual;
+    { Whether paragraph AIndex holds a field's mark, as the loader's index knows it - without
+      parsing it. False by default: not known (the paragraph is parsed to tell). }
+    function ParaHoldsMarks(ADoc: TTyRichDocument; AIndex: Integer;
+      out AHolds: Boolean): Boolean; virtual;
   end;
 
   TTyRichRange = record
@@ -1562,6 +1566,9 @@ type
       has one, else from the loader's index. A paragraph with both above 0 lies wholly inside
       a field's result: a writer that writes that field as its bytes need not read it. }
     procedure ParaFieldDepths(AIndex: Integer; out AStart, ALow: Integer);
+    { Paragraph AIndex holds a field's mark: from its value when it has one, else from the
+      loader's index (nothing parsed), else it is parsed. }
+    function ParaHoldsMarks(AIndex: Integer): Boolean;
     { The same of paragraph AIndex whose value (as a walk of the paragraphs hands it out,
       nil: not parsed) is AData - no look-up of the paragraph for a value. }
     procedure ValueFieldDepths(AData: Pointer; AIndex: Integer; out AStart, ALow: Integer);
@@ -3821,6 +3828,13 @@ begin
   Result := False;
 end;
 
+function TTyRichParaLoader.ParaHoldsMarks(ADoc: TTyRichDocument; AIndex: Integer;
+  out AHolds: Boolean): Boolean;
+begin
+  AHolds := False;
+  Result := False;
+end;
+
 { ---- TTyRichDocument: life ---- }
 
 constructor TTyRichDocument.Create;
@@ -4157,6 +4171,23 @@ begin
     if nd <> d then PutData(i, d, nd);
     depth := EndDepthOfData(nd);
   end;
+end;
+
+function TTyRichDocument.ParaHoldsMarks(AIndex: Integer): Boolean;
+var
+  d: TTyRichParaData;
+  i: Integer;
+begin
+  d := TTyRichParaData(SlotData(AIndex));
+  if (d = nil) and (FLoader <> nil) then
+  begin
+    if FLoader.ParaHoldsMarks(Self, AIndex, Result) then Exit;
+    d := DataOf(AIndex);
+  end;
+  Result := False;
+  if d = nil then Exit;
+  for i := 0 to High(d.FRuns) do
+    if d.FRuns[i].Obj is TTyRichFieldMark then Exit(True);
 end;
 
 procedure TTyRichDocument.ParaDepths(AIndex: Integer; out AStart, ALow: Integer);

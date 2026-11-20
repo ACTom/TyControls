@@ -244,6 +244,7 @@ type
     Fields: Integer;             // fields whose result is being read as content (open marks)
     ParaFields: Integer;         // ... open where the current paragraph began
     ParaLow: Integer;            // ... the fewest open anywhere in it so far
+    ParaMarked: Boolean;         // ... a field's mark is in it
   end;
 
   // A snapshot: everything the parse depends on at a point between two tokens (with the
@@ -298,6 +299,7 @@ type
     ListText: UTF8String;        // building: its {\listtext} / {\pntext}, '' none
     FieldDepth: Integer;         // fields open at its start (TTyRichFieldMark pairs)
     FieldLow: Integer;           // the fewest open anywhere in it, its start and end included
+    Marked: Boolean;             // a field's mark is in it
   end;
 
   TTyRtfRowRec = record
@@ -551,6 +553,8 @@ type
     // A paragraph's fields: how many are open at its start, and the fewest open anywhere in
     // it (its start and its end included) - also when counting.
     procedure ParaDepths(AIndex: Integer; out AStart, ALow: Integer);
+    // A field's mark is in paragraph AIndex - also when counting.
+    function ParaMarked(AIndex: Integer): Boolean;
     // The first paragraph ParaRec still has.
     property FirstParaRec: Integer read FParaBase;
     // Forgets the records of the paragraphs before AIndex (an index scan keeps no record of
@@ -722,6 +726,11 @@ type
     FDepthSrc: array of Int64;
     FDepthStart, FDepthLow: array of Integer;
     FDepthN: Integer;
+    { Where the paragraphs that hold a field's mark begin and end, as the scan found them: the
+      offsets at which "holds one" changes, rising (an odd count at or before a paragraph's
+      offset: it holds one). }
+    FMarkedSrc: array of Int64;
+    FMarkedN: Integer;
     FOnLoadProgress: TTyRtfProgressEvent;
     procedure Index(ABudget: Int64; AMinParas: Integer);
     procedure Collect;
@@ -821,6 +830,9 @@ type
       them, without parsing it: how many are open at its start, and the fewest open anywhere
       in it. A binary search of the places they change. }
     procedure ParaFieldDepths(ASrcOffset: Int64; out AStart, ALow: Integer);
+    { The file's paragraph that begins at ASrcOffset holds a field's mark, as the index scan
+      found it, without parsing it (a binary search). }
+    function ParaHoldsMarks(ASrcOffset: Int64): Boolean;
     { The file's paragraphs after the one at ASrcOffset that are alike in their fields (as
       ParaFieldDepths tells) end where the next one begins whose depths differ: its offset
       (False: none - they go on to the file's end). A writer passes a field's paragraphs by
@@ -4768,6 +4780,7 @@ var
   nums: array[0..2] of Integer;
   i, f: Integer;
 begin
+  FS.ParaMarked := True;
   if Counting then
   begin
     EmitObject(nil);
@@ -4822,9 +4835,11 @@ begin
   rec^.Src := Range(FS.Boundary, FTok.Stop);
   rec^.FieldDepth := FS.ParaFields;
   rec^.FieldLow := FS.ParaLow;
+  rec^.Marked := FS.ParaMarked;
   // (the paragraph that begins next: as deep as the field marks so far leave it)
   FS.ParaFields := FS.Fields;
   FS.ParaLow := FS.Fields;
+  FS.ParaMarked := False;
   if not Counting then
   begin
     if FRunN = 0 then AddRun(CharFormatFor(rccLoch), nil);
@@ -5289,6 +5304,11 @@ begin
   ALow := FParas[AIndex - FParaBase].FieldLow;
 end;
 
+function TTyRtfParser.ParaMarked(AIndex: Integer): Boolean;
+begin
+  Result := FParas[AIndex - FParaBase].Marked;
+end;
+
 { TTyRtfFieldVerdicts }
 
 procedure TTyRtfFieldVerdicts.Add(AStart, AStop: Int64; AShown: Boolean);
@@ -5464,6 +5484,8 @@ type
       out AFirst, ALast: Integer): Boolean; override;
     function ParaFieldDepths(ADoc: TTyRichDocument; AIndex: Integer;
       out AStart, ALow: Integer): Boolean; override;
+    function ParaHoldsMarks(ADoc: TTyRichDocument; AIndex: Integer;
+      out AHolds: Boolean): Boolean; override;
   end;
 
   TRtfBuild = class(TTyRichDocBuilder)
@@ -5527,6 +5549,16 @@ begin
   ALow := 0;
   Result := ADoc.Text.ParaLazySource(AIndex, src, nbytes);
   if Result then Load.ParaFieldDepths(src, AStart, ALow);
+end;
+
+function TRtfLoader.ParaHoldsMarks(ADoc: TTyRichDocument; AIndex: Integer;
+  out AHolds: Boolean): Boolean;
+var
+  src, nbytes: Int64;
+begin
+  AHolds := False;
+  Result := ADoc.Text.ParaLazySource(AIndex, src, nbytes);
+  if Result then AHolds := Load.ParaHoldsMarks(src);
 end;
 
 function TyRichRtfLoadOf(ADoc: TTyRichDocument): TTyRtfLoad;
@@ -5689,6 +5721,13 @@ var
   ds, dl: Integer;
   same: Boolean;
 begin
+  // (the marks first: a paragraph alike in its depths may still differ in this)
+  if FScan.ParaMarked(AIndex) <> Odd(FMarkedN) then
+  begin
+    if FMarkedN = Length(FMarkedSrc) then SetLength(FMarkedSrc, FMarkedN * 2 + 16);
+    FMarkedSrc[FMarkedN] := ASrcStart;
+    Inc(FMarkedN);
+  end;
   FScan.ParaDepths(AIndex, ds, dl);
   if FDepthN > 0 then
     same := (FDepthStart[FDepthN - 1] = ds) and (FDepthLow[FDepthN - 1] = dl)
@@ -6626,6 +6665,21 @@ begin
     AStart := FDepthStart[hi];
     ALow := FDepthLow[hi];
   end;
+end;
+
+function TTyRtfLoad.ParaHoldsMarks(ASrcOffset: Int64): Boolean;
+var
+  lo, hi, m: Integer;
+begin
+  // how many changes there are at or before ASrcOffset
+  lo := 0;
+  hi := FMarkedN - 1;
+  while lo <= hi do
+  begin
+    m := (lo + hi) shr 1;
+    if FMarkedSrc[m] <= ASrcOffset then lo := m + 1 else hi := m - 1;
+  end;
+  Result := Odd(lo);
 end;
 
 function TTyRtfLoad.NextDepthChange(ASrcOffset: Int64; out ANextOffset: Int64): Boolean;
