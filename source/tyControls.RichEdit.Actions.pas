@@ -12,19 +12,15 @@ unit tyControls.RichEdit.Actions;
   (DisableIfNoHandler).
 
   What they show is the rich edit's own answer, never a rule of theirs: Enabled is the
-  control's Can... query (CanUndo, CanInsertTable, CanInsertPicture) or, for the formats, the
-  user's right to format there that the control reports with its paragraph view
-  (CaretParagraphView's Editable: not ReadOnly, enabled, the document taking edits, outside
-  its update); Checked is the format API's reading (SelAttributes, Paragraph) - a style, an
-  alignment or a list shared by the whole selection (ConsistentAttributes), never a mixed
-  one. What they do goes through the control's doors for the user: the paragraph actions
-  through ApplyParagraphFormat, the table and the picture through InsertTable and
-  InsertPictureFromFile, undo and redo through Undo and Redo - each one undo step named as
-  the control names it, a refusal told by the control (OnEditRefused) as for a key. The
-  character styles are written through SelAttributes, the format API (one step; with nothing
-  selected the format the next typed text gets): it does not stop at ReadOnly, so the action
-  writes only where the control reports the user may format, and what the engine refuses
-  there (a field's result) is told through the control's EditRefused, never raised.
+  control's Can... query (CanFormatCharacters, CanFormatParagraphs, CanUndo, CanInsertTable,
+  CanInsertPicture - False also in a field's result or a row that holds a nested table where
+  the change would be refused); Checked is the format API's reading (SelAttributes,
+  Paragraph) - a style, an alignment or a list shared by the whole selection
+  (ConsistentAttributes), never a mixed one. What they do goes through the control's doors for
+  the user: ApplyCharacterFormat, ApplyParagraphFormat, InsertTable, InsertPictureFromFile,
+  Undo, Redo - each one undo step named as the control names it (a character style with
+  nothing selected: the format the next typed text gets), a refusal told by the control
+  (OnEditRefused) as for a key.
 
   What an update costs: the application's idle updates every action, several times when a
   menu item and a button share one. The actions do not ask the rich edit each time: one
@@ -53,7 +49,7 @@ unit tyControls.RichEdit.Actions;
 interface
 
 uses
-  Classes, SysUtils, Graphics, Controls, ActnList, Dialogs, LCLType, LCLProc,
+  Classes, SysUtils, Math, Graphics, Controls, ActnList, Dialogs, LCLType, LCLProc,
   tyControls.StrConsts, tyControls.RichEdit.Text, tyControls.RichEdit.Model, tyControls.RichEdit.Attrs,
   tyControls.RichEdit.Find, tyControls.RichEdit, tyControls.Dialogs, tyControls.Dialogs.Find,
   tyControls.Dialogs.FileDialog;
@@ -91,7 +87,7 @@ type
     FRich: TTyCustomRichEdit;
     FDirty: Boolean;
     FRefreshes, FQueries: Integer;
-    FHasView, FEditable: Boolean;
+    FReadable, FCanChars, FCanParas: Boolean;
     FCaretPara: TTyParaFormat;
     FStyle: TFontStyles;
     FCharSame: TTyRichConsistentAttributes;
@@ -116,14 +112,15 @@ type
       (for a test that holds an idle round to no query). }
     property Refreshes: Integer read FRefreshes;
     property Queries: Integer read FQueries;
-    { The control's paragraph view could be had (it was laid out, outside its update). }
-    property HasView: Boolean read FHasView;
-    { The user may format here: the view's Editable. }
-    property Editable: Boolean read FEditable;
-    { The caret's paragraph's format (meaningful with HasView). }
+    { The formats could be read (the document outside its update). }
+    property Readable: Boolean read FReadable;
+    { The control's CanFormatCharacters / CanFormatParagraphs. }
+    property CanFormatCharacters: Boolean read FCanChars;
+    property CanFormatParagraphs: Boolean read FCanParas;
+    { The caret's paragraph's format (meaningful with Readable). }
     property CaretParagraph: TTyParaFormat read FCaretPara;
     { SelAttributes.Style / ConsistentAttributes / Subscript; Paragraph.ParaAlign / Numbering
-      / ConsistentAttributes (meaningful with HasView). }
+      / ConsistentAttributes (meaningful with Readable). }
     property Style: TFontStyles read FStyle;
     property CharConsistent: TTyRichConsistentAttributes read FCharSame;
     property Subscript: TTySubscriptType read FSubscript;
@@ -148,8 +145,6 @@ type
     { Enabled and Checked from ARich's record (checked already). }
     procedure UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); virtual;
     procedure ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); virtual;
-    { A refusal the format API raised, told by the control as for a key. }
-    procedure Refused(ARich: TTyCustomRichEdit; const AReason: string);
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -498,9 +493,6 @@ function TyRichPictureFilter: string;
 
 implementation
 
-type
-  TRichEditAccess = class(TTyCustomRichEdit);
-
 function TyRichPictureFilter: string;
 var
   masks: TStringList;
@@ -574,16 +566,20 @@ end;
 
 procedure TTyRichEditActionState.Refresh;
 var
-  view: TTyRichParaView;
+  d: TTyRichDocument;
 begin
   FDirty := False;
   Inc(FRefreshes);
-  Inc(FQueries);
-  FHasView := FRich.CaretParagraphView(view);
-  FEditable := FHasView and view.Editable;
-  if FHasView then
+  FCanChars := FRich.CanFormatCharacters;
+  FCanParas := FRich.CanFormatParagraphs;
+  Inc(FQueries, 2);
+  d := FRich.Document;
+  // (inside the document's update its formats are not read: the user's actions are off then)
+  FReadable := not d.Updating;
+  if FReadable then
   begin
-    FCaretPara := view.Format;
+    FCaretPara := d.Formats.ParaFormat(d.ParaFormatOf(d.Text.ParaOfPos(
+      Max(0, Min(FRich.CaretIndex, d.Text.Length)))));
     // the format API's readings: the selection's first character / paragraph, and what the
     // whole selection shares (bounded and remembered by the control)
     FStyle := FRich.SelAttributes.Style;
@@ -592,7 +588,7 @@ begin
     FAlign := FRich.Paragraph.ParaAlign;
     FList := FRich.Paragraph.Numbering;
     FParaSame := FRich.Paragraph.ConsistentAttributes;
-    Inc(FQueries, 6);
+    Inc(FQueries, 7);
   end
   else
   begin
@@ -719,17 +715,12 @@ end;
 
 procedure TTyRichEditAction.UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState);
 begin
-  Enabled := AState.Editable;
+  Enabled := AState.CanFormatCharacters;
   Checked := False;
 end;
 
 procedure TTyRichEditAction.ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState);
 begin
-end;
-
-procedure TTyRichEditAction.Refused(ARich: TTyCustomRichEdit; const AReason: string);
-begin
-  TRichEditAccess(ARich).EditRefused(AReason);
 end;
 
 { TTyRichEditStyleAction }
@@ -740,30 +731,25 @@ const
   Same: array[TFontStyle] of TTyRichConsistentAttribute = (caBold, caItalic, caUnderline,
     caStrikeOut);
 begin
-  Enabled := AState.Editable;
-  Checked := AState.HasView and (StyleOf in AState.Style) and (Same[StyleOf] in AState.CharConsistent);
+  Enabled := AState.CanFormatCharacters;
+  Checked := AState.Readable and (StyleOf in AState.Style) and (Same[StyleOf] in AState.CharConsistent);
 end;
 
 procedure TTyRichEditStyleAction.ExecuteOn(ARich: TTyCustomRichEdit;
   AState: TTyRichEditActionState);
+const
+  Fields: array[TFontStyle] of TTyCharFormatField = (cffBold, cffItalic, cffUnderline, cffStrike);
 var
-  turnOn: Boolean;
+  f: TTyCharFormat;
 begin
-  // the format API writes regardless of ReadOnly: only where the user may format
-  if not AState.Editable then Exit;
-  turnOn := not Checked;
+  // SelAttributes' one-style write, through the user's door
+  f := TyDefaultCharFormat;
+  if not Checked then
+    if StyleOf = fsStrikeOut then f.Strike := True
+    else Include(f.Style, StyleOf);
   // asked again after this (a write with nothing selected tells no one)
   AState.Changed;
-  try
-    case StyleOf of
-      fsBold: ARich.SelAttributes.Bold := turnOn;
-      fsItalic: ARich.SelAttributes.Italic := turnOn;
-      fsUnderline: ARich.SelAttributes.Underline := turnOn;
-      fsStrikeOut: ARich.SelAttributes.Strikeout := turnOn;
-    end;
-  except
-    on E: ETyRichEdit do Refused(ARich, E.Message);
-  end;
+  ARich.ApplyCharacterFormat([Fields[StyleOf]], f);
 end;
 
 function TTyRichEditBold.StyleOf: TFontStyle;
@@ -822,24 +808,22 @@ end;
 procedure TTyRichEditScriptAction.UpdateOn(ARich: TTyCustomRichEdit;
   AState: TTyRichEditActionState);
 begin
-  Enabled := AState.Editable;
-  Checked := AState.HasView and (AState.Subscript = ScriptOf) and
+  Enabled := AState.CanFormatCharacters;
+  Checked := AState.Readable and (AState.Subscript = ScriptOf) and
     (caSubscript in AState.CharConsistent);
 end;
 
 procedure TTyRichEditScriptAction.ExecuteOn(ARich: TTyCustomRichEdit;
   AState: TTyRichEditActionState);
 var
-  v: TTySubscriptType;
+  f: TTyCharFormat;
 begin
-  if not AState.Editable then Exit;
-  if Checked then v := sstNone else v := ScriptOf;
+  f := TyDefaultCharFormat;
+  if Checked then f.VertAlign := vaNone
+  else if ScriptOf = sstSuperscript then f.VertAlign := vaSuper
+  else f.VertAlign := vaSub;
   AState.Changed;
-  try
-    ARich.SelAttributes.Subscript := v;
-  except
-    on E: ETyRichEdit do Refused(ARich, E.Message);
-  end;
+  ARich.ApplyCharacterFormat([cffVertAlign], f);
 end;
 
 function TTyRichEditSuperscript.ScriptOf: TTySubscriptType;
@@ -871,8 +855,8 @@ end;
 procedure TTyRichEditAlignAction.UpdateOn(ARich: TTyCustomRichEdit;
   AState: TTyRichEditActionState);
 begin
-  Enabled := AState.Editable;
-  Checked := AState.HasView and (AState.ParaAlign = AlignOf) and
+  Enabled := AState.CanFormatParagraphs;
+  Checked := AState.Readable and (AState.ParaAlign = AlignOf) and
     (cpaAlignment in AState.ParaConsistent);
 end;
 
@@ -943,8 +927,8 @@ end;
 procedure TTyRichEditListAction.UpdateOn(ARich: TTyCustomRichEdit;
   AState: TTyRichEditActionState);
 begin
-  Enabled := AState.Editable;
-  Checked := AState.HasView and (AState.Numbering = KindOf) and
+  Enabled := AState.CanFormatParagraphs;
+  Checked := AState.Readable and (AState.Numbering = KindOf) and
     (cpaNumbering in AState.ParaConsistent);
 end;
 
@@ -989,7 +973,7 @@ end;
 procedure TTyRichEditIndentAction.UpdateOn(ARich: TTyCustomRichEdit;
   AState: TTyRichEditActionState);
 begin
-  Enabled := AState.Editable;
+  Enabled := AState.CanFormatParagraphs;
   Checked := False;
 end;
 
@@ -999,7 +983,7 @@ var
   f: TTyParaFormat;
   place, q: Integer;
 begin
-  if not AState.HasView then Exit;
+  if not AState.Readable then Exit;
   // where the caret paragraph's first line starts, and the step's place beyond it
   place := AState.CaretParagraph.LeftIndent + AState.CaretParagraph.FirstIndent;
   if Direction > 0 then
@@ -1233,36 +1217,43 @@ begin
   Result := TTyReplaceDialog(FDialog);
 end;
 
+{ The user may edit the text: what the control's door asks before any edit of the user's
+  (not ReadOnly, enabled, the document taking edits) - the replace methods are the document
+  API and do not ask it themselves. }
+function UserMayEdit(ARich: TTyCustomRichEdit): Boolean;
+begin
+  Result := not ARich.ReadOnly and ARich.IsEnabled and not ARich.Document.Updating and
+    not ARich.Document.Loading and not ARich.Document.Incomplete and not ARich.Document.Saving;
+end;
+
 procedure TTyRichEditReplace.UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState);
 begin
-  Enabled := AState.Editable;
+  Enabled := UserMayEdit(ARich);
   Checked := False;
 end;
 
 procedure TTyRichEditReplace.ExecuteOn(ARich: TTyCustomRichEdit;
   AState: TTyRichEditActionState);
 begin
-  if not AState.Editable then Exit;
+  if not UserMayEdit(ARich) then Exit;
   inherited ExecuteOn(ARich, AState);
 end;
 
 procedure TTyRichEditReplace.DialogReplace(Sender: TObject);
 var
   r: TTyCustomRichEdit;
-  st: TTyRichEditActionState;
   s, w: string;
   start, len: TTyRichPos;
   n: Integer;
   so: TTySearchOptions;
+  done: TTyRichReplaceResult;
 begin
   r := FSearched;
   s := FDialog.FindText;
   if (r = nil) or (s = '') or (csDestroying in r.ComponentState) then Exit;
   w := ReplaceDialog.ReplaceText;
   // the replace methods are the document API: they replace only where the user may edit
-  st := StateOf(r);
-  st.Check;
-  if not st.Editable then Exit;
+  if not UserMayEdit(r) then Exit;
   if frReplaceAll in FDialog.Options then
   begin
     n := r.ReplaceAll(s, w, SearchOptions - [rfoWrap, rfoBackward]);
@@ -1279,15 +1270,8 @@ begin
   if r.HasSelection and r.Search(s, r.SelStart, r.SelLength, so, start, len) and
     (start = r.SelStart) and (len = r.SelLength) then
   begin
-    try
-      r.SelText := w;
-    except
-      on E: ETyRichEdit do
-      begin
-        Refused(r, E.Message);
-        Exit;
-      end;
-    end;
+    // the one match as ReplaceAll replaces it: one step, a match it may not change kept as it is
+    r.ReplaceAll(s, w, SearchOptions - [rfoWrap, rfoBackward], start, len, done);
   end;
   FindAgain;
 end;

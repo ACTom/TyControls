@@ -57,7 +57,7 @@ What compiles but does something else than in Delphi or RichMemo is listed item 
 
 Below is the document model `Document` (`TTyRichDocument`, unit `tyControls.RichEdit.Model`). Every change of it is a command object given to `Document.Execute`: `TTyRichInsertText`, `TTyRichDelete`, `TTyRichSetCharFormat`, `TTyRichSetParaFormat`, `TTyRichInsertObject`, the tables' `TTyRichInsertTable`, `TTyRichInsertRow` and the others (unit `tyControls.RichEdit.Commands`). A command keeps the change (piece references, old values), never a copy of the document. The commands between `Document.BeginUpdate` and `EndUpdate` are one undo step; the control's `BeginEdit` / `EndEdit` do the same and also put the selection back.
 
-The user's actions are another set of methods: `InsertTable`, `InsertRow`, `DeleteColumn`, `InsertPictureFromFile`, `ApplyParagraphFormat` (the one the ruler uses), `FindNext`. They behave as keys do: with `ReadOnly` or disabled they do nothing, a refusal is told through `OnEditRefused`, nothing is raised. Each has its `Can…` (`CanInsertTable`, `CanInsertPicture`, `CanUndo` ...) for a toolbar to grey a button with.
+The user's actions are another set of methods: `ApplyCharacterFormat` (a toolbar's Bold, a font box), `ApplyParagraphFormat` (alignment, indents; the ruler uses it too), `InsertTable`, `InsertRow`, `DeleteColumn`, `InsertPictureFromFile`, `FindNext`. They behave as keys do: with `ReadOnly` or disabled they do nothing, a refusal is told once through `OnEditRefused`, nothing is raised. That is what sets them apart from the format API: `SelAttributes` is the program's write, ignores `ReadOnly` and raises `ETyRichEdit` when refused. Each action has its `Can…` (`CanFormatCharacters`, `CanFormatParagraphs`, `CanInsertTable`, `CanInsertPicture`, `CanUndo` ...) that says whether it would be taken now, for a toolbar to grey a button with. They need no layout, and what they read is bounded: at most `CRichFormatQueryParas` of the selection's paragraphs from its first, each one's field depth and cell.
 
 ## 3. The ruler, `TTyRichEditRuler`
 
@@ -84,10 +84,10 @@ Ready-made actions for a `TActionList` (the IDE's action list editor shows them 
 | `TTyRichEditUndo` / `Redo` | Undo / Redo | Ctrl+Z / Y | `CanUndo` / `CanRedo` | — |
 | `TTyRichEditZoomIn` / `ZoomOut` / `ZoomReset` | Zoom In / Zoom Out / 100% | Ctrl+plus / minus / 0 | the zoom is below its upper / above its lower limit | 100%: the zoom is 100 |
 
-"May the user format here" is the control's own answer (`CaretParagraphView`'s `Editable`: not read-only, enabled, the document not loading or being saved, not inside an update). The actions add no rule of their own: what they show is the control's answer, and what they do goes through the control's door for the user. So each action is one undo step, named as the format API names it, and a refusal is told by the control through `OnEditRefused`, as for a key.
+"May the user format here" is the control's own answer (`CanFormatCharacters`, `CanFormatParagraphs`: not read-only, enabled, the document not loading or being saved, not inside an update, and the selection not wholly inside a field's result or a row that holds a nested table). The actions add no rule of their own: what they show is the control's answer, and what they do goes through the control's door for the user. So each action is one undo step, named as the format API names it, and a refusal is told by the control through `OnEditRefused`, as for a key.
 
 - **Which rich edit**: the one `RichEdit` names when it is set (on another form too); else the focused `TTyCustomRichEdit`; else none, and the action is grey.
-- **The character styles** are written through `SelAttributes`: with nothing selected they set the format of the text typed next, which is no undo step. `SelAttributes` is the program's layer and does not stop at `ReadOnly`, so the actions write only where the user may format; what the engine refuses in a field's result is told by the control, never raised.
+- **The character styles** are written through `ApplyCharacterFormat`: with nothing selected they set the format of the text typed next, which is no undo step. In a field's result and in a row that holds a nested table the format actions are grey, and so is Insert picture.
 - **Indent** moves the caret paragraph's first line to the next (previous) half inch, never left of the margin; with several paragraphs selected each goes to that place, keeping its own hanging offset (the ruler's rule).
 - **Insert table** inserts `Rows` × `Columns` (3 × 3 by default). `OnChooseSize` comes first: the program can ask the user there, change the size or cancel.
 - **Insert picture** uses the package's own open dialog (`Dialog`, a `TTyOpenPictureDialog`) with a filter of the formats the control reads (`TyRichPictureFilter`: every picture the LCL reads; PNG and JPEG keep their bytes, the others become PNG; no WMF, no EMF).
@@ -119,7 +119,7 @@ The figures of the performance suite (`TTyRichEditPerfTest`) on this machine:
 | 100 MB RTF: a character typed in the middle, to the end of its paint | 1.6 ms |
 | the process's peak memory after a 100 MB load | about 180 MB |
 | Tab in a table of 10,000 rows | 1.1 ms |
-| all of a 100 MB txt / RTF selected: the 23 actions' first round of updates (the one asking) | 55 / 64 ms |
+| all of a 100 MB txt / RTF selected: the 23 actions' first round of updates (the one asking) | 50 / 70 ms |
 | an idle round after it | 0.0 ms |
 | moving a selection of 50 Mi characters (drag and drop) | 314 ms |
 | pasting 10 MB of RTF | 3.6 s |
@@ -151,4 +151,4 @@ The full list is the last section of [LCL differences](../lcl-differences.en.md)
 - **Commands**: a descendant of `TTyRichCommand` given to `Document.Execute` is one undo step.
 - **The ruler**: `DrawMarker`, `DrawTickLabel` and `Snap` are virtual; `OnMarkerChanging` (can refuse a change) and `OnMarkerChanged`.
 - **The actions**: a descendant overrides `UpdateOn` and `ExecuteOn`; the picture's `AskFileName` and find and replace's `ShowDialog` and `ShowNotFound` are virtual, for a program's own interface.
-- **A toolbar of your own**: without these actions, `CaretParagraphView`, `AddHandlerOnParagraphView`, `ApplyParagraphFormat` and the `Can…` functions are public; the ruler and the actions use only public calls like these.
+- **A toolbar of your own**: without these actions, `ApplyCharacterFormat`, `ApplyParagraphFormat`, the `Can…` functions, `AddHandlerOnParagraphView` (when to ask again) and `CaretParagraphView` are public; the ruler and the actions use only public calls like these.

@@ -57,7 +57,7 @@ RichEdit1.SaveToFile('说明.rtf');
 
 底下是文档模型 `Document`(`TTyRichDocument`，单元 `tyControls.RichEdit.Model`)。对它的每一次修改都是一个命令对象，交给 `Document.Execute`：插入文字 `TTyRichInsertText`、删除 `TTyRichDelete`、字符格式 `TTyRichSetCharFormat`、段落格式 `TTyRichSetParaFormat`、对象 `TTyRichInsertObject`、表格的 `TTyRichInsertTable`、`TTyRichInsertRow` 等等(单元 `tyControls.RichEdit.Commands`)。命令只记下改动(片段的引用、旧值)，从不复制整篇文档。`Document.BeginUpdate` / `EndUpdate` 中间的命令合成一步撤销；控件的 `BeginEdit` / `EndEdit` 也是这样，还把选区放回去。
 
-用户的操作是另一组方法：`InsertTable`、`InsertRow`、`DeleteColumn`、`InsertPictureFromFile`、`ApplyParagraphFormat`(标尺用的那个)、`FindNext`。它们像按键一样：只读或禁用时什么都不做，被拒绝时通过 `OnEditRefused` 告诉，不抛异常。每个都有对应的 `Can…`(`CanInsertTable`、`CanInsertPicture`、`CanUndo` ……)，工具栏可以拿它来变灰。
+用户的操作是另一组方法：`ApplyCharacterFormat`(工具栏的粗体、字体框)、`ApplyParagraphFormat`(对齐、缩进，标尺用的也是它)、`InsertTable`、`InsertRow`、`DeleteColumn`、`InsertPictureFromFile`、`FindNext`。它们像按键一样：只读或禁用时什么都不做，被拒绝时通过 `OnEditRefused` 告诉一次，不抛异常。和格式 API 的区别就在这里：`SelAttributes` 是程序的写，不管只读，被拒绝时抛 `ETyRichEdit`。每个操作都有对应的 `Can…`(`CanFormatCharacters`、`CanFormatParagraphs`、`CanInsertTable`、`CanInsertPicture`、`CanUndo` ……)，回答这个操作现在会不会被接受，工具栏拿它来变灰。它们不需要排版，读的东西有上限：选区里从第一段起最多 `CRichFormatQueryParas` 段，每段查一下域的深度和所在的单元格。
 
 ## 3. 标尺 `TTyRichEditRuler`
 
@@ -84,10 +84,10 @@ RichEdit1.SaveToFile('说明.rtf');
 | `TTyRichEditUndo` / `Redo` | 撤销 / 重做 | Ctrl+Z / Y | `CanUndo` / `CanRedo` | — |
 | `TTyRichEditZoomIn` / `ZoomOut` / `ZoomReset` | 放大 / 缩小 / 100% | Ctrl+加号 / 减号 / 0 | 还没到缩放的上限 / 下限 | 100%：缩放是 100 |
 
-"用户这里能不能改格式"是控件自己的回答(`CaretParagraphView` 的 `Editable`：不是只读、可用、文档不在载入或保存、不在更新中)。动作不加自己的规则：显示什么由控件回答，做什么也走控件给用户的那扇门，所以每个动作就是一步撤销，名字和格式 API 的一样，被拒绝时控件通过 `OnEditRefused` 告诉，和按键被拒一样。
+"用户这里能不能改格式"是控件自己的回答(`CanFormatCharacters`、`CanFormatParagraphs`：不是只读、可用、文档不在载入或保存、不在更新中，而且选区不全在域的结果里、不全在含嵌套表格的行里)。动作不加自己的规则：显示什么由控件回答，做什么也走控件给用户的那扇门，所以每个动作就是一步撤销，名字和格式 API 的一样，被拒绝时控件通过 `OnEditRefused` 告诉，和按键被拒一样。
 
 - **作用于哪个富文本**：设了 `RichEdit` 就是它(别的窗体上的也行)；没设就是有焦点的那个 `TTyCustomRichEdit`；都没有就变灰。
-- **字符样式**通过 `SelAttributes` 写：没选东西时，它决定接下来打的字是什么格式，不算一步撤销。`SelAttributes` 是程序用的那一层，不挡只读，所以动作只在用户能改格式的地方写；域的结果里被拒绝的，控件会告诉，不会抛出来。
+- **字符样式**通过 `ApplyCharacterFormat` 写：没选东西时，它决定接下来打的字是什么格式，不算一步撤销。在域的结果里、含嵌套表格的行里，格式动作是灰的；插入图片也一样。
 - **缩进**把插入点所在段落的首行移到下一个(上一个)半英寸处，不越过左边距；选了几个段落时都移到那个位置，各自保留自己的悬挂距离(和标尺的规则一样)。
 - **插入表格**插入 `Rows` × `Columns`(默认 3 × 3)。插入前触发 `OnChooseSize`，程序可以在这里问用户，改大小，或者取消。
 - **插入图片**用本库自己的打开对话框(`Dialog`，一个 `TTyOpenPictureDialog`)，过滤器是控件能读的格式(`TyRichPictureFilter`：LCL 能读的图片都行，PNG 和 JPEG 原样保存字节，其他转成 PNG；不收 WMF、EMF)。
@@ -119,7 +119,7 @@ RichEdit1.SaveToFile('说明.rtf');
 | 100 MB 的 RTF：在中间敲一个字，到画完 | 1.6 毫秒 |
 | 载入 100 MB 后进程的峰值内存 | 约 180 MB |
 | 10,000 行的表格里按 Tab | 1.1 毫秒 |
-| 全选 100 MB 的 txt / RTF 后，23 个动作的第一轮更新(问控件的那一次) | 55 / 64 毫秒 |
+| 全选 100 MB 的 txt / RTF 后，23 个动作的第一轮更新(问控件的那一次) | 50 / 70 毫秒 |
 | 之后的一轮空闲更新 | 0.0 毫秒 |
 | 移动 50 M 个字符的选区(拖放) | 314 毫秒 |
 | 粘贴 10 MB 的 RTF | 3.6 秒 |
@@ -151,4 +151,4 @@ RichEdit1.SaveToFile('说明.rtf');
 - **命令**：自己写一个 `TTyRichCommand` 的子类，交给 `Document.Execute`，它就是一步撤销。
 - **标尺**：`DrawMarker`、`DrawTickLabel`、`Snap` 是虚方法；`OnMarkerChanging`(可以不让改)、`OnMarkerChanged`。
 - **动作**：子类覆盖 `UpdateOn`、`ExecuteOn`；插入图片的 `AskFileName`、查找替换的 `ShowDialog` 和 `ShowNotFound` 是虚方法，可以换成程序自己的界面。
-- **自己的工具栏**：不用这套动作也行，`CaretParagraphView`、`AddHandlerOnParagraphView`、`ApplyParagraphFormat` 和各个 `Can…` 都是公开的，标尺和动作只用这些公开的调用。
+- **自己的工具栏**：不用这套动作也行，`ApplyCharacterFormat`、`ApplyParagraphFormat`、各个 `Can…`、`AddHandlerOnParagraphView`(什么时候该再问一次)、`CaretParagraphView` 都是公开的，标尺和动作只用这些公开的调用。

@@ -21,6 +21,7 @@ uses
   Forms, ActnList, Dialogs,
   tyControls.Controller, tyControls.StrConsts,
   tyControls.RichEdit.Text, tyControls.RichEdit.Model, tyControls.RichEdit.Attrs,
+  tyControls.RichEdit.Commands,
   tyControls.RichEdit, tyControls.RichEdit.Actions, tyControls.Dialogs.Find,
   tyControls.Dialogs.FileDialog, test.richedit.control;
 
@@ -98,6 +99,8 @@ type
     procedure TestTheCheckedStatesFollowTheFormatApi;
     procedure TestAPlainTextDocument;
     procedure TestAFieldsResultIsRefusedAndToldOnce;
+    procedure TestTheCharacterDoorIsTheUsers;
+    procedure TestCanInsertPictureReadsThePlace;
     procedure TestAnIdleRoundAsksTheControlNothing;
     procedure TestTheTableActionAsksForItsSize;
     procedure TestFindAndReplaceUseThePackagesDialogs;
@@ -351,8 +354,9 @@ end;
 { Read-only: every action that edits is disabled (Undo with a step to undo too) and does
   nothing when run anyway; find and zoom stay. In a table whose structure cannot change (a
   merged cell, a nested table) Insert table is disabled - the control's CanInsertTable; in the
-  row that holds the nested table Insert picture is enabled (CanInsertPicture reads no place)
-  and its run is refused by the control, told once, no step. }
+  row that holds the nested table, where the control would refuse them, Insert picture and the
+  format actions are disabled (CanInsertPicture, CanFormatCharacters, CanFormatParagraphs):
+  run anyway, no file is asked for, nothing is told, no step. }
 procedure TTyRichEditActionsTest.TestActionsDisableOnReadOnlyAndLockedTables;
 const
   Editing: array[0..17] of TTyRichEditActionClass = (
@@ -404,13 +408,14 @@ begin
   pic := TPictureProbe.Create(FForm);
   pic.RichEdit := FRich;
   pic.Answer := PngFile;
-  AssertTrue('insert picture: the control does not look at the place', UpdatedOn(pic).Enabled);
+  AssertFalse('insert picture: the place is the control''s no', UpdatedOn(pic).Enabled);
+  AssertFalse('bold: the same', UpdatedOn(Make(TTyRichEditBold)).Enabled);
+  AssertFalse('centre: the same', UpdatedOn(Make(TTyRichEditAlignCenter)).Enabled);
   depth := FRich.Document.UndoDepth;
   FRefusals := 0;
-  AssertTrue('run', pic.Execute);
-  AssertEquals('asked for a file once', 1, pic.Asks);
-  AssertEquals('refused, told once', 1, FRefusals);
-  AssertEquals('the row''s reason', rsRichEditRefusedFixedRow, FReason);
+  pic.ExecuteTarget(FRich);
+  AssertEquals('no file asked for', 0, pic.Asks);
+  AssertEquals('nothing told', 0, FRefusals);
   AssertEquals('no step', depth, FRich.Document.UndoDepth);
 end;
 
@@ -693,23 +698,26 @@ begin
   AssertEquals('nothing refused', 0, FRefusals);
 end;
 
-{ A paragraph of Word's table of contents (inside a field's result): the control has no query
-  for it, so the format actions are enabled; their run is refused by the control - the
-  paragraph action's door and the format API's write alike -, told once with the field's
-  reason, never raised, no step. }
+{ A paragraph of Word's table of contents (inside a field's result): the control says the
+  formats cannot change there, so the format actions are disabled; their doors called there
+  anyway refuse, tell once with the field's reason, never raise, change nothing. A selection
+  that reaches outside the result is formatted outside it, nothing told. }
 procedure TTyRichEditActionsTest.TestAFieldsResultIsRefusedAndToldOnce;
 var
-  p, i, depth: Integer;
+  p, i, k, depth: Integer;
   a: TTyRichEditAction;
-  ps, pl: TTyRichPos;
+  ps, pl, q: TTyRichPos;
+  f: TTyCharFormat;
+  pf: TTyParaFormat;
 const
   Cases: array[0..2] of TTyRichEditActionClass = (TTyRichEditAlignCenter, TTyRichEditBullets,
     TTyRichEditBold);
 begin
   LoadFixture('word-toc.rtf');
   p := -1;
-  for i := 0 to FRich.Document.Text.ParaCount - 1 do
-    if FRich.Document.ParaEndsInField(i) then
+  // a paragraph wholly inside the contents' result (the contents open inside the one before)
+  for i := 1 to FRich.Document.Text.ParaCount - 1 do
+    if FRich.Document.ParaEndsInField(i) and FRich.Document.ParaEndsInField(i - 1) then
     begin
       p := i;
       Break;
@@ -721,14 +729,191 @@ begin
   begin
     Select(ps + 1, pl - 2);
     a := Make(Cases[i]);
-    AssertTrue(Cases[i].ClassName + ' enabled: the control does not say', UpdatedOn(a).Enabled);
+    AssertFalse(Cases[i].ClassName + ' disabled: the control''s answer', UpdatedOn(a).Enabled);
     depth := FRich.Document.UndoDepth;
     FRefusals := 0;
     a.Execute;
-    AssertEquals(Cases[i].ClassName + ' told once', 1, FRefusals);
-    AssertEquals(Cases[i].ClassName + ' the field''s reason', rsRichEditRefusedField, FReason);
+    AssertEquals(Cases[i].ClassName + ' not run: nothing told', 0, FRefusals);
     AssertEquals(Cases[i].ClassName + ' no step', depth, FRich.Document.UndoDepth);
   end;
+  Select(ps + 1, pl - 2);
+  AssertFalse('characters: no', FRich.CanFormatCharacters);
+  AssertFalse('paragraphs: no', FRich.CanFormatParagraphs);
+  f := TyDefaultCharFormat;
+  Include(f.Style, fsBold);
+  depth := FRich.Document.UndoDepth;
+  FRefusals := 0;
+  AssertFalse('the character door refuses', FRich.ApplyCharacterFormat([cffBold], f));
+  AssertEquals('told once', 1, FRefusals);
+  AssertEquals('the field''s reason', rsRichEditRefusedField, FReason);
+  pf := TyDefaultParaFormat;
+  pf.Align := paraCenter;
+  AssertFalse('the paragraph door refuses', FRich.ApplyParagraphFormat([pffAlign], pf));
+  AssertEquals('told once again', 2, FRefusals);
+  AssertEquals('the field''s reason too', rsRichEditRefusedField, FReason);
+  AssertEquals('no step', depth, FRich.Document.UndoDepth);
+  // the caret inside the result: typing there would be refused, so would its format
+  Select(ps + 2, 0);
+  AssertFalse('the caret in a result: no', FRich.CanFormatCharacters);
+  // a link in an ordinary paragraph: its characters no, its paragraph yes
+  q := -1;
+  for i := 0 to FRich.Document.Text.ParaCount - 1 do
+    if not FRich.Document.ParaEndsInField(i) then
+    begin
+      for k := 1 to FRich.Document.Text.ParaLength(i) - 1 do
+        // (two inside: the caret rests outside a link at its very edges)
+        if (FRich.Document.ChangeRefusal(FRich.Document.Text.ParaStart(i) + k, 0) = rcrField) and
+          (FRich.Document.ChangeRefusal(FRich.Document.Text.ParaStart(i) + k + 1, 0) = rcrField) and
+          (FRich.Document.ChangeRefusal(FRich.Document.Text.ParaStart(i) + k + 2, 0) = rcrField) then
+        begin
+          q := FRich.Document.Text.ParaStart(i) + k + 2;
+          Break;
+        end;
+      if q >= 0 then Break;
+    end;
+  AssertTrue('a link in a paragraph of its own', q >= 0);
+  Select(q, 0);
+  AssertEquals('the caret stays inside the link', q, FRich.SelStart);
+  AssertFalse('bold: no', UpdatedOn(Make(TTyRichEditBold)).Enabled);
+  AssertTrue('centre: yes', UpdatedOn(Make(TTyRichEditAlignCenter)).Enabled);
+  // from the paragraph before into the result: formatted outside it, nothing told
+  // from the paragraph before the contents into their first entry
+  i := 0;
+  while not FRich.Document.ParaEndsInField(i) do Inc(i);
+  AssertTrue('a paragraph before the contents', i > 0);
+  Select(FRich.Document.Text.ParaStart(i - 1), FRich.Document.Text.ParaStart(i) + 2 -
+    FRich.Document.Text.ParaStart(i - 1));
+  AssertFalse('the selection reaches outside the result',
+    FRich.Document.FieldOnly(FRich.SelStart, FRich.SelLength));
+  AssertTrue('reaching outside: yes', FRich.CanFormatCharacters);
+  FRefusals := 0;
+  AssertTrue('formatted', FRich.ApplyCharacterFormat([cffBold], f));
+  AssertEquals('nothing told', 0, FRefusals);
+  AssertEquals('one step', depth + 1, FRich.Document.UndoDepth);
+end;
+
+{ ApplyCharacterFormat is the user's: ReadOnly, disabled - nothing done, nothing told, as for a
+  key (the format API, from code, writes there); a selection formatted in one step named as the
+  format API's, the selection kept; nothing selected, the next typed text's format, no step; the
+  document loading or being saved, told once. The queries agree with it, and need no layout:
+  a rich edit never laid out answers as any other. }
+procedure TTyRichEditActionsTest.TestTheCharacterDoorIsTheUsers;
+var
+  f: TTyCharFormat;
+  depth: Integer;
+  fresh: TActRich;
+begin
+  f := TyDefaultCharFormat;
+  Include(f.Style, fsItalic);
+  Select(0, 5);
+  FRich.ReadOnly := True;
+  AssertFalse('read-only: no', FRich.CanFormatCharacters);
+  AssertFalse('read-only: no paragraphs', FRich.CanFormatParagraphs);
+  depth := FRich.Document.UndoDepth;
+  AssertFalse('read-only: the door does nothing', FRich.ApplyCharacterFormat([cffItalic], f));
+  AssertEquals('nothing told', 0, FRefusals);
+  AssertFalse('not italic', FRich.SelAttributes.Italic);
+  // nothing selected, read-only: not even the next typed text's format
+  Select(2, 0);
+  AssertFalse('read-only at the caret: nothing', FRich.ApplyCharacterFormat([cffItalic], f));
+  AssertFalse('no typing format', FRich.SelAttributes.Italic);
+  Select(0, 5);
+  FRich.ReadOnly := False;
+  FRich.Enabled := False;
+  AssertFalse('disabled: no', FRich.CanFormatCharacters);
+  AssertFalse('disabled: the door does nothing', FRich.ApplyCharacterFormat([cffItalic], f));
+  FRich.Enabled := True;
+  AssertTrue('yes', FRich.CanFormatCharacters);
+  AssertTrue('yes, paragraphs', FRich.CanFormatParagraphs);
+  AssertTrue('done', FRich.ApplyCharacterFormat([cffItalic], f));
+  AssertEquals('one step', depth + 1, FRich.Document.UndoDepth);
+  AssertEquals('named as the format API''s', rsRichUndoCharFormat, FRich.Document.UndoDescription);
+  AssertEquals('the selection kept', 0, FRich.SelStart);
+  AssertEquals('its length kept', 5, FRich.SelLength);
+  AssertTrue('italic', FRich.SelAttributes.Italic);
+  AssertEquals('nothing told', 0, FRefusals);
+  // nothing selected: the typing format
+  Select(8, 0);
+  depth := FRich.Document.UndoDepth;
+  Exclude(f.Style, fsItalic);
+  Include(f.Style, fsUnderline);
+  AssertTrue('at the caret', FRich.ApplyCharacterFormat([cffUnderline], f));
+  AssertEquals('no step', depth, FRich.Document.UndoDepth);
+  AssertTrue('the next typed text''s format', FRich.SelAttributes.Underline);
+  // a rich edit never laid out
+  fresh := NewRich;
+  try
+    fresh.Lines.Text := 'Never painted';
+    AssertTrue('no layout needed: characters', fresh.CanFormatCharacters);
+    AssertTrue('no layout needed: paragraphs', fresh.CanFormatParagraphs);
+    with TTyRichEditBold.Create(FForm) do
+    begin
+      RichEdit := fresh;
+      Update;
+      AssertTrue('bold enabled before the first paint', Enabled);
+    end;
+    with TTyRichEditAlignCenter.Create(FForm) do
+    begin
+      RichEdit := fresh;
+      Update;
+      AssertTrue('centre enabled before the first paint', Enabled);
+    end;
+  finally
+    fresh.Free;
+  end;
+end;
+
+{ CanInsertPicture reads the place: no in a field's result, in a row that holds a nested
+  table, across cells - where the insert would be refused; yes in plain text. }
+procedure TTyRichEditActionsTest.TestCanInsertPictureReadsThePlace;
+var
+  p, i, depth: Integer;
+  c: TTyRichCell;
+  pf: TTyParaFormat;
+begin
+  Select(2, 0);
+  AssertTrue('plain text: yes', FRich.CanInsertPicture);
+  LoadFixture('word-toc.rtf');
+  p := -1;
+  for i := 1 to FRich.Document.Text.ParaCount - 1 do
+    if FRich.Document.ParaEndsInField(i) and FRich.Document.ParaEndsInField(i - 1) then
+    begin
+      p := i;
+      Break;
+    end;
+  Select(FRich.Document.Text.ParaStart(p) + 2, 0);
+  AssertFalse('in a field''s result: no', FRich.CanInsertPicture);
+  LoadFixture('hand-word-table-merged.rtf');
+  p := FirstParaWhere(True);
+  Select(FRich.Document.Text.ParaStart(p), 0);
+  AssertFalse('in the row that holds a nested table: no', FRich.CanInsertPicture);
+  AssertFalse('nor characters', FRich.CanFormatCharacters);
+  AssertFalse('nor paragraphs', FRich.CanFormatParagraphs);
+  // the paragraph door there: told once, no empty step
+  depth := FRich.Document.UndoDepth;
+  FRefusals := 0;
+  pf := TyDefaultParaFormat;
+  pf.Align := paraRight;
+  AssertFalse('the paragraph door refuses', FRich.ApplyParagraphFormat([pffAlign], pf));
+  AssertEquals('told once', 1, FRefusals);
+  AssertEquals('the row''s reason', rsRichEditRefusedFixedRow, FReason);
+  AssertEquals('no step', depth, FRich.Document.UndoDepth);
+  // across two cells of an ordinary row
+  p := FirstParaWhere(False);
+  c := FRich.Document.CellAt(p);
+  i := p + 1;
+  while (i < FRich.Document.Text.ParaCount) and (FRich.Document.CellAt(i) <> nil) and
+    (FRich.Document.CellAt(i).Row = c.Row) and (FRich.Document.CellAt(i) = c) do Inc(i);
+  if (i < FRich.Document.Text.ParaCount) and (FRich.Document.CellAt(i) <> nil) and
+    (FRich.Document.CellAt(i).Row = c.Row) then
+  begin
+    Select(FRich.Document.Text.ParaStart(p), FRich.Document.Text.ParaStart(i) + 1 -
+      FRich.Document.Text.ParaStart(p));
+    AssertFalse('across cells: no', FRich.CanInsertPicture);
+  end;
+  Select(FRich.Document.Text.ParaStart(p), 0);
+  AssertTrue('in an ordinary cell: yes', FRich.CanInsertPicture);
+  AssertTrue('and its formats', FRich.CanFormatCharacters and FRich.CanFormatParagraphs);
 end;
 
 { ---- the cost ---- }

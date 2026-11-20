@@ -144,6 +144,10 @@ const
     consistent". }
   CRichConsistWork = 130000;
   CRichConsistParseBytes = 192 * 1024;
+  { The most paragraphs CanFormatCharacters / CanFormatParagraphs look at (from the
+    selection's first): a few look-ups each, so the queries stay within a keystroke over any
+    selection; past them the answer is True and the door's own check tells. }
+  CRichFormatQueryParas = 1024;
   { The most bytes of image a picture is made from (a paste, TyRichMakePicture): 128 MB. With
     CRichPictureMaxPixels (32 Mi pixels: the most the layouter decodes - a bigger picture
     would only ever show as a placeholder - and 128 MB once decoded) it bounds what one paste
@@ -2479,8 +2483,10 @@ type
     function InsertPictureFromStream(AStream: TStream): Boolean;
     function InsertPicture(AGraphic: TGraphic): Boolean;
     { An insert would be taken now (for an action's Update): not ReadOnly, enabled, not inside
-      the document's update, the document taking edits, not a plain text document. Reads
-      nothing, never raises. }
+      the document's update, the document taking edits, not a plain text document, and a
+      place a paste could go - the selection (or the caret) not inside a field's result, not
+      in a row that holds a nested table, not across cells. Reads the selection's two ends,
+      never raises. }
     function CanInsertPicture: Boolean;
     { The handles. When the selection is exactly one object that can be resized
       (TTyRichObject.CanResize - a picture, also one shown as a placeholder) and the user may
@@ -3018,11 +3024,47 @@ type
       scrolled, one OnChange. As the user's other actions: an open composition ends first; a
       read-only or disabled control, one in the designer or inside the document's update does
       nothing and tells nothing (False); a refusal - the document loading, incomplete or being
-      saved, a range of fields' results only - is told once through EditRefused
+      saved, a range of fields' results only, a range of a row that holds a nested table
+      only (CanFormatParagraphs says so first) - is told once through EditRefused
       (OnEditRefused), never raised, and nothing changes. A plain-text document is formatted as
       the format API formats it (a text save leaves the formats out). True: the formats
       changed. A handler the action runs may free the control: False then. }
     function ApplyParagraphFormat(AMask: TTyParaFormatMask; const AValue: TTyParaFormat): Boolean;
+  private
+    { The place's half of CanFormatCharacters / CanFormatParagraphs (AParagraphs) and of their
+      doors: '' when the change would be taken at the selection, else the reason it would be
+      told (rsRichEditRefusedField, rsRichEditRefusedFixedRow). See CanFormatCharacters for
+      what it reads. }
+    function FormatPlaceRefusal(AParagraphs: Boolean): string;
+  public
+    { The user's character format action (a toolbar's Bold, a font box): AMask's fields of
+      AValue (TyMergeCharFormat's meanings) to the selection, in one command -
+      TTyRichSetCharFormat, one undo step named as the format API's -, the selection kept and
+      the view not scrolled; with nothing selected, the format the next typed text gets (no
+      command, no undo step, as SelAttributes). A name or a size that is the base's leaves the
+      text without one of its own, as the format API does. What makes it the user's and not
+      the format API's (SelAttributes, SetTextAttributes, which are edits from code): ReadOnly,
+      a disabled control, the designer and the document's update take nothing and tell nothing
+      (False), as for a key; an open composition ends first; a refusal - the document loading,
+      incomplete or being saved, every character of the selection (or the caret) inside a
+      field's result or in a row that holds a nested table - is told once through
+      EditRefused (OnEditRefused), never raised, and nothing changes. A selection that reaches
+      outside a result is formatted outside it (the result keeps its look) and nothing is
+      told. True: done. A handler it runs may free the control: False then. }
+    function ApplyCharacterFormat(AMask: TTyCharFormatMask; const AValue: TTyCharFormat): Boolean;
+    { Would ApplyCharacterFormat / ApplyParagraphFormat take the change now (what a toolbar's
+      Update greys its buttons by), never told, never raised: False when ReadOnly, disabled,
+      in the designer, inside the document's update, while the document loads, is incomplete
+      or is being saved, and where the door would refuse - characters: every character of the
+      selection inside a field's result or in a row that holds a nested table (nothing
+      selected: typing at the caret would be refused there); paragraphs: every paragraph the
+      selection touches ends inside a field's result or is in such a row. No layout is
+      needed. What they read is what the engine's own refusal reads, bounded: the selection's
+      paragraphs from its first, each one's field depths and cell, stopping at the first that
+      takes the change - at most CRichFormatQueryParas of them; past that the answer is True
+      (the door's own check then tells). }
+    function CanFormatCharacters: Boolean;
+    function CanFormatParagraphs: Boolean;
   published
     { TControl publishes Cursor and a redeclaration cannot unpublish it (the memo's #108). }
     property Cursor default crIBeam;
@@ -8040,9 +8082,17 @@ begin
 end;
 
 function TTyCustomRichEdit.CanInsertPicture: Boolean;
+var
+  s, n: TTyRichPos;
 begin
   Result := not FReadOnly and IsEnabled and not ViewBehind and (RefusalReason = '') and
     not PlainTextDocument;
+  if not Result then Exit;
+  // the place InsertPictureMade asks for, untold: the selection's deletion, the insert, the cells
+  s := GetSelStart;
+  n := GetSelLength;
+  Result := ((n <= 0) or FDoc.CanChange(s, n)) and FDoc.CanChange(s, 0) and
+    FDoc.UserRangeAllowed(s, n);
 end;
 
 function TTyCustomRichEdit.ReadPictureStream(AStream: TStream; AFromFile: Boolean;
@@ -18877,6 +18927,7 @@ var
   r: Boolean;
   first, last: Integer;
   place: TTyRichEditPlace;
+  reason: string;
 
   procedure Work;
   begin
@@ -18897,7 +18948,162 @@ begin
   // the paragraphs of the selection as it is once what is being composed went in
   EndCompositionForUser;
   if FReadOnly or not IsEnabled or ViewBehind then Exit;
+  // where every paragraph would be passed over (CanFormatParagraphs' no): told, no empty step
+  if RefusalReason = '' then
+  begin
+    reason := FormatPlaceRefusal(True);
+    if reason <> '' then
+    begin
+      EditRefused(reason);
+      Exit;
+    end;
+  end;
   ParasOfRange(GetSelStart, GetSelLength, first, last);
+  place := Default(TTyRichEditPlace);
+  place.Anchor := CRichPlaceStays;
+  place.Caret := CRichPlaceStays;
+  place.AtLineEnd := FCaretAtEnd;
+  r := False;
+  Guard(life, @Work);
+  Result := r and not life.Gone;
+end;
+
+function TTyCustomRichEdit.FormatPlaceRefusal(AParagraphs: Boolean): string;
+var
+  t: TTyRichText;
+  s, n, ps, a, b: TTyRichPos;
+  first, last, k: Integer;
+  field, fixed: Boolean;
+
+  // a row that holds a nested table: the format writes pass its paragraphs over
+  function FixedRow(AIndex: Integer): Boolean;
+  var
+    c: TTyRichCell;
+  begin
+    c := FDoc.CellAt(AIndex);
+    Result := (c <> nil) and c.Row.HoldsNestedTable;
+  end;
+
+begin
+  Result := '';
+  t := FDoc.Text;
+  s := GetSelStart;
+  n := GetSelLength;
+  field := False;
+  fixed := False;
+  if AParagraphs then
+  begin
+    // ApplyParaFormat's rule: a paragraph that ends in a result, or in such a row, is passed over
+    ParasOfRange(s, n, first, last);
+    for k := first to last do
+    begin
+      if k - first >= CRichFormatQueryParas then Exit;
+      if FixedRow(k) then fixed := True
+      else if FDoc.ParaEndsInField(k) then field := True
+      else Exit;
+    end;
+  end
+  else if n <= 0 then
+    // the format the next typed text gets: refused where that typing would be
+    case FDoc.ChangeRefusal(s, 0) of
+      rcrField: field := True;
+      rcrFixedRow: fixed := True;
+    else
+      Exit;
+    end
+  else
+  begin
+    // ApplyCharFormat's: the characters of a result, and such a row's, are passed over
+    first := t.ParaOfPos(s);
+    last := t.ParaOfPos(s + n - 1);
+    for k := first to last do
+    begin
+      if k - first >= CRichFormatQueryParas then Exit;
+      if FixedRow(k) then
+      begin
+        fixed := True;
+        Continue;
+      end;
+      ps := t.ParaStart(k);
+      a := Math.Max(s, ps);
+      // (the paragraph's separator with it, when the range takes it)
+      b := Math.Min(Math.Min(s + n, ps + t.ParaLength(k) + 1), t.Length);
+      if (b > a) and not FDoc.FieldOnly(a, b - a) then Exit;
+      field := True;
+    end;
+  end;
+  if field then Result := rsRichEditRefusedField
+  else if fixed then Result := rsRichEditRefusedFixedRow;
+end;
+
+function TTyCustomRichEdit.CanFormatCharacters: Boolean;
+begin
+  Result := not FReadOnly and IsEnabled and not ViewBehind and
+    not (csDesigning in ComponentState) and (RefusalReason = '') and
+    (FormatPlaceRefusal(False) = '');
+end;
+
+function TTyCustomRichEdit.CanFormatParagraphs: Boolean;
+begin
+  Result := not FReadOnly and IsEnabled and not ViewBehind and
+    not (csDesigning in ComponentState) and (RefusalReason = '') and
+    (FormatPlaceRefusal(True) = '');
+end;
+
+function TTyCustomRichEdit.ApplyCharacterFormat(AMask: TTyCharFormatMask;
+  const AValue: TTyCharFormat): Boolean;
+var
+  life: TTyRichLife;
+  r: Boolean;
+  s, n: TTyRichPos;
+  reason: string;
+  base: TTyCharFormat;
+  keep: TTyCharFormatMask;
+  place: TTyRichEditPlace;
+
+  procedure Work;
+  begin
+    // as the façades' writes: the selection kept, no scroll
+    Inc(FApiWrite);
+    try
+      r := RunMade(TTyRichSetCharFormat.Create(TyRichRange(s, n), AMask, AValue, keep), place, True);
+    finally
+      if not life.Gone then Dec(FApiWrite);
+    end;
+  end;
+
+begin
+  Result := False;
+  if (AMask = []) or (csDesigning in ComponentState) then Exit;
+  // a user's action: a viewer, a disabled control and an update take nothing and tell nothing
+  if FReadOnly or not IsEnabled or ViewBehind then Exit;
+  EndCompositionForUser;
+  if FReadOnly or not IsEnabled or ViewBehind then Exit;
+  reason := RefusalReason;
+  if reason = '' then reason := FormatPlaceRefusal(False);
+  if reason <> '' then
+  begin
+    EditRefused(reason);
+    Exit;
+  end;
+  s := GetSelStart;
+  n := GetSelLength;
+  if n <= 0 then
+  begin
+    // the format the next typed text gets (no command), as the format API sets it
+    ApiCharFormat(FCaret, 0, AMask, AValue);
+    Exit(True);
+  end;
+  // a name or a size that is the base's: the text keeps none of its own (ApiCharFormat's rule)
+  keep := [];
+  if AMask * [cffFontName, cffSize] <> [] then
+  begin
+    base := BaseCharFormat;
+    if (cffFontName in AMask) and (AValue.FontName <> '') and (AValue.FontName = base.FontName) then
+      Include(keep, cffFontName);
+    if (cffSize in AMask) and (AValue.SizeHalfPt > 0) and (AValue.SizeHalfPt = base.SizeHalfPt) then
+      Include(keep, cffSize);
+  end;
   place := Default(TTyRichEditPlace);
   place.Anchor := CRichPlaceStays;
   place.Caret := CRichPlaceStays;
