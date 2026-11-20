@@ -51,9 +51,9 @@ object MainForm: TMainForm
       ButtonSpacing = 2
       Indent = 6
       ShowHint = True
+      StyleOverride = '--toolbar-icon-size: 16px;'
       object BtnNew: TTySpeedButton
         Left = 6
-        Height = 28
         Top = 4
         Width = 28
         Action = ActNew
@@ -61,12 +61,10 @@ object MainForm: TMainForm
         StyleClass = 'ghost'
         IconFont = LucideFont
         GlyphName = 'file-plus'
-        GlyphSize = 16
         ShowCaption = False
       end
       object BtnOpen: TTySpeedButton
         Left = 36
-        Height = 28
         Top = 4
         Width = 28
         Action = ActOpen
@@ -74,12 +72,10 @@ object MainForm: TMainForm
         StyleClass = 'ghost'
         IconFont = LucideFont
         GlyphName = 'folder-open'
-        GlyphSize = 16
         ShowCaption = False
       end
       object BtnSave: TTySpeedButton
         Left = 66
-        Height = 28
         Top = 4
         Width = 28
         Action = ActSave
@@ -87,18 +83,15 @@ object MainForm: TMainForm
         StyleClass = 'ghost'
         IconFont = LucideFont
         GlyphName = 'save'
-        GlyphSize = 16
         ShowCaption = False
       end
       object Sep1: TTyToolSeparator
         Left = 96
-        Height = 28
         Top = 4
         Width = 8
       end
       object BtnCut: TTySpeedButton
         Left = 106
-        Height = 28
         Top = 4
         Width = 28
         Action = ActCut
@@ -106,12 +99,10 @@ object MainForm: TMainForm
         StyleClass = 'ghost'
         IconFont = LucideFont
         GlyphName = 'scissors'
-        GlyphSize = 16
         ShowCaption = False
       end
       object BtnCopy: TTySpeedButton
         Left = 136
-        Height = 28
         Top = 4
         Width = 28
         Action = ActCopy
@@ -119,12 +110,10 @@ object MainForm: TMainForm
         StyleClass = 'ghost'
         IconFont = LucideFont
         GlyphName = 'copy'
-        GlyphSize = 16
         ShowCaption = False
       end
       object BtnPaste: TTySpeedButton
         Left = 166
-        Height = 28
         Top = 4
         Width = 28
         Action = ActPaste
@@ -132,18 +121,15 @@ object MainForm: TMainForm
         StyleClass = 'ghost'
         IconFont = LucideFont
         GlyphName = 'clipboard-paste'
-        GlyphSize = 16
         ShowCaption = False
       end
       object Sep2: TTyToolSeparator
         Left = 196
-        Height = 28
         Top = 4
         Width = 8
       end
       object BtnUndo: TTySpeedButton
         Left = 206
-        Height = 28
         Top = 4
         Width = 28
         Action = ActUndo
@@ -151,12 +137,10 @@ object MainForm: TMainForm
         StyleClass = 'ghost'
         IconFont = LucideFont
         GlyphName = 'undo-2'
-        GlyphSize = 16
         ShowCaption = False
       end
       object BtnRedo: TTySpeedButton
         Left = 236
-        Height = 28
         Top = 4
         Width = 28
         Action = ActRedo
@@ -164,18 +148,15 @@ object MainForm: TMainForm
         StyleClass = 'ghost'
         IconFont = LucideFont
         GlyphName = 'redo-2'
-        GlyphSize = 16
         ShowCaption = False
       end
       object Sep3: TTyToolSeparator
         Left = 266
-        Height = 28
         Top = 4
         Width = 8
       end
       object BtnFind: TTySpeedButton
         Left = 276
-        Height = 28
         Top = 4
         Width = 28
         Action = ActFind
@@ -183,12 +164,10 @@ object MainForm: TMainForm
         StyleClass = 'ghost'
         IconFont = LucideFont
         GlyphName = 'search'
-        GlyphSize = 16
         ShowCaption = False
       end
       object BtnReplace: TTySpeedButton
         Left = 306
-        Height = 28
         Top = 4
         Width = 28
         Action = ActReplace
@@ -196,18 +175,15 @@ object MainForm: TMainForm
         StyleClass = 'ghost'
         IconFont = LucideFont
         GlyphName = 'replace'
-        GlyphSize = 16
         ShowCaption = False
       end
       object Sep4: TTyToolSeparator
         Left = 336
-        Height = 28
         Top = 4
         Width = 8
       end
       object BtnInsertPicture: TTySpeedButton
         Left = 346
-        Height = 28
         Top = 4
         Width = 28
         Action = ActInsertPicture
@@ -215,12 +191,10 @@ object MainForm: TMainForm
         StyleClass = 'ghost'
         IconFont = LucideFont
         GlyphName = 'image'
-        GlyphSize = 16
         ShowCaption = False
       end
       object BtnInsertTable: TTySpeedButton
         Left = 376
-        Height = 28
         Top = 4
         Width = 28
         Action = ActInsertTable
@@ -228,18 +202,15 @@ object MainForm: TMainForm
         StyleClass = 'ghost'
         IconFont = LucideFont
         GlyphName = 'table'
-        GlyphSize = 16
         ShowCaption = False
       end
       object Sep5: TTyToolSeparator
         Left = 406
-        Height = 28
         Top = 4
         Width = 8
       end
       object BtnZoomOut: TTySpeedButton
         Left = 416
-        Height = 28
         Top = 4
         Width = 28
         Action = ActZoomOut
@@ -247,12 +218,10 @@ object MainForm: TMainForm
         StyleClass = 'ghost'
         IconFont = LucideFont
         GlyphName = 'zoom-out'
-        GlyphSize = 16
         ShowCaption = False
       end
       object BtnZoomIn: TTySpeedButton
         Left = 446
-        Height = 28
         Top = 4
         Width = 28
         Action = ActZoomIn
@@ -260,7 +229,6 @@ object MainForm: TMainForm
         StyleClass = 'ghost'
         IconFont = LucideFont
         GlyphName = 'zoom-in'
-        GlyphSize = 16
         ShowCaption = False
       end
     end
@@ -274,6 +242,7 @@ object MainForm: TMainForm
       ButtonSpacing = 2
       Indent = 6
       ShowHint = True
+      StyleOverride = '--toolbar-icon-size: 16px;'
       object FontBox: TTyFontComboBox
         Left = 6
         Height = 28
@@ -299,13 +268,11 @@ object MainForm: TMainForm
       end
       object Sep6: TTyToolSeparator
         Left = 224
-        Height = 28
         Top = 4
         Width = 8
       end
       object BtnBold: TTySpeedButton
         Left = 234
-        Height = 28
         Top = 4
         Width = 28
         Action = ActBold
@@ -314,12 +281,10 @@ object MainForm: TMainForm
         StyleClass = 'ghost'
         IconFont = LucideFont
         GlyphName = 'bold'
-        GlyphSize = 16
         ShowCaption = False
       end
       object BtnItalic: TTySpeedButton
         Left = 264
-        Height = 28
         Top = 4
         Width = 28
         Action = ActItalic
@@ -328,12 +293,10 @@ object MainForm: TMainForm
         StyleClass = 'ghost'
         IconFont = LucideFont
         GlyphName = 'italic'
-        GlyphSize = 16
         ShowCaption = False
       end
       object BtnUnderline: TTySpeedButton
         Left = 294
-        Height = 28
         Top = 4
         Width = 28
         Action = ActUnderline
@@ -342,12 +305,10 @@ object MainForm: TMainForm
         StyleClass = 'ghost'
         IconFont = LucideFont
         GlyphName = 'underline'
-        GlyphSize = 16
         ShowCaption = False
       end
       object BtnStrikeOut: TTySpeedButton
         Left = 324
-        Height = 28
         Top = 4
         Width = 28
         Action = ActStrikeOut
@@ -356,12 +317,10 @@ object MainForm: TMainForm
         StyleClass = 'ghost'
         IconFont = LucideFont
         GlyphName = 'strikethrough'
-        GlyphSize = 16
         ShowCaption = False
       end
       object BtnSuperscript: TTySpeedButton
         Left = 354
-        Height = 28
         Top = 4
         Width = 28
         Action = ActSuperscript
@@ -370,12 +329,10 @@ object MainForm: TMainForm
         StyleClass = 'ghost'
         IconFont = LucideFont
         GlyphName = 'superscript'
-        GlyphSize = 16
         ShowCaption = False
       end
       object BtnSubscript: TTySpeedButton
         Left = 384
-        Height = 28
         Top = 4
         Width = 28
         Action = ActSubscript
@@ -384,18 +341,15 @@ object MainForm: TMainForm
         StyleClass = 'ghost'
         IconFont = LucideFont
         GlyphName = 'subscript'
-        GlyphSize = 16
         ShowCaption = False
       end
       object Sep7: TTyToolSeparator
         Left = 414
-        Height = 28
         Top = 4
         Width = 8
       end
       object BtnTextColor: TTySpeedButton
         Left = 424
-        Height = 28
         Top = 4
         Width = 28
         Action = ActTextColor
@@ -403,12 +357,10 @@ object MainForm: TMainForm
         StyleClass = 'ghost'
         IconFont = LucideFont
         GlyphName = 'baseline'
-        GlyphSize = 16
         ShowCaption = False
       end
       object TextSwatch: TTyColorButton
         Left = 454
-        Height = 28
         Top = 4
         Width = 16
         Hint = 'Choose the text color'
@@ -419,7 +371,6 @@ object MainForm: TMainForm
       end
       object BtnHighlight: TTySpeedButton
         Left = 472
-        Height = 28
         Top = 4
         Width = 28
         Action = ActHighlight
@@ -427,12 +378,10 @@ object MainForm: TMainForm
         StyleClass = 'ghost'
         IconFont = LucideFont
         GlyphName = 'highlighter'
-        GlyphSize = 16
         ShowCaption = False
       end
       object HighlightSwatch: TTyColorButton
         Left = 502
-        Height = 28
         Top = 4
         Width = 16
         Hint = 'Choose the highlight color'
@@ -443,13 +392,11 @@ object MainForm: TMainForm
       end
       object Sep8: TTyToolSeparator
         Left = 520
-        Height = 28
         Top = 4
         Width = 8
       end
       object BtnAlignLeft: TTySpeedButton
         Left = 530
-        Height = 28
         Top = 4
         Width = 28
         Action = ActAlignLeft
@@ -458,12 +405,10 @@ object MainForm: TMainForm
         StyleClass = 'ghost'
         IconFont = LucideFont
         GlyphName = 'align-left'
-        GlyphSize = 16
         ShowCaption = False
       end
       object BtnAlignCenter: TTySpeedButton
         Left = 560
-        Height = 28
         Top = 4
         Width = 28
         Action = ActAlignCenter
@@ -472,12 +417,10 @@ object MainForm: TMainForm
         StyleClass = 'ghost'
         IconFont = LucideFont
         GlyphName = 'align-center'
-        GlyphSize = 16
         ShowCaption = False
       end
       object BtnAlignRight: TTySpeedButton
         Left = 590
-        Height = 28
         Top = 4
         Width = 28
         Action = ActAlignRight
@@ -486,12 +429,10 @@ object MainForm: TMainForm
         StyleClass = 'ghost'
         IconFont = LucideFont
         GlyphName = 'align-right'
-        GlyphSize = 16
         ShowCaption = False
       end
       object BtnJustify: TTySpeedButton
         Left = 620
-        Height = 28
         Top = 4
         Width = 28
         Action = ActJustify
@@ -500,18 +441,15 @@ object MainForm: TMainForm
         StyleClass = 'ghost'
         IconFont = LucideFont
         GlyphName = 'align-justify'
-        GlyphSize = 16
         ShowCaption = False
       end
       object Sep9: TTyToolSeparator
         Left = 650
-        Height = 28
         Top = 4
         Width = 8
       end
       object BtnBullets: TTySpeedButton
         Left = 660
-        Height = 28
         Top = 4
         Width = 28
         Action = ActBullets
@@ -520,12 +458,10 @@ object MainForm: TMainForm
         StyleClass = 'ghost'
         IconFont = LucideFont
         GlyphName = 'list'
-        GlyphSize = 16
         ShowCaption = False
       end
       object BtnNumbering: TTySpeedButton
         Left = 690
-        Height = 28
         Top = 4
         Width = 28
         Action = ActNumbering
@@ -534,12 +470,10 @@ object MainForm: TMainForm
         StyleClass = 'ghost'
         IconFont = LucideFont
         GlyphName = 'list-ordered'
-        GlyphSize = 16
         ShowCaption = False
       end
       object BtnIndentDecrease: TTySpeedButton
         Left = 720
-        Height = 28
         Top = 4
         Width = 28
         Action = ActIndentDecrease
@@ -547,12 +481,10 @@ object MainForm: TMainForm
         StyleClass = 'ghost'
         IconFont = LucideFont
         GlyphName = 'indent-decrease'
-        GlyphSize = 16
         ShowCaption = False
       end
       object BtnIndentIncrease: TTySpeedButton
         Left = 750
-        Height = 28
         Top = 4
         Width = 28
         Action = ActIndentIncrease
@@ -560,18 +492,15 @@ object MainForm: TMainForm
         StyleClass = 'ghost'
         IconFont = LucideFont
         GlyphName = 'indent-increase'
-        GlyphSize = 16
         ShowCaption = False
       end
       object Sep10: TTyToolSeparator
         Left = 780
-        Height = 28
         Top = 4
         Width = 8
       end
       object BtnSpacing: TTyToolButton
         Left = 790
-        Height = 28
         Top = 4
         Width = 40
         Hint = 'Line spacing'
@@ -580,18 +509,15 @@ object MainForm: TMainForm
         DropdownMenu = PopSpacing
         IconFont = LucideFont
         GlyphName = 'unfold-vertical'
-        GlyphSize = 16
         ShowCaption = False
       end
       object Sep11: TTyToolSeparator
         Left = 832
-        Height = 28
         Top = 4
         Width = 8
       end
       object BtnClearFormat: TTySpeedButton
         Left = 842
-        Height = 28
         Top = 4
         Width = 28
         Action = ActClearFormat
@@ -599,7 +525,6 @@ object MainForm: TMainForm
         StyleClass = 'ghost'
         IconFont = LucideFont
         GlyphName = 'remove-formatting'
-        GlyphSize = 16
         ShowCaption = False
       end
     end
