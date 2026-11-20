@@ -425,6 +425,11 @@ type
     FKeepVerdicts: Boolean;
     FPreScanned: Int64;
     FMarksInFile: Boolean;
+    // the pre-scan's state per group depth: nothing shows in it; an \upr's (1); the \uc in
+    // effect
+    FPreSilent: array of Boolean;
+    FPreUpr: array of Byte;
+    FPreUc: array of Integer;
     function Counting: Boolean; inline;
     procedure InitState;
     // the node pool
@@ -4387,12 +4392,9 @@ end;
   Shown when all of these hold:
   - the group closes before the file ends, and its groups stay within the depth the reader
     keeps (MaxDepth);
-  - it has a result (its \fldrslt group) with something in it the reader shows: a character
-    (text, \'xx, \uN, a symbol that is one - \~ \_ \\ \{ \}), a tab or another character
-    word, a line or paragraph end, a picture, an object; not the field's instruction or data
-    (its \*\fldinst and \*\datafield groups), nor a {\*\...} group in the result (a bookmark,
-    a destination unknown here) but a picture's (\*\shppict) and a text's Unicode form
-    (\*\ud), nor an optional hyphen alone;
+  - it has a result (its \fldrslt group) with something in it the reader shows in a paragraph
+    (DecideFields says what): not the field's instruction or data (its \*\fldinst and
+    \*\datafield groups), and not bookmarks alone;
   - nothing in the group is of a table (\trowd \cell \row \nestcell \nestrow \intbl, \itap
     above 0), a section break (\sect), or a header, footer, footnote or annotation group;
   - no paragraph end in it (\par) when the field stands in a table cell;
@@ -4421,11 +4423,18 @@ begin
 end;
 
 { FieldShown's pass over the group at AStart. The fields in it are followed as they open and
-  close; what shows in a result shows in the results around it too. A field inside the group
-  is shown, once the group is, when its own result has something to show: the rest of the
-  rules hold for it since they hold for the whole group (and a field in an instruction is
-  never read as content). The verdicts on the fields inside go to FVerdicts, for when the
-  parse meets them; with KeepVerdicts the large ones to KeptVerdicts too. }
+  close; what shows in a result shows in the results around it too. What shows is what the
+  reader would make of the same bytes in a paragraph (BodyWord, DoText, DoHex, DoSymbol,
+  HandleDestination): a character - text, \'xx, \uN, a symbol that is one, a character word -
+  a paragraph end, an object (\page, a kept block: a footnote's or an unknown {\*\...} group,
+  \object, \shp, \mmath, a field of its own), a picture; not what it passes over (a
+  destination it skips or reads as tables or properties, \upr's first part, the fallback after
+  a \uN) nor bytes that make no character (NUL, CR, LF). Bookmarks show nothing here,
+  although the reader keeps each as an object: a result of bookmarks alone is no result.
+  A field inside the group is shown, once the group is, when its own result shows something:
+  the other rules hold for it since they hold for the whole group (and a field in an
+  instruction is never read as content). The verdicts on the fields inside go to FVerdicts,
+  for when the parse meets them; with KeepVerdicts the large ones to KeptVerdicts too. }
 function TTyRtfParser.DecideFields(AStart: PtrInt; out AStop: PtrInt): Boolean;
 type
   TOpenField = record
@@ -4437,11 +4446,13 @@ type
 var
   lex: TTyRtfLexer;
   t: TTyRtfToken;
-  depth, top, skipDepth, kw, p, pending, n, i: Integer;
+  depth, top, kw, pending, n, i, ucSkip: Integer;
+  p: PtrInt;
   open: array[0..CRtfMaxShownFields + 1] of TOpenField;
   found: array of TTyRtfFieldVerdict;
-  first, starred, inCell, closed, big: Boolean;
+  first, starred, inCell, closed, big, dest: Boolean;
   braceAt: PtrInt;
+  code: Cardinal;
 
   procedure Shows;
   var
@@ -4455,14 +4466,29 @@ var
       end;
   end;
 
+  // what shows nothing at all: neither the group's first word nor anything in it
+  procedure Silence;
+  begin
+    FPreSilent[depth] := True;
+  end;
+
 begin
   Result := False;
   AStop := -1;
   inCell := FS.Props.InTable or (FS.Props.Itap > 0) or (FS.CellIdx > 0);
   lex.Init(FBuf, AStart, FLen);
   depth := 0;
+  if Length(FPreSilent) < 64 then
+  begin
+    SetLength(FPreSilent, 64);
+    SetLength(FPreUpr, 64);
+    SetLength(FPreUc, 64);
+  end;
+  FPreSilent[0] := False;
+  FPreUpr[0] := 0;
+  FPreUc[0] := FS.Props.Uc;
+  ucSkip := 0;            // fallback items of a \uN still to pass over
   top := 0;               // fields open in the group
-  skipDepth := 0;         // inside an instruction, data or {\*\...} group: its depth
   pending := 0;           // fields inside their result with nothing shown in it yet
   n := 0;
   found := nil;
@@ -4478,6 +4504,16 @@ begin
           Inc(depth);
           // (the group the reader would only count: it could not read the field's end)
           if FS.Depth - 1 + depth >= MaxDepth then Break;
+          if depth >= Length(FPreSilent) then
+          begin
+            SetLength(FPreSilent, depth * 2);
+            SetLength(FPreUpr, depth * 2);
+            SetLength(FPreUc, depth * 2);
+          end;
+          FPreSilent[depth] := FPreSilent[depth - 1];
+          FPreUpr[depth] := 0;
+          FPreUc[depth] := FPreUc[depth - 1];
+          ucSkip := 0;
           first := True;
           starred := False;
           braceAt := t.Start;
@@ -4485,6 +4521,7 @@ begin
         end;
       rtkGroupEnd:
         begin
+          ucSkip := 0;
           if (top > 0) and (open[top - 1].ResultAt = depth) then
           begin
             open[top - 1].ResultAt := 0;
@@ -4499,7 +4536,6 @@ begin
               found[open[top].Slot].Shown := open[top].Content;
             end;
           end;
-          if depth = skipDepth then skipDepth := 0;
           Dec(depth);
           if depth = 0 then
           begin
@@ -4509,55 +4545,122 @@ begin
         end;
       rtkWord:
         begin
+          ucSkip := 0;
           kw := LookupWord(@FBuf[t.NameStart], t.NameLen);
           case kw of
             kwTrowd, kwCell, kwRow, kwNestCell, kwNestRow, kwIntbl, kwDHeaderFooter: Break;
             kwItap: if t.HasParam and (t.Param > 0) then Break;
             kwPar: if inCell then Break;
+            // (a section break; not \sectd, which Word writes in a table of contents' result
+            // before each entry: the section's properties, restated, as in the body)
+            kwObjWord: if NameIs(FBuf, t, 'sect') then Break;
+            kwUc: if t.HasParam and (t.Param >= 0) then FPreUc[depth] := t.Param;
           end;
-          // (a section break; not \sectd, which Word writes in a table of contents' result
-          // before each entry: the section's properties, restated, as in the body)
-          if NameIs(FBuf, t, 'sect') or
-             (first and (NameIs(FBuf, t, 'footnote') or NameIs(FBuf, t, 'annotation'))) then
+          if first and ((kw = kwDOpaque) and (NameIs(FBuf, t, 'footnote') or
+             NameIs(FBuf, t, 'annotation'))) then
             Break;
+          dest := False;
           if first then
           begin
-            if kw = kwDField then
-            begin
-              if FS.Fields + top + 1 > CRtfMaxShownFields then Break;
-              open[top].Depth := depth;
-              open[top].ResultAt := 0;
-              open[top].Content := False;
-              open[top].Slot := -1;
-              if skipDepth = 0 then
-              begin
-                if n = Length(found) then SetLength(found, n * 2 + 4);
-                found[n].Start := braceAt;
-                found[n].Stop := -1;
-                found[n].Shown := False;
-                open[top].Slot := n;
-                Inc(n);
-              end;
-              Inc(top);
-            end
-            else if (kw = kwDFldRslt) and (top > 0) and (open[top - 1].Depth = depth - 1) and
-              (open[top - 1].ResultAt = 0) then
-            begin
-              // the result of the field this group belongs to (not one inside its result)
-              open[top - 1].ResultAt := depth;
-              if not open[top - 1].Content then Inc(pending);
-            end
-            else if (skipDepth = 0) and ((kw = kwDFldInst) or NameIs(FBuf, t, 'datafield') or
-              (starred and (kw <> kwDShpPict) and (kw <> kwDUd))) then
-              skipDepth := depth;
-          end;
-          if (pending > 0) and (skipDepth = 0) then
+            dest := True;
             case kw of
-              kwU, kwPar, kwLine..kwZwnbo, kwObjWord, kwDPict, kwDShpPict: Shows;
+              kwDField:
+                begin
+                  if FS.Fields + top + 1 > CRtfMaxShownFields then Break;
+                  // a field in a result shows: its result, or itself as one object
+                  if not FPreSilent[depth] then Shows;
+                  open[top].Depth := depth;
+                  open[top].ResultAt := 0;
+                  open[top].Content := False;
+                  open[top].Slot := -1;
+                  if not FPreSilent[depth] then
+                  begin
+                    if n = Length(found) then SetLength(found, n * 2 + 4);
+                    found[n].Start := braceAt;
+                    found[n].Stop := -1;
+                    found[n].Shown := False;
+                    open[top].Slot := n;
+                    Inc(n);
+                  end;
+                  Inc(top);
+                end;
+              kwDFldRslt:
+                if (top > 0) and (open[top - 1].Depth = depth - 1) and (open[top - 1].ResultAt = 0) then
+                begin
+                  // the result of the field this group belongs to (not one inside its result)
+                  open[top - 1].ResultAt := depth;
+                  if not open[top - 1].Content then Inc(pending);
+                end
+                else
+                  Silence;
+              // what the reader passes over, or reads as tables and properties
+              kwDFontTbl, kwDColorTbl, kwDListTable, kwDOverrideTable, kwDDocSkip, kwDFldInst,
+              kwDPnText, kwDNestSkip, kwDListText, kwDCharExtra, kwDParaExtra, kwDPn:
+                Silence;
+              kwDUd:
+                // \upr's Unicode half is its text; anywhere else it is passed over
+                if FPreUpr[depth - 1] = 1 then FPreSilent[depth] := FPreSilent[depth - 2]
+                else Silence;
+              kwDUpr:
+                begin
+                  FPreUpr[depth] := 1;
+                  Silence;
+                end;
+              // a picture, or a picture's group (one object even with no picture in it)
+              kwDPict, kwDShpPict,
+              kwDOpaque:
+                begin
+                  if not FPreSilent[depth] and not (NameIs(FBuf, t, 'bkmkstart') or
+                     NameIs(FBuf, t, 'bkmkend')) then
+                    Shows;
+                  Silence;
+                end;
+            else
+              if starred then
+              begin
+                // a destination the reader does not know: one object of its bytes
+                if not FPreSilent[depth] then Shows;
+                Silence;
+              end
+              else if NameIs(FBuf, t, 'datafield') then
+                Silence
+              else
+                dest := False;
             end;
+          end;
+          if not dest and (pending > 0) and not FPreSilent[depth] then
+            case kw of
+              kwU:
+                begin
+                  code := UnicodeOfParam(t.Param);
+                  if (code <> 0) and (code <> 10) and (code <> 13) then Shows;
+                end;
+              kwPar, kwLine..kwZwnbo, kwObjWord: Shows;
+            end;
+          if kw = kwU then ucSkip := FPreUc[depth];
         end;
       rtkText:
-        if (pending > 0) and (skipDepth = 0) then
+        if ucSkip > 0 then
+        begin
+          // the fallback a \uN gave: its characters (NUL, CR and LF are none) are passed over
+          p := t.Start;
+          while (p < t.Stop) and (ucSkip > 0) do
+          begin
+            if not (FBuf[p] in [0, 10, 13]) then Dec(ucSkip);
+            Inc(p);
+          end;
+          if (pending > 0) and not FPreSilent[depth] then
+            while p < t.Stop do
+            begin
+              if not (FBuf[p] in [0, 10, 13]) then
+              begin
+                Shows;
+                Break;
+              end;
+              Inc(p);
+            end;
+        end
+        else if (pending > 0) and not FPreSilent[depth] then
           for p := t.Start to t.Stop - 1 do
             if not (FBuf[p] in [0, 10, 13]) then
             begin
@@ -4565,13 +4668,20 @@ begin
               Break;
             end;
       rtkHex:
-        if (pending > 0) and (skipDepth = 0) and (t.Value >= 0) then Shows;
+        if ucSkip > 0 then Dec(ucSkip)
+        else if (pending > 0) and not FPreSilent[depth] and (t.Value >= 0) and
+          not (t.Value in [0, 10, 13]) then
+          Shows;
+      rtkBin:
+        if ucSkip > 0 then Dec(ucSkip);
       rtkSymbol:
         if t.Value = Ord('*') then
         begin
           if first then starred := True;
         end
-        else if (pending > 0) and (skipDepth = 0) and (t.Value >= 0) and
+        else if ucSkip > 0 then
+          Dec(ucSkip)
+        else if (pending > 0) and not FPreSilent[depth] and (t.Value >= 0) and
           (t.Value in [Ord('~'), Ord('_'), Ord('\'), Ord('{'), Ord('}'), 10, 13]) then
           Shows;
     end;
