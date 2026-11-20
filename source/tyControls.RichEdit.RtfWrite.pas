@@ -340,7 +340,8 @@ type
     FSkipPara: Integer;      // the paragraph that field began in
     FPrevInField: Boolean;
     FBreakInFields: Boolean; // a walk stops after a paragraph that ends inside such a field
-    FLastWalked: Integer;    // ... the paragraph it wrote last
+    FLastWalked: Integer;    // ... the paragraph it wrote (or looked at) last
+    FWalkStop: Boolean;      // ... and it stopped there for that
     FPrevCell: TTyRichCell;  // its cell
     // a range (TyRichSaveRtfRange): its paragraphs, what of its end paragraphs goes out
     FRange: Boolean;
@@ -371,7 +372,7 @@ type
     function FieldStartDepth(AIndex: Integer): Integer;
     function PastFieldFrom(AIndex, ALimit: Integer): Integer;
     function BackOverField(AIndex, ALimit: Integer): Integer;
-    procedure WalkStretch(AFirst, ALast: Integer);
+    procedure WalkStretch(AFirst, ALast: Integer; ALook: Boolean);
     procedure Fragment(const S: RawByteString);
     procedure RawText(const S: RawByteString);
     procedure NewLine;
@@ -993,12 +994,12 @@ begin
   Result := lo;
 end;
 
-{ Paragraphs AFirst .. ALast written (StretchPara), in one walk of the text - but where a
-  paragraph ends inside a field written as its bytes (a whole document's save: not a range),
-  the walk stops there: the paragraphs wholly inside that field are passed over (counted as
-  done), neither parsed nor walked, and the walk goes on from the next one, as deep in the
-  field as it starts (FSkip). }
-procedure TRtfWriter.WalkStretch(AFirst, ALast: Integer);
+{ Paragraphs AFirst .. ALast written (StretchPara) - or, ALook, their text looked at for the
+  fonts it settles (LookPara) - in one walk of the text; but where a paragraph ends inside a
+  field written as its bytes (a whole document's save: not a range), the walk stops there: the
+  paragraphs wholly inside that field are passed over (counted as done), neither parsed nor
+  walked, and the walk goes on from the next one, as deep in the field as it starts (FSkip). }
+procedure TRtfWriter.WalkStretch(AFirst, ALast: Integer; ALook: Boolean);
 var
   k, m: Integer;
 begin
@@ -1007,11 +1008,16 @@ begin
   while k <= ALast do
   begin
     FLastWalked := -1;
-    FDoc.Text.WalkParaTexts(k, ALast, @StretchPara);
-    if (FLastWalked < 0) or (FLastWalked >= ALast) or (FSkip = 0) then Break;
+    FWalkStop := False;
+    if ALook then FDoc.Text.WalkParaTexts(k, ALast, @LookPara)
+    else FDoc.Text.WalkParaTexts(k, ALast, @StretchPara);
+    if not FWalkStop then Break;
     m := PastFieldFrom(FLastWalked + 1, ALast + 1);
-    Inc(FDone, m - FLastWalked - 1);
-    if m <= ALast then FSkip := FieldStartDepth(m);
+    if not ALook then
+    begin
+      Inc(FDone, m - FLastWalked - 1);
+      if m <= ALast then FSkip := FieldStartDepth(m);
+    end;
     k := m;
   end;
   FBreakInFields := False;
@@ -1425,15 +1431,34 @@ var
   cell: TTyRichCell;
   p, n: PtrInt;
   ch: Int64;
-  r, d: Integer;
+  r, d, bal: Integer;
   code: Cardinal;
-  any: Boolean;
+  any, marked: Boolean;
 begin
   PlanTick(AIndex);
   // (in a document of our own a paragraph with no value is plain, and was not noted: its
   // text is looked at only for the view's font, which plain text is in - PlainLook)
   if (AData = nil) and (FLoad = nil) and not PlainLook then Exit;
   ReadPara(AIndex, AData, pf, runs, cell);
+  // a paragraph that ends inside a field: the field goes out as its bytes, the paragraphs
+  // wholly inside it are not looked at (WalkStretch)
+  if FBreakInFields then
+  begin
+    bal := 0;
+    marked := False;
+    for r := 0 to High(runs) do
+      if runs[r].Obj is TTyRichFieldMark then
+      begin
+        marked := True;
+        if TTyRichFieldMark(runs[r].Obj).Kind = rfmOpen then Inc(bal) else Dec(bal);
+      end;
+    if marked and (bal + FieldStartDepth(AIndex) > 0) then
+    begin
+      FLastWalked := AIndex;
+      FWalkStop := True;
+      AContinue := False;
+    end;
+  end;
   any := False;
   for r := 0 to High(runs) do
   begin
@@ -1940,7 +1965,7 @@ begin
   begin
     item := FPlan[k];
     if item.Stretch and item.Look and (item.Count > 0) then
-      FDoc.Text.WalkParaTexts(item.First, item.First + item.Count - 1, @LookPara);
+      WalkStretch(item.First, item.First + item.Count - 1, True);
   end;
   FinishTables;
 end;
@@ -1973,7 +1998,7 @@ begin
   FPrevCell := nil;
   FSkip := 0;
   FPrevInField := False;
-  WalkStretch(AFirst, AFirst + ACount - 1);
+  WalkStretch(AFirst, AFirst + ACount - 1, False);
   // (one that ended inside a field written as its bytes: they ended it)
   if FPrevInField then Exit;
   { A range's last paragraph taken in part, without its separator: no \par (pasted, it adds
@@ -2018,7 +2043,11 @@ begin
   Inc(FDone);
   FLastWalked := AIndex;
   // (the paragraphs wholly inside the field written as its bytes are passed over: WalkStretch)
-  if FBreakInFields and (FSkip > 0) then AContinue := False;
+  if FBreakInFields and (FSkip > 0) then
+  begin
+    FWalkStop := True;
+    AContinue := False;
+  end;
 end;
 
 // A row begins: its definition. A row is all its cells, each in its place, and the model
