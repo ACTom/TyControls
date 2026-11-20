@@ -230,7 +230,7 @@ var
   ppi, indentPx, spacingPx: Integer;
   ours: Boolean;
   kids: array of TControl;
-  widths: array of Integer;
+  widths, steps: array of Integer;
   ctl: TControl;
 begin
   // Wrapping path is 100% the base behaviour — the chevron is not used.
@@ -328,7 +328,15 @@ begin
     spacingPx := MulDiv(ButtonSpacing, ppi, 96);
 
     chevW := ChevronWidthPx;
-    visCount := TyToolbarOverflowCount(widths, ClientWidth - indentPx, chevW);
+    { #233. The fit is decided over what the row really takes. The tools are placed with the
+      spacing between them, and the chevron sits an indent in from the right edge; adding up
+      the widths alone let the last tool that "fitted" reach under the chevron. So each tool
+      counts with the spacing after it -- the room is one spacing more, for the last tool,
+      which has none after it -- and the chevron counts with its indent. }
+    SetLength(steps, n);
+    for i := 0 to n - 1 do steps[i] := widths[i] + spacingPx;
+    visCount := TyToolbarOverflowCount(steps, ClientWidth - indentPx + spacingPx,
+      chevW + indentPx);
     if visCount > n then visCount := n;
 
     // Place the lead (fitting) buttons; hide + record the overflow set.
