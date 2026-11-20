@@ -582,8 +582,11 @@ var
   found: Boolean;
   cf: TTyCharFormat;
 begin
-  x := Loaded(Rtf(HeadX + '{|field{|*|fldinst HYPERLINK "http://x.test/m"}{|fldrslt {|f1 ' +
-    '|u20013?|u25991?|par |u23383?|u31526?}}} tail|par}'));
+  // (its middle paragraph, wholly inside it, in a font that names no charset: the save settles
+  // it from the text)
+  x := Loaded(Rtf(StringReplace(HeadX, 'Times New Roman;}}', 'Times New Roman;}{|f3|fnil KaiTi;}}', []) +
+    '{|field{|*|fldinst HYPERLINK "http://x.test/m"}{|fldrslt {|f1 ' +
+    '|u20013?|u25991?|par {|f3 |u23383?|u31526?}|par |u26411?}}} tail|par}'));
   CopyAll(x);
   y := Loaded(Rtf(HeadY + BodyY));
   // the target's own field copied inside it, at its start
@@ -603,8 +606,8 @@ begin
       if Hex(back.Text.GetText(k, 1)) = 'E5AD97' then
       begin
         cf := back.Formats.CharFormat(back.TypingFormatAt(k + 1));
-        AssertEquals('the pasted field''s font', 'SimSun', cf.FontName);
-        AssertEquals('... its charset', 134, cf.Charset);
+        AssertEquals('the pasted field''s font', 'KaiTi', cf.FontName);
+        AssertEquals('... its charset, settled from its text', 134, cf.Charset);
         found := True;
       end;
     AssertTrue('the text of its second paragraph read back', found);

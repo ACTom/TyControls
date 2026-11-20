@@ -1622,13 +1622,17 @@ var
     Result := FRich.PositionRect(APos).Top;
   end;
 
-  procedure CheckAll(const ADoc: string);
+  procedure CheckAll(const ADoc: string; AInWord: Boolean);
   var
     q, m: TTyRichPos;
     t0: Integer;
   begin
     for m := 0 to Doc.Text.Length - 1 do
     begin
+      // a link inside a word: the word is not broken at its marks
+      if AInWord and (IsOpen(m) or IsClose(m)) then
+        AssertEquals(Format('%s, width %d: the word around the mark at %d on one line',
+          [ADoc, w, m]), Top(m - 1), Top(m + 1));
       if IsOpen(m) then
       begin
         AssertEquals(Format('%s, width %d: the open mark at %d on its first character''s line',
@@ -1714,7 +1718,7 @@ begin
     begin
       FRich.SetBounds(0, 0, w, 3000);
       FRich.UpdateView;
-      CheckAll(what);
+      CheckAll(what, k = 2);
       Inc(total, starts);
       starts := 0;
       Inc(w, 11);
