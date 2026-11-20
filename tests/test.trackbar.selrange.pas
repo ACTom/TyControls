@@ -40,6 +40,7 @@ type
     procedure TestEndsAreClampedToMinAndMax;
     procedure TestPaintFillsExactlyTheSpan;
     procedure TestPaintShowsNothingWhenOff;
+    procedure TestTheSpanRunsAlongTheTrackInsideTheFrame;
   end;
 
 implementation
@@ -254,6 +255,27 @@ begin
   FBar.ShowSelRange := False;
   CountRed(0, BarW, inside, outside);
   AssertEquals('ShowSelRange off paints no selection', 0, inside + outside);
+end;
+
+{ #236: the track is laid out inside the frame (here 30 px of padding on the left, 10 on the
+  right), and the selection runs along THAT track -- from the middle of the thumb at its
+  start value to the middle of the thumb at its end value. }
+procedure TTyTrackBarSelRangeTest.TestTheSpanRunsAlongTheTrackInsideTheFrame;
+var
+  lo, hi, inside, outside, c20, c60: Integer;
+begin
+  FBar.StyleOverride := 'padding: 0px 10px 0px 30px;';
+  c20 := ThumbCentreAt(20);
+  c60 := ThumbCentreAt(60);
+  FBar.Position := 100;       // the thumb parked clear of the span
+  FBar.SelStart := 20;
+  FBar.SelEnd := 60;
+  AssertTrue(FBar.SelRangeSpan(96, lo, hi));
+  AssertEquals('from the middle of the thumb at 20', c20, 30 + lo);
+  AssertEquals('to the middle of the thumb at 60', c60, 30 + hi);
+  CountRed(30 + lo, 30 + hi, inside, outside);
+  AssertEquals('every pixel of the span is the selection colour', hi - lo, inside);
+  AssertEquals('nothing outside the span is', 0, outside);
 end;
 
 initialization

@@ -1002,9 +1002,11 @@ begin
     T.Font.PixelsPerInch := 96;
     T.SetBounds(0, 0, 160, 24);
     T.Min := 0; T.Max := 100; T.Position := 0;
-    AssertEquals('un-reversed: Min at the left', 0, T.ThumbRect.Left);
+    { #236: the track is laid out inside the theme's 2px focus ring, so its ends are 2 and
+      158, not the control's own edges. }
+    AssertEquals('un-reversed: Min at the left', 2, T.ThumbRect.Left);
     T.Reversed := True;
-    AssertEquals('reversed: Min at the right', 160 - 12, T.ThumbRect.Left);
+    AssertEquals('reversed: Min at the right', 160 - 2 - 12, T.ThumbRect.Left);
   finally T.Free; end;
 end;
 
@@ -1018,9 +1020,9 @@ begin
     T.Orientation := toVertical;
     T.Min := 0; T.Max := 100; T.Position := 0;
     AssertEquals('un-reversed vertical: Max on top, so Min sits at the bottom',
-      160 - 12, T.ThumbRect.Top);
+      160 - 2 - 12, T.ThumbRect.Top);   // inside the 2px focus ring (#236)
     T.Reversed := True;
-    AssertEquals('reversed vertical: Min on top', 0, T.ThumbRect.Top);
+    AssertEquals('reversed vertical: Min on top', 2, T.ThumbRect.Top);
   finally T.Free; end;
 end;
 

@@ -192,6 +192,7 @@ const
                              // blend in sRGB and BGRA blends in linear light, which pales a
                              // partial alpha: black at 180 here peaks at 126, at 200 at 106,
                              // where the Windows 11 chevron's darkest pixel is (about 111)
+  TyTrackThumbLength = 12;   // TrackBar thumb, along the track -- --track-thumb-length (#237)
   TyTrackThickness   = 4;    // TrackBar GROOVE thickness -- the recessed band the thumb rides,
                              // not the control height (the bar used to fill its whole client
                              // rect, which is why it read as a slab and swallowed its ticks)

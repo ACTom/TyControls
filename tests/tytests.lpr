@@ -35,6 +35,7 @@ uses
   test.progressbar,
   test.toggleswitch,
   test.trackbar,
+  test.trackbar.frame,
   test.trackbar.selrange,
   test.trackbar.ticklabels,
   test.multitrackbar,

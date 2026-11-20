@@ -2435,7 +2435,11 @@ begin
           ValueText, S.FontName, ResolveFontSize(S), S.FontWeight, S.TextColor,
           taCenter, tlCenter, False)
       else
-        P.DrawText(Rect(R.Right - FValueAreaPx, R.Top, R.Right, R.Bottom),
+        { #236: two px after the number, as TTyTrackBar draws it -- one thumb with the readout
+          is the same picture on both. The REST of #236 is not here yet: TTyTrackBar lays its
+          parts out inside the focus ring and the style's padding (ContentRectIn), these bars
+          still use the whole client rectangle. }
+        P.DrawText(Rect(R.Right - FValueAreaPx, R.Top, R.Right - P.Scale(2), R.Bottom),
           ValueText, S.FontName, ResolveFontSize(S), S.FontWeight, S.TextColor,
           taRightJustify, tlCenter, False);
     end;

@@ -152,7 +152,9 @@ end;
 
 procedure TTyTrackBarGeometryTest.TestThumbRectPos0Left;
 { Bounds 200x24 @96ppi. ThumbW = Scale(12) = 12.
-  Travel = 200 - 12 = 188. Pos=0 → thumbLeft = 0.
+  The built-in theme has a 2px focus ring, and the track is laid out inside it (#236):
+  196 of track, travel = 196 - 12 = 184. Pos=0 → thumbLeft = 2, not 0 -- at 0 the thumb sat
+  on the ring.
 }
 var
   Form: TForm;
@@ -169,7 +171,7 @@ begin
     Bar.Max := 100;
     Bar.Position := 0;
     R := Bar.ThumbRect;
-    AssertEquals('Pos=0: thumb Left = 0', 0, R.Left);
+    AssertEquals('Pos=0: thumb Left = 2, inside the focus ring', 2, R.Left);
     AssertEquals('Pos=0: thumb Width = 12', 12, R.Right - R.Left);
   finally
     Form.Free;
@@ -177,7 +179,7 @@ begin
 end;
 
 procedure TTyTrackBarGeometryTest.TestThumbRectPos100Right;
-{ Pos=100: thumbLeft = Travel = 188, Right = 200. }
+{ Pos=100: thumbLeft = 2 + Travel (184) = 186, Right = 198: inside the ring (#236). }
 var
   Form: TForm;
   Bar: TTyTrackBar;
@@ -193,7 +195,7 @@ begin
     Bar.Max := 100;
     Bar.Position := 100;
     R := Bar.ThumbRect;
-    AssertEquals('Pos=100: thumb Right = 200', 200, R.Right);
+    AssertEquals('Pos=100: thumb Right = 198, inside the focus ring', 198, R.Right);
   finally
     Form.Free;
   end;
