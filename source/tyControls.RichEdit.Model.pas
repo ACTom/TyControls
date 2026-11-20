@@ -323,14 +323,14 @@ type
     function Clone: TTyRichObject; override;
     function DataBytes: Int64; override;
     { The picture the block's own bytes carry for readers that cannot draw it, when the layout
-      can show it: an equation's (\mmath: the picture of its \mmathPict), an embedded
-      object's (\object: the first picture of its \result) or a shape's (\shp: the first
-      picture of its \shprslt, else that of its pib property). A picture is a \pict group,
-      also one inside a \*\shppict group; Word's pair of a \*\shppict group and a \nonshppict
-      group after it is one picture, the first of the two the layout can draw. nil for any other block, for one
-      with display text, one that holds no picture, and one whose picture cannot be drawn (a
-      metafile that is not one bitmap, an unknown format, no image bytes, a group cut off by
-      the end of the file). Looked for the first time it is asked - the layout asks when it
+      can show it, the first of its pictures the layout can draw: an equation's (\mmath: the
+      pictures of its \mmathPict), an embedded object's (\object: those of its \result) or a
+      shape's (\shp: those of its \shprslt in order, then that of its pib property - Word keeps
+      a metafile in the result of a floating image and the image itself in pib). A picture is
+      a \pict group, also one inside Word's \*\shppict and \nonshppict groups. nil for any
+      other block, for one with display text, and for one none of whose pictures can be drawn
+      (a metafile that is not one bitmap, an unknown format, no image bytes, a group cut off
+      by the end of the file). Looked for the first time it is asked - the layout asks when it
       first measures the block - and never again; nothing of the bytes is copied. }
     function DisplayPicture: TTyRichKeptPicture;
     property Bytes: RawByteString read FBytes;
@@ -2925,45 +2925,15 @@ begin
   Result.FShowCount := Integer(cnt);
 end;
 
-{ L has just entered a \*\shppict or a \nonshppict group: the picture of the first \pict
-  group in it (nil when it cannot be shown, or there is none), L after its brace. }
-function KeptFirstPict(var L: TKeptLexer; const ASource: RawByteString): TTyRichKeptPicture;
-var
-  depth: Integer;
-  got: Boolean;
-  pk: TKeptPict;
-begin
-  Result := nil;
-  depth := 0;
-  got := False;
-  while KeptNext(L) do
-    case L.Kind of
-      kkGroup:
-        if not got and KeptEnter(L, 'pict') then
-        begin
-          got := True;
-          if KeptReadPict(L, pk) then Result := KeptPictureOf(ASource, pk);
-        end
-        else
-          Inc(depth);
-      kkEnd:
-        begin
-          if depth = 0 then Exit;
-          Dec(depth);
-        end;
-    end;
-end;
-
-{ L inside a group, past its name: the first picture in it - a \pict group, or Word's pair of
-  a \*\shppict group and the \nonshppict group after it, the first of the two the layout can
-  show - wherever it is in the group. True when the group holds a picture (APic nil when it
-  cannot be shown). }
+{ L inside a group, past its name: the first picture in it the layout can show - of its \pict
+  groups wherever they are in it (also inside Word's \*\shppict and \nonshppict groups), in
+  order, the first that can be drawn. True when there is one (APic); False when there is none,
+  L after the group's brace or at the end of the bytes. }
 function KeptFindIn(var L: TKeptLexer; const ASource: RawByteString;
   out APic: TTyRichKeptPicture): Boolean;
 var
   depth: Integer;
   pk: TKeptPict;
-  m: TKeptLexer;
 begin
   APic := nil;
   depth := 0;
@@ -2972,26 +2942,9 @@ begin
       kkGroup:
         if KeptEnter(L, 'pict') then
         begin
+          // (one that cannot be read leaves L after it, or at the end of a cut-off block)
           if KeptReadPict(L, pk) then APic := KeptPictureOf(ASource, pk);
-          Exit(True);
-        end
-        else if KeptEnter(L, 'shppict') then
-        begin
-          APic := KeptFirstPict(L, ASource);
-          if APic = nil then
-          begin
-            // its other half: the next group (past line breaks), when it is \nonshppict
-            m := L;
-            while KeptNext(m) and (m.Kind = kkText) and not KeptTextHasHex(m) do ;
-            if (m.Kind = kkGroup) and (m.Pos > L.Pos) and KeptEnter(m, 'nonshppict') then
-              APic := KeptFirstPict(m, ASource);
-          end;
-          Exit(True);
-        end
-        else if KeptEnter(L, 'nonshppict') then
-        begin
-          APic := KeptFirstPict(L, ASource);
-          Exit(True);
+          if APic <> nil then Exit(True);
         end
         else
           Inc(depth);
@@ -3031,8 +2984,8 @@ begin
 end;
 
 { L inside a shape's \*\shpinst group: the picture of its property pib - the \sp group whose
-  \sn group says pib, its \sv group holding the \pict group. True when it holds one (APic nil
-  when it cannot be shown). }
+  \sn group says pib, its \sv group holding the \pict group. True when it holds one the layout
+  can show (APic). }
 function KeptPibPicture(var L: TKeptLexer; const ASource: RawByteString;
   out APic: TTyRichKeptPicture): Boolean;
 var
@@ -3079,7 +3032,7 @@ begin
   begin
     m := L;
     if KeptFindGroup(m, 'shprslt', False) and KeptFindIn(m, S, Result) then Exit;
-    // the result holds none: the picture the shape is filled with
+    // none of the result's can be drawn: the picture the shape is filled with
     if KeptFindGroup(L, 'shpinst', False) then KeptPibPicture(L, S, Result);
   end;
 end;
