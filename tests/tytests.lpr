@@ -311,6 +311,7 @@ uses
   test.richedit.fieldctl,
   test.richedit.fieldpaste,
   test.richedit.keptpictures,
+  test.richedit.pictparse,
   test.richedit.ruler,
   test.richedit.actions;
 

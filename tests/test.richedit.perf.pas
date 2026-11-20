@@ -64,6 +64,7 @@ type
     procedure TestA100MBRtfOfEquations;
     procedure TestAKeyWithARulerLinked;
     procedure TestTheActionsOverAWhole100MBSelection;
+    procedure TestARtfOf200PicturesAPlaceNeverShownAndAgain;
   private
     procedure SaveBesideFields(ABytes: Int64; ANest: Integer);
   end;
@@ -603,6 +604,125 @@ begin
     f.Free;
   end;
   SetLength(AParas, n);
+end;
+
+{ A JPEG of a photograph's kind: smooth colour with grain. }
+function GrainJpeg(AW, AH: Integer; ASeed: Cardinal): TBytes;
+var
+  b: TBGRABitmap;
+  st: TBytesStream;
+  p: PBGRAPixel;
+  x, y, g: Integer;
+begin
+  b := TBGRABitmap.Create(AW, AH);
+  st := TBytesStream.Create;
+  try
+    for y := 0 to AH - 1 do
+    begin
+      p := b.ScanLine[y];
+      for x := 0 to AW - 1 do
+      begin
+        ASeed := ASeed xor (ASeed shl 13);
+        ASeed := ASeed xor (ASeed shr 17);
+        ASeed := ASeed xor (ASeed shl 5);
+        g := Integer(ASeed and 7) - 4;
+        p^.red := EnsureRange(x * 255 div AW + g, 0, 255);
+        p^.green := EnsureRange(y * 255 div AH + g, 0, 255);
+        p^.blue := EnsureRange(128 + ((x + y) mod 97) + g, 0, 255);
+        p^.alpha := 255;
+        Inc(p);
+      end;
+    end;
+    b.InvalidateBitmap;
+    b.SaveToStreamAs(st, ifJpeg);
+    Result := Copy(st.Bytes, 0, st.Size);
+  finally
+    st.Free;
+    b.Free;
+  end;
+end;
+
+{ An RTF of APictures pictures as the bench makes its file: PNG and JPEG by turns in eight
+  sizes from 200 x 150 to 2400 x 1600 (about 0.1 to 2 MB each), each after fifteen of
+  MakeRtf's paragraphs, shown at most 600 pixels wide; hex digits, 64 bytes a line.
+  APicBytes: the pictures' bytes. }
+procedure MakePicturesRtf(const APath: string; APictures: Integer; out APicBytes: Int64);
+const
+  W: array[0..7] of Integer = (320, 1600, 640, 800, 200, 2400, 640, 1024);
+  H: array[0..7] of Integer = (240, 1200, 480, 600, 150, 1600, 360, 768);
+  Jpg: array[0..7] of Boolean = (False, True, False, True, False, True, False, True);
+  D: array[0..15] of AnsiChar = '0123456789abcdef';
+var
+  f: TFileStream;
+  buf: TMemoryStream;
+  hex: array[0..7] of RawByteString;
+  lens: array[0..7] of Integer;
+  data: TBytes;
+  i, k, n, kind, gw, gh, o: Integer;
+begin
+  for kind := 0 to 7 do
+  begin
+    if Jpg[kind] then data := GrainJpeg(W[kind], H[kind], 2463534242 + Cardinal(kind))
+    else data := NoisePng(W[kind], H[kind]);
+    lens[kind] := Length(data);
+    SetLength(hex[kind], Length(data) * 2 + (Length(data) div 64 + 1) * 2);
+    o := 1;
+    for i := 0 to High(data) do
+    begin
+      if (i > 0) and (i mod 64 = 0) then
+      begin
+        hex[kind][o] := #13;
+        hex[kind][o + 1] := #10;
+        Inc(o, 2);
+      end;
+      hex[kind][o] := D[data[i] shr 4];
+      hex[kind][o + 1] := D[data[i] and 15];
+      Inc(o, 2);
+    end;
+    SetLength(hex[kind], o - 1);
+  end;
+  APicBytes := 0;
+  f := TFileStream.Create(APath, fmCreate);
+  buf := TMemoryStream.Create;
+  try
+    WriteRaw(buf, '{\rtf1\ansi\ansicpg936\deff0{\fonttbl{\f0\fswiss\fcharset0 Arial;}' +
+      '{\f1\fnil\fcharset134 SimSun;}}' + #13#10 + '{\colortbl ;\red200\green0\blue0;}' +
+      #13#10 + '\viewkind4\uc1\pard\f0\fs20 ');
+    n := 0;
+    for i := 0 to APictures - 1 do
+    begin
+      for k := 1 to 15 do
+      begin
+        Inc(n);
+        WriteRaw(buf, 'Paragraph ' + IntToStr(n) + ' with \b bold\b0  and \cf1 coloured\cf0  ' +
+          'words, \f1 3?▙1?➗9?㕹7?\f0  and more text.\par' + #13#10);
+      end;
+      kind := i mod 8;
+      Inc(APicBytes, lens[kind]);
+      gw := Min(W[kind], 600);
+      gh := H[kind] * gw div W[kind];
+      WriteRaw(buf, Bar('|pard Picture ' + IntToStr(i + 1) + ': {|pict|picw' + IntToStr(W[kind]) +
+        '|pich' + IntToStr(H[kind]) + '|picwgoal' + IntToStr(gw * 15) + '|pichgoal' +
+        IntToStr(gh * 15) + BoolToStr(Jpg[kind], '|jpegblip', '|pngblip') + ' ') + #13#10);
+      WriteRaw(buf, hex[kind]);
+      WriteRaw(buf, Bar('}|par') + #13#10);
+      if buf.Size > 1024 * 1024 then
+      begin
+        f.WriteBuffer(buf.Memory^, buf.Size);
+        buf.Clear;
+      end;
+    end;
+    for k := 1 to 15 do
+    begin
+      Inc(n);
+      WriteRaw(buf, 'Paragraph ' + IntToStr(n) + ' after the last picture.\par' + #13#10);
+    end;
+    WriteRaw(buf, '}' + #13#10);
+    f.WriteBuffer(buf.Memory^, buf.Size);
+  finally
+    buf.Free;
+    f.Free;
+  end;
 end;
 
 function WorkingSetMB: Double;
@@ -1858,6 +1978,85 @@ begin
     finally
       for i := 0 to High(acts) do acts[i].Free;
     end;
+  finally
+    bmp.Free;
+  end;
+end;
+
+{ An RTF of 200 pictures (PNG and JPEG, about 0.1 to 2 MB each; the bench's file of
+  pictures): a place never shown (70 % of the height: never parsed since the index) set and
+  painted within 300 ms, and that place again after two dozen others evicted its layouts and
+  its parse, within 300 ms - the pictures there parsed without their bytes being converted
+  (asserted: none made from hex digits, none copied), decoded later in the background. }
+procedure TTyRichEditPerfTest.TestARtfOf200PicturesAPlaceNeverShownAndAgain;
+var
+  path: string;
+  bmp: TBitmap;
+  t0, rand, again: Double;
+  load: TTyRtfLoad;
+  total: Int64;
+  pics, parsed, conv, copied: Int64;
+  i, top, parses: Integer;
+  misses: Int64;
+begin
+  CheckRoom;
+  path := NewFile('.rtf');
+  MakePicturesRtf(path, 200, pics);
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf32bit;
+    bmp.SetSize(FRich.Width, FRich.Height);
+    FRich.LoadFromFile(path);
+    TPerfRich(FRich).PaintInto(bmp);
+    FRich.FinishLoading;
+    load := TyRichRtfLoadOf(FRich.Document);
+    AssertTrue('a lazy load', (load <> nil) and not load.Whole);
+    total := FRich.Document.Text.TotalHeight;
+    // the middle, and its pictures made ready in the background (not timed)
+    FRich.ScrollY := total div 2;
+    TPerfRich(FRich).PaintInto(bmp);
+    while TPerfRich(FRich).Step do ;
+    TPerfRich(FRich).PaintInto(bmp);
+    // a place never shown
+    misses := FRich.Layouter.CacheMisses;
+    parses := load.ParseCount;
+    parsed := load.ParsedBytes;
+    conv := load.PictureBytesConverted;
+    copied := load.PictureBytesCopied;
+    // (the heights laid out so far are real ones now: the place by the document's height now)
+    total := FRich.Document.Text.TotalHeight;
+    t0 := Clock;
+    FRich.ScrollY := Round(total * 0.7371);
+    TPerfRich(FRich).PaintInto(bmp);
+    rand := Clock - t0;
+    Report(Format('pictures %d MB (%d MB of pictures): a place never shown set and painted ' +
+      '(%d KB of the file parsed for it)', [SizeOfFile(path) div (1024 * 1024),
+      pics div (1024 * 1024), (load.ParsedBytes - parsed) div 1024]), rand);
+    AssertTrue('the place was laid out for the paint', FRich.Layouter.CacheMisses > misses);
+    AssertTrue('the place was parsed for the paint', load.ParseCount > parses);
+    AssertEquals('no picture byte made from hex digits', conv, load.PictureBytesConverted);
+    AssertEquals('no picture byte copied', copied, load.PictureBytesCopied);
+    top := FRich.TopParagraph;
+    // other places until that place's layouts left the cache, two dozen at least
+    i := 0;
+    repeat
+      FRich.ScrollY := Round(FRich.Document.Text.TotalHeight * Frac(0.1 + i * 0.6180339887));
+      TPerfRich(FRich).PaintInto(bmp);
+      Inc(i);
+    until ((i >= 24) and (FRich.Layouter.CachedLayout(top) = nil)) or (i >= 400);
+    misses := FRich.Layouter.CacheMisses;
+    parses := load.ParseCount;
+    t0 := Clock;
+    FRich.ScrollY := FRich.Document.Text.ParaTop(top);
+    TPerfRich(FRich).PaintInto(bmp);
+    again := Clock - t0;
+    Report(Format('pictures: that place again after %d others evicted it', [i]), again);
+    WriteLn('TTyRichEditPerfTest: pictures: peak working set: ' + PeakWorkingSet);
+    AssertTrue('the place''s layouts were evicted', FRich.Layouter.CacheMisses > misses);
+    AssertTrue('the place''s parse was evicted', load.ParseCount > parses);
+    AssertEquals('the same place', top, FRich.TopParagraph);
+    AssertTrue(Format('a place never shown in %.0f ms', [rand]), rand <= CScrollMs);
+    AssertTrue(Format('that place again in %.0f ms', [again]), again <= CScrollMs);
   finally
     bmp.Free;
   end;
