@@ -896,6 +896,10 @@ procedure TyRichLoadRtfFull(ADoc: TTyRichDocument; AStream: TStream; AMap: TTyRt
 // The RTF load ADoc's content came from; nil when it did not come from TyRichLoadRtf (or
 // TyRichBeginLoadRtf), or after it was replaced.
 function TyRichRtfLoadOf(ADoc: TTyRichDocument): TTyRtfLoad;
+// The control words the reader knows (its own table, read only): how many, and the name of
+// each (0 .. TyRtfKnownWordCount - 1). Any other word is an unknown property to it.
+function TyRtfKnownWordCount: Integer;
+function TyRtfKnownWord(AIndex: Integer): string;
 // RTF that came from somewhere else (a clipboard) read as content to insert into a document
 // (TTyRichInsertFragment): a new document of its own, read whole (TyRichLoadRtfFull; when the
 // whole parse and the index disagree - malformed bytes - as TyRichLoadRtf reads it, as far as
@@ -1199,6 +1203,16 @@ begin
   Result := (Result * 2654435761) shr 20;
 end;
 {$POP}
+
+function TyRtfKnownWordCount: Integer;
+begin
+  Result := Length(WordTable);
+end;
+
+function TyRtfKnownWord(AIndex: Integer): string;
+begin
+  Result := WordTable[AIndex].N;
+end;
 
 procedure InitWords;
 var

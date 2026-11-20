@@ -40,6 +40,7 @@ type
     procedure TestLazyEqualsWholeAcrossSnapshots;
     procedure TestCharacterWordsOfTheFieldReachItsResult;
     procedure TestAResultThatShowsNothingStaysOneObject;
+    procedure TestAResultShowsWhatTheBodyWouldShow;
     procedure TestALargeFieldIsDecidedAlikeWhereverAParseBegins;
     procedure TestAFieldsGroupIsReadOnceToDecideIt;
     procedure TestWordsOwnTableOfContents;
@@ -54,6 +55,8 @@ type
     procedure TestReplaceAllLeavesResults;
     procedure TestTablesAndObjectsAroundFields;
     procedure TestPastesAndMovesTakeWholeFields;
+    procedure TestASaveBesideALargeFieldReadsOnlyItsMarksParagraphs;
+    procedure TestTextCopiedOutOfAResultCarriesNoSectionWords;
     procedure TestAReplaceOfMatchesInsideAResultLeavesThem;
     // the model's own word on fields
     procedure TestTheDepthOfEveryParagraphFollowsEveryEdit;
@@ -1876,6 +1879,27 @@ begin
   end;
   CheckRoundTrip(Self, 'bold', b);
   CheckLazyIsWhole(Self, 'bold', b, 0, False);
+  // Word's slots named at the field's own level: its Chinese in the double-byte font, its Latin
+  // in the low one - as the same words on a group of the body give them
+  s := Rtf('{|rtf1|ansi|ansicpg1252|deff0{|fonttbl{|f0|froman Times New Roman;}' +
+    '{|f1|fswiss Arial;}{|f2|fnil|fcharset134 SimSun;}}|pard|f0 ' +
+    'a{|field|loch|af1|dbch|af2{|*|fldinst X}{|fldrslt |u38142?x}}b ' +
+    '{|loch|af1|dbch|af2 |u38142?x}|par}');
+  b := BytesOf(s);
+  for full := False to True do
+  begin
+    d := LoadDoc(b, full);
+    try
+      AssertRaw(Self, 'slots at the field''s level', 'a' + OC + '链x' + OC + 'b 链x', ParaText(d, 0));
+      AssertEquals('as in the body: the Chinese', CharFmt(d, 7).FontName, CharFmt(d, 2).FontName);
+      AssertEquals('as in the body: the Latin', CharFmt(d, 8).FontName, CharFmt(d, 3).FontName);
+      AssertEquals('the Chinese in the double-byte font', 'SimSun', CharFmt(d, 2).FontName);
+      AssertEquals('the Latin in the low one', 'Arial', CharFmt(d, 3).FontName);
+    finally
+      d.Free;
+    end;
+  end;
+  CheckRoundTrip(Self, 'slots at the field''s level', b);
   // a paragraph word and a text word in the field's group are not the result's
   s := Rtf(H1252 + 'a{|field|qc|tab{|*|fldinst X}{|fldrslt xy}}b|par}');
   b := BytesOf(s);
@@ -1890,21 +1914,31 @@ begin
 end;
 
 { A result the reader would make nothing visible of - an optional hyphen alone, bookmarks
-  alone, a destination it does not know, line ends - leaves the field one object of its bytes,
-  as an empty result does. A non-breaking space or hyphen alone is a character: shown. }
+  alone, line ends, a NUL or a line end written as \'xx or \uN, a list item's marker, a
+  destination it passes over - leaves the field one object of its bytes, as an empty result
+  does. A non-breaking space or hyphen alone is a character: shown; a block the reader keeps
+  as an object (one it does not know, a picture in Word's \*\shppict) is shown with it. }
 procedure TTyRichFieldsTest.TestAResultThatShowsNothingStaysOneObject;
 const
-  Nothing: array[0..5] of RawByteString = (
+  Nothing: array[0..11] of RawByteString = (
     '{|field{|*|fldinst X}{|fldrslt |-}}',
     '{|field{|*|fldinst X}{|fldrslt {|*|bkmkstart b}}}',
     '{|field{|*|fldinst X}{|fldrslt {|*|bkmkstart b}{|*|bkmkend b}}}',
-    '{|field{|*|fldinst X}{|fldrslt {|*|zzz some text}}}',
+    '{|field{|*|fldinst X}{|fldrslt |''00|''0d|''0a}}',
     '{|field{|*|fldinst X}{|fldrslt |-'#13#10'}}',
-    '{|field{|*|fldinst X}{|fldrslt {|*|bkmkstart b}|-}}');
-  Something: array[0..2] of RawByteString = (
+    '{|field{|*|fldinst X}{|fldrslt {|*|bkmkstart b}|-}}',
+    '{|field{|*|fldinst X}{|fldrslt |u0 |u10 }}',
+    '{|field{|*|fldinst X}{|fldrslt {|listtext 1.|tab}}}',
+    '{|field{|*|fldinst X}{|fldrslt {|info{|title t}}}}',
+    '{|field{|*|fldinst X}{|fldrslt {|*|ud x}}}',
+    '{|field{|*|fldinst X}{|fldrslt {|fldrslt x}}}',
+    '{|field{|*|fldinst X}{|fldrslt |pict |shppict }}');
+  Something: array[0..4] of RawByteString = (
     '{|field{|*|fldinst X}{|fldrslt |~}}',
     '{|field{|*|fldinst X}{|fldrslt |_}}',
-    '{|field{|*|fldinst X}{|fldrslt {|*|bkmkstart b}x{|*|bkmkend b}}}');
+    '{|field{|*|fldinst X}{|fldrslt {|*|bkmkstart b}x{|*|bkmkend b}}}',
+    '{|field{|*|fldinst X}{|fldrslt {|*|zzz some text}}}',
+    '{|field{|*|fldinst X}{|fldrslt {|*|shppict{|pict|pngblip|picwgoal300|pichgoal200 89504e470d0a1a0a}}}}');
 var
   i: Integer;
   s, g, objs: RawByteString;
@@ -1936,8 +1970,8 @@ begin
       objs := AllObjects(d);
       AssertTrue(Format('result %d: shown (%s)', [i, objs]), (objs <> '') and (objs[1] = '[') and
         (objs[Length(objs)] = ']'));
-      AssertTrue(Format('result %d: a character between the marks', [i]),
-        Length(WithoutObjects(ParaText(d, 0))) > 2);
+      AssertTrue(Format('result %d: something between the marks', [i]),
+        Length(ParaText(d, 0)) > Length(U('a' + OC + OC + 'b')));
     finally
       d.Free;
     end;
@@ -2076,11 +2110,14 @@ end;
   are in the fonts they were: the slots in force before the field are in force before its
   bytes. Where nothing names a slot, nothing more is written. }
 procedure TTyRichFieldsTest.TestTheSlotFontsAroundAFieldHoldAfterAnEdit;
+const
+  Slots: array[0..1] of string = ('|ltrch', '|rtlch');
 var
   s: RawByteString;
   b, o: TBytes;
   d: TTyRichDocument;
   pf: TTyParaFormat;
+  i: Integer;
 begin
   // a0 b1 _2 [3 链4 接5 x6 y7 ]8 _9 c10 d11
   s := Rtf('{|rtf1|ansi|ansicpg1252|deff0{|fonttbl{|f0|froman Times New Roman;}' +
@@ -2104,6 +2141,24 @@ begin
   pf.Align := paraCenter;
   CheckEditKeeps(Self, 'slots, the paragraph centred', b,
     TTyRichSetParaFormat.Create(0, 0, [pffAlign], pf), [FieldGroup(s, 1)]);
+  { The slot named last before the field is \ltrch (or \rtlch): the result's character of no
+    class of its own reads in the high font, as before the edit (Arial, not SimSun) }
+  for i := 0 to 1 do
+  begin
+    s := Rtf('{|rtf1|ansi|ansicpg1252|deff0{|fonttbl{|f0|froman Times New Roman;}' +
+      '{|f1|fnil|fcharset134 SimSun;}{|f6|fswiss Arial;}}|pard|plain|loch|af0|hich|af6|dbch|af1' +
+      Slots[i] + '|f0 ab {|field{|*|fldinst A}{|fldrslt |''e9}} cd|par}');
+    b := BytesOf(s);
+    d := LoadDoc(b, True);
+    try
+      AssertEquals(Format('%s last: the result in the high font', [Slots[i]]), 'Arial',
+        CharFmt(d, 4).FontName);
+    finally
+      d.Free;
+    end;
+    CheckEditKeeps(Self, Format('%s last, typed before the field', [Slots[i]]), b,
+      TTyRichInsertText.Create(0, 'Q'), [FieldGroup(s, 1)]);
+  end;
   // no slot named around the field: an edit writes no slot word
   b := BytesOf(LinkRtf);
   d := LoadDoc(b, False);
@@ -2396,6 +2451,356 @@ begin
     TTyRichInsertText.Create(p, 'Q'), groups);
   CheckEditKeeps(Self, 'Word''s contents, typed in the links'' paragraph', b,
     TTyRichInsertText.Create(z, 'Q'), groups);
+end;
+
+{ Of S: what a reader that has nothing in a paragraph but 'a', a group holding S and 'b' shows
+  between the two - text, an object, a paragraph end. The group starts with a word that does
+  nothing (\b0), so S's first token is no group's first word, as in a field's result. }
+function BodyShows(const S: RawByteString): Boolean;
+var
+  d: TTyRichDocument;
+  t: RawByteString;
+begin
+  d := LoadDoc(BytesOf(Rtf(H936 + '|pard a{|b0 ') + S + Rtf('}b|par}')), True);
+  try
+    if d.Text.ParaCount > 1 then Exit(True);
+    t := ParaText(d, 0);
+    if (t <> '') and (t[1] = 'a') then Delete(t, 1, 1);
+    if (t <> '') and (t[Length(t)] = 'b') then Delete(t, Length(t), 1);
+    Result := t <> '';
+  finally
+    d.Free;
+  end;
+end;
+
+{ Of S as a field's result: shown (two marks), and the marks with nothing between them. }
+procedure FieldOf(const S: RawByteString; out AShown, AEmpty: Boolean);
+var
+  d: TTyRichDocument;
+  k, i: Integer;
+  runs: TTyRunArray;
+  p: TTyRichPos;
+begin
+  AShown := False;
+  AEmpty := False;
+  d := LoadDoc(BytesOf(Rtf(H936 + '|pard a{|field{|*|fldinst X}{|fldrslt ') + S + Rtf('}}b|par}')), True);
+  try
+    for k := 0 to d.Text.ParaCount - 1 do
+    begin
+      runs := d.RunsOf(k);
+      for i := 0 to High(runs) do
+        if IsOpenMark(runs[i].Obj) and not AShown then
+        begin
+          AShown := True;
+          p := d.Text.ParaStart(k) + runs[i].Start;
+          AEmpty := d.FieldPartner(p) = p + 1;
+        end;
+    end;
+  finally
+    d.Free;
+  end;
+end;
+
+{ What decides whether a result is shown is what the reader would show of it: for every word
+  of the reader's own table (alone, with a number, as a group's first word, as a starred
+  group's first word), every control symbol and a few bytes, the field is shown exactly when
+  the same bytes show something in a paragraph - never as two marks with nothing between
+  them, and never one object when the body would show something - but for what keeps a field
+  one object whatever it shows (a table's words, a section break, a header, footer, footnote
+  or comment, \itap above 0) and bookmarks, which show nothing in a result (a result of
+  bookmarks alone is no result). A word the reader learns later is asked here as soon as it
+  is in its table. }
+procedure TTyRichFieldsTest.TestAResultShowsWhatTheBodyWouldShow;
+const
+  // what keeps a field one object, by the word (any form) - and the forms of a few
+  Refused: array[0..13] of string = ('trowd', 'cell', 'row', 'nestcell', 'nestrow', 'intbl',
+    'sect', 'header', 'headerl', 'headerr', 'headerf', 'footer', 'footerl', 'footerr');
+  Bytes: array[0..11] of RawByteString = ('|''41', '|''00', '|''0d', '|''0a', '|''a1', '|''4',
+    '|u0 ', '|u ', '|u20320 ', '|uc0|u20320 ', '|uc2|u20320??', '|bin3 abc');
+var
+  i, k, bad: Integer;
+  w, form: string;
+  c: Char;
+  report: string;
+
+  function Excused(const AWord: string; AForm: Integer): Boolean;
+  var
+    j: Integer;
+  begin
+    for j := 0 to High(Refused) do
+      if AWord = Refused[j] then Exit(True);
+    Result := (AWord = 'footerf') or ((AWord = 'itap') and (AForm = 1)) or
+      ((AForm >= 2) and ((AWord = 'footnote') or (AWord = 'annotation') or
+       (AWord = 'bkmkstart') or (AWord = 'bkmkend')));
+  end;
+
+  procedure Check(const S: RawByteString; AExcused: Boolean);
+  var
+    inBody, isPair, empty: Boolean;
+  begin
+    try
+      inBody := BodyShows(S);
+      FieldOf(S, isPair, empty);
+    except
+      on E: Exception do
+      begin
+        Inc(bad);
+        if Length(report) < 6000 then report := report + ' [' + Shown(S) + ']: ' + E.Message + ';';
+        Exit;
+      end;
+    end;
+    if isPair and empty then
+    begin
+      Inc(bad);
+      if Length(report) < 6000 then report := report + ' [' + Shown(S) + ']: an empty pair;';
+    end
+    else if isPair and not inBody then
+    begin
+      Inc(bad);
+      if Length(report) < 6000 then report := report + ' [' + Shown(S) + ']: shown, the body shows nothing;';
+    end
+    else if inBody and not isPair and not AExcused then
+    begin
+      Inc(bad);
+      if Length(report) < 6000 then report := report + ' [' + Shown(S) + ']: one object, the body shows it;';
+    end;
+  end;
+
+begin
+  bad := 0;
+  report := '';
+  AssertTrue('the reader''s table', TyRtfKnownWordCount > 200);
+  for i := 0 to TyRtfKnownWordCount - 1 do
+  begin
+    w := TyRtfKnownWord(i);
+    for k := 0 to 3 do
+    begin
+      case k of
+        0: form := '|' + w + ' ';
+        1: form := '|' + w + '1 ';
+        2: form := '{|' + w + ' x}';
+      else
+        form := '{|*|' + w + ' x}';
+      end;
+      Check(Rtf(form), Excused(w, k));
+    end;
+  end;
+  for c := #33 to #126 do
+    if not (c in ['a'..'z', 'A'..'Z', '0'..'9', '''', '|']) then Check(Rtf('|' + c), False);
+  Check(Rtf('||'), False);
+  Check(Rtf('|') + #13#10, False);
+  for i := 0 to High(Bytes) do Check(Rtf(Bytes[i]), False);
+  AssertEquals('results shown as the body shows them:' + report, 0, bad);
+end;
+
+{ A save after a key beside a large field - before its open mark, after its close mark, both,
+  in the paragraph where one field closes and the next opens, beside fields eight deep, after
+  Word's own contents - reads the paragraphs of the marks and the key's, not the field's: the
+  field's group goes out as one block of the file's bytes. The output is the file but for the
+  marks' paragraphs (the group cut out of both, they differ in a few hundred bytes only), read
+  back it is the edited document, and undone it saves as the file. }
+procedure TTyRichFieldsTest.TestASaveBesideALargeFieldReadsOnlyItsMarksParagraphs;
+
+  function Wrapped(ANest, AFields: Integer): RawByteString;
+  var
+    s: RawByteString;
+    i, k, f: Integer;
+  begin
+    s := H936 + '|pard intro|par ';
+    for f := 1 to AFields do
+    begin
+      for k := 1 to ANest do
+        s := s + '{|field{|*|fldinst INCLUDETEXT "part' + IntToStr(f) + IntToStr(k) + '.rtf"}{|fldrslt ';
+      for i := 1 to 12000 do
+        s := s + '|pard line ' + IntToStr(i) + ' of part ' + IntToStr(f) + ', to give it its length|par ';
+      for k := 1 to ANest do s := s + '}}';
+    end;
+    Result := Rtf(s + '|pard tail|par}');
+  end;
+
+  // the bytes A and B do not share at their start and end, the group G taken out of both
+  function DiffBytes(const A, B, G: RawByteString; out AFrom: Integer): Integer;
+  var
+    x, y: RawByteString;
+    p, s: Integer;
+  begin
+    x := A;
+    y := B;
+    p := Pos(G, x);
+    if p > 0 then Delete(x, p, Length(G));
+    p := Pos(G, y);
+    if p > 0 then Delete(y, p, Length(G));
+    p := 0;
+    while (p < Length(x)) and (p < Length(y)) and (x[p + 1] = y[p + 1]) do Inc(p);
+    s := 0;
+    while (s < Length(x) - p) and (s < Length(y) - p) and (x[Length(x) - s] = y[Length(y) - s]) do Inc(s);
+    AFrom := p;
+    Result := Length(y) - p - s;
+  end;
+
+  procedure Check(const AMsg: string; const B: TBytes; const AAt: array of TTyRichPos;
+    const AGroup: RawByteString);
+  var
+    d, r: TTyRichDocument;
+    load: TTyRtfLoad;
+    i, parses, from, n: Integer;
+    o: TBytes;
+  begin
+    d := LoadDoc(B, False);
+    try
+      load := TyRichRtfLoadOf(d);
+      load.MaxResidentIntervals := 1;
+      for i := High(AAt) downto 0 do
+        AssertTrue(AMsg + ': the key', d.Execute(TTyRichInsertText.Create(AAt[i], 'Z')));
+      parses := load.ParseCount;
+      o := SaveOut(d);
+      parses := load.ParseCount - parses;
+      // (Word's file is a few intervals; the others many)
+      AssertTrue(Format('%s: a file of many intervals: %d', [AMsg, load.IntervalCount]),
+        (Length(B) < 400000) or (load.IntervalCount > 8));
+      AssertTrue(Format('%s: intervals read for the save: %d of %d', [AMsg, parses, load.IntervalCount]),
+        parses <= 3);
+      n := DiffBytes(StrOfBytes(B), StrOfBytes(o), AGroup, from);
+      AssertTrue(Format('%s: the output differs from the file in %d bytes from %d (the group aside)',
+        [AMsg, n, from]), n < 4096 * Length(AAt));
+      AssertEquals(AMsg + ': the group once', CountRaw(AGroup, StrOfBytes(B)), CountRaw(AGroup, StrOfBytes(o)));
+      CheckBalanced(Self, AMsg, o);
+      r := LoadDoc(o, True);
+      try
+        AssertEquals(AMsg + ': read back, the edited document', '', ModelDiff(d, r));
+      finally
+        r.Free;
+      end;
+      for i := 0 to High(AAt) do d.Undo;
+      AssertTrue(AMsg + ': undone, the file', SameBytes(B, SaveOut(d)));
+    finally
+      d.Free;
+    end;
+  end;
+
+var
+  s: RawByteString;
+  b: TBytes;
+  d: TTyRichDocument;
+  openAt, closeAt, between: TTyRichPos;
+  k: Integer;
+begin
+  s := Wrapped(1, 1);
+  b := BytesOf(s);
+  d := LoadDoc(b, True);
+  try
+    openAt := d.Text.ParaStart(1);
+    closeAt := d.Text.ParaStart(d.Text.ParaCount - 1) + 1;
+    AssertTrue('the open mark there', IsOpenMark(d.ObjectAt(openAt)));
+    AssertTrue('the close mark before', IsCloseMark(d.ObjectAt(closeAt - 1)));
+  finally
+    d.Free;
+  end;
+  Check('a key before the open mark', b, [openAt], FieldGroup(s, 1));
+  Check('a key after the close mark', b, [closeAt], FieldGroup(s, 1));
+  Check('both', b, [openAt, closeAt], FieldGroup(s, 1));
+  // one field closes and the next opens in one paragraph
+  s := Wrapped(1, 2);
+  b := BytesOf(s);
+  d := LoadDoc(b, True);
+  try
+    k := 12001;
+    AssertEquals('one closes, the next opens', '][', Copy(ObjectsOf(d, k), 1, 2));
+    between := d.Text.ParaStart(k) + 1;
+  finally
+    d.Free;
+  end;
+  Check('between two fields', b, [between], FieldGroup(s, 1));
+  // eight deep: the outer marks' paragraphs
+  s := Wrapped(8, 1);
+  b := BytesOf(s);
+  d := LoadDoc(b, True);
+  try
+    openAt := d.Text.ParaStart(1);
+    closeAt := d.Text.ParaStart(d.Text.ParaCount - 1) + 8;
+    AssertTrue('eight open', IsOpenMark(d.ObjectAt(openAt + 7)));
+    AssertEquals('none open after them', 0, d.FieldDepthAt(closeAt));
+  finally
+    d.Free;
+  end;
+  Check('eight deep, before them', b, [openAt], FieldGroup(s, 1));
+  Check('eight deep, after them', b, [closeAt], FieldGroup(s, 1));
+  // right after the close mark of Word's own contents
+  b := Fixture('word-toc.rtf');
+  s := StrOfBytes(b);
+  d := LoadDoc(b, True);
+  try
+    closeAt := d.Text.ParaStart(43) + 1;
+    AssertTrue('the contents'' close mark', IsCloseMark(d.ObjectAt(closeAt - 1)));
+  finally
+    d.Free;
+  end;
+  k := Pos(Rtf('{|field|fldedit'), s);
+  Check('after Word''s contents', b, [closeAt], FieldGroup(s, CountRaw(Rtf('{|field'), Copy(s, 1, k - 1)) + 1));
+end;
+
+{ Word restates the section's properties (\sectd, \ltrsect, \linex0, \headery851 ...) inside
+  its contents' result before entries; they are no character's. Text copied out of a result
+  carries none of them: copied as RTF, pasted into the same document (as the control pastes:
+  its filter), into a second copy of the file (no filter), copied inside the document - each
+  saved holds the file's own \sectd and section words, no more; the field's bytes go out as
+  they came. }
+procedure TTyRichFieldsTest.TestTextCopiedOutOfAResultCarriesNoSectionWords;
+const
+  Words: array[0..3] of string = ('|sectd', '|ltrsect', '|linex', '|headery');
+var
+  b, r: TBytes;
+  d, d2, src: TTyRichDocument;
+  a, z, at: TTyRichPos;
+  ends: Boolean;
+  i: Integer;
+  f: RawByteString;
+
+  procedure Same(const AMsg: string; ADoc: TTyRichDocument);
+  var
+    o: RawByteString;
+    j: Integer;
+  begin
+    o := StrOfBytes(SaveOut(ADoc));
+    for j := 0 to High(Words) do
+      AssertEquals(Format('%s: %s as the file has it', [AMsg, Words[j]]), CountRaw(Rtf(Words[j]), f),
+        CountRaw(Rtf(Words[j]), o));
+  end;
+
+begin
+  b := Fixture('word-toc.rtf');
+  f := StrOfBytes(b);
+  d := LoadDoc(b, True);
+  try
+    AssertTrue('an entry''s link', d.FieldRangeAt(d.Text.ParaStart(10) + 2, a, z));
+    r := RangeOut(d, a + 1, 6);
+    for i := 0 to High(Words) do
+      AssertEquals(Format('copied: no %s', [Words[i]]), 0, CountRaw(Rtf(Words[i]), StrOfBytes(r)));
+    at := d.Text.ParaStart(d.Text.ParaCount - 1) + 2;
+    src := TyRichReadRtfFragment(r, ends);
+    AssertTrue('pasted into the same document',
+      d.Execute(TTyRichInsertFragment.Create(at, src, ends, False, TyRichFragmentFilterFor(src, d))));
+    Same('pasted into the same document', d);
+    d.Undo;
+    AssertTrue('copied inside the document', d.Execute(TTyRichCopy.Create(a + 1, 6, at)));
+    Same('copied inside the document', d);
+    d.Undo;
+    d2 := LoadDoc(b, True);
+    try
+      src := TyRichReadRtfFragment(r, ends);
+      at := d2.Text.ParaStart(d2.Text.ParaCount - 1) + 2;
+      AssertTrue('pasted into a second copy', d2.Execute(TTyRichInsertFragment.Create(at, src, ends)));
+      Same('pasted into a second copy of the file, no filter', d2);
+    finally
+      d2.Free;
+    end;
+    // an edit in the first paragraph: the body's section words as they were
+    AssertTrue('typed in the first paragraph', d.Execute(TTyRichInsertText.Create(0, 'Q')));
+    Same('typed in the first paragraph', d);
+  finally
+    d.Free;
+  end;
+  CheckRoundTrip(Self, 'Word''s contents', b);
 end;
 
 initialization

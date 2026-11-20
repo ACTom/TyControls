@@ -58,13 +58,18 @@ type
     procedure TestOneFieldAroundA100MBRtf;
     procedure TestFieldsEightDeepAround30MB;
     procedure TestTheWholeParseOfFieldsEightDeepIsLinear;
+    procedure TestASaveBesideOneFieldAround100MB;
+    procedure TestASaveBesideFieldsEightDeepAround30MB;
+  private
+    procedure SaveBesideFields(ABytes: Int64; ANest: Integer);
   end;
 
 implementation
 
 uses
   Math, LCLType, Controls, BGRABitmap, BGRABitmapTypes, tyControls.RichEdit.Text,
-  tyControls.RichEdit.RtfRead, tyControls.RichEdit.Model, tyControls.RichEdit.Commands
+  tyControls.RichEdit.RtfRead, tyControls.RichEdit.RtfWrite, tyControls.RichEdit.Model,
+  tyControls.RichEdit.Commands
   {$IFDEF LCLWin32}, test.richedit.dropacross{$ENDIF};
 
 {$IFDEF MSWINDOWS}
@@ -1290,9 +1295,10 @@ begin
     WriteLn(Format('TTyRichEditPerfTest: eight deep: working set %.0f MB after the first slice, ' +
       '%.0f MB after the first screen''s paragraphs were read', [before, after]));
     AssertEquals('eight fields open on the first screen', 8, FRich.Document.ParaFieldDepth(2));
-    AssertTrue(Format('the first screen in %.0f ms', [first]), first <= 1000);
+    // (memory first: a machine too slow for the time line still checks it)
     AssertTrue(Format('the first screen''s paragraphs added %.0f MB', [after - before]),
       after - before <= 16);
+    AssertTrue(Format('the first screen in %.0f ms', [first]), first <= 1000);
   finally
     bmp.Free;
   end;
@@ -1336,6 +1342,72 @@ begin
   Report('8 MB of paragraphs in fields eight deep: the whole parse', times[1]);
   AssertTrue(Format('eight deep in %.0f ms, none in %.0f ms', [times[1], times[0]]),
     times[1] <= 1.25 * times[0] + 100);
+end;
+
+{ A file of ANest fields around ABytes and the same paragraphs with no field, each read on
+  demand: a key typed before the first paragraph of the paragraphs (before the fields' open
+  marks) and one after the last (after their close marks), and the save after each - within
+  1.5 times the field-less file's save after the same key, and 100 ms: the fields' groups go
+  out as blocks of the file, their paragraphs neither parsed nor walked. }
+procedure TTyRichEditPerfTest.SaveBesideFields(ABytes: Int64; ANest: Integer);
+var
+  paths: array[0..1] of string;
+  times: array[0..1, 0..1] of Double;
+  i, w: Integer;
+  d: TTyRichDocument;
+  s: TFileStream;
+  o: TMemoryStream;
+  at: TTyRichPos;
+  t0: Double;
+begin
+  CheckRoom;
+  for i := 0 to 1 do
+  begin
+    paths[i] := NewFile('.rtf');
+    MakeWrappedRtf(paths[i], ABytes, ANest * i);
+    for w := 0 to 1 do
+    begin
+      d := TTyRichDocument.Create;
+      o := TMemoryStream.Create;
+      try
+        s := TFileStream.Create(paths[i], fmOpenRead or fmShareDenyWrite);
+        try
+          TyRichLoadRtf(d, s);
+        finally
+          s.Free;
+        end;
+        // paragraph 1: the fields' open marks first; the last one ("tail"): their close marks
+        if w = 0 then at := d.Text.ParaStart(1)
+        else at := d.Text.ParaStart(d.Text.ParaCount - 1) + ANest * i;
+        AssertEquals('outside every field', 0, d.FieldDepthAt(at));
+        AssertTrue('the key', d.Execute(TTyRichInsertText.Create(at, 'Z')));
+        t0 := Clock;
+        TyRichSaveRtf(d, o);
+        times[i, w] := Clock - t0;
+      finally
+        o.Free;
+        d.Free;
+      end;
+    end;
+  end;
+  for w := 0 to 1 do
+  begin
+    Report(Format('%d MB of paragraphs, %d fields deep, a key %s them: the save (no field: %.1f ms)',
+      [ABytes div (1024 * 1024), ANest, BoolToStr(w = 0, 'before', 'after')]), times[1, w]);
+    AssertTrue(Format('a key %s the fields: the save in %.0f ms, %.0f ms with no field',
+      [BoolToStr(w = 0, 'before', 'after'), times[1, w], times[0, w]]),
+      times[1, w] <= 1.5 * times[0, w] + 100);
+  end;
+end;
+
+procedure TTyRichEditPerfTest.TestASaveBesideOneFieldAround100MB;
+begin
+  SaveBesideFields(CFileBytes, 1);
+end;
+
+procedure TTyRichEditPerfTest.TestASaveBesideFieldsEightDeepAround30MB;
+begin
+  SaveBesideFields(30 * 1024 * 1024, 8);
 end;
 
 initialization
