@@ -384,6 +384,15 @@ type
     FPicNibble: Integer;
     FPicW, FPicH, FPicWGoal, FPicHGoal, FPicSX, FPicSY: Integer;
     FHeld: TTyRichPicture;      // read inside \shppict, shown when it ends
+    // what reading pictures cost here: bytes made from hex digits; bytes copied
+    FPicConverted, FPicCopied: Int64;
+    { Where the picture's bytes are: 0 none yet, 1 hex digits [FPicAt, FPicStop) of the file,
+      2 \bin's bytes there - nothing converted (MarksInFile) -, 3 converted into FPicData.
+      The same of the picture FHeld holds. }
+    FPicMode: Integer;
+    FPicAt, FPicStop: PtrInt;
+    FHeldMode: Integer;
+    FHeldAt, FHeldStop: PtrInt;
     // fields
     FFieldNest: Integer;
     FFieldText: UTF8String;
@@ -526,6 +535,7 @@ type
     procedure BeginPicture;
     function TakePicture(AStart, AStop: PtrInt): TTyRichPicture;
     procedure PutPicByte(B: Byte);
+    procedure PicOwn;
   public
     // APool nil: count characters only. The parser keeps a reference to ABytes.
     constructor Create(const ABytes: TBytes; APool: TTyFormatPool);
@@ -632,8 +642,15 @@ type
     // The bytes the pre-scan read to decide fields (tests and probes).
     property PreScannedBytes: Int64 read FPreScanned;
     { Open field marks hold their group as a range of Bytes, which the document keeps
-      (TTyRichFieldMark.CreateInFile), instead of a copy. }
+      (TTyRichFieldMark.CreateInFile), instead of a copy; so do pictures, their group and
+      their image's bytes (TTyRichPicture.CreateInFile): nothing of them is converted or
+      copied - unless the digits are not one stretch of the file (a word or a group among
+      them, \bin and digits), which no writer puts and which is converted as it is read. }
     property MarksInFile: Boolean read FMarksInFile write FMarksInFile;
+    { Picture bytes this parser made from hex digits, and copied (a picture's data, its
+      group), for tests and probes. }
+    property PictureBytesConverted: Int64 read FPicConverted;
+    property PictureBytesCopied: Int64 read FPicCopied;
   end;
 
 const
@@ -719,6 +736,7 @@ type
     FWalk: TTyRtfParser;             // StateAt's own scan, kept to go on from
     FStateBytes: Int64;              // what it scanned
     FTextVisits: Int64;              // tree nodes entered putting groups' values in and out
+    FPicConverted, FPicCopied: Int64; // what parses did with pictures' bytes
     FVerdicts: TTyRtfFieldVerdicts;  // what the scan decided of large fields
     FPreScanned: Int64;              // what parses' pre-scans read (the scan's own aside)
     { The paragraphs' fields, as the scan found them, by where they begin in the file: an
@@ -863,6 +881,9 @@ type
     // ... and the text's tree nodes entered setting parsed paragraphs' values and taking
     // them back (a cost of each interval parsed, not of the one who asked)
     property TextVisits: Int64 read FTextVisits;
+    // ... and the pictures' bytes those parses made from hex digits, and copied
+    property PictureBytesConverted: Int64 read FPicConverted;
+    property PictureBytesCopied: Int64 read FPicCopied;
     property ParseCount: Integer read FParseCount;
     // The file was parsed as a whole (TyRichLoadRtfFull): one parse from its first byte to
     // its last set every paragraph, and nothing is ever sent back to unparsed.
@@ -1374,6 +1395,17 @@ begin
   else
     Result := -1;
   end;
+end;
+
+// A hex digit among ABuf[AFrom .. ATo - 1] (a picture's bytes begin with one: found at once).
+function HasHexIn(ABuf: PByte; AFrom, ATo: PtrInt): Boolean;
+begin
+  while AFrom < ATo do
+  begin
+    if HexVal(ABuf[AFrom]) >= 0 then Exit(True);
+    Inc(AFrom);
+  end;
+  Result := False;
 end;
 
 function IsLetter(B: Byte): Boolean; inline;
@@ -2520,10 +2552,34 @@ begin
       begin
         any := True;
         if not Counting then
-          while p < e do
+          if (FPicMode = 1) and (p = FPicStop) then
+            // (the stretch goes on: nothing came between)
+            FPicStop := e
+          else if FPicMode = 3 then
+            while p < e do
+            begin
+              PutPicByte(FBuf[p]);
+              Inc(p);
+            end
+          else if HasHexIn(FBuf, p, e) then
           begin
-            PutPicByte(FBuf[p]);
-            Inc(p);
+            // (text that holds no digit adds nothing to the picture, wherever it is)
+            if FPicMode = 0 then
+            begin
+              FPicMode := 1;
+              FPicAt := p;
+              FPicStop := e;
+            end
+            else
+            begin
+              // digits after something else: not one stretch, read as a converting reader does
+              PicOwn;
+              while p < e do
+              begin
+                PutPicByte(FBuf[p]);
+                Inc(p);
+              end;
+            end;
           end;
       end;
   else
@@ -2557,12 +2613,24 @@ begin
   FS.GroupOpen := False;
   if FS.Props.Dest = rdPict then
   begin
-    if not Counting then
+    if not Counting and (FPicMode = 0) then
     begin
+      // the picture's bytes are these, where they are
+      if FTok.Stop > FTok.DataStart then
+      begin
+        FPicMode := 2;
+        FPicAt := FTok.DataStart;
+        FPicStop := FTok.Stop;
+      end;
+    end
+    else if not Counting then
+    begin
+      PicOwn;
       FPicNibble := -1;
       if FPicLen + (FTok.Stop - FTok.DataStart) > Length(FPicData) then
         SetLength(FPicData, FPicLen + (FTok.Stop - FTok.DataStart));
       p := FTok.DataStart;
+      Inc(FPicCopied, FTok.Stop - FTok.DataStart);
       while p < FTok.Stop do
       begin
         FPicData[FPicLen] := FBuf[p];
@@ -2993,7 +3061,13 @@ begin
       begin
         // (FObjects owns what TakePicture makes until a document takes it)
         pic := TakePicture(AOld.DestStart, FTokStop);
-        if FS.Props.Dest = rdShpPict then FHeld := pic
+        if FS.Props.Dest = rdShpPict then
+        begin
+          FHeld := pic;
+          FHeldMode := FPicMode;
+          FHeldAt := FPicAt;
+          FHeldStop := FPicStop;
+        end
         else EmitObject(pic);
       end;
     rdShpPict:
@@ -3013,8 +3087,17 @@ begin
         end;
         if FHeld <> nil then
         begin
-          pic := TTyRichPicture.Create(FHeld.PictureFormat, FHeld.Data, FHeld.WidthTwips,
-            FHeld.HeightTwips, Fragment(Range(AOld.DestStart, stop)), FS.Props.Uc);
+          if FHeldMode <> 3 then
+            // its bytes where the held one's are, its group the pair's
+            pic := TTyRichPicture.CreateInFile(FHeld.PictureFormat, FBytes, FHeldAt,
+              FHeldStop - FHeldAt, FHeldMode = 2, FHeld.WidthTwips, FHeld.HeightTwips,
+              AOld.DestStart, stop - AOld.DestStart, FS.Props.Uc)
+          else
+          begin
+            Inc(FPicCopied, stop - AOld.DestStart);
+            pic := TTyRichPicture.Create(FHeld.PictureFormat, FHeld.Data, FHeld.WidthTwips,
+              FHeld.HeightTwips, Fragment(Range(AOld.DestStart, stop)), FS.Props.Uc);
+          end;
           FObjects.Add(pic);
           FHeld := nil;
           EmitObject(pic);
@@ -3296,6 +3379,8 @@ begin
   FPicData := nil;
   FPicLen := 0;
   FPicNibble := -1;
+  // (a reader whose bytes no document keeps converts as it reads)
+  if FMarksInFile then FPicMode := 0 else FPicMode := 3;
   FPicW := 0;
   FPicH := 0;
   FPicWGoal := 0;
@@ -3318,7 +3403,29 @@ begin
   if FPicLen = Length(FPicData) then SetLength(FPicData, FPicLen * 2 + 256);
   FPicData[FPicLen] := (FPicNibble shl 4) or h;
   Inc(FPicLen);
+  Inc(FPicConverted);
   FPicNibble := -1;
+end;
+
+{ The picture's bytes noted where they are, converted into FPicData after all: more of them
+  follow that are not of the same stretch. }
+procedure TTyRtfParser.PicOwn;
+var
+  q: PtrInt;
+begin
+  case FPicMode of
+    1:
+      for q := FPicAt to FPicStop - 1 do PutPicByte(FBuf[q]);
+    2:
+      begin
+        if FPicLen + (FPicStop - FPicAt) > Length(FPicData) then
+          SetLength(FPicData, FPicLen + (FPicStop - FPicAt));
+        Move(FBuf[FPicAt], FPicData[FPicLen], FPicStop - FPicAt);
+        Inc(FPicLen, FPicStop - FPicAt);
+        Inc(FPicCopied, FPicStop - FPicAt);
+      end;
+  end;
+  FPicMode := 3;
 end;
 
 procedure TTyRtfParser.PictWord(AKw: Integer);
@@ -3360,10 +3467,25 @@ begin
   if FPicSY > 0 then h := h * FPicSY div 100;
   if w > High(Integer) then w := High(Integer) else if w < 0 then w := 0;
   if h > High(Integer) then h := High(Integer) else if h < 0 then h := 0;
-  data := Copy(FPicData, 0, FPicLen);
   // (its group has ended: the \uc in effect now is the one it was opened under)
-  Result := TTyRichPicture.Create(FPicFormat, data, Integer(w), Integer(h),
-    Fragment(Range(AStart, AStop)), FS.Props.Uc);
+  if FPicMode <> 3 then
+  begin
+    // where its bytes and its group are in the file the document keeps: nothing copied
+    if FPicMode = 0 then
+    begin
+      FPicAt := AStart;
+      FPicStop := AStart;
+    end;
+    Result := TTyRichPicture.CreateInFile(FPicFormat, FBytes, FPicAt, FPicStop - FPicAt,
+      FPicMode = 2, Integer(w), Integer(h), AStart, AStop - AStart, FS.Props.Uc);
+  end
+  else
+  begin
+    data := Copy(FPicData, 0, FPicLen);
+    Inc(FPicCopied, FPicLen + (AStop - AStart));
+    Result := TTyRichPicture.Create(FPicFormat, data, Integer(w), Integer(h),
+      Fragment(Range(AStart, AStop)), FS.Props.Uc);
+  end;
   FObjects.Add(Result);
   FPicData := nil;
   FPicLen := 0;
@@ -6033,6 +6155,8 @@ begin
     Inc(FParsedBytes, p.Position - start);
     Inc(FParseCount);
     Inc(FPreScanned, p.PreScannedBytes);
+    Inc(FPicConverted, p.PictureBytesConverted);
+    Inc(FPicCopied, p.PictureBytesCopied);
     Result := GroupFrom(p, s, e);
   finally
     p.Free;
@@ -6142,6 +6266,8 @@ begin
     Inc(FParsedBytes, p.Position);
     Inc(FParseCount);
     Inc(FPreScanned, p.PreScannedBytes);
+    Inc(FPicConverted, p.PictureBytesConverted);
+    Inc(FPicCopied, p.PictureBytesCopied);
     n := p.ParaCount;
     if (n <> FDoc.Text.ParaCount) or (p.HeaderEnd <> FHeaderEnd) or
        (p.TrailerStart <> FTrailer.Start) then
@@ -7814,7 +7940,13 @@ begin
       code page (its alternative text): its image, as a picture made here is written - the
       properties go with the rest of its RTF (the smaller of the two ways; rewriting
       the text as \uN would mean re-encoding a group this control never shows). }
-    if (p.RawRtf = '') or not (Foreign(p.RawRtf, False) or HasForeignText(p.RawRtf)) then Exit;
+    b := p.RawRtf;
+    if (b = '') or not (Foreign(b, False) or HasForeignText(b)) then
+    begin
+      // (it leaves the document it was read into: its bytes go with it, not that file's)
+      if p.InFile then Result := p.Clone;
+      Exit;
+    end;
     // its image, as a picture made here is written
     Result := TTyRichPicture.Create(p.PictureFormat, p.Data, p.WidthTwips, p.HeightTwips);
   end;

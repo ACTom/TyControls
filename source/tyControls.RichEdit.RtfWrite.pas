@@ -451,6 +451,7 @@ type
     procedure WriteUnit(AUnit: Cardinal);
     procedure WriteObject(AObj: TTyRichObject);
     procedure WritePicture(APic: TTyRichPicture);
+    procedure RawPicture(APic: TTyRichPicture);
     procedure LeaveGroupsAt(APos: Int64);
     procedure RestoreAt(APos: Int64; ANext: Integer);
     procedure BalanceTrailer;
@@ -931,6 +932,26 @@ begin
   Put(p, n);
   FNeedDelim := False;
   FRawOpen := False;
+  if uc then Word('uc1');
+end;
+
+// A picture's group as read - in place (a file's bytes are not copied) - under the \uc it
+// was read under, as RawUnder.
+procedure TRtfWriter.RawPicture(APic: TTyRichPicture);
+var
+  p: PByte;
+  n: Int64;
+  uc: Boolean;
+begin
+  p := APic.RawRtfData;
+  n := APic.RawRtfLength;
+  if n <= 0 then Exit;
+  uc := (APic.RawUc <> 1) and (p^ = Ord('{'));
+  if uc then WordN('uc', APic.RawUc);
+  Put(p, n);
+  FNeedDelim := False;
+  // (as Raw: a group ends at its brace; one that does not ends in what it ends in)
+  FRawOpen := (p[n - 1] <> Ord('}')) and EndsInOpenWord(APic.RawRtf);
   if uc then Word('uc1');
 end;
 
@@ -2787,7 +2808,10 @@ end;
 procedure TRtfWriter.WritePicture(APic: TTyRichPicture);
 var
   i: Integer;
+  data: TBytes;
 begin
+  // (asked once: a picture whose bytes are its file's makes them each time)
+  data := APic.Data;
   Sym('{');
   Word('pict');
   case APic.PictureFormat of
@@ -2807,14 +2831,14 @@ begin
   if APic.WidthTwips > 0 then WordN('picwgoal', APic.WidthTwips);
   if APic.HeightTwips > 0 then WordN('pichgoal', APic.HeightTwips);
   PutB(Ord(' '));
-  for i := 0 to High(APic.Data) do
+  for i := 0 to High(data) do
   begin
     if (i > 0) and (i mod 64 = 0) then
     begin
       PutB(13);
       PutB(10);
     end;
-    Hex(APic.Data[i]);
+    Hex(data[i]);
   end;
   Sym('}');
 end;
@@ -2827,7 +2851,7 @@ begin
     RawUnder(TTyRichOpaque(AObj).Bytes, AObj.RawUc)
   else if AObj is TTyRichPicture then
   begin
-    if TTyRichPicture(AObj).RawRtf <> '' then RawUnder(TTyRichPicture(AObj).RawRtf, AObj.RawUc)
+    if TTyRichPicture(AObj).RawRtfLength > 0 then RawPicture(TTyRichPicture(AObj))
     else WritePicture(TTyRichPicture(AObj));
   end
   else

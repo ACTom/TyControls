@@ -11450,21 +11450,27 @@ function TTyRichSharedPictures.MapObject(AObj: TTyRichObject; out AText: UTF8Str
 var
   got, src: TTyRichPicture;
   j: Integer;
+  gd, sd: TBytes;
 begin
   AText := '';
   if FInner = nil then Result := AObj else Result := FInner.MapObject(AObj, AText);
   if not (Result is TTyRichPicture) then Exit;
   got := TTyRichPicture(Result);
+  gd := got.Data;
   for j := FNext to Math.Min(High(FPics), FNext + CRichSharedLookAhead - 1) do
   begin
     src := FPics[j];
     Inc(GSharedPictureCompares);
-    if (src.PictureFormat <> got.PictureFormat) or (Length(src.Data) <> Length(got.Data)) or
-      ((Length(src.Data) > 0) and not CompareMem(@src.Data[0], @got.Data[0], Length(src.Data))) then
+    if src.PictureFormat <> got.PictureFormat then Continue;
+    { (asked once: one whose bytes are its source's file's makes them - and what it makes is
+      this document's own, not a reference to that file) }
+    sd := src.Data;
+    if (Length(sd) <> Length(gd)) or
+      ((Length(sd) > 0) and not CompareMem(@sd[0], @gd[0], Length(sd))) then
       Continue;
     FNext := j + 1;
     // (one the reader's filter made is no one's yet: it goes)
-    Result := TTyRichPicture.Create(got.PictureFormat, src.Data, got.WidthTwips,
+    Result := TTyRichPicture.Create(got.PictureFormat, sd, got.WidthTwips,
       got.HeightTwips, got.RawRtf, got.RawUc);
     if got <> AObj then got.Free;
     Exit;

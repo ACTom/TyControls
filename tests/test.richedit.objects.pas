@@ -952,7 +952,7 @@ begin
     back := PictureAt(p);
     AssertEquals(IntToStr(kind) + ': the new width', 1440 + 360, back.WidthTwips);
     AssertEquals(IntToStr(kind) + ': the height', 720, back.HeightTwips);
-    AssertTrue(IntToStr(kind) + ': the data shared', Pointer(back.Data) = Pointer(pic.Data));
+    AssertTrue(IntToStr(kind) + ': the data shared', back.DataIdentity = pic.DataIdentity);
     saved := SaveRtf;
     // read back: the same bytes and format, the new size
     d := LoadDoc(saved);
@@ -1850,7 +1850,7 @@ begin
   SelectAt(p);
   PaintAll;
   Drag(rhRight, 12, 0);
-  AssertTrue('the PNG''s bytes', Pointer(PictureAt(p).Data) = Pointer(pic.Data));
+  AssertTrue('the PNG''s bytes', PictureAt(p).DataIdentity = pic.DataIdentity);
   saved := SaveRtf;
   {$IFDEF WINDOWS}
   if RichEditText(saved, text) then

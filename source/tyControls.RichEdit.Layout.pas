@@ -4975,7 +4975,9 @@ var
 begin
   Result := nil;
   if not APicture.DisplayData(fmt, start, count) then Exit;
-  // a kept block's picture: its bytes decoded for this decode only
+  { a kept block's picture: its bytes decoded for this decode only; so are those of a
+    picture whose bytes are its file's (Data makes them) - in the background work, not where
+    its paragraph was parsed }
   if APicture is TTyRichKeptPicture then data := TTyRichKeptPicture(APicture).ImageData
   else data := APicture.Data;
   if (start < 0) or (count <= 0) or (Int64(start) + count > System.Length(data)) then Exit;
@@ -5138,9 +5140,13 @@ end;
   a picture with no bytes, itself. The format is added to the block's address: blocks lie
   further apart than the formats count. }
 function PictureKey(APicture: TTyRichPicture): Pointer; inline;
+var
+  p: Pointer;
 begin
-  if Length(APicture.Data) = 0 then Result := APicture
-  else Result := Pointer(PtrUInt(Pointer(APicture.Data)) + PtrUInt(Ord(APicture.PictureFormat)));
+  // (where its bytes are: a picture whose bytes are its file's is not made to make them)
+  p := APicture.DataIdentity;
+  if p = nil then Result := APicture
+  else Result := Pointer(PtrUInt(p) + PtrUInt(Ord(APicture.PictureFormat)));
 end;
 
 procedure TTyRichLayouter.PictureUnlink(AEntry: TObject);
@@ -5514,13 +5520,12 @@ function TTyRichLayouter.PictureReady(APicture: TTyRichPicture; AWidth,
 var
   o: TObject;
   e: TTyPictureEntry;
-  fmt: TTyRichPictureFormat;
-  start, count: Integer;
 begin
   if (APicture = nil) or (AWidth <= 0) or (AHeight <= 0) then Exit(True);
-  // never drawn: there is something to decode, unless nothing of it can be shown
+  { never drawn: there is something to decode, unless nothing of it can be shown - asked
+    without reading the bytes of one whose bytes are its file's (the decode finds out) }
   if not FPictures.TryGetValue(APicture, o) then
-    Exit(not APicture.DisplayData(fmt, start, count));
+    Exit(not APicture.MayShow);
   e := TTyPictureEntry(o);
   if not e.Tried then Exit(False);
   case TPictureDraw(PictureHow(e, AWidth, AHeight)) of
