@@ -307,7 +307,8 @@ uses
   test.richedit.dropacross,
   test.richedit.perf,
   test.richedit.fields,
-  test.richedit.fieldctl;
+  test.richedit.fieldctl,
+  test.richedit.keptpictures;
 
 type
   TTyTestRunner = class(TTestRunner)
