@@ -53,6 +53,7 @@ type
     procedure TestEachKindShowsThePictureItCarries;
     procedure TestTheFirstPictureAndTheResultBeforePib;
     procedure TestOfWordsPairTheFirstThatCanBeDrawn;
+    procedure TestTheFirstPictureThatCanBeDrawnAndAShapesPib;
     procedure TestWhatCannotBeDrawnStaysAsItWas;
     procedure TestTheSizeIsThePicturesOwnDisplaySize;
     procedure TestWiderThanTheTextAsAPictureIs;
@@ -580,6 +581,32 @@ begin
     AssertTrue(KindNames[k] + ': the first, the metafile after it unread, not ' + PxText(c),
       SamePx(Red, c));
   end;
+end;
+
+{ Of several pictures, the first the layout can draw: in an equation's or an object's, past
+  an undrawable one; in a shape, through its result's pictures in order, then its pib - Word's
+  floating image keeps a metafile in its result and the PNG in its pib. Only when none can be
+  drawn is the block as it was. }
+procedure TTyRichKeptPictureTest.TestTheFirstPictureThatCanBeDrawnAndAShapesPib;
+var
+  c: TBGRAPixel;
+  w, h: Integer;
+begin
+  BoxOf(InPara(ShapeResult(WmfPict, Pict(Green, 30, 10, 900, 450))), w, h);
+  AssertEquals('a metafile in the result, a PNG in pib: the PNG''s width', 60, w);
+  AssertEquals('a metafile in the result, a PNG in pib: the PNG''s height', 30, h);
+  c := MiddleColour(InPara(ShapeResult(WmfPict, GreenPict)));
+  AssertTrue('a metafile in the result: drawn as the pib, not ' + PxText(c), SamePx(Green, c));
+  c := MiddleColour(InPara(ShapeResult(EmfPict + WmfPict, GreenPict)));
+  AssertTrue('two metafiles in the result: the pib, not ' + PxText(c), SamePx(Green, c));
+  c := MiddleColour(InPara(ShapeResult(EmfPict + RedPict, GreenPict)));
+  AssertTrue('the result''s drawable one before the pib, not ' + PxText(c), SamePx(Red, c));
+  c := MiddleColour(InPara(EmbeddedObject(EmfPict + GreenPict)));
+  AssertTrue('an object: past the undrawable one, not ' + PxText(c), SamePx(Green, c));
+  c := MiddleColour(InPara(Equation(WmfPict + GreenPict)));
+  AssertTrue('an equation: past the undrawable one, not ' + PxText(c), SamePx(Green, c));
+  BoxOf(InPara(ShapeResult(EmfPict, WmfPict)), w, h);
+  AssertEquals('nothing drawable anywhere: as it was', 0, w);
 end;
 
 { No picture, a metafile nothing here draws (EMF, a WMF that is not one bitmap), a picture of
