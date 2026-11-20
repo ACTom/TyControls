@@ -124,6 +124,8 @@ Full walkthrough: [docs/getting-started.en.md](docs/getting-started.en.md).
 |---|---|
 | `TTyEdit` | Single-line edit: selection, clipboard, word navigation |
 | `TTyMemo` | Multi-line edit |
+| `TTyRichEdit` | Rich text editing: RTF and plain text, formats, lists, tables, pictures; 100 MB files without lag |
+| `TTyRichEditRuler` | The rich edit's ruler: indents and tab stops, draggable |
 | `TTyTerminalView` | Terminal: draws a program's output and encodes keys for the host, after xterm.js; its own colour scheme if wanted (reads and writes Windows Terminal's format); hooks for in-band protocols and for the parser (ZModem send and receive in the example) |
 | `TTySpinEdit` | Integer spinner |
 | `TTyFloatSpinEdit` | Decimal spinner; the step can be less than 1 |
@@ -456,6 +458,7 @@ The repository also has a theme editor, `tools/themebuilder`: the preview follow
 | [labels](examples/labels/) | Link, shadow and glow labels |
 | [listbox](examples/listbox/) | `TTyListBox`: multiselect, sorting, row height, selecting and scrolling from code |
 | [memo](examples/memo/) | `TTyMemo`: word wrap, read-only, undo/redo, clipboard, Tab and Enter handling, a length cap, scroll bars |
+| [richedit](examples/richedit/) | `TTyRichEdit`: a small word processor - menus and a toolbar made of its actions, the ruler, a status bar, RTF and text files, sample documents |
 | [menu](examples/menu/) | Menu bar, enhanced context menu, plain themed menu, and rolling the window up by double-clicking the title bar |
 | [panel](examples/panel/) | `TTyPanel`: nesting, caption alignment, `StyleOverride`, hints and clicks |
 | [progressbar](examples/progressbar/) | `TTyProgressBar`: animation, vertical, any range, click to seek, disabled |
