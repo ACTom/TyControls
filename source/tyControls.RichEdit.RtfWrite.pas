@@ -641,26 +641,38 @@ end;
 
 // A fragment that ends with a control word and no delimiter: text right after it would be
 // read as part of the word.
-function EndsInOpenWord(const S: RawByteString): Boolean;
+// The ALen bytes at P end in a control word (EndsInOpenWord), read from their end only.
+function EndsInOpenWordAt(P: PByte; ALen: Int64): Boolean;
 var
-  i, q, slashes: Integer;
+  i, q, slashes: Int64;
+
+  function At(AIndex: Int64): AnsiChar; inline;
+  begin
+    Result := AnsiChar(P[AIndex - 1]);
+  end;
+
 begin
   Result := False;
-  i := Length(S);
+  i := ALen;
   if i < 2 then Exit;
-  while (i >= 1) and (S[i] in ['0'..'9']) do Dec(i);
-  if (i >= 1) and (S[i] = '-') and (i < Length(S)) then Dec(i);
+  while (i >= 1) and (At(i) in ['0'..'9']) do Dec(i);
+  if (i >= 1) and (At(i) = '-') and (i < ALen) then Dec(i);
   q := i;
-  while (i >= 1) and (S[i] in ['a'..'z', 'A'..'Z']) do Dec(i);
-  if (i = q) or (i < 1) or (S[i] <> '\') then Exit;
+  while (i >= 1) and (At(i) in ['a'..'z', 'A'..'Z']) do Dec(i);
+  if (i = q) or (i < 1) or (At(i) <> '\') then Exit;
   // the backslash is one that starts a word, not an escaped backslash before text
   slashes := 0;
-  while (i >= 1) and (S[i] = '\') do
+  while (i >= 1) and (At(i) = '\') do
   begin
     Inc(slashes);
     Dec(i);
   end;
   Result := Odd(slashes);
+end;
+
+function EndsInOpenWord(const S: RawByteString): Boolean;
+begin
+  Result := (S <> '') and EndsInOpenWordAt(PByte(PAnsiChar(S)), Length(S));
 end;
 
 // A kept group that holds a \uN: how many of the bytes after it are its fallback is said by
@@ -950,8 +962,8 @@ begin
   if uc then WordN('uc', APic.RawUc);
   Put(p, n);
   FNeedDelim := False;
-  // (as Raw: a group ends at its brace; one that does not ends in what it ends in)
-  FRawOpen := (p[n - 1] <> Ord('}')) and EndsInOpenWord(APic.RawRtf);
+  // (as Raw; read where the group is - a cut-off one is not copied to look at its end)
+  FRawOpen := EndsInOpenWordAt(p, n);
   if uc then Word('uc1');
 end;
 
@@ -2811,7 +2823,7 @@ var
   data: TBytes;
 begin
   // (asked once: a picture whose bytes are its file's makes them each time)
-  data := APic.Data;
+  data := APic.MakeImageData;
   Sym('{');
   Word('pict');
   case APic.PictureFormat of

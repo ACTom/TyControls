@@ -237,16 +237,20 @@ type
 
   TTyRichPictureFormat = (rpfUnknown, rpfPng, rpfJpeg, rpfBmp, rpfDib, rpfEmf, rpfWmf);
 
-  { A picture: an image file's bytes (Data) shown at a display size. One read from a file the
-    document keeps (its load holds the file's bytes for the paragraphs nobody changed) does
-    not convert or copy anything when its paragraph is parsed: it holds a reference to that
-    buffer, where its image's bytes are in it (hex digits, or \bin's bytes) and where its
-    group is (RawRtf) - so parsing a paragraph with a picture costs what finding the group's
-    end costs, whatever the picture's size, and the buffer lives as long as one such picture
-    does (TTyRichFieldMark.CreateInFile is the same). Its bytes are made where they are
-    needed: Data makes them each time it is asked, the layout's decode (in the background)
-    reads them once a decode, a writer writes its group where it is. A clone, and what goes
-    to another document, owns its bytes. }
+  { A picture: an image file's bytes (MakeImageData) shown at a display size. One read from a
+    file the document keeps (its load holds the file's bytes for the paragraphs nobody
+    changed) does not convert or copy anything when its paragraph is parsed: it holds a
+    reference to that buffer, where its image's bytes are in it (hex digits, or \bin's bytes)
+    and where its group is (RawRtf) - so parsing a paragraph with a picture costs what finding
+    the group's end costs, whatever the picture's size, and the buffer lives as long as one
+    such picture does (TTyRichFieldMark.CreateInFile is the same). Its bytes are made where
+    they are needed, by MakeImageData, each time it is called: the layout's decode makes them
+    once a decode (a step of the control's idle work, on the user-interface thread: the
+    conversion is part of that step), a writer of a resized picture once a save; a writer
+    writes its group where it is. They are not kept: kept, they would be memory that comes
+    and goes with no command (the history counts what an object holds by DataBytes, which
+    must not change while it lives). A clone, and what goes to another document, owns its
+    bytes. }
   TTyRichPicture = class(TTyRichObject)
   private
     FFormat: TTyRichPictureFormat;
@@ -262,8 +266,9 @@ type
     FFileData, FFileDataLen: Int64;
     FFileBin: Boolean;
     FFileRaw, FFileRawLen: Int64;
-    function GetData: TBytes;
     function GetRawRtf: RawByteString;
+    // FShown and the rest, from the image's bytes themselves
+    procedure ShowFrom(const AData: TBytes);
   public
     constructor Create(AFormat: TTyRichPictureFormat; const AData: TBytes;
       AWidthTwips, AHeightTwips: Integer; const ARawRtf: RawByteString = '';
@@ -279,9 +284,10 @@ type
     function Clone: TTyRichObject; override;
     // its bytes are a range of its file's (CreateInFile), not its own
     function InFile: Boolean;
-    { Where its image's bytes are - its Data's block, or the place in its file's bytes - nil
-      for none: two pictures of the same identity show the same (a resized one, one parsed
-      again). }
+    { Where its image's bytes are - its own block, or the place in its file's bytes - nil for
+      none: two pictures of the same identity and format show the same (a resized one, one
+      parsed again). Meaningful only while the picture lives: a freed block's address may be
+      another's later. }
     function DataIdentity: Pointer;
     { Its group where it is: RawRtfLength bytes from RawRtfData, valid while it lives (a
       writer reads them in place). }
@@ -289,33 +295,44 @@ type
     function RawRtfLength: Int64;
     { False only where DisplayData is False, answered without reading its bytes for one whose
       bytes are its file's and whose answer is not known yet (beyond the first two digits; a
-      metafile then may show) - what a paint asks, before the decode in the background finds
-      out. }
+      metafile then may show) - what a paint asks, before the decode in an idle step (on the
+      user-interface thread) finds out. }
     function MayShow: Boolean;
+    { The image file's bytes - made from its file's bytes each time it is called (a new array
+      each time: call it once and keep what it gives, never in a loop over the bytes); for a
+      picture that owns them, its very bytes, not a copy. Do not change them. }
+    function MakeImageData: TBytes; virtual;
+    { How many bytes MakeImageData gives, without making them: for hex digits of a file a
+      count of the digits (a look at each, no array). }
+    function ImageDataLength: Int64; virtual;
+    { DisplayData and the bytes it speaks of, made once: what a decode for display asks
+      (the answer worked out from the made bytes - nothing is counted or made twice). False:
+      nothing can be shown, AData nil. }
+    function DisplayBytes(out AFormat: TTyRichPictureFormat; out AStart, ACount: Integer;
+      out AData: TBytes): Boolean;
     function DataBytes: Int64; override;
-    // its Data: a resized picture shares it
+    // its own bytes: a resized picture shares them
     function SharedData(out ABytes: Int64): Pointer; override;
     function DisplaySize(out AWidthTwips, AHeightTwips: Integer): Boolean; override;
     { True: a picture can be shown at any size - also one shown as a placeholder (a metafile
       nothing here draws). }
     function CanResize: Boolean; override;
-    { The same format and the very same Data (shared, not copied), the new display size, and no
+    { The same format and the very same bytes (shared, not copied), the new display size, and no
       RawRtf: a writer writes it from the model at its new size - what the file's group said
       besides the picture (scaling words, cropping, other representations of it) is not kept.
       Made by the class reference, so a subclass's object is of its class; a subclass with
       fields of its own overrides this to copy them. }
     function Resized(AWidthTwips, AHeightTwips: Integer): TTyRichObject; override;
     { What an image decoder can show of this picture: the format to decode as and the part of
-      Data to hand it, [AStart, AStart + ACount). PNG, JPEG, BMP and DIB pictures are their
-      data; a metafile whose whole drawing is one bitmap is that bitmap (rpfDib, the
-      BITMAPINFO inside the metafile). False for any other metafile, and for an unknown or
-      empty picture: the layout draws a placeholder. Nothing is decoded or copied here, and
-      PictureFormat and Data stay what the file had (writing is unchanged). }
+      its image's bytes (MakeImageData) to hand it, [AStart, AStart + ACount). PNG, JPEG, BMP
+      and DIB pictures are their data; a metafile whose whole drawing is one bitmap is that
+      bitmap (rpfDib, the BITMAPINFO inside the metafile). False for any other metafile, and
+      for an unknown or empty picture: the layout draws a placeholder. Worked out once; for a
+      picture of its file's bytes that counts the hex digits, and walks a metafile in a copy
+      made for that only (a decode asks DisplayBytes, which does neither). PictureFormat and
+      the bytes stay what the file had (writing is unchanged). }
     function DisplayData(out AFormat: TTyRichPictureFormat; out AStart, ACount: Integer): Boolean;
     property PictureFormat: TTyRichPictureFormat read FFormat;
-    { The image file's bytes; do not change them. Made each time it is asked for a picture
-      whose bytes are its file's (a new array each time) - ask once and keep what it gives. }
-    property Data: TBytes read GetData;
     property WidthTwips: Integer read FWidthTwips;  // display size
     property HeightTwips: Integer read FHeightTwips;
     { The {\pict ...} group as read, '' if new - a copy, for a picture whose bytes are its
@@ -325,10 +342,10 @@ type
 
   { The picture a block of kept RTF carries inside its own bytes for readers that cannot draw
     the block itself (TTyRichOpaque.DisplayPicture): what the layout shows for the block. It is
-    never in a document - the block is - and has no Data: the image file's bytes are
-    [DataStart, DataStart + DataLength) of Source, the block's own bytes (the same string, not
-    a copy), written there as hex digits or, with Hex False, as \bin's bytes; ImageData decodes
-    them, each time it is called. DisplayData answers in the decoded bytes, PictureFormat and
+    never in a document - the block is - and has no bytes of its own: the image file's bytes
+    are [DataStart, DataStart + DataLength) of Source, the block's own bytes (the same string,
+    not a copy), written there as hex digits or, with Hex False, as \bin's bytes;
+    MakeImageData decodes them, each time it is called. DisplayData answers in the decoded bytes, PictureFormat and
     the display size are those of the block's \pict group. It cannot be resized: the block it shows is
     one object of bytes no one rewrites. }
   TTyRichKeptPicture = class(TTyRichPicture)
@@ -345,7 +362,8 @@ type
     function Resized(AWidthTwips, AHeightTwips: Integer): TTyRichObject; override;
     { The image file's bytes, decoded from Source as a reader decodes a picture's (a lone hex
       digit at the end is dropped). }
-    function ImageData: TBytes;
+    function MakeImageData: TBytes; override;
+    function ImageDataLength: Int64; override;
     property Source: RawByteString read FSource;
     property DataStart: Integer read FDataAt;      // 0-based, in Source
     property DataLength: Integer read FDataLen;
@@ -1874,6 +1892,10 @@ function TyRichLiveParaValues: Int64;
 { How many times a kept block's bytes were searched for the picture it carries
   (TTyRichOpaque.DisplayPicture), in every document - for tests. }
 function TyRichKeptPictureLookups: Int64;
+{ What making a picture's bytes from its file's bytes cost, in every document - for tests: the
+  bytes made, and the bytes looked at only to count a picture's hex digits. }
+function TyRichPictureBytesMade: Int64;
+function TyRichPictureDigitsCounted: Int64;
 
 implementation
 
@@ -1886,6 +1908,9 @@ var
   GLiveParaValues: Int64 = 0;
   // TyRichKeptPictureLookups
   GKeptPictureLookups: Int64 = 0;
+  // TyRichPictureBytesMade, TyRichPictureDigitsCounted
+  GPictureBytesMade: Int64 = 0;
+  GPictureDigitsCounted: Int64 = 0;
 
 const
   // RunStep
@@ -1935,6 +1960,16 @@ end;
 function TyRichKeptPictureLookups: Int64;
 begin
   Result := GKeptPictureLookups;
+end;
+
+function TyRichPictureBytesMade: Int64;
+begin
+  Result := GPictureBytesMade;
+end;
+
+function TyRichPictureDigitsCounted: Int64;
+begin
+  Result := GPictureDigitsCounted;
 end;
 
 function TyRichNoSpaceScript(C: Cardinal): Boolean;
@@ -2490,7 +2525,7 @@ begin
   Result := FFile <> nil;
 end;
 
-function TTyRichPicture.GetData: TBytes;
+function TTyRichPicture.MakeImageData: TBytes;
 begin
   if FFile = nil then Exit(FData);
   Result := nil;
@@ -2502,6 +2537,7 @@ begin
   end
   else
     Result := KeptDecodeHex(@FFile[FFileData], FFileDataLen);
+  Inc(GPictureBytesMade, Length(Result));
 end;
 
 function TTyRichPicture.GetRawRtf: RawByteString;
@@ -2637,88 +2673,107 @@ end;
 
 function TTyRichPicture.Clone: TTyRichObject;
 begin
-  // (a file's bytes made its own: GetData and GetRawRtf copy them)
-  Result := TTyRichPicture.Create(FFormat, GetData, FWidthTwips, FHeightTwips, GetRawRtf, FRawUc);
+  // (a file's bytes made its own: MakeImageData and GetRawRtf copy them)
+  Result := TTyRichPicture.Create(FFormat, MakeImageData, FWidthTwips, FHeightTwips, GetRawRtf,
+    FRawUc);
+end;
+
+procedure TTyRichPicture.ShowFrom(const AData: TBytes);
+var
+  bm: TTyWmfBitmap;
+begin
+  FShown := 2;
+  FShowFormat := rpfUnknown;
+  FShowStart := 0;
+  FShowCount := 0;
+  if Length(AData) = 0 then Exit;
+  case FFormat of
+    rpfPng, rpfJpeg, rpfBmp, rpfDib:
+      begin
+        FShown := 1;
+        FShowFormat := FFormat;
+        FShowCount := Length(AData);
+      end;
+    rpfWmf:
+      if TyWmfSingleBitmap(AData, bm) then
+      begin
+        FShown := 1;
+        FShowFormat := rpfDib;
+        FShowStart := bm.DibStart;
+        FShowCount := bm.DibCount;
+      end;
+  else
+    ;  // EMF and other metafiles are drawn by nothing in phase 1
+  end;
 end;
 
 function TTyRichPicture.DisplayData(out AFormat: TTyRichPictureFormat;
   out AStart, ACount: Integer): Boolean;
 var
   bm: TTyWmfBitmap;
-
-  // the same answers from the file's bytes: the digits counted, a metafile's walked in place
-  // (\bin) or in a copy made for that only
-  procedure DisplayInFile;
-  var
-    n: Int64;
-    d: TBytes;
-    ok: Boolean;
-  begin
-    if FFileDataLen <= 0 then Exit;
-    if FFileBin then n := FFileDataLen
-    else n := KeptHexDigits(@FFile[FFileData], FFileDataLen) div 2;
-    if (n <= 0) or (n > MaxInt) then Exit;
-    case FFormat of
-      rpfPng, rpfJpeg, rpfBmp, rpfDib:
-        begin
-          FShown := 1;
-          FShowFormat := FFormat;
-          FShowCount := Integer(n);
-        end;
-      rpfWmf:
-        begin
-          if FFileBin then
-            ok := TyWmfSingleBitmap(@FFile[FFileData], FFileDataLen, bm)
-          else
-          begin
-            d := GetData;
-            ok := TyWmfSingleBitmap(d, bm);
-          end;
-          if ok then
-          begin
-            FShown := 1;
-            FShowFormat := rpfDib;
-            FShowStart := bm.DibStart;
-            FShowCount := bm.DibCount;
-          end;
-        end;
-    end;
-  end;
-
+  n: Int64;
 begin
   // the picture never changes, so the metafile's records are walked once
   if FShown = 0 then
-  begin
-    FShown := 2;
-    FShowFormat := rpfUnknown;
-    FShowStart := 0;
-    FShowCount := 0;
-    if FFile <> nil then
-      DisplayInFile
-    else if Length(FData) > 0 then
-      case FFormat of
-        rpfPng, rpfJpeg, rpfBmp, rpfDib:
-          begin
-            FShown := 1;
-            FShowFormat := FFormat;
-            FShowCount := Length(FData);
-          end;
-        rpfWmf:
-          if TyWmfSingleBitmap(FData, bm) then
-          begin
-            FShown := 1;
-            FShowFormat := rpfDib;
-            FShowStart := bm.DibStart;
-            FShowCount := bm.DibCount;
-          end;
+    if FFile = nil then
+      ShowFrom(FData)
+    else if FFormat = rpfWmf then
+    begin
+      // walked in place (\bin), or in a copy made for that only
+      if FFileBin and (FFileDataLen > 0) then
+      begin
+        ShowFrom(nil);
+        if TyWmfSingleBitmap(@FFile[FFileData], FFileDataLen, bm) then
+        begin
+          FShown := 1;
+          FShowFormat := rpfDib;
+          FShowStart := bm.DibStart;
+          FShowCount := bm.DibCount;
+        end;
+      end
       else
-        ;  // EMF and other metafiles are drawn by nothing in phase 1
+        ShowFrom(MakeImageData);
+    end
+    else
+    begin
+      // the same answers without the bytes: how many there are
+      ShowFrom(nil);
+      n := ImageDataLength;
+      if (n > 0) and (n <= MaxInt) and (FFormat in [rpfPng, rpfJpeg, rpfBmp, rpfDib]) then
+      begin
+        FShown := 1;
+        FShowFormat := FFormat;
+        FShowCount := Integer(n);
       end;
-  end;
+    end;
   Result := FShown = 1;
   AFormat := FShowFormat;
   AStart := FShowStart;
   ACount := FShowCount;
+end;
+
+function TTyRichPicture.DisplayBytes(out AFormat: TTyRichPictureFormat;
+  out AStart, ACount: Integer; out AData: TBytes): Boolean;
+begin
+  AData := nil;
+  // nothing to make for what is known to show nothing, or of a kind nothing here draws
+  if (FShown = 2) or ((FShown = 0) and
+    not (FFormat in [rpfPng, rpfJpeg, rpfBmp, rpfDib, rpfWmf])) then
+    Exit(DisplayData(AFormat, AStart, ACount));
+  AData := MakeImageData;
+  // (worked out from these bytes when it was not yet: nothing counted, nothing made again)
+  if FShown = 0 then ShowFrom(AData);
+  Result := DisplayData(AFormat, AStart, ACount);
+  if not Result then AData := nil;
+end;
+
+function TTyRichPicture.ImageDataLength: Int64;
+begin
+  if FFile = nil then Exit(Length(FData));
+  if FFileDataLen <= 0 then Exit(0);
+  if FFileBin then Exit(FFileDataLen);
+  Inc(GPictureDigitsCounted, FFileDataLen);
+  Result := KeptHexDigits(@FFile[FFileData], FFileDataLen) div 2;
 end;
 
 constructor TTyRichOpaque.Create(const ABytes: RawByteString; const ADisplayText: UTF8String;
@@ -3326,7 +3381,20 @@ begin
   Result := nil;
 end;
 
-function TTyRichKeptPicture.ImageData: TBytes;
+function TTyRichKeptPicture.ImageDataLength: Int64;
+begin
+  if (FDataLen <= 0) or (FDataAt < 0) or (Int64(FDataAt) + FDataLen > Length(FSource)) then
+    Exit(0);
+  if FHex then
+  begin
+    Inc(GPictureDigitsCounted, FDataLen);
+    Result := KeptHexDigits(PByte(PAnsiChar(FSource)) + FDataAt, FDataLen) div 2;
+  end
+  else
+    Result := FDataLen;
+end;
+
+function TTyRichKeptPicture.MakeImageData: TBytes;
 begin
   Result := nil;
   if (FDataLen <= 0) or (FDataAt < 0) or (Int64(FDataAt) + FDataLen > Length(FSource)) then Exit;

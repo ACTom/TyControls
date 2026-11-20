@@ -1412,7 +1412,7 @@ begin
   got := TTyRichPicture(FRich.Document.ObjectAt(2));
   AssertTrue('copied: an object there', got <> nil);
   AssertTrue('copied: another object', got <> pic);
-  AssertTrue('copied: the very block of bytes', Pointer(got.Data) = Pointer(pic.Data));
+  AssertTrue('copied: the very block of bytes', got.DataIdentity = pic.DataIdentity);
   AssertTrue('the original still there', FRich.Document.ObjectAt(14) = pic);
   // a file's picture: moved, undone, saved: the file
   file0 := StrOfBytes(FixtureBytes('re-zh-picture.rtf'));

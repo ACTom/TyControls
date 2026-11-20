@@ -301,13 +301,13 @@ begin
     begin
       p := TTyRichPicture(l[i]);
       AssertTrue(Format('picture %d stays a metafile', [i]), p.PictureFormat = rpfWmf);
-      AssertEquals(Format('picture %d: its data is the metafile', [i]), $0001, U16(p.Data, 0));
+      AssertEquals(Format('picture %d: its data is the metafile', [i]), $0001, U16(p.MakeImageData, 0));
       AssertTrue(Format('picture %d: written back as read', [i]),
         Pos('{\pict{\*\picprop}\wmetafile8', p.RawRtf) = 1);
       AssertTrue(Format('picture %d shows', [i]), p.DisplayData(fmt, start, count));
       AssertTrue(Format('picture %d shows a DIB', [i]), fmt = rpfDib);
-      CheckDibHeader(Format('picture %d', [i]), p.Data, start, count, 96, 64, Bits[i]);
-      AssertTrue(Format('picture %d: one bitmap', [i]), TyWmfSingleBitmap(p.Data, bm));
+      CheckDibHeader(Format('picture %d', [i]), p.MakeImageData, start, count, 96, 64, Bits[i]);
+      AssertTrue(Format('picture %d: one bitmap', [i]), TyWmfSingleBitmap(p.MakeImageData, bm));
       AssertEquals(Format('picture %d: pixel width', [i]), 96, bm.Width);
       AssertEquals(Format('picture %d: pixel height', [i]), 64, bm.Height);
       AssertEquals(Format('picture %d: the same range', [i]), start, bm.DibStart);
@@ -373,7 +373,7 @@ begin
     // Word's fallback draws nothing but one 8-bit META_DIBSTRETCHBLT of 56 x 24 pixels
     AssertTrue('one bitmap', p.DisplayData(fmt, start, count));
     AssertTrue('shown as a DIB', fmt = rpfDib);
-    CheckDibHeader('the formula', p.Data, start, count, 56, 24, 8);
+    CheckDibHeader('the formula', p.MakeImageData, start, count, 56, 24, 8);
   finally
     l.Free;
     f.Free;
@@ -450,7 +450,7 @@ begin
   d := LoadBytes(ReadFileBytes(FixtureDir + 'wp-zh-picture.rtf'));
   l := PicturesOf(d);
   try
-    data := Copy(TTyRichPicture(l[0]).Data);
+    data := Copy(TTyRichPicture(l[0]).MakeImageData);
   finally
     l.Free;
     d.Free;
@@ -584,7 +584,7 @@ begin
     AssertTrue('as DIB', fmt = rpfDib);
     AssertEquals('the DIB', 18 + 10 + 6 + 22, start);
     AssertEquals('its length', 56, count);
-    AssertEquals('the data stays the metafile', 18 + 10 + 84 + 6, Length(p.Data));
+    AssertEquals('the data stays the metafile', 18 + 10 + 84 + 6, Length(p.MakeImageData));
   finally
     p.Free;
   end;

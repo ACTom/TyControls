@@ -299,8 +299,8 @@ begin
   pa := A as TTyRichPicture;
   pb := B as TTyRichPicture;
   Result := (pa.PictureFormat = pb.PictureFormat) and (pa.WidthTwips = pb.WidthTwips) and
-    (pa.HeightTwips = pb.HeightTwips) and (Length(pa.Data) = Length(pb.Data)) and
-    ((Length(pa.Data) = 0) or CompareMem(@pa.Data[0], @pb.Data[0], Length(pa.Data)));
+    (pa.HeightTwips = pb.HeightTwips) and (Length(pa.MakeImageData) = Length(pb.MakeImageData)) and
+    ((Length(pa.MakeImageData) = 0) or CompareMem(PByte(pa.MakeImageData), PByte(pb.MakeImageData), Length(pa.MakeImageData)));
 end;
 
 type
@@ -2627,7 +2627,7 @@ begin
   AssertTrue('stored as PNG', p.PictureFormat = rpfPng);
   AssertEquals('4 px at 96 dpi', 60, p.WidthTwips);
   AssertEquals('3 px at 96 dpi', 45, p.HeightTwips);
-  img := DecodePng(p.Data);
+  img := DecodePng(p.MakeImageData);
   try
     AssertEquals('its width', 4, img.Width);
     AssertEquals('its height', 3, img.Height);
@@ -2641,7 +2641,7 @@ begin
   FRich.SelStart := 1;
   Clip('', '', MakeDib(2, 2, 10, 20, 30, 0), rikDib);
   FRich.PasteFromClipboard;
-  img := DecodePng((ObjectAt(1) as TTyRichPicture).Data);
+  img := DecodePng((ObjectAt(1) as TTyRichPicture).MakeImageData);
   try
     AssertEquals('opaque', 255, img.GetPixel(0, 0).alpha);
   finally
@@ -2673,7 +2673,7 @@ begin
   FRich.PasteFromClipboard;
   p := ObjectAt(1) as TTyRichPicture;
   AssertTrue('PNG', p.PictureFormat = rpfPng);
-  AssertTrue('its bytes kept', SameRaw(StrOfBytes(png), StrOfBytes(p.Data)));
+  AssertTrue('its bytes kept', SameRaw(StrOfBytes(png), StrOfBytes(p.MakeImageData)));
   AssertEquals('5 px', 75, p.WidthTwips);
   PaintAll;
   st := TBytesStream.Create;
@@ -2692,7 +2692,7 @@ begin
       begin
         found := True;
         AssertTrue('read back: its bytes', SameRaw(StrOfBytes(png),
-          StrOfBytes(TTyRichPicture(runs[i].Obj).Data)));
+          StrOfBytes(TTyRichPicture(runs[i].Obj).MakeImageData)));
         AssertEquals('read back: its width', 75, TTyRichPicture(runs[i].Obj).WidthTwips);
       end;
     AssertTrue('read back: a picture', found);
@@ -3037,7 +3037,7 @@ begin
   FillChar(b[Length(png)], 13, 0);
   AssertTrue('made', TyRichMakePicture(b, rikPng, 0, pic) = rpmMade);
   try
-    AssertEquals('kept to its IEND', Length(png), Length(pic.Data));
+    AssertEquals('kept to its IEND', Length(png), Length(pic.MakeImageData));
   finally
     pic.Free;
   end;
@@ -3090,7 +3090,7 @@ begin
   s := DibHeader(2, 1, 24, 1) + #9#9#9#0 + #255#0#0 + #0#0#255 + #0#0;
   AssertTrue('made', TyRichMakePicture(RawBytes(s), rikDib, 0, pic) = rpmMade);
   try
-    bmp := DecodePng(pic.Data);
+    bmp := DecodePng(pic.MakeImageData);
     try
       AssertEquals('two pixels', 2, bmp.Width);
       AssertTrue('the first blue', (bmp.GetPixel(0, 0).blue = 255) and (bmp.GetPixel(0, 0).red = 0));

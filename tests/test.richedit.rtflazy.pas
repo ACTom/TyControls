@@ -403,8 +403,8 @@ begin
   pb := B as TTyRichPicture;
   Result := (pa.PictureFormat = pb.PictureFormat) and (pa.WidthTwips = pb.WidthTwips) and
     (pa.HeightTwips = pb.HeightTwips) and (pa.RawRtf = pb.RawRtf) and
-    (Length(pa.Data) = Length(pb.Data)) and
-    ((Length(pa.Data) = 0) or CompareMem(@pa.Data[0], @pb.Data[0], Length(pa.Data)));
+    (Length(pa.MakeImageData) = Length(pb.MakeImageData)) and
+    ((Length(pa.MakeImageData) = 0) or CompareMem(PByte(pa.MakeImageData), PByte(pb.MakeImageData), Length(pa.MakeImageData)));
 end;
 
 procedure TTyRtfLazyTest.CheckAgree(const AMsg: string; ALazy, AFull: TTyRichDocument;

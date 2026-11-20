@@ -1567,7 +1567,7 @@ begin
     AssertTrue('the layout shows the picture', found);
     w := TTyRichPicture(obj).WidthTwips;
     h := TTyRichPicture(obj).HeightTwips;
-    n := Length(TTyRichPicture(obj).Data);
+    n := Length(TTyRichPicture(obj).MakeImageData);
     AssertTrue('a size', (w > 0) and (h > 0) and (n > 0));
     AssertEquals('its box', TyRichTwipsToPx(w, 96, 1), fr.Width);
     BeginPoison;
@@ -1578,7 +1578,7 @@ begin
         TBuilderAccess.Value(d, q) = nil);
       AssertEquals('the width, still', w, TTyRichPicture(obj).WidthTwips);
       AssertEquals('the height', h, TTyRichPicture(obj).HeightTwips);
-      AssertEquals('the data', n, Length(TTyRichPicture(obj).Data));
+      AssertEquals('the data', n, Length(TTyRichPicture(obj).MakeImageData));
       AssertTrue('held', obj.RefCount >= 1);
     finally
       EndPoison;
@@ -4454,7 +4454,7 @@ begin
     L.Paint(bmp, 0, 0, Rect(0, 0, 300, 200), st, 0, 0);
     AssertEquals('an enlargement: no scaled copy', 0, FLayouter.PictureScales);
     AssertTrue(Format('kept: the decoded image alone (%d bytes)', [FLayouter.PictureCacheBytes]),
-      FLayouter.PictureCacheBytes <= 600 * 400 * 4 + Length(big.Data) + 1024);
+      FLayouter.PictureCacheBytes <= 600 * 400 * 4 + Length(big.MakeImageData) + 1024);
     AssertTrue('the part in the clip drawn', SamePx(blue, bmp.GetPixel(150, 100)));
     // a reduction to more than the copy budget: drawn from the decoded image as well
     FLayouter.PictureScaleBudget := 1000;

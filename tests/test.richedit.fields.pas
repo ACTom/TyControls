@@ -343,7 +343,7 @@ begin
       SameRaw(TTyRichOpaque(A).DisplayText, TTyRichOpaque(B).DisplayText));
   if A is TTyRichPicture then
     Exit((TTyRichPicture(A).PictureFormat = TTyRichPicture(B).PictureFormat) and
-      (Length(TTyRichPicture(A).Data) = Length(TTyRichPicture(B).Data)));
+      (Length(TTyRichPicture(A).MakeImageData) = Length(TTyRichPicture(B).MakeImageData)));
   if A is TTyRichFieldMark then
     Exit((TTyRichFieldMark(A).Kind = TTyRichFieldMark(B).Kind) and
       SameRaw(TTyRichFieldMark(A).Bytes, TTyRichFieldMark(B).Bytes));

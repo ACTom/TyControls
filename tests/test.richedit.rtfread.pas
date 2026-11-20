@@ -1243,8 +1243,8 @@ begin
     AssertTrue('picture starting a paragraph', o is TTyRichPicture);
     p := TTyRichPicture(o);
     AssertTrue('png', p.PictureFormat = rpfPng);
-    AssertTrue('png signature', (Length(p.Data) > 8) and CompareMem(@p.Data[0], @Png[0], 8));
-    AssertEquals('PNG data length', 211, Length(p.Data));
+    AssertTrue('png signature', (Length(p.MakeImageData) > 8) and CompareMem(PByte(p.MakeImageData), @Png[0], 8));
+    AssertEquals('PNG data length', 211, Length(p.MakeImageData));
     AssertEquals('width', 720, p.WidthTwips);
     AssertEquals('height', 480, p.HeightTwips);
     AssertText('raw start', '{\pict{\*\picprop', Copy(p.RawRtf, 1, 17));
@@ -1255,7 +1255,7 @@ begin
     p := TTyRichPicture(o);
     AssertEquals('width 2', 360, p.WidthTwips);
     AssertEquals('height 2', 240, p.HeightTwips);
-    AssertTrue('png 2', CompareMem(@p.Data[0], @Png[0], 8));
+    AssertTrue('png 2', CompareMem(PByte(p.MakeImageData), @Png[0], 8));
   finally
     d.Free;
   end;
@@ -1267,14 +1267,14 @@ begin
     CheckParas('pair', d, ['a' + ObjChar + 'b' + ObjChar + 'x']);
     p := ObjAt(d, 0, 1) as TTyRichPicture;
     AssertTrue('the pair shows the first', p.PictureFormat = rpfPng);
-    AssertEquals('the pair: 4 bytes', 4, Length(p.Data));
+    AssertEquals('the pair: 4 bytes', 4, Length(p.MakeImageData));
     AssertEquals('scaled width', 500, p.WidthTwips);
     AssertEquals('scaled height', 200, p.HeightTwips);
     AssertText('the pair''s bytes', raw, p.RawRtf);
     p := ObjAt(d, 0, 3) as TTyRichPicture;
     AssertTrue('jpeg', p.PictureFormat = rpfJpeg);
-    AssertEquals('\bin data', 4, Length(p.Data));
-    AssertEquals('\bin data: the brace is data', Ord('{'), p.Data[0]);
+    AssertEquals('\bin data', 4, Length(p.MakeImageData));
+    AssertEquals('\bin data: the brace is data', Ord('{'), p.MakeImageData[0]);
     AssertEquals('pixels to twips', 150, p.WidthTwips);
     AssertEquals('pixels to twips (height)', 300, p.HeightTwips);
   finally
@@ -1504,7 +1504,7 @@ begin
   d := LoadString('{\rtf1 a{\pict\pngblip\bin100 xy');
   try
     CheckParas('\bin past the end', d, ['a' + ObjChar]);
-    AssertEquals('the data there', 2, Length((ObjAt(d, 0, 1) as TTyRichPicture).Data));
+    AssertEquals('the data there', 2, Length((ObjAt(d, 0, 1) as TTyRichPicture).MakeImageData));
   finally
     d.Free;
   end;
@@ -1590,14 +1590,14 @@ begin
   d := LoadString('{\rtf1 a{\pict\pngblip\bin-5 4142}b\par}');
   try
     CheckParas('\bin-5', d, ['a' + ObjChar + 'b']);
-    AssertEquals('\bin-5: the hex after it is the data', 2, Length((ObjAt(d, 0, 1) as TTyRichPicture).Data));
+    AssertEquals('\bin-5: the hex after it is the data', 2, Length((ObjAt(d, 0, 1) as TTyRichPicture).MakeImageData));
   finally
     d.Free;
   end;
   d := LoadString('{\rtf1 a{\pict\pngblip\bin99999999999999999999 xy}b\par}');
   try
     CheckParas('\bin saturated', d, ['a' + ObjChar]);
-    AssertEquals('\bin saturated: to the end of the file', 9, Length((ObjAt(d, 0, 1) as TTyRichPicture).Data));
+    AssertEquals('\bin saturated: to the end of the file', 9, Length((ObjAt(d, 0, 1) as TTyRichPicture).MakeImageData));
   finally
     d.Free;
   end;

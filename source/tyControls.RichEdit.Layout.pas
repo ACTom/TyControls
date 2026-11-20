@@ -5019,7 +5019,10 @@ begin
 end;
 
 { The bytes a decoder is handed for the picture: what DisplayData says can be shown (a DIB with
-  a BITMAPFILEHEADER put in front); nil when nothing can. }
+  a BITMAPFILEHEADER put in front); nil when nothing can. A kept block's picture, and one whose
+  bytes are its file's, has them made for this decode only (DisplayBytes: once, the answer
+  worked out from them) - in the control's idle step that decodes it, on the user-interface
+  thread, not where its paragraph was parsed. }
 function PictureStream(APicture: TTyRichPicture): TMemoryStream;
 var
   fmt: TTyRichPictureFormat;
@@ -5027,12 +5030,7 @@ var
   data: TBytes;
 begin
   Result := nil;
-  if not APicture.DisplayData(fmt, start, count) then Exit;
-  { a kept block's picture: its bytes decoded for this decode only; so are those of a
-    picture whose bytes are its file's (Data makes them) - in the background work, not where
-    its paragraph was parsed }
-  if APicture is TTyRichKeptPicture then data := TTyRichKeptPicture(APicture).ImageData
-  else data := APicture.Data;
+  if not APicture.DisplayBytes(fmt, start, count, data) then Exit;
   if (start < 0) or (count <= 0) or (Int64(start) + count > System.Length(data)) then Exit;
   Result := TMemoryStream.Create;
   try

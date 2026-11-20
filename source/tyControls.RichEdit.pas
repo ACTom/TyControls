@@ -11354,8 +11354,11 @@ type
     pictures, read back from that RTF, are each made again with the source picture's own
     bytes (the same array: a picture is immutable, so two documents may share its bytes)
     where the source has a picture of the same bytes - the first such one after the last
-    found, in text order -: the target's objects are its own, the bytes are not copied. The
-    rest is the reader's filter's (AInner). }
+    found, in text order -: the target's objects are its own, the bytes are not copied. A
+    source picture whose bytes are its file's shares nothing of that file: the one read back
+    keeps the copy of its own it has (equal to them). A source picture's bytes are made to be
+    compared only when their length is that of the one read back (ImageDataLength makes
+    nothing), once each. The rest is the reader's filter's (AInner). }
   TTyRichSharedPictures = class(TTyRichFragmentFilter)
   private
     FInner: TTyRichFragmentFilter;
@@ -11456,19 +11459,24 @@ begin
   if FInner = nil then Result := AObj else Result := FInner.MapObject(AObj, AText);
   if not (Result is TTyRichPicture) then Exit;
   got := TTyRichPicture(Result);
-  gd := got.Data;
+  gd := got.MakeImageData;
   for j := FNext to Math.Min(High(FPics), FNext + CRichSharedLookAhead - 1) do
   begin
     src := FPics[j];
     Inc(GSharedPictureCompares);
     if src.PictureFormat <> got.PictureFormat then Continue;
-    { (asked once: one whose bytes are its source's file's makes them - and what it makes is
-      this document's own, not a reference to that file) }
-    sd := src.Data;
-    if (Length(sd) <> Length(gd)) or
-      ((Length(sd) > 0) and not CompareMem(@sd[0], @gd[0], Length(sd))) then
-      Continue;
+    // the same bytes where they are; else bytes of another length are not made to compare
+    if (src.DataIdentity <> got.DataIdentity) or (src.DataIdentity = nil) then
+    begin
+      if src.ImageDataLength <> Length(gd) then Continue;
+      // (one that could be equal: made once - of its file's bytes, a copy only for this look)
+      sd := src.MakeImageData;
+      if (Length(sd) > 0) and not CompareMem(@sd[0], @gd[0], Length(sd)) then Continue;
+    end;
     FNext := j + 1;
+    { the source's very bytes when it owns them; of its file's, the copy the one read back
+      has (the target's own, equal to them: nothing of the source's file comes along) }
+    if src.InFile then sd := gd else sd := src.MakeImageData;
     // (one the reader's filter made is no one's yet: it goes)
     Result := TTyRichPicture.Create(got.PictureFormat, sd, got.WidthTwips,
       got.HeightTwips, got.RawRtf, got.RawUc);

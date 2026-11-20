@@ -3095,7 +3095,7 @@ begin
           else
           begin
             Inc(FPicCopied, stop - AOld.DestStart);
-            pic := TTyRichPicture.Create(FHeld.PictureFormat, FHeld.Data, FHeld.WidthTwips,
+            pic := TTyRichPicture.Create(FHeld.PictureFormat, FHeld.MakeImageData, FHeld.WidthTwips,
               FHeld.HeightTwips, Fragment(Range(AOld.DestStart, stop)), FS.Props.Uc);
           end;
           FObjects.Add(pic);
@@ -7948,7 +7948,7 @@ begin
       Exit;
     end;
     // its image, as a picture made here is written
-    Result := TTyRichPicture.Create(p.PictureFormat, p.Data, p.WidthTwips, p.HeightTwips);
+    Result := TTyRichPicture.Create(p.PictureFormat, p.MakeImageData, p.WidthTwips, p.HeightTwips);
   end;
 end;
 

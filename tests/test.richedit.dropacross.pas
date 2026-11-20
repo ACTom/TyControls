@@ -246,6 +246,7 @@ type
     procedure TestNothingOfTheControlsReachesTheApplication;
     procedure TestACommandTheDoorDidNotTakeGoesWithTheControl;
     procedure TestPicturesAfterChangedOnesStillShareTheirBytes;
+    procedure TestPicturesOfTheSourcesFileAreMadeOnlyWhenTheyCouldMatch;
     {$IFDEF LCLWin32}
     procedure TestEveryPictureFileIsSizedForTheDropPlace;
     procedure TestAControlFreedDuringAnOleDropStopsThere;
@@ -482,7 +483,7 @@ begin
   if not Change or not (Result is TTyRichPicture) or (ChangeLeft = 0) then Exit;
   if ChangeLeft > 0 then Dec(ChangeLeft);
   p := TTyRichPicture(Result);
-  b := Copy(p.Data, 0, Length(p.Data));
+  b := Copy(p.MakeImageData, 0, Length(p.MakeImageData));
   if Length(b) > 0 then b[High(b)] := b[High(b)] xor $FF;
   Result := TTyRichPicture.Create(p.PictureFormat, b, p.WidthTwips, p.HeightTwips);
   if p <> AObj then p.Free;
@@ -1204,7 +1205,7 @@ begin
   got := TTyRichPicture(FB.Document.ObjectAt(6));
   AssertTrue('a picture there', (got <> nil) and (got is TTyRichPicture));
   AssertTrue('the target''s own object', got <> pic);
-  AssertTrue('the source''s very bytes', Pointer(got.Data) = Pointer(pic.Data));
+  AssertTrue('the source''s very bytes', got.DataIdentity = pic.DataIdentity);
   AssertTrue('gone from the source', FA.Document.ObjectAt(13) = nil);
   FA.Undo;
   AssertTrue('undo there: the very object back', FA.Document.ObjectAt(13) = pic);
@@ -1928,7 +1929,7 @@ begin
     end;
   AssertTrue('the pictures went in', got <> nil);
   AssertTrue('with bytes of their own (none matched)',
-    Pointer(got.Data) <> Pointer(TTyRichPicture(FA.Document.ObjectAt(1)).Data));
+    got.DataIdentity <> TTyRichPicture(FA.Document.ObjectAt(1)).DataIdentity);
 end;
 
 { A rich edit on a form that takes no input now is no target: another form is the modal one,
@@ -2238,7 +2239,7 @@ begin
     if FB.Document.ObjectAt(i) is TTyRichPicture then
     begin
       got := TTyRichPicture(FB.Document.ObjectAt(i));
-      if Pointer(got.Data) = Pointer(src[k].Data) then
+      if got.DataIdentity = src[k].DataIdentity then
       begin
         if k >= 20 then Inc(shared);
       end
@@ -2251,6 +2252,86 @@ begin
   AssertEquals('the 20 after them share the source''s bytes', 20, shared);
   AssertTrue(Format('a few comparisons for each (%d for 40)', [TyRichDropPictureCompares - c0]),
     TyRichDropPictureCompares - c0 <= 8 * 40);
+end;
+
+{ The source's pictures read from its file (their bytes are that file's): a picture read back
+  is held against a source picture's bytes only when their lengths agree - none of the others
+  is made -, so a drop whose round trip changed every picture makes each source picture's
+  bytes once at most (besides the copy each picture read back gets as its own); one it did
+  not change gets the bytes as its own, equal to the source's. }
+procedure TTyRichDropAcrossTest.TestPicturesOfTheSourcesFileAreMadeOnlyWhenTheyCouldMatch;
+const
+  D: array[0..15] of AnsiChar = '0123456789abcdef';
+var
+  offer: TTyRichSelectionOffer;
+  p: TPoint;
+  i, j, k: Integer;
+  b: TBGRABitmap;
+  st: TBytesStream;
+  data: array of TBytes;
+  rtf, hex: RawByteString;
+  total, m0, made: Int64;
+  got: TTyRichPicture;
+  pass: Integer;
+begin
+  SetLength(data, 12);
+  rtf := '{' + #92 + 'rtf1' + #92 + 'ansi' + #92 + 'deff0{' + #92 + 'fonttbl{' + #92 +
+    'f0 Arial;}}' + #13#10 + #92 + 'pard x';
+  total := 0;
+  for i := 0 to High(data) do
+  begin
+    b := TBGRABitmap.Create(3 + i * 4, 5 + i, BGRA(i * 17, 40, 90, 255));
+    st := TBytesStream.Create;
+    try
+      for j := 0 to b.Width - 1 do b.SetPixel(j, j mod b.Height, BGRA(j * 9, 200, i, 255));
+      b.SaveToStreamAs(st, ifPng);
+      data[i] := Copy(st.Bytes, 0, st.Size);
+    finally
+      st.Free;
+      b.Free;
+    end;
+    Inc(total, Length(data[i]));
+    hex := '';
+    for j := 0 to High(data[i]) do hex := hex + D[data[i][j] shr 4] + D[data[i][j] and 15];
+    rtf := rtf + '{' + #92 + 'pict' + #92 + 'pngblip' + #92 + 'picw20' + #92 + 'pich20 ' + hex + '}';
+  end;
+  for i := 0 to High(data) do
+    for j := 0 to i - 1 do
+      AssertTrue('lengths of their own', Length(data[i]) <> Length(data[j]));
+  rtf := rtf + #92 + 'par' + #13#10 + '}';
+  for pass := 0 to 1 do
+  begin
+    LoadRtf(FA, rtf);
+    Load(FB, 'alpha beta');
+    FB.ChangePictures := pass = 0;
+    m0 := TyRichPictureBytesMade;
+    offer := TTyRichSelectionOffer.Create(FA, 0, FA.Document.Text.Length);
+    try
+      p := Pt(FB, 6);
+      AssertTrue('a copy there', FB.DropEnter(offer, p.X, p.Y, [ssCtrl]) = rdeCopy);
+      AssertTrue('copied', FB.DropOn(p.X, p.Y, [ssCtrl]) = rdeCopy);
+    finally
+      offer.Free;
+    end;
+    FB.ChangePictures := False;
+    made := TyRichPictureBytesMade - m0;
+    // (each picture read back is made its own once; a source picture once, when it could match)
+    AssertTrue(Format('%d: bytes made: %d for %d bytes of pictures', [pass, made, total]),
+      made <= 2 * total);
+    k := 0;
+    for i := 0 to FB.Document.Text.Length - 1 do
+      if FB.Document.ObjectAt(i) is TTyRichPicture then
+      begin
+        got := TTyRichPicture(FB.Document.ObjectAt(i));
+        AssertFalse('the target''s own bytes', got.InFile);
+        if pass = 1 then
+          AssertTrue(Format('picture %d: the source''s bytes', [k]),
+            (Length(got.MakeImageData) = Length(data[k])) and
+            CompareMem(PByte(got.MakeImageData), @data[k][0], Length(data[k])));
+        Inc(k);
+      end;
+    AssertEquals('all went in', Length(data), k);
+  end;
 end;
 
 {$IFDEF LCLWin32}
@@ -2383,7 +2464,7 @@ begin
         begin
           AssertTrue(what + ': a picture', FA.Document.ObjectAt(4) is TTyRichPicture);
           AssertTrue(what + ': the PNG''s own bytes', StrOfBytes(TTyRichPicture(
-            FA.Document.ObjectAt(4)).Data) = StrOfBytes(d.Png));
+            FA.Document.ObjectAt(4)).MakeImageData) = StrOfBytes(d.Png));
         end;
       4:
         begin
@@ -2579,11 +2660,11 @@ begin
   e := DropAt(FA, d, p, 0, DROPEFFECT_COPY or DROPEFFECT_MOVE);
   AssertEquals('pictures: copied', DROPEFFECT_COPY, e);
   got := TTyRichPicture(FA.Document.ObjectAt(4));
-  AssertTrue('the first file first', (got <> nil) and (Length(got.Data) = Length(pa)) and
-    CompareMem(@got.Data[0], @pa[0], Length(pa)));
+  AssertTrue('the first file first', (got <> nil) and (Length(got.MakeImageData) = Length(pa)) and
+    CompareMem(PByte(got.MakeImageData), @pa[0], Length(pa)));
   got := TTyRichPicture(FA.Document.ObjectAt(5));
-  AssertTrue('the second after it', (got <> nil) and (Length(got.Data) = Length(pb)) and
-    CompareMem(@got.Data[0], @pb[0], Length(pb)));
+  AssertTrue('the second after it', (got <> nil) and (Length(got.MakeImageData) = Length(pb)) and
+    CompareMem(PByte(got.MakeImageData), @pb[0], Length(pb)));
   AssertEquals('one step', 1, FA.Document.UndoDepth);
   AssertEquals('named as an inserted picture', rsRichUndoInsertPicture,
     FA.Document.UndoDescription);
@@ -2920,7 +3001,7 @@ var
           f.Free;
         end;
         AssertTrue(Format('%s: picture %d is file %d', [AWhat, j, j]),
-          StrOfBytes(got.Data) = StrOfBytes(bytes));
+          StrOfBytes(got.MakeImageData) = StrOfBytes(bytes));
         AssertEquals(Format('%s: picture %d''s width', [AWhat, j]), want.WidthTwips, got.WidthTwips);
         AssertEquals(Format('%s: picture %d''s height', [AWhat, j]), want.HeightTwips,
           got.HeightTwips);

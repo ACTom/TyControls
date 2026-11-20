@@ -861,7 +861,7 @@ begin
   AssertTrue('a new object', nw <> old);
   AssertEquals('the width', 1950, nw.WidthTwips);
   AssertEquals('the height follows the shape', 975, nw.HeightTwips);
-  AssertTrue('the same bytes, shared', Pointer(nw.Data) = Pointer(old.Data));
+  AssertTrue('the same bytes, shared', nw.DataIdentity = old.DataIdentity);
   AssertTrue('the same format', nw.PictureFormat = old.PictureFormat);
   AssertEquals('no raw RTF', '', nw.RawRtf);
   AssertEquals('selected again: start', p, FRich.SelStart);
@@ -963,7 +963,7 @@ begin
         AssertTrue(IntToStr(kind) + ': read back a picture', d.ObjectAt(k) is TTyRichPicture);
         back := TTyRichPicture(d.ObjectAt(k));
         AssertTrue(IntToStr(kind) + ': the format', back.PictureFormat = pic.PictureFormat);
-        AssertTrue(IntToStr(kind) + ': the bytes', SameBytes(back.Data, pic.Data));
+        AssertTrue(IntToStr(kind) + ': the bytes', SameBytes(back.MakeImageData, pic.MakeImageData));
         AssertEquals(IntToStr(kind) + ': the width read back', 1800, back.WidthTwips);
         AssertEquals(IntToStr(kind) + ': the height read back', 720, back.HeightTwips);
       finally
@@ -997,7 +997,7 @@ begin
   Drag(rhBottomRight, 10, 10);
   back := PictureAt(p);
   AssertTrue('WordPad: still the WMF', back.PictureFormat = rpfWmf);
-  AssertTrue('WordPad: its bytes', SameBytes(back.Data, pic.Data));
+  AssertTrue('WordPad: its bytes', SameBytes(back.MakeImageData, pic.MakeImageData));
   saved := SaveRtf;
   AssertTrue('WordPad: written as a metafile',
     Pos(BS + 'wmetafile8', StrOfBytes(saved)) > 0);
@@ -1657,7 +1657,7 @@ begin
     AssertTrue('the command''s object', cmd.NewObject = nw);
     AssertEquals('the new width', 600, nw.WidthTwips);
     AssertTrue('a JPEG still', nw.PictureFormat = rpfJpeg);
-    AssertTrue('the very bytes', Pointer(nw.Data) = Pointer(pic.Data));
+    AssertTrue('the very bytes', nw.DataIdentity = pic.DataIdentity);
     AssertEquals('the text the same', 'b', d.Text.GetText(3, 1));
     d.Undo;
     AssertTrue('undo: the object itself', d.ObjectAt(2) = pic);
@@ -1803,7 +1803,7 @@ begin
   p := 1;
   pic := PictureAt(p);
   AssertTrue('a JPEG', pic.PictureFormat = rpfJpeg);
-  AssertTrue('its bytes', SameBytes(pic.Data, jpg));
+  AssertTrue('its bytes', SameBytes(pic.MakeImageData, jpg));
   AssertTrue('its group kept', pic.RawRtf <> '');
   SelectAt(p);
   PaintAll;
@@ -1822,7 +1822,7 @@ begin
     d.BeginRead;
     try
       AssertTrue('read back: a picture', d.ObjectAt(1) is TTyRichPicture);
-      AssertTrue('read back: the bytes', SameBytes(TTyRichPicture(d.ObjectAt(1)).Data, jpg));
+      AssertTrue('read back: the bytes', SameBytes(TTyRichPicture(d.ObjectAt(1)).MakeImageData, jpg));
       AssertEquals('read back: the width', pic.WidthTwips, TTyRichPicture(d.ObjectAt(1)).WidthTwips);
     finally
       d.EndRead;
@@ -1886,7 +1886,7 @@ begin
   AssertEquals('the selection went', 'a' + TyRichObjectChar + 'd', FRich.Document.Text.GetText(0, 3));
   pic := PictureAt(1);
   AssertTrue('PNG', pic.PictureFormat = rpfPng);
-  AssertTrue('its own bytes', SameBytes(pic.Data, png));
+  AssertTrue('its own bytes', SameBytes(pic.MakeImageData, png));
   AssertEquals('40 pixels at 96 dpi', 600, pic.WidthTwips);
   AssertEquals('20 pixels', 300, pic.HeightTwips);
   AssertEquals('one step', 1, FRich.Document.UndoDepth);
@@ -1902,7 +1902,7 @@ begin
   AssertTrue('a JPEG file', FRich.InsertPictureFromFile(TempFile('b.jpg', jpg)));
   pic := PictureAt(0);
   AssertTrue('JPEG', pic.PictureFormat = rpfJpeg);
-  AssertTrue('the file''s bytes', SameBytes(pic.Data, jpg));
+  AssertTrue('the file''s bytes', SameBytes(pic.MakeImageData, jpg));
   // a BMP, a GIF, an icon, a cursor: PNG
   FRich.SelStart := 0;
   AssertTrue('a BMP file', FRich.InsertPictureFromFile(TempFile('c.bmp', bmp)));
@@ -1928,7 +1928,7 @@ begin
   finally
     st.Free;
   end;
-  AssertTrue('stream: the JPEG''s bytes', SameBytes(PictureAt(0).Data, jpg));
+  AssertTrue('stream: the JPEG''s bytes', SameBytes(PictureAt(0).MakeImageData, jpg));
   // TGraphic: PNG, JPEG, a bitmap
   g := TPortableNetworkGraphic.Create;
   j := TJPEGImage.Create;
@@ -2027,9 +2027,9 @@ begin
   try
     FRich.SelStart := 0;
     AssertTrue('a PNG from a stream that tells its size', FRich.InsertPictureFromStream(lying));
-    AssertTrue('the picture keeps the very block read into', Pointer(PictureAt(0).Data) =
+    AssertTrue('the picture keeps the very block read into', PictureAt(0).DataIdentity =
       lying.FirstBuffer);
-    AssertEquals('its length', Length(told), Length(PictureAt(0).Data));
+    AssertEquals('its length', Length(told), Length(PictureAt(0).MakeImageData));
   finally
     lying.Free;
   end;
@@ -2048,7 +2048,7 @@ begin
       AssertTrue(Format('a PNG from a stream that says too little (%d)', [k]),
         FRich.InsertPictureFromStream(lying));
       AssertEquals(Format('its width (%d)', [k]), 180, PictureAt(0).WidthTwips);
-      AssertTrue(Format('its bytes (%d)', [k]), SameBytes(PngOf(12, 6), PictureAt(0).Data));
+      AssertTrue(Format('its bytes (%d)', [k]), SameBytes(PngOf(12, 6), PictureAt(0).MakeImageData));
     finally
       lying.Free;
     end;
