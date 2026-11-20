@@ -159,6 +159,7 @@ type
     procedure UnderTheDisplayTokenTheStackedRowIsTheSame;
     procedure OnAStackedBarAGivenIconSizeIsAnchoredAlike;
     procedure BesideItsCaptionAnIconStaysAtTheStart;
+    procedure AToolWithALookOfItsOwnIsToldTheRowAtOnce;
   end;
 
 implementation
@@ -2106,6 +2107,26 @@ begin
   box := IconBox(t);
   AssertFalse('setup: an icon is drawn', IsRectEmpty(box));
   AssertTrue(Format('in the first quarter of the button (%s)', [BoxText(box)]), box.Right < 50);
+end;
+
+{ A tool that wrote its own ShowCaption and GlyphLayout takes neither from the bar, so the
+  row flag is the ONLY thing that reaches it when the bar turns its captions on. Its floor
+  has to move then and there: the bar lays out by it, and nothing else will repaint the tool. }
+procedure TToolbarDisplayTest.AToolWithALookOfItsOwnIsToldTheRowAtOnce;
+var
+  b: TTyToolButton;
+  alone: Integer;
+begin
+  FBar.List := False;
+  b := AddTool('Save');
+  b.GlyphLayout := glTop;
+  b.ShowCaption := False;
+  alone := b.Constraints.MinHeight;
+  FBar.ShowCaptions := True;
+  AssertTrue(Format('the caption''s line is in its floor at once (%d against %d)',
+    [b.Constraints.MinHeight, alone]), b.Constraints.MinHeight > alone + 8);
+  FBar.ShowCaptions := False;
+  AssertEquals('and out of it again', alone, b.Constraints.MinHeight);
 end;
 
 initialization
