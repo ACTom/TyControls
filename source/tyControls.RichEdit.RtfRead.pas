@@ -915,6 +915,12 @@ procedure TyRichLoadRtfFull(ADoc: TTyRichDocument; AStream: TStream; AMap: TTyRt
 // The RTF load ADoc's content came from; nil when it did not come from TyRichLoadRtf (or
 // TyRichBeginLoadRtf), or after it was replaced.
 function TyRichRtfLoadOf(ADoc: TTyRichDocument): TTyRtfLoad;
+// The instruction of the field whose open mark is AMark (a mark of ADoc): the text of its
+// {\*\fldinst ...} as the reader decodes text - \'xx in the code page of the font in effect
+// (by ADoc's file's font table when ADoc came from a load, else the ANSI code page 1252), \uN
+// with its \uc fallback skipped, no destination inside it -, its spaces at the ends trimmed.
+// Only the group's bytes up to the instruction's end are read. '' for a close mark or none.
+function TyRichFieldInstruction(ADoc: TTyRichDocument; AMark: TTyRichFieldMark): UTF8String;
 // The control words the reader knows (its own table, read only): how many, and the name of
 // each (0 .. TyRtfKnownWordCount - 1). Any other word is an unknown property to it.
 function TyRtfKnownWordCount: Integer;
@@ -7727,6 +7733,58 @@ begin
     if (p.RawRtf = '') or not (Foreign(p.RawRtf, False) or HasForeignText(p.RawRtf)) then Exit;
     // its image, as a picture made here is written
     Result := TTyRichPicture.Create(p.PictureFormat, p.Data, p.WidthTwips, p.HeightTwips);
+  end;
+end;
+
+function TyRichFieldInstruction(ADoc: TTyRichDocument; AMark: TTyRichFieldMark): UTF8String;
+var
+  lex: TTyRtfLexer;
+  t: TTyRtfToken;
+  buf: PByte;
+  len, stop: PtrInt;
+  depth, instAt: Integer;
+  head: RawByteString;
+  f: TTyRtfForeignFilter;
+  load: TTyRtfLoad;
+begin
+  Result := '';
+  if (AMark = nil) or (AMark.Kind <> rfmOpen) then Exit;
+  buf := AMark.BytesData;
+  len := PtrInt(AMark.BytesLength);
+  if (buf = nil) or (len <= 0) then Exit;
+  // the group up to the instruction's end (a table of contents' group is megabytes)
+  lex.Init(buf, 0, len);
+  depth := 0;
+  instAt := -1;
+  stop := len;
+  while lex.Next(t) do
+    case t.Kind of
+      rtkGroupStart: Inc(depth);
+      rtkGroupEnd:
+        begin
+          if depth = instAt then
+          begin
+            stop := t.Stop;
+            Break;
+          end;
+          Dec(depth);
+        end;
+      rtkWord:
+        if (instAt < 0) and (t.NameLen = 7) and
+          CompareMem(@buf[t.NameStart], PChar('fldinst'), 7) then
+          instAt := depth;
+    end;
+  if instAt < 0 then Exit;
+  head := '';
+  SetLength(head, stop);
+  Move(buf^, head[1], stop);
+  f := TTyRtfForeignFilter.Create;
+  try
+    load := TyRichRtfLoadOf(ADoc);
+    if load <> nil then f.FScan := load.Scan;
+    Result := f.FieldInstruction(head, AMark.RawUc);
+  finally
+    f.Free;
   end;
 end;
 

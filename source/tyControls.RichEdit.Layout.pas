@@ -529,6 +529,18 @@ type
       of the block; a row never stops in a cell merged away. From a place that is not a caret
       place (inside a cluster) a step back gives the start of that cluster. }
     function NextCaretPos(APos: TTyRichPos; AForward: Boolean): TTyRichPos; virtual; abstract;
+    { Objects the layout gives no width (a field's two marks, a bookmark's ends, a kept object
+      with nothing to show) cost no caret step: a run of them between two things that are seen
+      is one place, and the caret has one position there - the leftmost of the run that is
+      right of every close mark and left of every open mark in it, else the run's first. So
+      the caret at a link's start is before its open mark, at its end after its close mark,
+      and what is typed there goes outside the link. RestPos is that position for a place APos
+      (block-relative; a place in no such run is its own); NextCaretPos steps over a run whole
+      and answers resting places. UnseenEnd: the end (AForward) or the start of the run APos
+      stands in or beside - APos where there is none. The control sets every caret and
+      selection end through RestPos (TTyCustomRichEdit.RestingPlace). }
+    function RestPos(APos: TTyRichPos): TTyRichPos; virtual;
+    function UnseenEnd(APos: TTyRichPos; AForward: Boolean): TTyRichPos; virtual;
     { The visual line the caret at APos (with its affinity) is on: its first caret place and
       its last - the end of a wrapped line with AEndAtLineEnd True (the caret belongs at that
       line's end, not the next line's start), before the U+000B that ends a line, the cut of a
@@ -590,6 +602,9 @@ type
     function InnerCaretRect(APos: TTyRichPos; AAtLineEnd: Boolean): TRect;
     function InnerPosAtPoint(AX, AY: Integer; out AAtLineEnd: Boolean): TTyRichPos;
     function InnerNextCaretPos(APos: TTyRichPos; AForward: Boolean): TTyRichPos;
+    function UnseenKind(AChar: TTyRichPos): Integer;
+    function InnerRestPos(APos: TTyRichPos): TTyRichPos;
+    function InnerUnseenEnd(APos: TTyRichPos; AForward: Boolean): TTyRichPos;
     function GetLine(AIndex: Integer): TTyRichLine;
     function GetFragment(AIndex: Integer): TTyRichFragment;
     function ByteOfChar(const F: TTyRichFragment; AChars: Integer): Integer;
@@ -617,6 +632,8 @@ type
     function MemSize: Int64; override;
     function LastCaretPos: TTyRichPos; override;
     function NextCaretPos(APos: TTyRichPos; AForward: Boolean): TTyRichPos; override;
+    function RestPos(APos: TTyRichPos): TTyRichPos; override;
+    function UnseenEnd(APos: TTyRichPos; AForward: Boolean): TTyRichPos; override;
     procedure LineBounds(APos: TTyRichPos; AAtLineEnd: Boolean; out AStart, AEnd: TTyRichPos;
       out AEndAtLineEnd: Boolean); override;
     function CompositionCaret(out ARect: TRect): Boolean; override;
@@ -741,6 +758,8 @@ type
     function MemSize: Int64; override;
     function LastCaretPos: TTyRichPos; override;
     function NextCaretPos(APos: TTyRichPos; AForward: Boolean): TTyRichPos; override;
+    function RestPos(APos: TTyRichPos): TTyRichPos; override;
+    function UnseenEnd(APos: TTyRichPos; AForward: Boolean): TTyRichPos; override;
     procedure LineBounds(APos: TTyRichPos; AAtLineEnd: Boolean; out AStart, AEnd: TTyRichPos;
       out AEndAtLineEnd: Boolean); override;
     { The composition's caret of the cell paragraph that shows one, in the row's pixels. }
@@ -2162,6 +2181,16 @@ begin
   Result := False;
 end;
 
+function TTyBlockLayout.RestPos(APos: TTyRichPos): TTyRichPos;
+begin
+  Result := APos;
+end;
+
+function TTyBlockLayout.UnseenEnd(APos: TTyRichPos; AForward: Boolean): TTyRichPos;
+begin
+  Result := APos;
+end;
+
 function TTyParaLayout.CompositionCaret(out ARect: TRect): Boolean;
 begin
   Result := FCompLen > 0;
@@ -2619,7 +2648,10 @@ begin
   begin
     // the cut and what is past it: the next block
     if APos >= FShown then Exit(-1);
-    if APos < 0 then Exit(0);
+    if APos < 0 then Exit(InnerRestPos(0));
+    // (a run of objects with no width is one place: the step is over the next thing seen)
+    APos := InnerUnseenEnd(APos, True);
+    if APos >= FShown then Exit(-1);
     k := FragAt(APos);
     if k < 0 then Exit(APos + 1);
     case FFrags[k].Kind of
@@ -2630,13 +2662,15 @@ begin
       Result := APos + 1;
     end;
     if Result > FShown then Result := FShown;
+    Result := InnerRestPos(Result);
   end
   else
   begin
-    if APos > FShown then Exit(FShown);
+    if APos > FShown then Exit(InnerRestPos(FShown));
+    APos := InnerUnseenEnd(APos, False);
     if APos <= 0 then Exit(-1);
     k := FragAt(APos - 1);
-    if k < 0 then Exit(APos - 1);
+    if k < 0 then Exit(InnerRestPos(APos - 1));
     case FFrags[k].Kind of
       rfkText: Result := FFrags[k].First +
         SnapToCluster(FFrags[k], Integer(APos - 1 - FFrags[k].First));
@@ -2644,7 +2678,68 @@ begin
     else
       Result := APos - 1;
     end;
+    Result := InnerRestPos(Result);
   end;
+end;
+
+{ Character AChar (the layout's position) for the caret: 0 something seen (or not laid out),
+  1 an object of no width, 2 a field's open mark, 3 its close mark (neither has a width). }
+function TTyParaLayout.UnseenKind(AChar: TTyRichPos): Integer;
+var
+  i: Integer;
+begin
+  Result := 0;
+  if (AChar < 0) or (AChar >= FShown) then Exit;
+  with FLines[LineOfPos(AChar)] do
+    for i := FirstFrag to FirstFrag + FragCount - 1 do
+      if (AChar >= FFrags[i].First) and (AChar < FFrags[i].First + FFrags[i].Count) then
+      begin
+        if (FFrags[i].Kind <> rfkObject) or (FFrags[i].Width <> 0) then Exit;
+        if FFrags[i].Obj is TTyRichFieldMark then
+        begin
+          if TTyRichFieldMark(FFrags[i].Obj).Kind = rfmOpen then Exit(2);
+          Exit(3);
+        end;
+        Exit(1);
+      end;
+end;
+
+function TTyParaLayout.InnerUnseenEnd(APos: TTyRichPos; AForward: Boolean): TTyRichPos;
+begin
+  Result := APos;
+  if AForward then
+    while UnseenKind(Result) <> 0 do Inc(Result)
+  else
+    while UnseenKind(Result - 1) <> 0 do Dec(Result);
+end;
+
+function TTyParaLayout.InnerRestPos(APos: TTyRichPos): TTyRichPos;
+var
+  rs, re, lo, hi, c: TTyRichPos;
+begin
+  Result := APos;
+  rs := InnerUnseenEnd(APos, False);
+  re := InnerUnseenEnd(APos, True);
+  if rs = re then Exit;
+  // right of every close mark, left of every open mark
+  lo := rs;
+  hi := re;
+  for c := rs to re - 1 do
+    case UnseenKind(c) of
+      2: if c < hi then hi := c;
+      3: lo := c + 1;
+    end;
+  if lo <= hi then Result := lo else Result := rs;
+end;
+
+function TTyParaLayout.RestPos(APos: TTyRichPos): TTyRichPos;
+begin
+  Result := OutPos(InnerRestPos(InPos(APos, False)));
+end;
+
+function TTyParaLayout.UnseenEnd(APos: TTyRichPos; AForward: Boolean): TTyRichPos;
+begin
+  Result := OutPos(InnerUnseenEnd(InPos(APos, False), AForward));
 end;
 
 procedure TTyParaLayout.LineBounds(APos: TTyRichPos; AAtLineEnd: Boolean; out AStart,
@@ -2881,7 +2976,7 @@ begin
       if r >= 0 then Exit(FItems[k].Pos + r);
     end;
     for j := k + 1 to High(FItems) do
-      if Shown(j) then Exit(FItems[j].Pos);
+      if Shown(j) then Exit(FItems[j].Pos + FItems[j].Layout.RestPos(0));
   end
   else
   begin
@@ -2891,9 +2986,32 @@ begin
       if r >= 0 then Exit(FItems[k].Pos + r);
     end;
     for j := k - 1 downto 0 do
-      if Shown(j) then Exit(FItems[j].Pos + FItems[j].Layout.LastCaretPos);
+      if Shown(j) then
+        Exit(FItems[j].Pos + FItems[j].Layout.RestPos(FItems[j].Layout.LastCaretPos));
   end;
   Result := -1;
+end;
+
+function TTyRowLayout.RestPos(APos: TTyRichPos): TTyRichPos;
+var
+  k: Integer;
+begin
+  Result := APos;
+  if (System.Length(FItems) = 0) or (APos < 0) then Exit;
+  k := ItemAt(APos);
+  if FCells[FItems[k].Cell].Hidden then Exit;
+  Result := FItems[k].Pos + FItems[k].Layout.RestPos(APos - FItems[k].Pos);
+end;
+
+function TTyRowLayout.UnseenEnd(APos: TTyRichPos; AForward: Boolean): TTyRichPos;
+var
+  k: Integer;
+begin
+  Result := APos;
+  if (System.Length(FItems) = 0) or (APos < 0) then Exit;
+  k := ItemAt(APos);
+  if FCells[FItems[k].Cell].Hidden then Exit;
+  Result := FItems[k].Pos + FItems[k].Layout.UnseenEnd(APos - FItems[k].Pos, AForward);
 end;
 
 procedure TTyRowLayout.LineBounds(APos: TTyRichPos; AAtLineEnd: Boolean; out AStart,

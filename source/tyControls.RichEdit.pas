@@ -202,6 +202,20 @@ type
   { An edit the user asked for (a key, the menu) was not made; AReason says why. }
   TTyRichEditRefusedEvent = procedure(Sender: TObject; const AReason: string) of object;
 
+  { A click on a link (TTyCustomRichEdit.OnLinkClick): AURL is its target, AButton the button
+    the click was made with. }
+  TTyRichLinkClickEvent = procedure(Sender: TObject; const AURL: string;
+    AButton: TMouseButton) of object;
+
+  { A field around a place the control has read: its open mark's place, its close mark's (-1
+    not known), how deep it is (-1 not known), whether it is a link and its target. }
+  TTyRichKnownField = record
+    Open, Close: TTyRichPos;
+    Depth: Integer;
+    Link: Boolean;
+    URL: string;
+  end;
+
   { What a background search runs: a find (FindNextAsync) or a replace (ReplaceAllAsync). }
   TTyRichFindTask = (rftFind, rftReplace);
   { After each piece of a background find or replace (ATask says which): ADone of ATotal
@@ -713,6 +727,27 @@ type
     FAskTblState: Int64;
     FAskTblRows, FAskTblColIns, FAskTblColDel, FAskTblDelete: Boolean;
     FOnEditRefused: TTyRichEditRefusedEvent;
+    FOnLinkClick: TTyRichLinkClickEvent;
+    { A press on a link that becomes its click when the same button comes up on the same link
+      (LinkPress): the button, where, the keys, the link's open mark. Moved past the drag
+      threshold it is a press as any (ReplayPress). }
+    FLinkPressed: Boolean;
+    FLinkButton: TMouseButton;
+    FLinkPoint: TPoint;
+    FLinkShift: TShiftState;
+    FLinkOpen: TTyRichPos;
+    FLinkURL: string;
+    { The pointer's last place over the control and the keys then: the hand follows Ctrl with
+      the pointer still, and ReadOnly. }
+    FPointerAt: TPoint;
+    FPointerShift: TShiftState;
+    FPointerKnown: Boolean;
+    { Fields read for the content FKnownState: what a pointer's move asks again is not read
+      again (a link's instruction, a field's marks found across paragraphs). }
+    FKnownState: Int64;
+    FKnown: array of TTyRichKnownField;
+    FKnownCount: Integer;
+    FLinkReads, FLinkSearches: Int64;
     { A selected object's handles and a resize's outline on the surface: where they are drawn
     (raster pixels of the view, as CaretRaster gives them; empty: none) - the surface's truth,
     kept with its pixels (MoveSurfaceText) and brought to what the view shows by
@@ -1226,6 +1261,7 @@ type
     function CaretStep(APos: TTyRichPos; AForward: Boolean): TTyRichPos;
     function WordStep(APos: TTyRichPos; AForward: Boolean): TTyRichPos;
     procedure WordAt(APos: TTyRichPos; out AFrom, ATo: TTyRichPos);
+    procedure MarkUnseen(AStart: TTyRichPos; var ACodes: array of Cardinal);
     procedure ParaRangeAt(APos: TTyRichPos; out AFrom, ATo: TTyRichPos);
     { The object character whose box client point (X, Y) is on, near hit position APos; -1
       when the point is on none. }
@@ -1233,6 +1269,45 @@ type
     { The selection becomes AAnchor .. ACaret: what changed its selected state is painted again
       (only those lines' bands); nothing else - the caller scrolls, blinks and reports. }
     procedure Select(AAnchor, ACaret: TTyRichPos; AAtEnd: Boolean);
+    { The one door of every caret place and selection end: Select puts both through it, so the
+      keys and their Shift, a click, a drag, a word's or a paragraph's selection, the caret an
+      edit, an undo or a redo leaves, a find's selection and SelStart / SelLength / CaretIndex
+      from code all land on it. A run of objects the layout gives no width (a field's marks, a
+      bookmark's ends) is one place, and the caret has one position there
+      (TTyBlockLayout.RestPos): before a link's open mark at its start, after its close mark at
+      its end - what is typed there goes outside the link. A place with no object beside it is
+      its own (nothing is laid out for it). }
+    function RestingPlace(APos: TTyRichPos): TTyRichPos;
+    { The other end of the run of objects with no width APos stands in or beside (AForward its
+      end, else its start); APos when there is none. }
+    function UnseenEnd(APos: TTyRichPos; AForward: Boolean): TTyRichPos;
+    { [AStart, AStart + ALen) grown to the smallest range that holds, whole, every field it cuts
+      (takes one mark of and not the other) - also once its ends are put on resting places;
+      False when it cuts none. A field around the whole range is not cut. }
+    function FieldCover(var AStart, ALen: TTyRichPos): Boolean;
+    { A user's edit of [AStart, AStart + ALen) - the selection - that cuts a field: the
+      selection grows to hold the fields whole and nothing changes (True; the caller tells the
+      refusal or not). False when the range cuts no field. }
+    function GrowOverFields(AStart, ALen: TTyRichPos): Boolean;
+    // the selection becomes that range, reported (GrowOverFields' and the delete keys')
+    procedure ShowCover(AStart, ALen: TTyRichPos);
+    { Links. CharBoxAt: the character whose box client point (X, Y) is on (-1: none - the
+      space right of a line's end, a paragraph's end, an object with no width). LinkOfChar:
+      the innermost HYPERLINK field around character AChar - its open mark's position and its
+      target - from what is known (KnownField) or read once and kept. LinkPress: a press of
+      AButton that LinkClickFires takes on a link - kept, nothing else done (True). The
+      release on the same link fires the click (LinkRelease); a move past the drag threshold
+      makes it the press it would have been (ReplayPress). }
+    function CharBoxAt(X, Y: Integer): TTyRichPos;
+    function KnownField(AOpen: TTyRichPos): Integer;
+    function KnownAround(APos: TTyRichPos; ADepth: Integer): Integer;
+    function KnowField(AOpen, AClose: TTyRichPos; ADepth: Integer): Integer;
+    function LinkOfChar(AChar: TTyRichPos; out AOpen: TTyRichPos; out AURL: string): Boolean;
+    function LinkPress(AButton: TMouseButton; AShift: TShiftState; X, Y: Integer): Boolean;
+    procedure LinkRelease(AButton: TMouseButton; X, Y: Integer);
+    procedure ReplayPress;
+    // the hand comes or goes where the pointer is, for the keys AShift (Ctrl down or up)
+    procedure PointerKeysChanged(AShift: TShiftState);
     procedure RepaintRange(AFrom, ATo: TTyRichPos);
     { The caret moved: where it was drawn and where it is now are blitted again (the window
       only: the caret is drawn over the blit), and it shows at once. }
@@ -1411,6 +1486,7 @@ type
       (told), False. A composition begins only where this says yes (one character for it). }
     function TypingAllowed(var AStart, ALen: TTyRichPos; const AText: UTF8String;
       AUser: Boolean): Boolean;
+    function EdgeTypingFormat(APos: TTyRichPos; out AFormat: TTyCharFormatId): Boolean;
     { The one routine of typing - a key's character, Enter, Tab, SelText from code and an input
       method's commit: AText in place of the selection (one undo step: delete and insert),
       else at the caret - AMergeable: typing, which merges with the typing before it - in
@@ -2001,12 +2077,35 @@ type
     property Finder: TTyRichFinder read FFinder;
     property ReplaceCommand: TTyRichReplaceAllCommand read FReplaceCmd;
     property FindBytesRead: Int64 read FFindBytesRead write FFindBytesRead;
+    { What finding the link under the pointer read (LinkAtPoint, the hand, a click): a
+      field's instruction, a search for a field's marks across paragraphs. Test seams. }
+    property LinkFieldReads: Int64 read FLinkReads;
+    property LinkFieldSearches: Int64 read FLinkSearches;
     { The door of the format API for a descendant: runs ACmd as the façades' writes
       run theirs (RunApiEdit) - not refused by ReadOnly, an open composition ended first,
       the selection kept with the step and left where it is, no scroll, one OnChange;
       a refusal of the document raised (ETyRichEdit). AChars: how many characters it changes
       (the wait cursor's threshold). RunUserEdit is the user's door (it asks ReadOnly). }
     procedure RunApiCommand(ACmd: TTyRichCommand; AChars: TTyRichPos);
+    { Does a press with AShift of AButton on a link make its click (OnLinkClick)? Editable: Ctrl
+      with the left or the middle button; ReadOnly: the left or the middle button without
+      Shift or Alt. Never the right button, never the second press of a double click
+      (ssDouble). The pointer is the hand where this says yes for the left button. The other
+      rules are not this function's: a disabled control, a drag, press and release on the same
+      link. }
+    function LinkClickFires(AShift: TShiftState; AButton: TMouseButton): Boolean; virtual;
+    { A click on a link (a HYPERLINK field: the innermost around the place counts): editable,
+      a Ctrl + left or middle click; ReadOnly, a plain left or middle click (LinkClickFires
+      says which, a descendant may say otherwise) - never the right button, a disabled control,
+      a drag (the pointer past the drag threshold), the second click of a double click, and
+      only with press and release on the same link's text or a picture in it. AURL: the
+      instruction's target ("target", "#name" for \l "name" alone, "target#name" for both;
+      the other switches are not looked at). The click does nothing else (no caret move, no
+      selection); the control never opens anything itself - with no handler nothing happens.
+      Run on the release; the handler may free the control, load another document or show a
+      dialog. The pointer is the hand where a left click would be one. As Delphi's
+      TRichEdit.OnLinkClick. }
+    property OnLinkClick: TTyRichLinkClickEvent read FOnLinkClick write FOnLinkClick;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -2061,6 +2160,21 @@ type
       PositionRect to have the caret on the line the point was on. What a click does. }
     function PositionAtPoint(X, Y: Integer): TTyRichPos; overload;
     function PositionAtPoint(X, Y: Integer; out AAtLineEnd: Boolean): TTyRichPos; overload;
+    { The link under client point (X, Y): True when the point is on a character of a link's
+      result - its text, a picture in it, not the empty space right of a line's end - with
+      AURL its target as OnLinkClick gives it. The innermost HYPERLINK field around that
+      character counts (a page number inside a table of contents' entry is in the entry's
+      link). What is read for it is kept until the document changes: asked again over the same
+      link, nothing is read again. False when nothing is laid out (as PositionAtPoint). }
+    function LinkAtPoint(X, Y: Integer; out AURL: string): Boolean;
+    { The innermost field whose result APos is inside (after its open mark, up to its close
+      mark): AStart its open mark's position, ALength its characters with both marks, and
+      AInstruction its instruction as text (decoded as the reader decodes text: "HYPERLINK
+      "https://..." \l "name"", "PAGEREF _Toc1 \h", "TOC \o "1-3""). False outside every field
+      (the variables left alone). The cost: the field's own paragraphs are looked up, at most
+      three read (TTyRichDocument.FieldRangeAt). }
+    function GetFieldRange(APos: TTyRichPos; var AStart, ALength: TTyRichPos;
+      var AInstruction: string): Boolean;
     { The caret rectangle of document position APos in client pixels - with AAtLineEnd, at a
       wrapped line's end rather than the next line's start; an empty rectangle when APos is in
       no visible block. Unclipped: the caret drawn (CaretClientRect) is kept inside the text. }
@@ -2880,6 +2994,7 @@ type
     property OnModifiedChange;
     property OnZoomChange;
     property OnEditRefused;
+    property OnLinkClick;
     property OnObjectResize;
     property OnDropFiles;
     property OnLoadProgress;
@@ -3152,6 +3267,39 @@ begin
   FOwner.FLinesStored := True;
 end;
 
+{ Paragraph AIndex's text S without the characters of its field marks (TTyRichFieldMark): the
+  text a reader of Lines and Text sees. }
+function WithoutFieldMarks(ADoc: TTyRichDocument; AIndex: Integer; const S: string): string;
+var
+  runs: TTyRunArray;
+  i, r, b, n: Integer;
+  ch: Int64;
+  bt: Byte;
+begin
+  Result := '';
+  runs := ADoc.RunsOf(AIndex);
+  SetLength(Result, Length(S));
+  n := 0;
+  r := 0;
+  ch := 0;
+  i := 1;
+  while i <= Length(S) do
+  begin
+    bt := Byte(S[i]);
+    if bt < $C0 then b := 1 else if bt < $E0 then b := 2 else if bt < $F0 then b := 3 else b := 4;
+    if i + b - 1 > Length(S) then b := Length(S) - i + 1;
+    while (r < High(runs)) and (runs[r + 1].Start <= ch) do Inc(r);
+    if not ((runs[r].Start = ch) and (runs[r].Obj is TTyRichFieldMark)) then
+    begin
+      Move(S[i], Result[n + 1], b);
+      Inc(n, b);
+    end;
+    Inc(i, b);
+    Inc(ch);
+  end;
+  SetLength(Result, n);
+end;
+
 function TTyRichEditLines.GetCount: Integer;
 var
   t: TTyRichText;
@@ -3170,6 +3318,8 @@ begin
   if (Index < 0) or (Index >= GetCount) then Error(SListIndexError, Index);
   t := FOwner.FDoc.Text;
   Result := t.GetText(t.ParaStart(Index), t.ParaLength(Index));
+  // a field's marks are no characters of the text (another object is its U+FFFC)
+  if Pos(TyRichObjectChar, Result) > 0 then Result := WithoutFieldMarks(FOwner.FDoc, Index, Result);
 end;
 
 procedure TTyRichEditLines.Put(Index: Integer; const S: string);
@@ -3864,6 +4014,8 @@ begin
   if HasCaretFocus and not (csDestroying in ComponentState) then
     if ImeIsReadOnly then ImeSetContextDefault(1, FImeContextL)
     else ImeSetContextDefault(1, FImeContextL and not ISC_SHOWUICOMPOSITIONWINDOW);
+  // a plain click on a link is its click now, or no more: the hand where the pointer is
+  PointerKeysChanged(FPointerShift);
 end;
 
 procedure TTyCustomRichEdit.SetScrollBarAutoHide(AValue: TTyScrollBarAutoHide);
@@ -4367,6 +4519,9 @@ begin
       start := t.ParaStart(b.FirstPara);
       // a cut paragraph's hidden tail: kept (Select All and copying take it; it shows at the cut)
       if (b is TTyParaLayout) and (APos - start > b.LastCaretPos) then Exit;
+      // before an object of no width: the run's resting place (a step back would pass it whole)
+      if b.UnseenEnd(APos - start, True) <> APos - start then
+        Exit(start + b.RestPos(APos - start));
       // one step back from the next character: the caret place at or before APos
       r := b.NextCaretPos(APos - start + 1, False);
       if r >= 0 then Result := start + r;
@@ -4470,6 +4625,33 @@ begin
   ACodes := RichCodes(AText.GetText(AStart, stop - AStart));
 end;
 
+const
+  // an object with no width in a word window: no word and no break - as if it were not there
+  CUnseenCode = $FFFFFFFE;
+
+{ The objects of a word window (ACodes, from AStart) that the layout gives no width - a field's
+  marks, a bookmark's ends - become CUnseenCode. }
+procedure TTyCustomRichEdit.MarkUnseen(AStart: TTyRichPos; var ACodes: array of Cardinal);
+var
+  i: Integer;
+begin
+  for i := 0 to High(ACodes) do
+    if (ACodes[i] = $FFFC) and (UnseenEnd(AStart + i, True) <> AStart + i) then
+      ACodes[i] := CUnseenCode;
+end;
+
+{ A word window's character class (WordClass), -1 for an object with no width. }
+function WordClassAt(const ACodes: TTyRichCodes; I: Integer): Integer; inline;
+begin
+  if ACodes[I] = CUnseenCode then Result := -1 else Result := WordClass(ACodes[I]);
+end;
+
+// of class AClass, or an object with no width (which goes with what is around it)
+function WordIs(const ACodes: TTyRichCodes; I, AClass: Integer): Boolean; inline;
+begin
+  Result := (ACodes[I] = CUnseenCode) or (WordClass(ACodes[I]) = AClass);
+end;
+
 procedure TTyCustomRichEdit.WordAt(APos: TTyRichPos; out AFrom, ATo: TTyRichPos);
 var
   a, ps, pe: TTyRichPos;
@@ -4479,12 +4661,17 @@ begin
   AFrom := APos;
   ATo := APos;
   WordWindow(FDoc.Text, APos, a, ps, pe, codes);
+  MarkUnseen(a, codes);
   n := Length(codes);
   if n = 0 then Exit;
   // the character after APos - at the paragraph's end the one before - and its run
   i := Integer(APos - a);
   if i >= n then i := n - 1;
-  cls := WordClass(codes[i]);
+  // (past objects with no width: the next character seen, else the one before)
+  while (i < n - 1) and (WordClassAt(codes, i) < 0) do Inc(i);
+  while (i > 0) and (WordClassAt(codes, i) < 0) do Dec(i);
+  cls := WordClassAt(codes, i);
+  if cls < 0 then Exit;
   if cls = 2 then
   begin
     AFrom := a + i;
@@ -4492,9 +4679,11 @@ begin
     Exit;
   end;
   s := i;
-  while (s > 0) and (WordClass(codes[s - 1]) = cls) do Dec(s);
+  while (s > 0) and (WordIs(codes, s - 1, cls)) do Dec(s);
+  while WordClassAt(codes, s) < 0 do Inc(s);
   e := i + 1;
-  while (e < n) and (WordClass(codes[e]) = cls) do Inc(e);
+  while (e < n) and (WordIs(codes, e, cls)) do Inc(e);
+  while WordClassAt(codes, e - 1) < 0 do Dec(e);
   AFrom := a + s;
   ATo := a + e;
 end;
@@ -4509,22 +4698,25 @@ begin
   t := FDoc.Text;
   Result := APos;
   WordWindow(t, APos, a, ps, pe, codes);
+  MarkUnseen(a, codes);
   n := Length(codes);
   i := Integer(APos - a);
   if AForward then
   begin
+    // (objects with no width before what is seen are not there)
+    while (i < n) and (WordClassAt(codes, i) < 0) do Inc(i);
     { The paragraph's end: the next caret place - the next paragraph's start, or in a row the
       next cell shown (a cell merged away is passed over, as Right passes it). }
-    if APos >= pe then
+    if a + i >= pe then
     begin
       Result := CaretStep(APos, True);
       Exit;
     end;
     // as the memo: past this word (an object is one by itself), then past what is no word
-    if (i < n) and (WordClass(codes[i]) = 2) then Inc(i)
+    if (i < n) and (WordClassAt(codes, i) = 2) then Inc(i)
     else
-      while (i < n) and (WordClass(codes[i]) = 1) do Inc(i);
-    while (i < n) and (WordClass(codes[i]) = 0) do Inc(i);
+      while (i < n) and (WordIs(codes, i, 1)) do Inc(i);
+    while (i < n) and (WordIs(codes, i, 0)) do Inc(i);
   end
   else
   begin
@@ -4538,12 +4730,13 @@ begin
       if OutOfTail(ps - 1, False) <> ps - 1 then Exit(OutOfTail(ps - 1, False));
       APos := CaretStep(APos, False);
       WordWindow(t, APos, a, ps, pe, codes);
+      MarkUnseen(a, codes);
       i := Integer(APos - a);
     end;
-    while (i > 0) and (WordClass(codes[i - 1]) = 0) do Dec(i);
-    if (i > 0) and (WordClass(codes[i - 1]) = 2) then Dec(i)
+    while (i > 0) and (WordIs(codes, i - 1, 0)) do Dec(i);
+    if (i > 0) and (WordClassAt(codes, i - 1) = 2) then Dec(i)
     else
-      while (i > 0) and (WordClass(codes[i - 1]) = 1) do Dec(i);
+      while (i > 0) and (WordIs(codes, i - 1, 1)) do Dec(i);
   end;
   // a word in a cut paragraph's hidden tail: on to the next block, or back to the cut
   Result := SnapPos(OutOfTail(a + i, AForward));
@@ -4601,6 +4794,16 @@ begin
   if AAnchor > len then AAnchor := len;
   if ACaret < 0 then ACaret := 0;
   if ACaret > len then ACaret := len;
+  { Both ends on resting places (RestingPlace) - not inside the document's update, where
+    nothing is laid out: its end puts them there (SnapAfterChange). }
+  if not ViewBehind and not (csDestroying in ComponentState) then
+  begin
+    a0 := RestingPlace(ACaret);
+    if AAnchor = ACaret then AAnchor := a0 else AAnchor := RestingPlace(AAnchor);
+    // (the affinity is of the place it was given for)
+    if a0 <> ACaret then AAtEnd := False;
+    ACaret := a0;
+  end;
   a0 := Math.Min(FSelAnchor, FCaret);
   a1 := Math.Max(FSelAnchor, FCaret);
   { The caret or the anchor moved by anything but an edit of the control's own (a key, a
@@ -4647,6 +4850,122 @@ begin
   end;
   // a selected object's handles come or go: their place alone is painted again
   SyncObjectOverlay;
+end;
+
+{ An object's character right before or right after APos: only then can APos be in a run of
+  objects with no width (two characters read, nothing laid out). }
+function ObjectBeside(AText: TTyRichText; APos: TTyRichPos): Boolean;
+var
+  a, b: TTyRichPos;
+begin
+  a := Math.Max(Int64(0), APos - 1);
+  b := Math.Min(AText.Length, APos + 1);
+  Result := (b > a) and (Pos(TyRichObjectChar, AText.GetText(a, b - a)) > 0);
+end;
+
+function TTyCustomRichEdit.RestingPlace(APos: TTyRichPos): TTyRichPos;
+var
+  t: TTyRichText;
+  b: TTyBlockLayout;
+  start: TTyRichPos;
+begin
+  t := FDoc.Text;
+  if APos < 0 then APos := 0;
+  if APos > t.Length then APos := t.Length;
+  Result := APos;
+  if not ObjectBeside(t, APos) then Exit;
+  EnsureParams;
+  FDoc.BeginRead;
+  try
+    b := LayoutBlockAt(t.ParaOfPos(APos));
+    try
+      start := t.ParaStart(b.FirstPara);
+      Result := start + b.RestPos(APos - start);
+    finally
+      b.Release;
+    end;
+  finally
+    FDoc.EndRead;
+  end;
+end;
+
+function TTyCustomRichEdit.UnseenEnd(APos: TTyRichPos; AForward: Boolean): TTyRichPos;
+var
+  t: TTyRichText;
+  b: TTyBlockLayout;
+  start: TTyRichPos;
+begin
+  t := FDoc.Text;
+  if APos < 0 then APos := 0;
+  if APos > t.Length then APos := t.Length;
+  Result := APos;
+  if not ObjectBeside(t, APos) then Exit;
+  EnsureParams;
+  FDoc.BeginRead;
+  try
+    b := LayoutBlockAt(t.ParaOfPos(APos));
+    try
+      start := t.ParaStart(b.FirstPara);
+      Result := start + b.UnseenEnd(APos - start, AForward);
+    finally
+      b.Release;
+    end;
+  finally
+    FDoc.EndRead;
+  end;
+end;
+
+{ A field cut by [s, e) has one mark inside it: one around s whose close mark is before e, or
+  one around e whose open mark is at or after s. Each is found from the innermost field
+  around the place outward (TTyRichDocument.FieldRangeAt: a look-up per paragraph of the
+  field, at most three paragraphs read); a field around both ends is not cut, and neither is
+  any around it. }
+function TTyCustomRichEdit.FieldCover(var AStart, ALen: TTyRichPos): Boolean;
+var
+  s, e, o, c, s0, e0: TTyRichPos;
+  i: Integer;
+begin
+  Result := False;
+  s := AStart;
+  e := AStart + ALen;
+  for i := 1 to 64 do
+  begin
+    s0 := s;
+    e0 := e;
+    while FDoc.FieldRangeAt(s, o, c) and (c < e) do s := o;
+    while FDoc.FieldRangeAt(e, o, c) and (o >= s) do e := c + 1;
+    if (s = s0) and (e = e0) then Break;
+    // grown: its ends put where a caret rests may take a mark beside them - once more from there
+    if not ViewBehind then
+    begin
+      s := Math.Min(s, RestingPlace(s));
+      e := Math.Max(e, RestingPlace(e));
+    end;
+  end;
+  Result := (s <> AStart) or (e <> AStart + ALen);
+  AStart := s;
+  ALen := e - s;
+end;
+
+function TTyCustomRichEdit.GrowOverFields(AStart, ALen: TTyRichPos): Boolean;
+var
+  s, n: TTyRichPos;
+begin
+  s := AStart;
+  n := ALen;
+  Result := FieldCover(s, n);
+  if Result then ShowCover(s, n);
+end;
+
+procedure TTyCustomRichEdit.ShowCover(AStart, ALen: TTyRichPos);
+begin
+  // the caret at the end it was on (a caret alone: at the far end)
+  if FCaret < FSelAnchor then Select(AStart + ALen, AStart, False)
+  else Select(AStart, AStart + ALen, False);
+  FWishValid := False;
+  ScrollCaretIntoView;
+  CaretMoved;
+  DoSelectionChange;
 end;
 
 { The lines of the held blocks in view that [AFrom, ATo) touches are painted again: a block it
@@ -4991,6 +5310,7 @@ end;
 function TTyCustomRichEdit.CursorAt(X, Y: Integer): TCursor;
 var
   h: TTyRichHandle;
+  url: string;
 begin
   // a handle's size cursor, also where it reaches over the text beside the object
   if FResizing then Exit(HandleCursor(FResizeHandle));
@@ -4998,7 +5318,13 @@ begin
   if OwnDragging then Exit(DropCursor(FDropEffect));
   if not ViewBehind and ObjectHandleAt(X, Y, h) then Exit(HandleCursor(h));
   if PtInRect(TextArea(Rect(0, 0, Width, Height), ViewPPI), Point(X, Y)) then
-    Result := crIBeam
+  begin
+    // the hand where a left click makes a link's click (not while a drag selects)
+    if not FDragging and not ViewBehind and LinkClickFires(FPointerShift, mbLeft) and
+      LinkAtPoint(X, Y, url) then
+      Exit(crHandPoint);
+    Result := crIBeam;
+  end
   else
     Result := crDefault;
 end;
@@ -5021,6 +5347,8 @@ var
 begin
   // (in the form designer a press selects the control, not text: no caret, no drag)
   if not IsEnabled or (csDesigning in ComponentState) then Exit;
+  // (a press on a link waiting for its release: any other press ends the wait)
+  FLinkPressed := False;
   { Another press during a drag of the control's own (another button: the right one, the
     middle one) - a handle's, the selection's or the press waiting for one: the drag ends with
     nothing changed and the press does nothing else - the selection stays, and the right
@@ -5089,6 +5417,12 @@ begin
   inherited MouseDown(Button, Shift, X, Y);
   // a user action is an entry point of the loop (see SchedulingFailed)
   EndOwedLoad;
+  // the middle button: a link's click, or nothing
+  if Button = mbMiddle then
+  begin
+    LinkPress(Button, Shift, X, Y);
+    Exit;
+  end;
   if (Button <> mbLeft) and (Button <> mbRight) then Exit;
   try
     if CanFocus and not Focused then SetFocus;
@@ -5104,6 +5438,8 @@ begin
     StartResize(h, q, box, X, Y);
     Exit;
   end;
+  // a link's click (LinkClickFires): nothing else - no caret, no selection, no object
+  if (Button = mbLeft) and LinkPress(Button, Shift, X, Y) then Exit;
   if not pre then
   begin
     q := HitClient(X, Y, atEnd);
@@ -5264,6 +5600,400 @@ begin
     Select(AQ, AQ, AAtEnd);
 end;
 
+{ ---- links ---- }
+
+{ The target of a HYPERLINK field's instruction: "target", "#name" for \l "name" alone,
+  "target#name" for both. \o and \t (each with its argument), \m, \n, \h and any other switch
+  are passed over. An argument in quotes is taken whole (\\ and \" in it are \ and ", the field
+  code's own escapes), one without up to the next space. False when it is no HYPERLINK, a quote
+  is not closed, or it names neither a target nor a place. }
+function LinkTarget(const AInstruction: string; out AURL: string): Boolean;
+var
+  i, n: Integer;
+  tok, arg, target, name: string;
+  quoted, q2, bad, hasTarget, hasName: Boolean;
+  sw: Char;
+
+  function NextToken(out AText: string; out AQuoted: Boolean): Boolean;
+  begin
+    AText := '';
+    AQuoted := False;
+    while (i <= n) and (AInstruction[i] in [' ', #9, #10, #13]) do Inc(i);
+    if i > n then Exit(False);
+    if AInstruction[i] = '"' then
+    begin
+      AQuoted := True;
+      Inc(i);
+      while (i <= n) and (AInstruction[i] <> '"') do
+      begin
+        if (AInstruction[i] = '\') and (i < n) and (AInstruction[i + 1] in ['\', '"']) then Inc(i);
+        AText := AText + AInstruction[i];
+        Inc(i);
+      end;
+      if i > n then bad := True;
+      Inc(i);
+    end
+    else
+      while (i <= n) and not (AInstruction[i] in [' ', #9, #10, #13]) do
+      begin
+        AText := AText + AInstruction[i];
+        Inc(i);
+      end;
+    Result := True;
+  end;
+
+begin
+  Result := False;
+  AURL := '';
+  i := 1;
+  n := Length(AInstruction);
+  bad := False;
+  if not NextToken(tok, quoted) or quoted or not SameText(tok, 'HYPERLINK') then Exit;
+  target := '';
+  name := '';
+  hasTarget := False;
+  hasName := False;
+  while NextToken(tok, quoted) do
+  begin
+    if bad then Exit;
+    if not quoted and (Length(tok) >= 2) and (tok[1] = '\') then
+    begin
+      sw := LowerCase(Copy(tok, 2, 1))[1];
+      if sw in ['l', 'o', 't'] then
+      begin
+        if not NextToken(arg, q2) or bad then Exit;
+        if sw = 'l' then
+        begin
+          name := arg;
+          hasName := True;
+        end;
+      end;
+      Continue;
+    end;
+    if not hasTarget then
+    begin
+      target := tok;
+      hasTarget := True;
+    end;
+  end;
+  if bad then Exit;
+  if target <> '' then
+  begin
+    AURL := target;
+    if hasName and (name <> '') then AURL := AURL + '#' + name;
+  end
+  else if hasName and (name <> '') then
+    AURL := '#' + name
+  else
+    Exit;
+  Result := True;
+end;
+
+function TTyCustomRichEdit.LinkClickFires(AShift: TShiftState; AButton: TMouseButton): Boolean;
+begin
+  Result := False;
+  if AShift * [ssDouble, ssTriple, ssQuad] <> [] then Exit;
+  if (AButton <> mbLeft) and (AButton <> mbMiddle) then Exit;
+  if AShift * [ssShift, ssAlt] <> [] then Exit;
+  Result := FReadOnly or (ssCtrl in AShift);
+end;
+
+function TTyCustomRichEdit.CharBoxAt(X, Y: Integer): TTyRichPos;
+var
+  t: TTyRichText;
+  q, c, start: TTyRichPos;
+  k, p: Integer;
+  area, r0, r1: TRect;
+  vx, vy: Int64;
+  L: TTyBlockLayout;
+  atEnd: Boolean;
+begin
+  Result := -1;
+  q := PositionAtPoint(X, Y, atEnd);
+  if q < 0 then Exit;
+  t := FDoc.Text;
+  area := TextArea(Rect(0, 0, Width, Height), ViewPPI);
+  vx := (Int64(X) - area.Left) * FScale + FScrollX;
+  vy := (Int64(Y) - area.Top) * FScale;
+  // the hit test gives a character's nearer edge: the character after it or the one before
+  for c := q downto q - 1 do
+  begin
+    if (c < 0) or (c >= t.Length) then Continue;
+    p := t.ParaOfPos(c);
+    // (a paragraph's end is no character to be on)
+    if c = t.ParaStart(p) + t.ParaLength(p) then Continue;
+    k := HeldBlockOf(c);
+    if k < 0 then Continue;
+    L := FBlocks[k].Layout;
+    start := t.ParaStart(FBlocks[k].FirstPara);
+    r0 := L.CaretRect(c - start, False);
+    r1 := L.CaretRect(c + 1 - start, True);
+    if (r0.Top = r1.Top) and (vx >= r0.Left) and (vx < r1.Left) and
+      (vy - FBlocks[k].Top >= r0.Top) and (vy - FBlocks[k].Top < r0.Bottom) then
+      Exit(c);
+  end;
+end;
+
+function TTyCustomRichEdit.KnownField(AOpen: TTyRichPos): Integer;
+var
+  i: Integer;
+begin
+  for i := 0 to FKnownCount - 1 do
+    if FKnown[i].Open = AOpen then Exit(i);
+  Result := -1;
+end;
+
+function TTyCustomRichEdit.KnownAround(APos: TTyRichPos; ADepth: Integer): Integer;
+var
+  i: Integer;
+begin
+  for i := 0 to FKnownCount - 1 do
+    if (FKnown[i].Depth = ADepth) and (FKnown[i].Close >= 0) and (FKnown[i].Open < APos) and
+      (APos <= FKnown[i].Close) then
+      Exit(i);
+  Result := -1;
+end;
+
+{ The field whose open mark is at AOpen kept: its instruction read once (only up to its end, a
+  table of contents' group may be megabytes), whether it is a link and its target. }
+function TTyCustomRichEdit.KnowField(AOpen, AClose: TTyRichPos; ADepth: Integer): Integer;
+const
+  CKnownMax = 64;
+var
+  o: TTyRichObject;
+  url: string;
+begin
+  Result := KnownField(AOpen);
+  if Result < 0 then
+  begin
+    if FKnownCount >= CKnownMax then FKnownCount := 0;
+    if FKnownCount >= Length(FKnown) then SetLength(FKnown, FKnownCount * 2 + 8);
+    Result := FKnownCount;
+    Inc(FKnownCount);
+    FKnown[Result].Open := AOpen;
+    FKnown[Result].Close := -1;
+    FKnown[Result].Depth := -1;
+    o := FDoc.ObjectAt(AOpen);
+    Inc(FLinkReads);
+    url := '';
+    FKnown[Result].Link := (o is TTyRichFieldMark) and
+      LinkTarget(TyRichFieldInstruction(FDoc, TTyRichFieldMark(o)), url);
+    FKnown[Result].URL := url;
+  end;
+  if AClose >= 0 then FKnown[Result].Close := AClose;
+  if ADepth >= 0 then FKnown[Result].Depth := ADepth;
+end;
+
+{ The fields around character AChar: those opened in its paragraph before it (and not closed),
+  innermost first, from the paragraph's runs; then those open at the paragraph's start that
+  are still open at it, found outward (TTyRichDocument.FieldRangeAt: a field's own
+  paragraphs looked up) and kept, so that the next paragraph of a table of contents finds them
+  known. The first that is a link counts. }
+function TTyCustomRichEdit.LinkOfChar(AChar: TTyRichPos; out AOpen: TTyRichPos;
+  out AURL: string): Boolean;
+var
+  t: TTyRichText;
+  p, i, j, k, nOpen, depth, outer, d: Integer;
+  ps, at, o, c: TTyRichPos;
+  runs: TTyRunArray;
+  opens: array of TTyRichPos;
+begin
+  Result := False;
+  AOpen := -1;
+  AURL := '';
+  t := FDoc.Text;
+  if (AChar < 0) or (AChar >= t.Length) then Exit;
+  if FKnownState <> FDoc.ContentState then
+  begin
+    FKnownState := FDoc.ContentState;
+    FKnownCount := 0;
+  end;
+  p := t.ParaOfPos(AChar);
+  ps := t.ParaStart(p);
+  FDoc.BeginRead;
+  try
+    runs := FDoc.RunsOf(p);
+    depth := FDoc.ParaFieldDepth(p);
+    // (a paragraph with no mark and outside every field: no link, nothing more read)
+    if depth = 0 then
+    begin
+      i := 0;
+      while (i <= High(runs)) and not (runs[i].Obj is TTyRichFieldMark) do Inc(i);
+      if i > High(runs) then Exit;
+    end;
+    opens := nil;
+    SetLength(opens, Length(runs));
+    nOpen := 0;
+    outer := depth;
+    for i := 0 to High(runs) do
+    begin
+      if ps + runs[i].Start >= AChar then Break;
+      if not (runs[i].Obj is TTyRichFieldMark) then Continue;
+      if TTyRichFieldMark(runs[i].Obj).Kind = rfmOpen then
+      begin
+        opens[nOpen] := ps + runs[i].Start;
+        Inc(nOpen);
+      end
+      else if nOpen > 0 then
+        Dec(nOpen)
+      else
+        Dec(outer);
+    end;
+    for j := nOpen - 1 downto 0 do
+    begin
+      k := KnowField(opens[j], -1, -1);
+      if FKnown[k].Link then
+      begin
+        AOpen := opens[j];
+        AURL := FKnown[k].URL;
+        Exit(True);
+      end;
+    end;
+    at := ps;
+    d := depth;
+    while d >= 1 do
+    begin
+      k := KnownAround(at, d);
+      if k < 0 then
+      begin
+        Inc(FLinkSearches);
+        if not FDoc.FieldRangeAt(at, o, c) then Break;
+        k := KnowField(o, c, d);
+      end;
+      // (one closed in the paragraph before the character is not around it)
+      if (d <= outer) and FKnown[k].Link then
+      begin
+        AOpen := FKnown[k].Open;
+        AURL := FKnown[k].URL;
+        Exit(True);
+      end;
+      at := FKnown[k].Open;
+      Dec(d);
+    end;
+  finally
+    FDoc.EndRead;
+  end;
+end;
+
+function TTyCustomRichEdit.LinkAtPoint(X, Y: Integer; out AURL: string): Boolean;
+var
+  c, o: TTyRichPos;
+begin
+  AURL := '';
+  Result := False;
+  if ViewBehind then Exit;
+  c := CharBoxAt(X, Y);
+  if c < 0 then Exit;
+  Result := LinkOfChar(c, o, AURL);
+end;
+
+function TTyCustomRichEdit.GetFieldRange(APos: TTyRichPos; var AStart, ALength: TTyRichPos;
+  var AInstruction: string): Boolean;
+var
+  o, c: TTyRichPos;
+  m: TTyRichObject;
+begin
+  Result := FDoc.FieldRangeAt(APos, o, c);
+  if not Result then Exit;
+  AStart := o;
+  ALength := c - o + 1;
+  FDoc.BeginRead;
+  try
+    m := FDoc.ObjectAt(o);
+    if m is TTyRichFieldMark then AInstruction := TyRichFieldInstruction(FDoc, TTyRichFieldMark(m))
+    else AInstruction := '';
+  finally
+    FDoc.EndRead;
+  end;
+end;
+
+function TTyCustomRichEdit.LinkPress(AButton: TMouseButton; AShift: TShiftState;
+  X, Y: Integer): Boolean;
+var
+  c, o: TTyRichPos;
+  url: string;
+begin
+  Result := False;
+  FLinkPressed := False;
+  if not IsEnabled or ViewBehind or not LinkClickFires(AShift, AButton) then Exit;
+  c := CharBoxAt(X, Y);
+  if (c < 0) or not LinkOfChar(c, o, url) then Exit;
+  FLinkPressed := True;
+  FLinkButton := AButton;
+  FLinkPoint := Point(X, Y);
+  FLinkShift := AShift;
+  FLinkOpen := o;
+  FLinkURL := url;
+  Result := True;
+end;
+
+procedure TTyCustomRichEdit.LinkRelease(AButton: TMouseButton; X, Y: Integer);
+var
+  c, o: TTyRichPos;
+  url: string;
+
+  procedure Fire;
+  begin
+    FOnLinkClick(Self, url, AButton);
+  end;
+
+begin
+  if not FLinkPressed or (AButton <> FLinkButton) then Exit;
+  FLinkPressed := False;
+  if not IsEnabled or ViewBehind then Exit;
+  // released on the link it was pressed on: the click
+  c := CharBoxAt(X, Y);
+  if (c < 0) or not LinkOfChar(c, o, url) or (o <> FLinkOpen) then Exit;
+  if Assigned(FOnLinkClick) then CallHandler(@Fire);
+end;
+
+{ A press on a link moved past the drag threshold before its release: no click - the press it
+  would have been with no link there, at its own place (a left one: the caret there and a drag
+  of the selection's end, or a drag of the selection it was pressed in). }
+procedure TTyCustomRichEdit.ReplayPress;
+var
+  q, o: TTyRichPos;
+  atEnd: Boolean;
+begin
+  if ViewBehind then Exit;
+  q := HitClient(FLinkPoint.X, FLinkPoint.Y, atEnd);
+  q := Math.Min(q, FDoc.Text.Length);
+  if q < 0 then Exit;
+  FDragUnit := 1;
+  o := ObjectAt(FLinkPoint.X, FLinkPoint.Y, q);
+  if DragStartOpen and PressInSelection(FLinkPoint.X, FLinkPoint.Y) then
+  begin
+    FDragPending := True;
+    FPressClickOwed := True;
+    FPressPoint := FLinkPoint;
+    FPressPlace := q;
+    FPressAtEnd := atEnd;
+    FDragPressObj := o;
+    Exit;
+  end;
+  PlainClick(FLinkPoint.X, FLinkPoint.Y, q, atEnd, o);
+  FDragFrom := GetSelStart;
+  FDragTo := GetSelStart + GetSelLength;
+  FDragging := True;
+  FWishValid := False;
+  CaretMoved;
+  DoSelectionChange;
+end;
+
+procedure TTyCustomRichEdit.PointerKeysChanged(AShift: TShiftState);
+var
+  c: TCursor;
+begin
+  FPointerShift := FPointerShift - [ssCtrl, ssShift, ssAlt, ssMeta] +
+    AShift * [ssCtrl, ssShift, ssAlt, ssMeta];
+  if not FPointerKnown or not IsEnabled or (csDesigning in ComponentState) then Exit;
+  c := CursorAt(FPointerAt.X, FPointerAt.Y);
+  if c = crHandPoint then FOverHandle := crHandPoint
+  else if FOverHandle = crHandPoint then FOverHandle := crDefault
+  else Exit;
+  if inherited GetCursor = crIBeam then SetTempCursor(GetCursor);
+end;
+
 procedure TTyCustomRichEdit.StartDragTimer;
 begin
   // (no drag begins in the form designer: MouseDown takes no press there)
@@ -5279,6 +6009,7 @@ end;
 
 procedure TTyCustomRichEdit.StopDrag;
 begin
+  FLinkPressed := False;
   CancelResize;
   FPressClickOwed := False;
   CancelSelectionDrag;
@@ -5298,6 +6029,16 @@ var
 begin
   if not IsEnabled then Exit;
   inherited MouseMove(Shift, X, Y);
+  FPointerAt := Point(X, Y);
+  FPointerShift := Shift;
+  FPointerKnown := True;
+  // a press on a link moved past the drag threshold: no click, the press it would have been
+  if FLinkPressed and ((Abs(X - FLinkPoint.X) > DragThreshold) or
+    (Abs(Y - FLinkPoint.Y) > DragThreshold)) then
+  begin
+    FLinkPressed := False;
+    if FLinkButton = mbLeft then ReplayPress;
+  end;
   // a press inside the selection: past the drag threshold the drag begins
   // (a move with no right button held lets the menu come again: see FEatMenu)
   if not (ssRight in Shift) then FEatMenu := False;
@@ -5315,7 +6056,7 @@ begin
   c := CursorAt(X, Y);
   FOverPadding := c = crDefault;
   if (c = crSizeNWSE) or (c = crSizeNESW) or (c = crSizeNS) or (c = crSizeWE) or
-    (c = crDrag) or (c = crMultiDrag) or (c = crNoDrop) then
+    (c = crDrag) or (c = crMultiDrag) or (c = crNoDrop) or (c = crHandPoint) then
     FOverHandle := c
   else
     FOverHandle := crDefault;
@@ -5384,6 +6125,12 @@ var
 
   procedure Work;
   begin
+    // a press on a link: its click, on the same link (nothing else)
+    if FLinkPressed then
+    begin
+      LinkRelease(Button, X, Y);
+      Exit;
+    end;
     if FResizing then
       FinishResize(X, Y, Shift)
     else
@@ -5400,8 +6147,8 @@ begin
   inherited MouseUp(Button, Shift, X, Y);
   // (another button's release lets the menu come again; the right one's is its press's)
   if Button <> mbRight then FEatMenu := False;
-  if Button <> mbLeft then Exit;
-  // (a handler the release runs - a drop's, a click's report - may free the control)
+  if (Button <> mbLeft) and not (FLinkPressed and (Button = FLinkButton)) then Exit;
+  // (a handler the release runs - a drop's, a click's report, a link's - may free the control)
   Guard(life, @Work);
 end;
 
@@ -5846,6 +6593,8 @@ begin
   Y := Math.Max(area.Top, Math.Min(Y, area.Bottom - 1));
   Result := HitClient(X, Y, AAtEnd);
   if Result > FDoc.Text.Length then Result := FDoc.Text.Length;
+  // a place as the caret's: at a link's edge, outside it
+  if Result >= 0 then Result := RestingPlace(Result);
 end;
 
 function TTyCustomRichEdit.DropEffectAt(AOffer: TTyRichDropOffer; APos: TTyRichPos;
@@ -6167,6 +6916,16 @@ begin
     if LongParaRefused(APos, 'x') then Exit;
     // (a descendant's own "not here": nothing told)
     if AEffect = rdeNone then Exit;
+    { A copy of a range that cuts a field changes nothing there, so it is never refused: it
+      takes what a clipboard copy takes (a part of a field as its formatted text). }
+    s := f;
+    m := n;
+    if asCopy and FieldCover(s, m) then
+    begin
+      if InsertOffer(AOffer, AOffer.Flavours, APos, 0, rpaBest, rsRichUndoCopy, True) then
+        Result := AEffect;
+      Exit;
+    end;
     if asCopy then cmd := TTyRichCopy.Create(f, n, APos)
     else cmd := TTyRichMove.Create(f, n, APos);
     place := Default(TTyRichEditPlace);
@@ -6281,6 +7040,9 @@ end;
 
 procedure TTyCustomRichEdit.KeyUp(var Key: Word; Shift: TShiftState);
 begin
+  // Ctrl up with the pointer still: the hand over a link goes
+  if (Key = VK_CONTROL) or (Key = VK_LCONTROL) or (Key = VK_RCONTROL) then
+    PointerKeysChanged(Shift - [ssCtrl]);
   inherited KeyUp(Key, Shift);
   if (Key = 0) or not OwnDragRunning then Exit;
   // Ctrl let go during the control's own drag: a move again, without a move of the pointer
@@ -8353,7 +9115,16 @@ begin
     refused half way would be reverted, but would have reported a change on the way (Modified
     stays: the history numbers only a content it kept). }
   if (reason = '') and (ALen > 0) and not FDoc.CanChange(APos, ALen) then
+  begin
     reason := ChangeRefusalText(APos, ALen);
+    { A user's edit of a selection that cuts a field (takes one of its marks without the
+      other): nothing changes, the selection grows to the smallest range that holds every
+      field it cut, whole - the next attempt acts on what is shown selected - and the refusal
+      is told once, below. An edit from code is refused as it is. }
+    if AUser and (reason = rsRichEditRefusedField) and (APos = GetSelStart) and
+      (ALen = GetSelLength) then
+      GrowOverFields(APos, ALen);
+  end;
   if (reason = '') and AInsert and not FDoc.CanChange(APos, 0) then
     reason := ChangeRefusalText(APos, 0);
   Result := reason = '';
@@ -8760,6 +9531,8 @@ begin
     Exit(FPendingFmt);
   t := FDoc.Text;
   s := GetSelStart;
+  // at a field's edge (also a selection that begins there): the text outside the field's
+  if EdgeTypingFormat(s, Result) then Exit;
   if HasSelection then
   begin
     // typed over: the format of the first character selected (the character before s + 1),
@@ -8768,6 +9541,58 @@ begin
     if s < t.ParaStart(p) + t.ParaLength(p) then Inc(s);
   end;
   Result := FDoc.TypingFormatAt(s);
+end;
+
+{ Typing at a place among objects with no width - a field's edge: the format of the text
+  outside the field, never its result's. With no close mark between the run's start and the
+  place, the text before the run (at a paragraph's start: the mark's own); after a close mark,
+  the text after the run when no open mark follows the place in it, else the close mark's
+  own. False at a place in no such run. }
+function TTyCustomRichEdit.EdgeTypingFormat(APos: TTyRichPos;
+  out AFormat: TTyCharFormatId): Boolean;
+var
+  t: TTyRichText;
+  rs, re, c, lastClose, ps, pe: TTyRichPos;
+  o: TTyRichObject;
+  opened: Boolean;
+begin
+  Result := False;
+  AFormat := Low(TTyCharFormatId);
+  rs := UnseenEnd(APos, False);
+  re := UnseenEnd(APos, True);
+  if rs = re then Exit;
+  t := FDoc.Text;
+  ps := t.ParaStart(t.ParaOfPos(APos));
+  pe := ps + t.ParaLength(t.ParaOfPos(APos));
+  lastClose := -1;
+  opened := False;
+  FDoc.BeginRead;
+  try
+    for c := rs to re - 1 do
+    begin
+      o := FDoc.ObjectAt(c);
+      if not (o is TTyRichFieldMark) then Continue;
+      if TTyRichFieldMark(o).Kind = rfmClose then
+      begin
+        if c < APos then lastClose := c;
+      end
+      else if c >= APos then
+        opened := True;
+    end;
+  finally
+    FDoc.EndRead;
+  end;
+  if lastClose < 0 then
+  begin
+    if rs > ps then AFormat := FDoc.TypingFormatAt(rs)
+    else if APos < re then AFormat := FDoc.TypingFormatAt(APos + 1)
+    else Exit;
+  end
+  else if not opened and (re < pe) then
+    AFormat := FDoc.TypingFormatAt(re + 1)
+  else
+    AFormat := FDoc.TypingFormatAt(lastClose + 1);
+  Result := True;
 end;
 
 function TTyCustomRichEdit.TypingAllowed(var AStart, ALen: TTyRichPos; const AText: UTF8String;
@@ -8875,7 +9700,7 @@ procedure TTyCustomRichEdit.DeleteKey(AForward, AWord: Boolean);
 var
   t: TTyRichText;
   p: Integer;
-  ps, pe, a, b, s, n: TTyRichPos;
+  ps, pe, a, b, s, n, reach, reachEnd: TTyRichPos;
   codes: TTyRichCodes;
 begin
   if HasSelection then
@@ -8898,34 +9723,66 @@ begin
     LeaveList(p);
     Exit;
   end;
+  { A key acts on the nearest thing with a width its way - [a, b): objects with none between
+    the caret and it (a bookmark's ends, a field that shows nothing) are passed over and
+    stay. A thing across a mark of a field that shows something is not taken: the field is
+    selected instead (whole, every field the key's reach cut), nothing told - the key's
+    effect there; the next press acts on the selection. }
   if AForward then
   begin
+    a := UnseenEnd(FCaret, True);
     // at the document's end nothing happens, and nothing goes on the history
-    if FCaret >= t.Length then Exit;
-    a := FCaret;
+    if a >= t.Length then Exit;
     // at a paragraph's end (Ctrl too, as the memo): the separator, the next paragraph joins
-    if FCaret >= pe then b := pe + 1
+    if a >= pe then b := pe + 1
     else if AWord then b := WordStep(FCaret, True)
     else b := CaretStep(FCaret, True);
     { A step that leaves the paragraph before its end is the cut of a paragraph too long to
       lay out whole: what lies past it is not shown, and a key does not take it. }
-    if (b > pe + 1) or ((b > pe) and (FCaret < pe)) then Exit;
+    if (b > pe + 1) or ((b > pe) and (a < pe)) then Exit;
+    // (a step ends on a resting place, which may be past marks behind the thing)
+    b := UnseenEnd(b, False);
+    reach := FCaret;
+    reachEnd := b;
   end
   else
   begin
-    if FCaret <= 0 then Exit;
-    b := FCaret;
+    b := UnseenEnd(FCaret, False);
+    if b <= 0 then Exit;
     // at a paragraph's start (Ctrl too, as the memo): the separator before it
-    if FCaret <= ps then a := ps - 1
+    if b <= ps then a := ps - 1
     else if AWord then a := WordStep(FCaret, False)
     else
     begin
-      codes := RichCodes(t.GetText(FCaret - 1, 1));
-      if (Length(codes) = 1) and BackspaceTakesOne(codes[0]) then a := FCaret - 1
+      codes := RichCodes(t.GetText(b - 1, 1));
+      if (Length(codes) = 1) and BackspaceTakesOne(codes[0]) then a := b - 1
       else a := CaretStep(FCaret, False);
     end;
+    a := UnseenEnd(a, True);
+    reach := a;
+    reachEnd := FCaret;
   end;
-  if (a < b) and KeyDeleteAllowed(a, b) then DeleteText(a, b, True);
+  if a >= b then Exit;
+  s := reach;
+  n := reachEnd - reach;
+  if not FieldCover(s, n) then
+  begin
+    s := a;
+    n := b - a;
+    if not FieldCover(s, n) then n := -1;
+  end;
+  if n >= 0 then
+  begin
+    if s > reach then
+    begin
+      n := n + s - reach;
+      s := reach;
+    end;
+    if s + n < reachEnd then n := reachEnd - s;
+    ShowCover(s, n);
+    Exit;
+  end;
+  if KeyDeleteAllowed(a, b) then DeleteText(a, b, True);
 end;
 
 function TTyCustomRichEdit.KeyDeleteAllowed(AFrom, ATo: TTyRichPos): Boolean;
@@ -10447,7 +11304,8 @@ begin
     FDoc.EndRead;
   end;
   // (a drop goes in at a place of its own: the format there, not the selection's)
-  if ASelect then fmt := FDoc.TypingFormatAt(s) else fmt := TypingFormat;
+  if not ASelect then fmt := TypingFormat
+  else if not EdgeTypingFormat(s, fmt) then fmt := FDoc.TypingFormatAt(s);
   waiting := False;
   cmd := nil;
   try
@@ -15230,6 +16088,9 @@ begin
       if APos <= start then Exit;
       // a cut paragraph's hidden tail: kept (as SnapPos keeps it)
       if (b is TTyParaLayout) and (APos - start > b.LastCaretPos) then Exit;
+      // after an object of no width: the run's resting place (a step on would pass it whole)
+      if b.UnseenEnd(APos - start, False) <> APos - start then
+        Exit(start + b.RestPos(APos - start));
       // one step on from the character before: the caret place at or after APos
       r := b.NextCaretPos(APos - start - 1, True);
       if r >= 0 then Result := start + r;
@@ -17634,6 +18495,9 @@ begin
   if csDesigning in ComponentState then Exit;
   // (a key lets the menu come again: see FEatMenu)
   FEatMenu := False;
+  // Ctrl down with the pointer still: the hand over a link comes
+  if (Key = VK_CONTROL) or (Key = VK_LCONTROL) or (Key = VK_RCONTROL) then
+    PointerKeysChanged(Shift + [ssCtrl]);
   inherited KeyDown(Key, Shift);
   // a user action is an entry point of the loop (see SchedulingFailed)
   EndOwedLoad;
@@ -17851,6 +18715,7 @@ begin
   { Where the pointer comes back in is not known: the arrow is not answered over the text
     until a move over the padding says so again. }
   FOverPadding := False;
+  FPointerKnown := False;
   inherited MouseLeave;
   if FVBar <> nil then FVBar.SetHostHovered(False);
   if FHBar <> nil then FHBar.SetHostHovered(False);

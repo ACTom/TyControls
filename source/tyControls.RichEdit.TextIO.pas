@@ -196,8 +196,11 @@ type
     procedure PutUnknown;
     procedure PutOther(var P: PByte; E: PByte);
     procedure Put(P: PByte; ACount: PtrInt);
+    procedure PutMarked(P: PByte; ACount: PtrInt; AChar: Int64);
     procedure Run(const ARun: TTyRichByteRun; var AContinue: Boolean);
   public
+    // the document the text is of: a field's marks are written as nothing (nil: no look)
+    Doc: TTyRichDocument;
     constructor Create(AText: TTyRichText; AStream: TStream; AEnc: TTyTextEncoding;
       ATable: TCodePageTable);
     destructor Destroy; override;
@@ -1507,6 +1510,66 @@ begin
     raise ETyRichTextSaveCancelled.Create('The save was cancelled');
 end;
 
+{ U+FFFC (EF BF BC) somewhere in the bytes: an object's character. }
+function HoldsObjectChar(P: PByte; ACount: PtrInt): Boolean;
+var
+  k: PtrInt;
+begin
+  Result := False;
+  while ACount >= 3 do
+  begin
+    k := IndexByte(P^, ACount - 2, $EF);
+    if k < 0 then Exit;
+    if (P[k + 1] = $BF) and (P[k + 2] = $BC) then Exit(True);
+    Inc(P, k + 1);
+    Dec(ACount, k + 1);
+  end;
+end;
+
+{ ACount bytes of text from P, whose first character is the text's AChar: written as Put
+  writes them, without the characters of a field's marks (TTyRichFieldMark) - a mark is no
+  character of the text; another object's U+FFFC stays. }
+procedure TTextSaver.PutMarked(P: PByte; ACount: PtrInt; AChar: Int64);
+var
+  e, q, from, counted: PByte;
+  k: PtrInt;
+  ch: Int64;
+begin
+  e := P + ACount;
+  from := P;
+  q := P;
+  counted := P;
+  ch := AChar;
+  while e - q >= 3 do
+  begin
+    k := IndexByte(q^, e - q - 2, $EF);
+    if k < 0 then Break;
+    Inc(q, k);
+    if (q[1] <> $BF) or (q[2] <> $BC) then
+    begin
+      Inc(q);
+      Continue;
+    end;
+    // the characters up to it (an escaped byte is two: its lead and its second byte)
+    while counted < q do
+    begin
+      if counted^ and $C0 <> $80 then Inc(ch);
+      if (counted^ >= $F8) and (counted^ <= $FB) then Inc(ch);
+      Inc(counted);
+    end;
+    if Doc.ObjectAt(ch) is TTyRichFieldMark then
+    begin
+      Put(from, q - from);
+      from := q + 3;
+      Tick(ch);
+    end;
+    Inc(q, 3);
+    counted := q;
+    Inc(ch);
+  end;
+  Put(from, e - from);
+end;
+
 procedure TTextSaver.Run(const ARun: TTyRichByteRun; var AContinue: Boolean);
 var
   s: UTF8String;
@@ -1520,8 +1583,17 @@ begin
     // (a walk lets its callback read; leaving it here and coming back would cost a second
     // descent for every such paragraph)
     s := FText.GetText(FPos, ARun.CharCount);
-    Put(PByte(s), Length(s));
+    if (Doc <> nil) and HoldsObjectChar(PByte(s), Length(s)) then
+      PutMarked(PByte(s), Length(s), FPos)
+    else
+      Put(PByte(s), Length(s));
     Inc(FSince, Length(s));
+  end
+  else if (Doc <> nil) and HoldsObjectChar(ARun.Bytes, ARun.ByteCount) then
+  begin
+    Tick(FPos);
+    PutMarked(ARun.Bytes, ARun.ByteCount, FPos);
+    Inc(FSince, ARun.ByteCount);
   end
   else if not Assigned(FOnProgress) then
     Put(ARun.Bytes, ARun.ByteCount)
@@ -1599,6 +1671,7 @@ begin
       end;
     saver := TTextSaver.Create(ADoc.Text, AStream, enc, table);
     try
+      saver.Doc := ADoc;
       saver.FOnProgress := AOnProgress;
       saver.Save;
     finally

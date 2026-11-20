@@ -9,7 +9,9 @@ unit tyControls.RichEdit.Find;
   byte of the text that starts no valid UTF-8 sequence (a text file's escaped byte is two of
   them) is a character that only the same byte in the needle matches. An object (U+FFFC) is
   matched by nothing: a needle that holds one finds nothing, and an object in the text breaks
-  any match across it. The paragraphs of a table cell merged into the one before it (\clmrg)
+  any match across it - but a field's marks (TTyRichFieldMark) are not there at all: a field's
+  result is text, found inside it and across its edges, and a match's range (MatchLen) holds
+  the marks it spans. The paragraphs of a table cell merged into the one before it (\clmrg)
   are not there for a find - the layout shows nothing of them. A cut paragraph's hidden tail
   (past CRichMaxParaLayoutChars) is text and is found. Positions are whole characters, as the
   text storage counts them; nothing is normalised (a combining mark is compared as it is).
@@ -38,9 +40,6 @@ unit tyControls.RichEdit.Find;
   row are an empty paragraph), the first must be at least as long as the first segment and
   the last at least as long as the last; only the paragraphs of a match that may be there
   are read.
-
-  An object never matches text - and a field (a link) is an object: its display text is not
-  found. When field results become text the control shows, the finder must see them.
 
   Replacing: TTyRichReplaceAllCommand replaces every match of a range, walking it from its
   start a range of paragraphs at a time, as ONE undo step that merges with no other (see its
@@ -117,8 +116,21 @@ type
     FDone, FWaiting, FWaitOpen: Boolean;
     FCollect: Boolean;
     FMatchPos: TTyRichPos;
+    FMatchLen: TTyRichPos;            // the match's characters (a field's marks inside it count)
     FMatches: array of TTyRichPos;
+    FMatchLens: array of TTyRichPos;
     FMatchCount: Integer;
+    FBestLen: TTyRichPos;
+    { A field's marks are not there for a match: the marks of the paragraph being read
+      (FMarkPara; their offsets, rising), found from its value the first time an object's
+      character is met in it. FPosRing: where each character fed to the matcher stands
+      (as FRing, by the count fed - FCurFed so far in the paragraph). }
+    FMarkPara: Integer;
+    FMarks: array of Int64;
+    FMarkCount, FMarkNext: Integer;
+    FPosRing: array of Int64;
+    FCurFed: Int64;
+    FPendLen: Int64;
     FLoad: TTyRtfLoad;                // the lazily read file the text is of (Source)
     FLoadAsked: Boolean;
     // counts
@@ -143,6 +155,9 @@ type
     FWinData: array of Pointer;
     FWinSrc, FWinBytes: array of Int64;
     FWinTail, FWinHead, FWinHidden: array of ShortInt;
+    // where a match's first segment begins in a first paragraph, its last ends in a last one
+    // (offsets: a field's marks there are passed over)
+    FWinTailAt, FWinHeadEnd: array of Int64;
     FWinMid: array of array of ShortInt;
     FWinNeed: array of Boolean;
     // where the bytes of paragraphs FSrcFirst .. are in the file (-1: not a paragraph of a
@@ -185,7 +200,10 @@ type
     function HiddenValue(AData: Pointer): Boolean;
     function Source: TTyRtfLoad;
     function BeforeCode: Cardinal;
-    function Accept(AStart: TTyRichPos): Boolean;
+    function Accept(AStart, ALen: TTyRichPos): Boolean;
+    procedure FindMarks(AIndex: Integer; AData: Pointer);
+    function IsMark(AIndex: Integer; AData: Pointer; AOff: Int64): Boolean;
+    function MayHoldMarks(AIndex: Integer; AData: Pointer): Boolean;
     procedure NextPara;
     procedure LoadSources(AFirst, ALast: Integer);
     procedure ScanRange(ALast: Integer);
@@ -262,11 +280,16 @@ type
       is loaded: rfrNotFound there means none in what is loaded yet. }
     function Run: TTyRichFindResult;
     property MatchPos: TTyRichPos read FMatchPos;
-    property MatchLen: Integer read FLen;
+    { The match's characters: the needle's, and the marks of fields it spans (a field's marks
+      are not there for a match - text is found across a field's edge). }
+    property MatchLen: TTyRichPos read FMatchLen;
+    { The needle's characters (a paragraph end one). }
+    property NeedleLen: Integer read FLen;
     { Every match is kept (in order, not overlapping) instead of stopping at each. }
     property Collect: Boolean read FCollect write FCollect;
     property MatchCount: Integer read FMatchCount;
     function Match(AIndex: Integer): TTyRichPos;
+    function MatchLength(AIndex: Integer): TTyRichPos;
     { The matches kept so far are let go (Collect: a caller that took them). }
     procedure ClearMatches;
     { The needle can match nothing (empty, or it holds an object). }
@@ -385,6 +408,7 @@ type
     FHighPos: TTyRichPos;             // where what was replaced ends, in the text it began on (-1)
     FRedoTo: TTyRichPos;              // a redo replaces the matches before here (-1: no redo)
     FReady: array of TTyRichPos;      // the next part's matches, rising
+    FReadyLen: array of TTyRichPos;   // ... their characters (a field's marks inside count)
     FReadyCount: Integer;
     FReadyState: Int64;               // the content they were found in
     FReadyFresh: Boolean;             // none of them replaced yet
@@ -392,14 +416,16 @@ type
     FAskedAnswer: Boolean;
     FAskedFields: Boolean;            // ... it has a field's mark or starts inside a result
     FAll: array of TTyRichPos;        // the simple way: every match
+    FAllLen: array of TTyRichPos;
     FAllCount, FAllNext: Integer;     // ... and the next to replace
     FCollected: Boolean;
     FReplaced, FSkipped: Integer;
     FRecBytes: Int64;
     FTally: PTyRichReplaceTally;
     FId: Int64;
-    function Allowed(APos: TTyRichPos): Boolean;
-    procedure Take(APos: TTyRichPos);
+    function Allowed(APos, ALen: TTyRichPos): Boolean;
+    procedure Take(APos, ALen: TTyRichPos);
+    function PlainPart(ACount: Integer): Boolean;
     procedure Apply(ADoc: TTyRichDocument);
     procedure Run(ADoc: TTyRichDocument);
     procedure Report;
@@ -649,8 +675,10 @@ begin
   FRangeHi := -1;
   FPend := -1;
   FKeepPara := -1;
+  FMarkPara := -1;
   FStartAt := AStart;
   ParseNeedle(ANeedle);
+  SetLength(FPosRing, Length(FRing));
   if (FMax >= 0) and (FMax - FMin < FLen) then FNever := True;
 end;
 
@@ -710,6 +738,61 @@ end;
 function TTyRichFinder.Match(AIndex: Integer): TTyRichPos;
 begin
   Result := FMatches[AIndex];
+end;
+
+function TTyRichFinder.MatchLength(AIndex: Integer): TTyRichPos;
+begin
+  Result := FMatchLens[AIndex];
+end;
+
+{ The marks of paragraph AIndex, from its value (AData; nil: a plain paragraph, none). }
+procedure TTyRichFinder.FindMarks(AIndex: Integer; AData: Pointer);
+var
+  fmt: TTyParaFormatId;
+  runs: TTyRunArray;
+  cell: TTyRichCell;
+  i: Integer;
+begin
+  FMarkPara := AIndex;
+  FMarkCount := 0;
+  FMarkNext := 0;
+  if (AData = nil) or not FDoc.ReadValue(AData, fmt, runs, cell) then Exit;
+  for i := 0 to High(runs) do
+    if runs[i].Obj is TTyRichFieldMark then
+    begin
+      if FMarkCount = Length(FMarks) then SetLength(FMarks, FMarkCount * 2 + 8);
+      FMarks[FMarkCount] := runs[i].Start;
+      Inc(FMarkCount);
+    end;
+end;
+
+{ Character AOff of paragraph AIndex (an object's) is a field's mark. Asked in rising order of
+  AOff within a paragraph read forward. }
+function TTyRichFinder.IsMark(AIndex: Integer; AData: Pointer; AOff: Int64): Boolean;
+begin
+  if FMarkPara <> AIndex then FindMarks(AIndex, AData);
+  // (asked again from an earlier place - a paragraph read again: from its first mark)
+  if (FMarkNext > 0) and (FMarkNext <= FMarkCount) and (FMarks[FMarkNext - 1] > AOff) then
+    FMarkNext := 0;
+  while (FMarkNext < FMarkCount) and (FMarks[FMarkNext] < AOff) do Inc(FMarkNext);
+  Result := (FMarkNext < FMarkCount) and (FMarks[FMarkNext] = AOff);
+end;
+
+{ A paragraph whose length says it cannot be a middle segment may still be one when marks
+  stand in it: known from its value, else from its depths (a paragraph inside a field's
+  result - a table of contents' entry). A paragraph at depth 0 not parsed yet is taken as
+  holding none (its length decides, as before). }
+function TTyRichFinder.MayHoldMarks(AIndex: Integer; AData: Pointer): Boolean;
+var
+  s, low: Integer;
+begin
+  if AData <> nil then
+  begin
+    FindMarks(AIndex, AData);
+    Exit(FMarkCount > 0);
+  end;
+  FDoc.ParaFieldDepths(AIndex, s, low);
+  Result := s > 0;
 end;
 
 procedure TTyRichFinder.ClearMatches;
@@ -780,24 +863,30 @@ end;
 
 { A match from AStart (its whole-word test passed): taken by the scan's mode. True: the walk
   stops here. }
-function TTyRichFinder.Accept(AStart: TTyRichPos): Boolean;
+function TTyRichFinder.Accept(AStart, ALen: TTyRichPos): Boolean;
 begin
   Result := False;
-  if (AStart < FMin) or (AStart + FLen > FScanEnd) then Exit;
+  if (AStart < FMin) or (AStart + ALen > FScanEnd) then Exit;
   case FMode of
     0:
       begin
         FBest := AStart;
+        FBestLen := ALen;
         FStop := True;
         Result := True;
       end;
     1:
       begin
-        if FMatchCount = Length(FMatches) then SetLength(FMatches, FMatchCount * 2 + 64);
+        if FMatchCount = Length(FMatches) then
+        begin
+          SetLength(FMatches, FMatchCount * 2 + 64);
+          SetLength(FMatchLens, Length(FMatches));
+        end;
         FMatches[FMatchCount] := AStart;
+        FMatchLens[FMatchCount] := ALen;
         Inc(FMatchCount);
         // the next one begins after this one
-        FMin := AStart + FLen;
+        FMin := AStart + ALen;
         if (FCap > 0) and (FMatchCount >= FCap) then
         begin
           // as many as a caller takes at a time: the scan stands right after this one
@@ -806,7 +895,11 @@ begin
         end;
       end;
   else
-    if AStart > FBest then FBest := AStart;
+    if AStart > FBest then
+    begin
+      FBest := AStart;
+      FBestLen := ALen;
+    end;
   end;
 end;
 
@@ -816,6 +909,7 @@ begin
   Inc(FNext);
   FCurOff := 0;
   FCurByte := 0;
+  FCurFed := 0;
   FPassTo := 0;
   FK := 0;
   FPend := -1;
@@ -836,12 +930,14 @@ var
   p, q, stop, lim, first: PByte;
   k, n, ringN: Integer;
   code, prev: Cardinal;
-  pos, pending, cost: Int64;
+  pos, pending, cost, fed, pendLen, start: Int64;
   matchCase, whole, begun, all: Boolean;
 
   // the scan stays in the paragraph: its text is kept for the next step (once)
   procedure KeepText;
   begin
+    // (the marks are known from the value, which the kept text's next steps are not given)
+    if (AData <> nil) and (FMarkPara <> AIndex) then FindMarks(AIndex, AData);
     if (FKeepPara = AIndex) and (Pointer(AText) = Pointer(FKeep)) then Exit;
     SetLength(FKeep, ALen);
     if ALen > 0 then Move(AText^, Pointer(FKeep)^, ALen);
@@ -858,8 +954,10 @@ var
     Dec(FBudget, AAt - first);
     FCurByte := AAt - AText;
     FCurOff := AOff;
+    FCurFed := fed;
     FK := AK;
     FPend := APending;
+    FPendLen := pendLen;
     AContinue := False;
   end;
 
@@ -901,6 +999,8 @@ begin
   if Pointer(AText) <> Pointer(FKeep) then Inc(FFetchedBytes, ALen);
   if begun then
   begin
+    // (its marks are found from this value when an object is met)
+    FMarkPara := -1;
     Inc(FParasRead);
     Inc(FFileBytes, cost);
     if cost > FBudget then
@@ -939,6 +1039,7 @@ begin
     first := p;
     lim := ReadTo(p, 8);
     pos := FCurOff;
+    fed := FCurFed;
     while (pos < FPassTo) and (p < lim) do
     begin
       if p^ < $80 then
@@ -952,13 +1053,18 @@ begin
         code := CodeAt(p, n);
         Inc(p, n);
       end;
-      if whole then FRing[pos mod ringN] := code;
+      if not ((code = CObject) and IsMark(AIndex, AData, pos)) then
+      begin
+        if whole then FRing[fed mod ringN] := code;
+        Inc(fed);
+      end;
       Inc(pos);
     end;
     Dec(FBudget, (p - first) div 8 + 1);
     Inc(FPassedBytes, p - first);
     FCurByte := p - AText;
     FCurOff := pos;
+    FCurFed := fed;
     if (pos < FPassTo) and (p < stop) then
     begin
       // the budget is spent before the start: the next step passes on from here
@@ -971,8 +1077,10 @@ begin
   first := p;
   lim := ReadTo(p, 1);
   pos := FCurOff;
+  fed := FCurFed;
   k := FK;
   pending := FPend;
+  pendLen := FPendLen;
   while p < lim do
   begin
     q := p;
@@ -987,11 +1095,17 @@ begin
       code := CodeAt(p, n);
       Inc(p, n);
     end;
+    // a field's mark is not there for a match: the matcher does not see it
+    if (code = CObject) and IsMark(AIndex, AData, pos) then
+    begin
+      Inc(pos);
+      Continue;
+    end;
     if pending >= 0 then
     begin
       // the character after a match: a word goes on past its end?
       if not Joins(code, FLastChar) then
-        if Accept(FRunPos + pending) then
+        if Accept(FRunPos + pending, pendLen) then
         begin
           // (that character is read again from here)
           Leave(q, pos, 0, -1);
@@ -999,31 +1113,38 @@ begin
         end;
       pending := -1;
     end;
-    if whole then FRing[pos mod ringN] := code;
+    if whole then FRing[fed mod ringN] := code;
+    FPosRing[fed mod ringN] := pos;
     if not matchCase then code := TyRichFoldChar(code);
     while (k >= 0) and (FCodes[k] <> code) do k := FKmp[k];
     Inc(k);
     if k = FLen then
     begin
-      // a match of the characters [pos - FLen + 1, pos]
+      // a match of the characters fed [fed - FLen + 1, fed]: from where the first stands to pos
+      start := FPosRing[(fed - FLen + 1) mod ringN];
       if not whole then
       begin
-        if Accept(FRunPos + pos - FLen + 1) then
+        if Accept(FRunPos + start, pos + 1 - start) then
         begin
+          Inc(fed);
           Leave(p, pos + 1, 0, -1);
           Exit;
         end;
       end
       else
       begin
-        if pos - FLen >= 0 then prev := FRing[(pos - FLen) mod ringN] else prev := CNone;
+        if fed - FLen >= 0 then prev := FRing[(fed - FLen) mod ringN] else prev := CNone;
         // (a match that begins where the finder was started: what its maker saw before it)
-        if FStartBefore.Known and (FRunPos + pos - FLen + 1 = FStartAt) then prev := BeforeCode;
+        if FStartBefore.Known and (FRunPos + start = FStartAt) then prev := BeforeCode;
         if not Joins(prev, FFirstChar) then
-          pending := pos - FLen + 1;
+        begin
+          pending := start;
+          pendLen := pos + 1 - start;
+        end;
       end;
       k := FKmp[k];
     end;
+    Inc(fed);
     Inc(pos);
   end;
   if p < stop then
@@ -1033,7 +1154,7 @@ begin
     Exit;
   end;
   // the paragraph's end is no word
-  if (pending >= 0) and Accept(FRunPos + pending) then
+  if (pending >= 0) and Accept(FRunPos + pending, pendLen) then
   begin
     Leave(p, pos, 0, -1);
     Exit;
@@ -1171,10 +1292,12 @@ var
   i, s, k, j, n, ringN, last: Integer;
   p, stop: PByte;
   code, prev: Cardinal;
-  pos: Int64;
+  pos, fed: Int64;
   matchCase, whole, ok: Boolean;
   seg: array of Cardinal;
   codes: array of Cardinal;
+  // where each character fed stands (a field's marks are not fed): the tail's, the head's
+  posr, heads: array of Int64;
 begin
   Inc(FParasRead);
   Inc(FTextBytes, ALen);
@@ -1188,7 +1311,11 @@ begin
   last := Length(FSegs[FParaEnds]);
   codes := nil;
   SetLength(codes, last + 1);
+  heads := nil;
+  SetLength(heads, last + 1);
   ringN := Length(FRing);
+  posr := nil;
+  SetLength(posr, ringN);
   n := 0;
   for s := 1 to FParaEnds - 1 do
     if Length(FSegs[s]) > n then n := Length(FSegs[s]);
@@ -1197,6 +1324,7 @@ begin
   p := AText;
   stop := AText + ALen;
   pos := 0;
+  fed := 0;
   while p < stop do
   begin
     if p^ < $80 then
@@ -1210,49 +1338,65 @@ begin
       code := CodeAt(p, k);
       Inc(p, k);
     end;
+    // a field's mark is not there for a match
+    if (code = CObject) and IsMark(AIndex, AData, pos) then
+    begin
+      Inc(pos);
+      Continue;
+    end;
     if not matchCase then code := TyRichFoldChar(code);
-    if pos <= last then codes[pos] := code;
-    if pos < n then seg[pos] := code;
-    FRing[pos mod ringN] := code;
+    if fed <= last then
+    begin
+      codes[fed] := code;
+      heads[fed] := pos;
+    end;
+    if fed < n then seg[fed] := code;
+    FRing[fed mod ringN] := code;
+    posr[fed mod ringN] := pos;
+    Inc(fed);
     Inc(pos);
   end;
   s := Length(FSegs[0]);
-  ok := pos >= s;
+  ok := fed >= s;
   j := 0;
   while ok and (j < s) do
   begin
-    ok := FRing[(pos - s + j) mod ringN] = FSegs[0][j];
+    ok := FRing[(fed - s + j) mod ringN] = FSegs[0][j];
     Inc(j);
   end;
+  // where the match begins: at the segment's first character (none: the paragraph's end)
+  if ok and (s > 0) then FWinTailAt[i] := posr[(fed - s) mod ringN] else FWinTailAt[i] := pos;
   if ok and whole and (s > 0) then
   begin
-    if pos - s - 1 >= 0 then prev := FRing[(pos - s - 1) mod ringN] else prev := CNone;
+    if fed - s - 1 >= 0 then prev := FRing[(fed - s - 1) mod ringN] else prev := CNone;
     // (a match that begins where the finder was started: what its maker saw before it)
-    if FStartBefore.Known and (FWinStart[i] + pos - s = FStartAt) then prev := BeforeCode;
+    if FStartBefore.Known and (FWinStart[i] + FWinTailAt[i] = FStartAt) then prev := BeforeCode;
     ok := not Joins(prev, FFirstChar);
   end;
   FWinTail[i] := Ord(ok);
   for k := 1 to FParaEnds - 1 do
   begin
-    ok := pos = Length(FSegs[k]);
+    ok := fed = Length(FSegs[k]);
     j := 0;
-    while ok and (j < pos) do
+    while ok and (j < fed) do
     begin
       ok := seg[j] = FSegs[k][j];
       Inc(j);
     end;
     FWinMid[k][i] := Ord(ok);
   end;
-  ok := pos >= last;
+  ok := fed >= last;
   j := 0;
   while ok and (j < last) do
   begin
     ok := codes[j] = FSegs[FParaEnds][j];
     Inc(j);
   end;
-  if ok and whole and (last > 0) and (pos > last) then
+  if ok and whole and (last > 0) and (fed > last) then
     ok := not Joins(codes[last], FLastChar);
   FWinHead[i] := Ord(ok);
+  // where the match ends: after the segment's last character (none: the paragraph's start)
+  if ok and (last > 0) then FWinHeadEnd[i] := heads[last - 1] + 1 else FWinHeadEnd[i] := 0;
 end;
 
 procedure TTyRichFinder.WindowSource(AIndex: Integer; AData: Pointer; ASrcOffset,
@@ -1295,8 +1439,14 @@ begin
   if FWinMid[K][I] < 0 then
   begin
     s := Length(FSegs[K]);
-    // a middle paragraph is the segment, whole: its length says much
-    if FWinLen[I] <> s then FWinMid[K][I] := 0
+    // a middle paragraph is the segment, whole: its length says much (a field's marks in it
+    // are not counted, so a longer one that may hold them may be the segment)
+    if FWinLen[I] < s then FWinMid[K][I] := 0
+    else if FWinLen[I] > s then
+    begin
+      if MayHoldMarks(FWinFirst + I, FWinData[I]) then FWinMid[K][I] := 2
+      else FWinMid[K][I] := 0;
+    end
     else if s = 0 then FWinMid[K][I] := 1
     else FWinMid[K][I] := 2;
   end;
@@ -1364,6 +1514,8 @@ begin
   SetLength(FWinTail, n);
   SetLength(FWinHead, n);
   SetLength(FWinHidden, n);
+  SetLength(FWinTailAt, n);
+  SetLength(FWinHeadEnd, n);
   SetLength(FWinNeed, n);
   SetLength(FWinMid, FParaEnds + 1);
   for k := 1 to FParaEnds - 1 do SetLength(FWinMid[k], n);
@@ -1379,6 +1531,8 @@ begin
     FWinTail[i] := -1;
     FWinHead[i] := -1;
     FWinHidden[i] := -1;
+    FWinTailAt[i] := FWinLen[i];
+    FWinHeadEnd[i] := 0;
     FWinNeed[i] := False;
     for k := 1 to FParaEnds - 1 do FWinMid[k][i] := -1;
   end;
@@ -1436,7 +1590,9 @@ begin
     i := j + FParaEnds;
     if ok then
       ok := (FWinHead[i] = 1) and ((Length(FSegs[FParaEnds]) = 0) or (FWinHidden[i] = 0));
-    if ok and Accept(FWinStart[j] + FWinLen[j] - Length(FSegs[0])) then Exit;
+    if ok and Accept(FWinStart[j] + FWinTailAt[j], FWinStart[i] + FWinHeadEnd[i] -
+      (FWinStart[j] + FWinTailAt[j])) then
+      Exit;
   end;
 end;
 { A needle with paragraph ends reads whole paragraphs: the range from ALo is cut at about ABudget
@@ -1494,6 +1650,7 @@ begin
     FPassTo := FMin - FText.ParaStart(FNext);
     FCurOff := 0;
     FCurByte := 0;
+    FCurFed := 0;
     FK := 0;
     FPend := -1;
   end;
@@ -1526,7 +1683,8 @@ begin
   if FStop then
   begin
     FMatchPos := FBest;
-    FMin := FBest + FLen;
+    FMatchLen := FBestLen;
+    FMin := FBest + FBestLen;
     // (without paragraph ends the scan stands right after the match already)
     if FParaEnds > 0 then FNext := FText.ParaOfPos(FBest);
     Exit(rfrFound);
@@ -1573,6 +1731,7 @@ begin
     FNext := lo;
     FCurOff := 0;
     FCurByte := 0;
+    FCurFed := 0;
     FPassTo := 0;
     FK := 0;
     FPend := -1;
@@ -1598,6 +1757,7 @@ begin
   if FBest >= 0 then
   begin
     FMatchPos := FBest;
+    FMatchLen := FBestLen;
     // the next one (backward) ends where this one begins
     FMax := FBest;
     FNext := FText.ParaOfPos(FBest);
@@ -1666,6 +1826,7 @@ begin
     FPassTo := FMin - FText.ParaStart(ALo);
     FCurOff := 0;
     FCurByte := 0;
+    FCurFed := 0;
     FKeep := '';
     FKeepPara := -1;
   end;
@@ -1701,6 +1862,9 @@ begin
   FStartBefore.Known := False;
   Inc(FNext, AParas);
   if FRangeHi >= 0 then Inc(FRangeHi, AParas);
+  // (the marks found are the kept text's: they go with it; any others are of the text before)
+  if (FKeepPara < 0) or (FMarkPara <> FKeepPara) then FMarkPara := -1
+  else Inc(FMarkPara, AParas);
   if FKeepPara >= 0 then
   begin
     Inc(FKeepPara, AParas);
@@ -1844,12 +2008,12 @@ begin
   Result := (FReadyCount = 0) and (FWalkDone or FLimited);
 end;
 
-function TTyRichReplaceAllCommand.Allowed(APos: TTyRichPos): Boolean;
+function TTyRichReplaceAllCommand.Allowed(APos, ALen: TTyRichPos): Boolean;
 var
   t: TTyRichText;
   k: Integer;
 begin
-  if FSimple then Exit(MatchAllowed(FTarget, APos, FLen));
+  if FSimple then Exit(MatchAllowed(FTarget, APos, ALen));
   { A match inside one paragraph never reaches across an edge: only its paragraph's row is
     asked, once a paragraph (a paragraph of megabytes may hold millions of matches). }
   if (APos < FAskedFrom) or (APos >= FAskedTo) then
@@ -1859,25 +2023,41 @@ begin
     FAskedFrom := t.ParaStart(k);
     FAskedTo := FAskedFrom + t.ParaLength(k);
     // (a field's result refuses its own matches, not the paragraph's others: asked of each)
-    FAskedAnswer := FTarget.ChangeRefusal(APos, FLen) <> rcrFixedRow;
+    FAskedAnswer := FTarget.ChangeRefusal(APos, ALen) <> rcrFixedRow;
     FAskedFields := ParaHoldsFields(FTarget, k);
   end;
   Result := FAskedAnswer;
-  if Result and FAskedFields then Result := FTarget.CanChange(APos, FLen);
+  if Result and FAskedFields then Result := FTarget.CanChange(APos, ALen);
 end;
 
-procedure TTyRichReplaceAllCommand.Take(APos: TTyRichPos);
+procedure TTyRichReplaceAllCommand.Take(APos, ALen: TTyRichPos);
 begin
   // (a redo replaces what the first run did, and only that: matches before where it ended)
   if (FRedoTo >= 0) and (APos - FCharDelta >= FRedoTo) then Exit;
-  if not Allowed(APos) then
+  if not Allowed(APos, ALen) then
   begin
     Inc(FSkipped);
     Exit;
   end;
-  if FReadyCount = Length(FReady) then SetLength(FReady, FReadyCount * 2 + 16);
+  if FReadyCount = Length(FReady) then
+  begin
+    SetLength(FReady, FReadyCount * 2 + 16);
+    SetLength(FReadyLen, Length(FReady));
+  end;
   FReady[FReadyCount] := APos;
+  FReadyLen[FReadyCount] := ALen;
   Inc(FReadyCount);
+end;
+
+{ The part's first ACount matches are the needle's characters alone (no field's marks inside
+  them): the way of matches of one length (ReplaceInParas) can take them. }
+function TTyRichReplaceAllCommand.PlainPart(ACount: Integer): Boolean;
+var
+  i: Integer;
+begin
+  for i := 0 to ACount - 1 do
+    if FReadyLen[i] <> FLen then Exit(False);
+  Result := True;
 end;
 
 function TTyRichReplaceAllCommand.Prepare(ABudget: Int64): Boolean;
@@ -1930,7 +2110,7 @@ begin
     FFinder := TTyRichFinder.Create(FTarget, FFind, FOptions, FFrom, FTo);
     FFinder.Collect := True;
     FFinder.StartBefore := FStartBefore;
-    FLen := FFinder.MatchLen;
+    FLen := FFinder.NeedleLen;
     if FFinder.Never then
     begin
       FWalkDone := True;
@@ -1956,7 +2136,12 @@ begin
       if r = rfrMore then Exit(False);
       FAllCount := FFinder.MatchCount;
       SetLength(FAll, FAllCount);
-      for i := 0 to FAllCount - 1 do FAll[i] := FFinder.Match(i);
+      SetLength(FAllLen, FAllCount);
+      for i := 0 to FAllCount - 1 do
+      begin
+        FAll[i] := FFinder.Match(i);
+        FAllLen[i] := FFinder.MatchLength(i);
+      end;
       FreeAndNil(FFinder);
       FCollected := True;
       FAllNext := 0;
@@ -1971,9 +2156,9 @@ begin
       FTarget.BeginRead;
       try
         // (the first one whatever its length: a needle may be longer than the range)
-        while (k < FAllCount) and ((k = FAllNext) or (FAll[k] + FLen - last <= FRangeChars)) do
+        while (k < FAllCount) and ((k = FAllNext) or (FAll[k] + FAllLen[k] - last <= FRangeChars)) do
         begin
-          Take(FAll[k] + FCharDelta);
+          Take(FAll[k] + FCharDelta, FAllLen[k]);
           Inc(k);
         end;
       finally
@@ -2025,7 +2210,7 @@ begin
     // (one read scope for the range's checks: the loader trims once, when it ends)
     FTarget.BeginRead;
     try
-      for k := 0 to FFinder.MatchCount - 1 do Take(FFinder.Match(k));
+      for k := 0 to FFinder.MatchCount - 1 do Take(FFinder.Match(k), FFinder.MatchLength(k));
     finally
       FTarget.EndRead;
     end;
@@ -2073,10 +2258,12 @@ begin
   { What stands right before the place this part ends at, while it is still there: the last
     character of its last match - how the walk sees the boundary of a match that begins right
     behind it (ResumeBefore). }
-  last := TyRichFindCodes(t.GetText(FReady[n - 1] + FLen - 1, 1));
+  last := TyRichFindCodes(t.GetText(FReady[n - 1] + FReadyLen[n - 1] - 1, 1));
   FResumeBefore.Known := Length(last) = 1;
   if FResumeBefore.Known then FResumeBefore.Code := last[0];
-  if FFast then
+  { (a part with a match that spans a field's marks - one that holds the field whole - is
+    made of the ordinary edits: matches of one length are ReplaceInParas') }
+  if FFast and PlainPart(n) then
   begin
     left := 0;
     ReplaceInParas(ADoc, FReady, 0, n, FLen, FRepl, left);
@@ -2112,7 +2299,7 @@ begin
       r := High(runs);
       while (r > 0) and (runs[r].Start > off) do Dec(r);
       if r >= 0 then fmt := runs[r].Format else fmt := ADoc.TypingFormatAt(p);
-      DeleteRange(ADoc, p, FLen);
+      DeleteRange(ADoc, p, FReadyLen[i]);
       if FRepl <> '' then InsertText(ADoc, p, FRepl, fmt);
       Inc(FReplaced);
       if k = 0 then d := t.Length - len0;
@@ -2135,19 +2322,23 @@ begin
       else
         // a paragraph's end: what typing there gets
         fmt := ADoc.TypingFormatAt(FReady[i]);
-      DeleteRange(ADoc, FReady[i], FLen);
+      DeleteRange(ADoc, FReady[i], FReadyLen[i]);
       if FRepl <> '' then InsertText(ADoc, FReady[i], FRepl, fmt);
       Inc(FReplaced);
     end;
   // where the first run ended, in the text it began on (what a redo replays to)
-  FHighPos := FReady[n - 1] + FLen - FCharDelta;
+  FHighPos := FReady[n - 1] + FReadyLen[n - 1] - FCharDelta;
   d := t.Length - len0;
   { Behind the last match of the part, in the text as it is now: everything the part changed
     lies before that place, so it moved by all of it. }
-  FResume := FReady[n - 1] + FLen + d;
+  FResume := FReady[n - 1] + FReadyLen[n - 1] + d;
   Inc(FCharDelta, d);
   // the others of the range, after what changed: moved by it
-  for i := n to FReadyCount - 1 do FReady[i - n] := FReady[i] + d;
+  for i := n to FReadyCount - 1 do
+  begin
+    FReady[i - n] := FReady[i] + d;
+    FReadyLen[i - n] := FReadyLen[i];
+  end;
   Dec(FReadyCount, n);
   // the range done: the walk goes on after it (and after the paragraphs a replacement made)
   if (FReadyCount = 0) and not FSimple then

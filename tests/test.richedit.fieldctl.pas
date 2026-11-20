@@ -34,6 +34,16 @@ type
     procedure MMove(AShift: TShiftState; X, Y: Integer);
     procedure MUp(AButton: TMouseButton; AShift: TShiftState; X, Y: Integer);
     procedure KeyUpOf(AKey: Word; AShift: TShiftState);
+    procedure KeyDownOf(AKey: Word; AShift: TShiftState);
+    function Reads: Int64;
+    function Searches: Int64;
+    function LastTemp: TCursor;
+  end;
+
+  { A descendant that makes a plain left click on a link its click, editable or not. }
+  TPlainClickProbe = class(TFieldProbe)
+  protected
+    function LinkClickFires(AShift: TShiftState; AButton: TMouseButton): Boolean; override;
   end;
 
   TTyRichFieldControlTest = class(TTestCase)
@@ -41,7 +51,16 @@ type
     FCtl: TTyStyleController;
     FRich: TFieldProbe;
     FSelChanges, FChanges: Integer;
+    FClicks: Integer;
+    FClickURL: string;
+    FClickButton: TMouseButton;
+    FOnClickDo: Integer;
     procedure SelChanged(Sender: TObject);
+    procedure LinkClicked(Sender: TObject; const AURL: string; AButton: TMouseButton);
+    procedure LinkClick(AButton: TMouseButton; AShift: TShiftState; const P: TPoint);
+    function NewPlainProbe: TFieldProbe;
+    procedure LoadFixture(const AName: string);
+    procedure ClickAndExpect(const AWhat: string; const AText, AURL: RawByteString);
     procedure Changed(Sender: TObject);
     function NewProbe: TFieldProbe;
     procedure Load(const S: RawByteString);
@@ -88,6 +107,15 @@ type
     procedure TestFormatsAcrossALink;
     procedure TestPlainTextHasNoMarks;
     procedure TestACopyIsNeverRefused;
+    procedure TestALinkClickFiresOnTheRelease;
+    procedure TestTheClicksThatNeverFire;
+    procedure TestAPictureInALinkIsItsClick;
+    procedure TestTheTargetsOfLinks;
+    procedure TestADescendantSaysWhichClickFires;
+    procedure TestAHandlerMayFreeTheControlOrLoad;
+    procedure TestTheHandFollowsCtrlAndReadOnly;
+    procedure TestAPointerMoveReadsNothingAgain;
+    procedure TestTheLinkAndFieldQueries;
   end;
 
 implementation
@@ -155,11 +183,11 @@ const
     number field; text after it. }
   function TocDoc: RawByteString;
   begin
-    Result := Rtf(Head + '{|field{|*|fldinst TOC |o "1-3" |h}{|fldrslt ' +
-      '{|field{|*|fldinst HYPERLINK |l "_Toc1"}{|fldrslt Chapter 1|tab ' +
-      '{|field{|*|fldinst PAGEREF _Toc1 |h}{|fldrslt 3}}}}|par ' +
-      '{|field{|*|fldinst HYPERLINK |l "_Toc2"}{|fldrslt Chapter 2|tab ' +
-      '{|field{|*|fldinst PAGEREF _Toc2 |h}{|fldrslt 6}}}}}} after|par}');
+    Result := Rtf(Head + '{|field{|*|fldinst TOC ||o "1-3" ||h}{|fldrslt ' +
+      '{|field{|*|fldinst HYPERLINK ||l "_Toc1"}{|fldrslt Chapter 1|tab ' +
+      '{|field{|*|fldinst PAGEREF _Toc1 ||h}{|fldrslt 3}}}}|par ' +
+      '{|field{|*|fldinst HYPERLINK ||l "_Toc2"}{|fldrslt Chapter 2|tab ' +
+      '{|field{|*|fldinst PAGEREF _Toc2 ||h}{|fldrslt 6}}}}}} after|par}');
   end;
 
   { Two links touching, the first at the document's start, the second at a paragraph's end;
@@ -212,6 +240,35 @@ var
 begin
   k := AKey;
   KeyUp(k, AShift);
+end;
+
+procedure TFieldProbe.KeyDownOf(AKey: Word; AShift: TShiftState);
+var
+  k: Word;
+begin
+  k := AKey;
+  KeyDown(k, AShift);
+end;
+
+function TFieldProbe.Reads: Int64;
+begin
+  Result := LinkFieldReads;
+end;
+
+function TFieldProbe.Searches: Int64;
+begin
+  Result := LinkFieldSearches;
+end;
+
+function TFieldProbe.LastTemp: TCursor;
+begin
+  if Length(TempCursors) = 0 then Exit(crNone);
+  Result := TempCursors[High(TempCursors)];
+end;
+
+function TPlainClickProbe.LinkClickFires(AShift: TShiftState; AButton: TMouseButton): Boolean;
+begin
+  Result := (AButton = mbLeft) and (AShift * [ssShift, ssAlt, ssCtrl, ssDouble] = []);
 end;
 
 { ---- the suite ---- }
@@ -487,6 +544,112 @@ begin
   if ssShift in AShift then AssertEquals(AWhat + ': nothing selected at the end', 0, FRich.SelLength);
 end;
 
+{ UTF-8 of code points (this file stays ASCII). }
+function U8(const ACodes: array of Cardinal): RawByteString;
+var
+  i: Integer;
+  c: Cardinal;
+begin
+  Result := '';
+  for i := 0 to High(ACodes) do
+  begin
+    c := ACodes[i];
+    if c < $80 then Result := Result + AnsiChar(c)
+    else if c < $800 then
+      Result := Result + AnsiChar($C0 or (c shr 6)) + AnsiChar($80 or (c and $3F))
+    else
+      Result := Result + AnsiChar($E0 or (c shr 12)) + AnsiChar($80 or ((c shr 6) and $3F)) +
+        AnsiChar($80 or (c and $3F));
+  end;
+  SetCodePage(Result, CP_NONE, False);
+end;
+
+function NoBytes: TBytes;
+begin
+  Result := nil;
+end;
+
+procedure TTyRichFieldControlTest.LinkClicked(Sender: TObject; const AURL: string;
+  AButton: TMouseButton);
+var
+  st: TBytesStream;
+begin
+  Inc(FClicks);
+  FClickURL := AURL;
+  FClickButton := AButton;
+  case FOnClickDo of
+    // the handler frees the control
+    1: FreeAndNil(FRich);
+    // the handler loads another document
+    2:
+      begin
+        st := TBytesStream.Create(RawBytes(Rtf(Head + 'another one|par}')));
+        try
+          FRich.LoadFromStream(st);
+        finally
+          st.Free;
+        end;
+      end;
+  end;
+end;
+
+procedure TTyRichFieldControlTest.LinkClick(AButton: TMouseButton; AShift: TShiftState;
+  const P: TPoint);
+var
+  held: TShiftState;
+begin
+  case AButton of
+    mbLeft: held := [ssLeft];
+    mbRight: held := [ssRight];
+    mbMiddle: held := [ssMiddle];
+  else
+    held := [];
+  end;
+  FRich.MDown(AButton, AShift + held, P.X, P.Y);
+  if FRich <> nil then FRich.MUp(AButton, AShift - [ssDouble], P.X, P.Y);
+end;
+
+function TTyRichFieldControlTest.NewPlainProbe: TFieldProbe;
+begin
+  Result := TPlainClickProbe.Create(nil);
+  Result.Controller := FCtl;
+  Result.Font.PixelsPerInch := 96;
+  Result.SetBounds(0, 0, 600, 400);
+  Result.ResetCounts;
+end;
+
+procedure TTyRichFieldControlTest.LoadFixture(const AName: string);
+var
+  f: TFileStream;
+  b: TBytes;
+begin
+  f := TFileStream.Create(ExtractFilePath(ParamStr(0)) + '..' + PathDelim + 'tests' + PathDelim +
+    'fixtures' + PathDelim + 'rtf' + PathDelim + AName, fmOpenRead or fmShareDenyWrite);
+  try
+    b := nil;
+    SetLength(b, f.Size);
+    if f.Size > 0 then f.ReadBuffer(b[0], f.Size);
+  finally
+    f.Free;
+  end;
+  LoadBytes(b);
+end;
+
+{ A Ctrl + left click on the first character of AText (scrolled into view): the click's URL. }
+procedure TTyRichFieldControlTest.ClickAndExpect(const AWhat: string; const AText,
+  AURL: RawByteString);
+var
+  q: TTyRichPos;
+begin
+  q := PosOfText(AText);
+  FRich.SelStart := q;
+  FClicks := 0;
+  FClickURL := '';
+  LinkClick(mbLeft, [ssCtrl], PointIn(q, 1));
+  AssertEquals(AWhat + ': one click', 1, FClicks);
+  AssertEquals(AWhat + ': its target', Hex(AURL), Hex(U(FClickURL)));
+end;
+
 procedure TTyRichFieldControlTest.CheckSelection(const AWhat: string; AStart, ALen: TTyRichPos);
 begin
   AssertEquals(AWhat + ': the selection''s start', AStart, FRich.SelStart);
@@ -632,6 +795,15 @@ begin
   AssertEquals('nothing refused', 0, FRich.Refused);
   s := SaveRtf;
   AssertTrue('the field''s bytes as they came', Pos(Rtf(LinkField), s) > 0);
+  // a field whose own group sets a character word (its result is bold, its marks too)
+  Load(Rtf(Head + 'ab {|field|b{|*|fldinst HYPERLINK "x"}{|fldrslt link}} cd|par}'));
+  AssertTrue('the result is bold', fsBold in CharFmt(5).Style);
+  FRich.SelStart := 9;
+  Chars('Y');
+  AssertFalse('typed after it: the text outside''s look, not bold', fsBold in CharFmt(9).Style);
+  FRich.SelStart := 3;
+  Chars('X');
+  AssertFalse('typed before it: not bold', fsBold in CharFmt(3).Style);
 end;
 
 { No selection: Backspace right after a field, Delete right before one, and the word keys
@@ -1080,6 +1252,336 @@ begin
   AssertEquals('all of it', 'ab link cd', FRich.ClipText);
   AssertTrue('a whole field: its bytes', Pos(Rtf(LinkField), FRich.ClipRtf) > 0);
   AssertEquals('SelText', 'ab link cd', FRich.SelText);
+end;
+
+{ Editable: Ctrl + a left or a middle click on a link's text is its click, on the release, and
+  nothing else - no caret move, no selection change; a plain click places the caret as ever.
+  ReadOnly: a plain left or middle click. }
+procedure TTyRichFieldControlTest.TestALinkClickFiresOnTheRelease;
+var
+  p: TPoint;
+begin
+  Load(LinkDoc);
+  FRich.OnLinkClick := @LinkClicked;
+  FRich.SelStart := 1;
+  Reset;
+  p := PointIn(5, 1);
+  FClicks := 0;
+  FRich.MDown(mbLeft, [ssLeft, ssCtrl], p.X, p.Y);
+  AssertEquals('nothing on the press', 0, FClicks);
+  FRich.MUp(mbLeft, [ssCtrl], p.X, p.Y);
+  AssertEquals('Ctrl + left: the click', 1, FClicks);
+  AssertEquals('its target', 'http://x.test/a', FClickURL);
+  AssertTrue('the left button', FClickButton = mbLeft);
+  AssertEquals('the caret stays', Int64(1), FRich.CaretIndex);
+  AssertEquals('no selection change', 0, FSelChanges);
+  LinkClick(mbMiddle, [ssCtrl], p);
+  AssertEquals('Ctrl + middle: the click', 2, FClicks);
+  AssertTrue('the middle button', FClickButton = mbMiddle);
+  AssertEquals('the caret stays again', Int64(1), FRich.CaretIndex);
+  // a plain click places the caret, no click
+  LinkClick(mbLeft, [], p);
+  AssertEquals('a plain left click: no link click', 2, FClicks);
+  AssertEquals('... the caret there', Int64(5), FRich.CaretIndex);
+  LinkClick(mbMiddle, [], p);
+  AssertEquals('a plain middle click: nothing', 2, FClicks);
+  // a viewer: a plain click is the link's
+  FRich.ReadOnly := True;
+  FRich.SelStart := 1;
+  Reset;
+  LinkClick(mbLeft, [], p);
+  AssertEquals('ReadOnly, a plain left click: the click', 3, FClicks);
+  LinkClick(mbMiddle, [], p);
+  AssertEquals('ReadOnly, a plain middle click: the click', 4, FClicks);
+  AssertEquals('the caret stays', Int64(1), FRich.CaretIndex);
+  AssertEquals('no selection change', 0, FSelChanges);
+  LinkClick(mbLeft, [ssShift], p);
+  AssertEquals('ReadOnly, Shift: no click', 4, FClicks);
+  // no handler: nothing happens, and nothing else either
+  FRich.OnLinkClick := nil;
+  FRich.SelStart := 1;
+  Reset;
+  LinkClick(mbLeft, [], p);
+  AssertEquals('no handler: the caret stays', Int64(1), FRich.CaretIndex);
+end;
+
+{ Never the right button, a disabled control, a drag past the threshold (it selects as ever),
+  the second press of a double click, a release on other text or another link, the space right
+  of a line's end. }
+procedure TTyRichFieldControlTest.TestTheClicksThatNeverFire;
+var
+  p, q, e: TPoint;
+  r: TRect;
+begin
+  Load(Rtf(Head + 'ab ' + LinkField + ' cd {|field{|*|fldinst HYPERLINK "http://y.test/"}' +
+    '{|fldrslt other}}|par}'));
+  FRich.OnLinkClick := @LinkClicked;
+  FClicks := 0;
+  p := PointIn(5, 1);
+  LinkClick(mbRight, [ssCtrl], p);
+  AssertEquals('the right button: no click', 0, FClicks);
+  FRich.Enabled := False;
+  LinkClick(mbLeft, [ssCtrl], p);
+  AssertEquals('disabled: no click', 0, FClicks);
+  FRich.Enabled := True;
+  // a drag from the link: a selection, no click
+  q := PointIn(10, 2);
+  FRich.MDown(mbLeft, [ssLeft, ssCtrl], p.X, p.Y);
+  FRich.MMove([ssLeft, ssCtrl], p.X + FRich.Width div 4, p.Y);
+  FRich.MMove([ssLeft, ssCtrl], q.X, q.Y);
+  FRich.MUp(mbLeft, [ssCtrl], q.X, q.Y);
+  AssertEquals('a drag: no click', 0, FClicks);
+  AssertTrue('a drag: a selection from the press', FRich.SelLength > 0);
+  AssertEquals('... from where it was pressed', Int64(5), FRich.SelStart);
+  // a small move inside the threshold is still the click
+  FRich.MDown(mbLeft, [ssLeft, ssCtrl], p.X, p.Y);
+  FRich.MMove([ssLeft, ssCtrl], p.X + 1, p.Y);
+  FRich.MUp(mbLeft, [ssCtrl], p.X + 1, p.Y);
+  AssertEquals('a move inside the threshold: the click', 1, FClicks);
+  // the second press of a double click
+  LinkClick(mbLeft, [ssCtrl, ssDouble], p);
+  AssertEquals('a double click''s second press: no click', 1, FClicks);
+  // released elsewhere
+  FRich.MDown(mbLeft, [ssLeft, ssCtrl], p.X, p.Y);
+  e := PointIn(1, 1);
+  FRich.MUp(mbLeft, [ssCtrl], e.X, e.Y);
+  AssertEquals('released on other text: no click', 1, FClicks);
+  FRich.MDown(mbLeft, [ssLeft, ssCtrl], p.X, p.Y);
+  e := PointIn(PosOfText('other') + 1, 1);
+  FRich.MUp(mbLeft, [ssCtrl], e.X, e.Y);
+  AssertEquals('released on another link: no click', 1, FClicks);
+  // the space right of the line's end, which ends with a link
+  r := FRich.PositionRect(Doc.Text.Length);
+  e := Point(Math.Min(FRich.Width - 30, r.Left + 40), (r.Top + r.Bottom) div 2);
+  LinkClick(mbLeft, [ssCtrl], e);
+  AssertEquals('right of the line''s end: no click', 1, FClicks);
+  AssertEquals('... the caret placed there as ever', Doc.Text.Length, FRich.CaretIndex);
+  // a press of another button while the press on the link waits
+  FRich.MDown(mbLeft, [ssLeft, ssCtrl], p.X, p.Y);
+  FRich.MDown(mbRight, [ssLeft, ssRight, ssCtrl], p.X, p.Y);
+  FRich.MUp(mbRight, [ssLeft, ssCtrl], p.X, p.Y);
+  FRich.MUp(mbLeft, [ssCtrl], p.X, p.Y);
+  AssertEquals('another button between: no click', 1, FClicks);
+end;
+
+{ A picture inside a link: a Ctrl click on it is the link's, and does not select the picture. }
+procedure TTyRichFieldControlTest.TestAPictureInALinkIsItsClick;
+var
+  p: TPoint;
+begin
+  Load(Rtf(Head + 'a{|field{|*|fldinst HYPERLINK "http://p.test/"}{|fldrslt {|pict|pngblip' +
+    '|picwgoal600|pichgoal400 89504e470d0a1a0a}}}b|par}'));
+  FRich.OnLinkClick := @LinkClicked;
+  FRich.SelStart := 0;
+  Reset;
+  FClicks := 0;
+  p := PointIn(2, 1);
+  LinkClick(mbLeft, [ssCtrl], p);
+  AssertEquals('the picture''s click', 1, FClicks);
+  AssertEquals('its link', 'http://p.test/', FClickURL);
+  AssertEquals('the picture not selected', 0, FRich.SelLength);
+  AssertEquals('no selection change', 0, FSelChanges);
+  // a plain click selects it - with its link's marks, the run it stands in being one place
+  LinkClick(mbLeft, [], p);
+  AssertEquals('a plain click: no link click', 1, FClicks);
+  CheckSelection('a plain click: the picture selected, with the marks', 1, 3);
+end;
+
+{ The targets: a URL with Chinese in it (as the reader decodes text), \l alone, a target with
+  \l, the innermost link around a page number inside a table of contents' entry; switches
+  passed over; an instruction that is no link. }
+procedure TTyRichFieldControlTest.TestTheTargetsOfLinks;
+var
+  url: string;
+  q: TTyRichPos;
+begin
+  LoadFixture('word-toc.rtf');
+  FRich.OnLinkClick := @LinkClicked;
+  ClickAndExpect('a Chinese URL', U8([$4E2D, $6587, $7F51, $5740]),
+    Raw('https://example.com/') + U8([$6587, $6863]) + Raw('?q=') + U8([$4E2D, $6587]));
+  ClickAndExpect('\l alone', U8([$5230, $4E66, $7B7E]), Raw('#mark1'));
+  ClickAndExpect('a target and \l', Raw('page#sec2'), Raw('https://example.com/page#sec2'));
+  ClickAndExpect('in a table''s cell', U8([$94FE, $63A5]) + Raw(' link'),
+    Raw('https://example.com/cell'));
+  // the first entry of the contents; then its page number, inside the PAGEREF inside the entry
+  ClickAndExpect('a contents'' entry', U8([$7B2C]) + Raw(' 1 ') + U8([$7AE0]),
+    Raw('#_Toc246044258'));
+  q := PosOfText(#9 + '3') + 1;
+  FRich.SelStart := q;
+  FClicks := 0;
+  LinkClick(mbLeft, [ssCtrl], PointIn(q, 1));
+  AssertEquals('the page number: the entry''s link', '#_Toc246044258', FClickURL);
+  // a REF is no link
+  q := PosOfText(U8([$4E66, $7B7E, $91CC]));
+  FRich.SelStart := q;
+  AssertFalse('a REF field: no link', FRich.LinkAtPoint(PointIn(q, 1).X, PointIn(q, 1).Y, url));
+  // instructions of our own
+  Load(Rtf(Head + '{|field{|*|fldinst HYPERLINK "http://a.test/" ||o "a tip" ||t "_blank" ||h}' +
+    '{|fldrslt one}} {|field{|*|fldinst HYPERLINK "http://x.test/|u20013?|u25991?"}' +
+    '{|fldrslt two}} {|field{|*|fldinst HYPERLINK}{|fldrslt three}} ' +
+    '{|field{|*|fldinst HYPERLINK "http://open.test/}{|fldrslt four}} ' +
+    '{|field{|*|fldinst HYPERLINK "C:||||dir||||a b.txt"}{|fldrslt five}} ' +
+    '{|field{|*|fldinst hyperlink ||l "low"}{|fldrslt six}}|par}'));
+  FRich.OnLinkClick := @LinkClicked;
+  ClickAndExpect('switches passed over', Raw('one'), Raw('http://a.test/'));
+  ClickAndExpect('\u in the target', Raw('two'), Raw('http://x.test/') + U8([$4E2D, $6587]));
+  q := PosOfText('three');
+  AssertFalse('HYPERLINK alone: no link', FRich.LinkAtPoint(PointIn(q, 1).X, PointIn(q, 1).Y, url));
+  q := PosOfText('four');
+  AssertFalse('a quote not closed: no link', FRich.LinkAtPoint(PointIn(q, 1).X, PointIn(q, 1).Y, url));
+  ClickAndExpect('a quoted path, the field code''s escapes', Raw('five'),
+    Raw('C:' + BS + 'dir' + BS + 'a b.txt'));
+  ClickAndExpect('the word in any case', Raw('six'), Raw('#low'));
+end;
+
+procedure TTyRichFieldControlTest.TestADescendantSaysWhichClickFires;
+var
+  p: TPoint;
+begin
+  FreeAndNil(FRich);
+  FRich := NewPlainProbe;
+  Load(LinkDoc);
+  FRich.OnLinkClick := @LinkClicked;
+  FClicks := 0;
+  p := PointIn(5, 1);
+  LinkClick(mbLeft, [], p);
+  AssertEquals('its rule: a plain left click', 1, FClicks);
+  LinkClick(mbLeft, [ssCtrl], p);
+  AssertEquals('its rule: not with Ctrl', 1, FClicks);
+  // the hand where its rule says yes
+  FRich.MMove([], p.X, p.Y);
+  AssertTrue('the hand without Ctrl', FRich.LastTemp = crHandPoint);
+end;
+
+procedure TTyRichFieldControlTest.TestAHandlerMayFreeTheControlOrLoad;
+var
+  p: TPoint;
+begin
+  Load(LinkDoc);
+  FRich.OnLinkClick := @LinkClicked;
+  p := PointIn(5, 1);
+  FOnClickDo := 2;
+  FClicks := 0;
+  LinkClick(mbLeft, [ssCtrl], p);
+  AssertEquals('clicked', 1, FClicks);
+  FRich.FinishLoading;
+  AssertEquals('the other document', 'another one', FRich.Lines[0]);
+  Load(LinkDoc);
+  FOnClickDo := 1;
+  LinkClick(mbLeft, [ssCtrl], p);
+  AssertEquals('clicked again', 2, FClicks);
+  AssertTrue('the handler freed the control', FRich = nil);
+  FOnClickDo := 0;
+end;
+
+{ The hand where a left click would be a link's click: it comes and goes with Ctrl, the pointer
+  still, and with ReadOnly. }
+procedure TTyRichFieldControlTest.TestTheHandFollowsCtrlAndReadOnly;
+var
+  p, o: TPoint;
+begin
+  Load(LinkDoc);
+  p := PointIn(5, 1);
+  o := PointIn(1, 1);
+  FRich.MMove([], p.X, p.Y);
+  AssertTrue('editable, no Ctrl: the I-beam', FRich.LastTemp <> crHandPoint);
+  AssertTrue('... CursorAt says so', FRich.CursorFor(p.X, p.Y) = crIBeam);
+  FRich.KeyDownOf(VK_CONTROL, [ssCtrl]);
+  AssertTrue('Ctrl down: the hand', FRich.LastTemp = crHandPoint);
+  FRich.KeyUpOf(VK_CONTROL, []);
+  AssertTrue('Ctrl up: the I-beam again', FRich.LastTemp = crIBeam);
+  FRich.MMove([ssCtrl], p.X, p.Y);
+  AssertTrue('a move with Ctrl: the hand', FRich.LastTemp = crHandPoint);
+  FRich.MMove([ssCtrl], o.X, o.Y);
+  AssertTrue('off the link: the I-beam', FRich.LastTemp = crIBeam);
+  FRich.MMove([], p.X, p.Y);
+  FRich.ReadOnly := True;
+  AssertTrue('ReadOnly: the hand with no key', FRich.LastTemp = crHandPoint);
+  FRich.ReadOnly := False;
+  AssertTrue('editable again: the I-beam', FRich.LastTemp = crIBeam);
+end;
+
+{ A move of the pointer over the same link reads nothing again, and over a table of contents of
+  many entries reads only what is under it. }
+procedure TTyRichFieldControlTest.TestAPointerMoveReadsNothingAgain;
+var
+  p: TPoint;
+  i: Integer;
+  r0, s0: Int64;
+  s: RawByteString;
+  url: string;
+begin
+  Load(LinkDoc);
+  FRich.ReadOnly := True;
+  p := PointIn(5, 1);
+  FRich.MMove([], p.X, p.Y);
+  r0 := FRich.Reads;
+  AssertEquals('the link''s instruction read once', Int64(1), r0);
+  for i := 1 to 50 do FRich.MMove([], p.X + (i mod 3), p.Y);
+  AssertEquals('fifty moves over it: nothing read again', r0, FRich.Reads);
+  // a table of contents of 3000 entries under a heading inside its result
+  s := Head + '{|field{|*|fldinst TOC ||o "1-3" ||h}{|fldrslt Contents heading|par second line|par ';
+  for i := 1 to 3000 do
+    s := s + '{|field{|*|fldinst HYPERLINK ||l "_Toc' + IntToStr(i) + '"}{|fldrslt Chapter ' +
+      IntToStr(i) + '|tab {|field{|*|fldinst PAGEREF _Toc' + IntToStr(i) + ' ||h}{|fldrslt ' +
+      IntToStr(i) + '}}}}|par ';
+  s := s + '}} after|par}';
+  Load(Rtf(s));
+  FRich.ReadOnly := True;
+  r0 := FRich.Reads;
+  s0 := FRich.Searches;
+  for i := 1 to 10 do
+  begin
+    p := PointIn(Doc.Text.ParaStart(i + 1) + 2, 1);
+    FRich.MMove([], p.X, p.Y);
+    AssertTrue(Format('entry %d: a link', [i]), FRich.LinkAtPoint(p.X, p.Y, url));
+  end;
+  AssertEquals('ten entries: no search across paragraphs', s0, FRich.Searches);
+  AssertTrue('... a few instructions read', FRich.Reads - r0 <= 20);
+  // a line inside the contents' result, in no entry: the contents' field found once
+  s0 := FRich.Searches;
+  p := PointIn(Doc.Text.ParaStart(1) + 2, 1);
+  FRich.MMove([], p.X, p.Y);
+  AssertFalse('the second line: no link', FRich.LinkAtPoint(p.X, p.Y, url));
+  AssertEquals('one search for the contents'' marks', s0 + 1, FRich.Searches);
+  s0 := FRich.Searches;
+  r0 := FRich.Reads;
+  for i := 1 to 20 do FRich.MMove([], p.X + (i mod 3), p.Y);
+  p := PointIn(2, 1);
+  for i := 1 to 20 do FRich.MMove([], p.X + (i mod 3), p.Y);
+  AssertEquals('moves over it and the heading: no search again', s0, FRich.Searches);
+  AssertEquals('... nothing read again', r0, FRich.Reads);
+end;
+
+procedure TTyRichFieldControlTest.TestTheLinkAndFieldQueries;
+var
+  url, inst: string;
+  p: TPoint;
+  a, n, q: TTyRichPos;
+begin
+  Load(TocDoc);
+  p := PointIn(3, 1);
+  AssertTrue('a link under the point', FRich.LinkAtPoint(p.X, p.Y, url));
+  AssertEquals('its target', '#_Toc1', url);
+  p := PointIn(PosOfText('after'), 1);
+  AssertFalse('the text after the contents: no link', FRich.LinkAtPoint(p.X, p.Y, url));
+  a := -1;
+  n := -1;
+  inst := '';
+  q := PosOfText('3');
+  AssertTrue('the page number''s field', FRich.GetFieldRange(q, a, n, inst));
+  AssertEquals('its open mark', q - 1, a);
+  AssertEquals('both marks and the number', Int64(3), n);
+  AssertEquals('its instruction', 'PAGEREF _Toc1 ' + BS + 'h', inst);
+  AssertTrue('the entry''s field', FRich.GetFieldRange(3, a, n, inst));
+  AssertEquals('the entry''s open mark', Int64(1), a);
+  AssertEquals('the entry''s instruction', 'HYPERLINK ' + BS + 'l "_Toc1"', inst);
+  AssertTrue('the contents'' own field at an entry''s start', FRich.GetFieldRange(1, a, n, inst));
+  AssertEquals('the contents'' open mark', Int64(0), a);
+  AssertEquals('its instruction', 'TOC ' + BS + 'o "1-3" ' + BS + 'h', inst);
+  a := -7;
+  AssertFalse('outside every field', FRich.GetFieldRange(Doc.Text.Length, a, n, inst));
+  AssertEquals('the variables left alone', Int64(-7), a);
 end;
 
 initialization

@@ -69,7 +69,7 @@ implementation
 uses
   Math, LCLType, Controls, BGRABitmap, BGRABitmapTypes, tyControls.RichEdit.Text,
   tyControls.RichEdit.RtfRead, tyControls.RichEdit.RtfWrite, tyControls.RichEdit.Model,
-  tyControls.RichEdit.Commands
+  tyControls.RichEdit.Commands, tyControls.RichEdit.Find
   {$IFDEF LCLWin32}, test.richedit.dropacross{$ENDIF};
 
 {$IFDEF MSWINDOWS}
@@ -113,6 +113,8 @@ type
     function HandleCentre(AHandle: TTyRichHandle; out APoint: TPoint): Boolean;
     procedure Press(X, Y: Integer);
     procedure MoveTo(X, Y: Integer);
+    { The pointer moved with no button held. }
+    procedure Hover(X, Y: Integer);
     procedure Release(X, Y: Integer);
     function Step: Boolean;
     procedure DragTick;
@@ -164,6 +166,11 @@ end;
 procedure TPerfRich.MoveTo(X, Y: Integer);
 begin
   MouseMove([ssLeft], X, Y);
+end;
+
+procedure TPerfRich.Hover(X, Y: Integer);
+begin
+  MouseMove([], X, Y);
 end;
 
 procedure TPerfRich.Release(X, Y: Integer);
@@ -764,10 +771,14 @@ procedure TTyRichEditPerfTest.TestA100MBRtfOfFieldsFirstScreenContentsAndKeys;
 var
   path: string;
   bmp: TBitmap;
-  t0, first, mid, last, keyLink, keyAfter: Double;
-  tocFirst, tocLast, linkAfter, p, depth: Integer;
+  t0, first, mid, last, keyLink, keyAfter, stepToc, moveNew, moveSame, findAll: Double;
+  tocFirst, tocLast, linkAfter, p, depth, i, found: Integer;
   at: TTyRichPos;
   t: TTyRichText;
+  r: TRect;
+  f: TTyRichFinder;
+  needle: UTF8String;
+  raw: RawByteString;
 begin
   CheckRoom;
   path := NewFile('.rtf');
@@ -830,12 +841,57 @@ begin
     AssertEquals('typed after the contents', depth + 1, FRich.Document.UndoDepth);
     Report('rtf of fields: a character typed in the paragraph after the contents, to the end of its paint',
       keyAfter);
+    // a caret step in the contents' middle, across an entry's link and its page number's marks
+    p := (tocFirst + tocLast) div 2;
+    FRich.SelStart := t.ParaStart(p) + 3;
+    FRich.ScrollCaretIntoView;
+    TPerfRich(FRich).PaintInto(bmp);
+    t0 := Clock;
+    for i := 1 to 20 do TPerfRich(FRich).Key(VK_RIGHT, []);
+    TPerfRich(FRich).PaintInto(bmp);
+    stepToc := (Clock - t0) / 20;
+    Report('rtf of fields: a caret step in the contents'' middle (the average of 20, painted once)', stepToc);
+    { The pointer over an entry of the contents, read-only (where a plain click is a link's, so
+      every move asks for the link under it): the first move over the entry, then moves over it
+      again. }
+    FRich.ReadOnly := True;
+    r := FRich.PositionRect(t.ParaStart(p) + 4);
+    t0 := Clock;
+    TPerfRich(FRich).Hover(r.Left + 1, (r.Top + r.Bottom) div 2);
+    moveNew := Clock - t0;
+    Report('rtf of fields: the pointer onto an entry of the contents', moveNew);
+    r := FRich.PositionRect(t.ParaStart(p + 1) + 4);
+    t0 := Clock;
+    for i := 1 to 20 do TPerfRich(FRich).Hover(r.Left + 1 + i mod 2, (r.Top + r.Bottom) div 2);
+    moveSame := (Clock - t0) / 20;
+    Report('rtf of fields: the pointer moving over the next entry (the average of 20)', moveSame);
+    FRich.ReadOnly := False;
+    // find all: a needle across every link's open mark, in the whole file
+    t0 := Clock;
+    // ("to " and the two characters every link's result begins with, U+94FE U+63A5)
+    raw := 'to ' + #$E9#$93#$BE#$E6#$8E#$A5;
+    SetCodePage(raw, CP_UTF8, False);
+    needle := raw;
+    f := TTyRichFinder.Create(FRich.Document, needle, [], 0, -1);
+    try
+      f.Collect := True;
+      f.Run;
+      found := f.MatchCount;
+    finally
+      f.Free;
+    end;
+    findAll := Clock - t0;
+    Report(Format('rtf of fields: find all of a needle across the links'' marks (%d found; not asserted)',
+      [found]), findAll);
     WriteLn('TTyRichEditPerfTest: rtf of fields: peak working set: ' + PeakWorkingSet);
     AssertTrue(Format('the first screen in %.0f ms', [first]), first <= CFirstScreenMs);
     AssertTrue(Format('the contents'' middle in %.0f ms', [mid]), mid <= CScrollMs);
     AssertTrue(Format('the end in %.0f ms', [last]), last <= CScrollMs);
     AssertTrue(Format('a key before a link in %.1f ms', [keyLink]), keyLink <= CKeystrokeMs);
     AssertTrue(Format('a key after the contents in %.1f ms', [keyAfter]), keyAfter <= CKeystrokeMs);
+    AssertTrue(Format('a caret step in the contents in %.1f ms', [stepToc]), stepToc <= CKeystrokeMs);
+    AssertTrue(Format('the pointer onto an entry in %.1f ms', [moveNew]), moveNew <= CKeystrokeMs);
+    AssertTrue(Format('the pointer over an entry in %.1f ms', [moveSame]), moveSame <= CKeystrokeMs);
   finally
     bmp.Free;
   end;

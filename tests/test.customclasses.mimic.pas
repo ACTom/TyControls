@@ -8591,6 +8591,7 @@ type
     property OnModifiedChange;
     property OnZoomChange;
     property OnEditRefused;
+    property OnLinkClick;
     property OnObjectResize;
     property OnDropFiles;
     property OnLoadProgress;
