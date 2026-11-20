@@ -308,6 +308,7 @@ uses
   test.richedit.perf,
   test.richedit.fields,
   test.richedit.fieldctl,
+  test.richedit.fieldpaste,
   test.richedit.keptpictures,
   test.richedit.ruler;
 

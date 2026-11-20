@@ -660,6 +660,22 @@ const
     BS + '*' + BS + 'cs5 Strong;}}' + BS + 'pard' + BS + 'f0 first' + BS + 'par second' + BS +
     'par third' + BS + 'par}';
 
+{ The instructions of ADoc's fields, in order, each closed by '|'. }
+function FieldInstructions(ADoc: TTyRichDocument): string;
+var
+  k, i: Integer;
+  runs: TTyRunArray;
+begin
+  Result := '';
+  for k := 0 to ADoc.Text.ParaCount - 1 do
+  begin
+    runs := ADoc.RunsOf(k);
+    for i := 0 to High(runs) do
+      if (runs[i].Obj is TTyRichFieldMark) and (TTyRichFieldMark(runs[i].Obj).Kind = rfmOpen) then
+        Result := Result + TyRichFieldInstruction(ADoc, TTyRichFieldMark(runs[i].Obj)) + '|';
+  end;
+end;
+
 { What a reader of the saved file finds in the pasted paragraphs - the field's text, styles,
   colours, the row - for the source's numbers left behind. }
 procedure CheckForeignPaste(ATest: TTestCase; const AWhat: string; ADoc: TTyRichDocument);
@@ -679,10 +695,11 @@ begin
   ATest.AssertEquals(AWhat + ': no underline colour', 0, PosRaw(BS + 'ulc', body));
   ATest.AssertEquals(AWhat + ': no border colour', 0, PosRaw(BS + 'brdrcf', body));
   ATest.AssertEquals(AWhat + ': no cell shading', 0, PosRaw(BS + 'clcbpat', body));
-  { A field shown as its result goes into another file as that result's text: its marks,
-    whose bytes name the source's entries, are left out (the field is not made again around
-    its content). }
-  ATest.AssertEquals(AWhat + ': no field', 0, PosRaw(BS + 'field', body));
+  { A field shown as its result goes into another file as a field made again there: its
+    instruction's text and a result written as content, naming this file's entries. }
+  ATest.AssertTrue(AWhat + ': the field made again: ' + Shown(body),
+    PosRaw('{' + BS + 'field{' + BS + '*' + BS + 'fldinst HYPERLINK "http://x"}{' + BS + 'fldrslt',
+    body) > 0);
   ATest.AssertTrue(AWhat + ': its result as Unicode', PosRaw(BS + 'u20013?' + BS + 'u25991?', body) > 0);
   ATest.AssertTrue(AWhat + ': the border kept', PosRaw(BS + 'brdrb', body) > 0);
   ATest.AssertTrue(AWhat + ': the cell''s border kept', PosRaw(BS + 'clbrdrb', body) > 0);
@@ -690,8 +707,12 @@ begin
   try
     ATest.AssertNull(AWhat + ': no object read back', FirstOpaque(b));
     k := 0;
-    while (k < b.Text.ParaCount) and (PosRaw(U($4E2D) + U($6587), ParaText(b, k)) = 0) do Inc(k);
-    ATest.AssertTrue(AWhat + ': its result read back, Chinese', k < b.Text.ParaCount);
+    while (k < b.Text.ParaCount) and
+      (PosRaw(U($FFFC) + U($4E2D) + U($6587) + U($FFFC), ParaText(b, k)) = 0) do
+      Inc(k);
+    ATest.AssertTrue(AWhat + ': its result read back between its marks, Chinese', k < b.Text.ParaCount);
+    ATest.AssertEquals(AWhat + ': its instruction read back', 'HYPERLINK "http://x"|',
+      FieldInstructions(b));
     ATest.AssertFalse(AWhat + ': ' + what, AnyTableNumber(b, what));
     k := 0;
     while (k < b.Text.ParaCount) and (b.CellAt(k) = nil) do Inc(k);
@@ -1222,14 +1243,18 @@ begin
     AssertTrue('a filter', filtered);
     body := SavedBody(d, all);
     AssertEquals('the file''s field kept: ' + Shown(body), 2, CountRaw(Esc(Field), body));
-    // (a field whose bytes name a font the file lacks goes as its result's text)
-    AssertEquals('the field naming the added font left out', 0, PosRaw(Esc('`fldrslt`f2'), body));
-    AssertEquals('... its marks with it', 0, PosRaw('http://g', body));
+    // (a field whose bytes name a font the file lacks is made again from its instruction)
+    AssertEquals('the field naming the added font not as its bytes', 0, PosRaw(Esc('`fldrslt`f2'), body));
+    AssertTrue('... made again from its instruction: ' + Shown(body),
+      PosRaw(Esc('{`field{`*`fldinst HYPERLINK "http://g"}{`fldrslt'), body) > 0);
     b := LoadDoc(all, True);
     try
       k := 0;
-      while (k < b.Text.ParaCount) and (ParaText(b, k) <> 'g g h') do Inc(k);
-      AssertTrue('... its text kept', k < b.Text.ParaCount);
+      while (k < b.Text.ParaCount) and not ((PosRaw(U($FFFC), ParaText(b, k)) > 0) and
+        (StringReplace(ParaText(b, k), U($FFFC), '', [rfReplaceAll]) = 'g g h')) do
+        Inc(k);
+      AssertTrue('... its text kept between its marks', k < b.Text.ParaCount);
+      AssertTrue('... its instruction', Pos('HYPERLINK "http://g"|', FieldInstructions(b)) > 0);
     finally
       b.Free;
     end;
@@ -1281,8 +1306,8 @@ begin
 end;
 
 { the pictures of a field's result (a linked image, a picture with a hyperlink) go into
-  another file with the result, which is the field's text there (its marks are left out):
-  one that is the whole result, and one after text with its shape and non-shape forms. }
+  another file with the result of the field made again there: one that is the whole result,
+  and one after text with its shape and non-shape forms. }
 procedure TTyRichEditPasteTest.TestAFieldMadeAgainKeepsItsResultsPictures;
 const
   Pic = '{`pict`pngblip`picwgoal1000`pichgoal1000 89504e470d0a1a0a}';
@@ -1301,12 +1326,16 @@ begin
     body := SavedBody(d, all);
     AssertTrue('the picture that is the result: ' + Shown(body), PosRaw(Esc(Pic), body) > 0);
     AssertTrue('the pictures after the text', PosRaw(Esc('go' + Shp), body) > 0);
-    AssertEquals('no field', 0, PosRaw(Esc('`field'), body));
+    AssertTrue('the fields made again: ' + Shown(body),
+      (PosRaw(Esc('`fldinst INCLUDEPICTURE "http://x/y.png"}{`fldrslt'), body) > 0) and
+      (PosRaw(Esc('`fldinst HYPERLINK "http://z"}{`fldrslt'), body) > 0));
     AssertEquals('no \f1 of the source', 0, PosRaw(Esc('`f1`cf1'), body));
     b := LoadDoc(all, True);
     try
       AssertNull('read back: no object of bytes', FirstOpaque(b));
       AssertEquals('read back: two pictures', 2, PictureCount(b));
+      AssertEquals('read back: the two fields', 'INCLUDEPICTURE "http://x/y.png"|HYPERLINK "http://z"|',
+        FieldInstructions(b));
     finally
       b.Free;
     end;
@@ -3375,8 +3404,8 @@ var
   all: TBytes;
   body: RawByteString;
 begin
-  // as the result of a field (INCLUDEPICTURE in \f1): a field shown as its result goes into
-  // another file as that result, the picture, which goes as it goes alone
+  // as the result of a field (INCLUDEPICTURE in \f1): the field made again around the
+  // picture, which goes as it goes alone
   d := LoadDoc(RawBytes(Esc(Tgt)), False);
   try
     AssertTrue('pasted', PasteAcross(d, d.Text.ParaStart(1), RawBytes(Esc(H +
@@ -3388,7 +3417,7 @@ begin
     AssertEquals('no bytes of the source''s code page: ' + Shown(body), 0, PosRaw(Esc('`''d6'), body));
     AssertEquals('...no properties group', 0, PosRaw('picprop', body));
     AssertTrue('the image kept', PosRaw('pngblip', body) > 0);
-    AssertEquals('no field', 0, PosRaw('INCLUDEPICTURE', body));
+    AssertTrue('the field made again', PosRaw(Esc('`fldinst INCLUDEPICTURE "x.png"}{`fldrslt'), body) > 0);
   finally
     d.Free;
   end;
