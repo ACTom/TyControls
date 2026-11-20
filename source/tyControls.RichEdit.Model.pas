@@ -279,17 +279,60 @@ type
     property RawRtf: RawByteString read FRawRtf;    // the {\pict ...} group as read, '' if new
   end;
 
+  { The picture a block of kept RTF carries inside its own bytes for readers that cannot draw
+    the block itself (TTyRichOpaque.DisplayPicture): what the layout shows for the block. It is
+    never in a document - the block is - and has no Data: the image file's bytes are
+    [DataStart, DataStart + DataLength) of Source, the block's own bytes (the same string, not
+    a copy), written there as hex digits or, with Hex False, as \bin's bytes; ImageData decodes
+    them, each time it is called. DisplayData answers in the decoded bytes, PictureFormat and
+    the display size are those of the block's \pict group. It cannot be resized: the block it shows is
+    one object of bytes no one rewrites. }
+  TTyRichKeptPicture = class(TTyRichPicture)
+  private
+    FSource: RawByteString;
+    FDataAt, FDataLen: Integer;
+    FHex: Boolean;
+  public
+    function Clone: TTyRichObject; override;
+    function DataBytes: Int64; override;
+    // the block's bytes it holds: what a cache that keeps it keeps alive
+    function SharedData(out ABytes: Int64): Pointer; override;
+    function CanResize: Boolean; override;
+    function Resized(AWidthTwips, AHeightTwips: Integer): TTyRichObject; override;
+    { The image file's bytes, decoded from Source as a reader decodes a picture's (a lone hex
+      digit at the end is dropped). }
+    function ImageData: TBytes;
+    property Source: RawByteString read FSource;
+    property DataStart: Integer read FDataAt;      // 0-based, in Source
+    property DataLength: Integer read FDataLen;
+    property Hex: Boolean read FHex;
+  end;
+
   // An RTF group this model does not understand ({\*\...}, fields, equations, ...), kept as
   // its bytes.
   TTyRichOpaque = class(TTyRichObject)
   private
     FBytes: RawByteString;
     FDisplayText: UTF8String;
+    FPicture: TTyRichKeptPicture;
+    FPictureSought: Boolean;
   public
     constructor Create(const ABytes: RawByteString; const ADisplayText: UTF8String = '';
       ARawUc: Integer = 1);
+    destructor Destroy; override;
     function Clone: TTyRichObject; override;
     function DataBytes: Int64; override;
+    { The picture the block's own bytes carry for readers that cannot draw it, when the layout
+      can show it: an equation's (\mmath: the picture of its \mmathPict), an embedded
+      object's (\object: the first picture of its \result) or a shape's (\shp: the first
+      picture of its \shprslt, else that of its pib property). A picture is a \pict group,
+      also one inside a \*\shppict group; Word's pair of a \*\shppict group and a \nonshppict
+      group after it is one picture, the first of the two the layout can draw. nil for any other block, for one
+      with display text, one that holds no picture, and one whose picture cannot be drawn (a
+      metafile that is not one bitmap, an unknown format, no image bytes, a group cut off by
+      the end of the file). Looked for the first time it is asked - the layout asks when it
+      first measures the block - and never again; nothing of the bytes is copied. }
+    function DisplayPicture: TTyRichKeptPicture;
     property Bytes: RawByteString read FBytes;
     // what stands for it on screen, as plain text: a field's result ('' for most blocks)
     property DisplayText: UTF8String read FDisplayText;
@@ -1745,6 +1788,9 @@ function TyRichNoSpaceScript(C: Cardinal): Boolean;
 { Paragraph values alive in all documents together (for the tests that count what a document
   or its history lets go of). }
 function TyRichLiveParaValues: Int64;
+{ How many times a kept block's bytes were searched for the picture it carries
+  (TTyRichOpaque.DisplayPicture), in every document - for tests. }
+function TyRichKeptPictureLookups: Int64;
 
 implementation
 
@@ -1755,6 +1801,8 @@ uses
 var
   // paragraph values alive in every document (TyRichLiveParaValues)
   GLiveParaValues: Int64 = 0;
+  // TyRichKeptPictureLookups
+  GKeptPictureLookups: Int64 = 0;
 
 const
   // RunStep
@@ -1799,6 +1847,11 @@ end;
 function TyRichLiveParaValues: Int64;
 begin
   Result := GLiveParaValues;
+end;
+
+function TyRichKeptPictureLookups: Int64;
+begin
+  Result := GKeptPictureLookups;
 end;
 
 function TyRichNoSpaceScript(C: Cardinal): Boolean;
@@ -2447,6 +2500,657 @@ end;
 function TTyRichOpaque.Clone: TTyRichObject;
 begin
   Result := TTyRichOpaque.Create(FBytes, FDisplayText, FRawUc);
+end;
+
+destructor TTyRichOpaque.Destroy;
+begin
+  if FPicture <> nil then FPicture.Release;
+  inherited Destroy;
+end;
+
+{ ---- the picture a kept block carries ---- }
+
+type
+  TKeptKind = (kkGroup, kkEnd, kkWord, kkSymbol, kkText, kkBin);
+
+  { The tokens of a kept block's bytes, as much of RTF as finding its picture needs: braces,
+    control words (\bin with its bytes), control symbols, runs of text - offsets into the
+    bytes, nothing copied. }
+  TKeptLexer = record
+    P: PByte;
+    Pos, Stop: PtrInt;
+    Kind: TKeptKind;
+    NameAt, NameLen: PtrInt;   // kkWord, kkBin; kkSymbol: NameAt is its character (-1: none)
+    Param: Int64;              // 0 when it has none
+    DataAt, DataLen: PtrInt;   // kkText: the run; kkBin: its bytes
+    Cut: Boolean;              // kkBin: the bytes end before the count it gives
+  end;
+
+  // A {\pict ...} group: its words, and where its image bytes are in the block's.
+  TKeptPict = record
+    Format: TTyRichPictureFormat;
+    W, H, WGoal, HGoal, SX, SY: Int64;
+    DataAt, DataLen: PtrInt;
+    Hex: Boolean;
+  end;
+
+function KeptHexVal(B: Byte): Integer; inline;
+begin
+  case B of
+    Ord('0')..Ord('9'): Result := B - Ord('0');
+    Ord('a')..Ord('f'): Result := B - Ord('a') + 10;
+    Ord('A')..Ord('F'): Result := B - Ord('A') + 10;
+  else
+    Result := -1;
+  end;
+end;
+
+// The bytes the hex digits among ALen bytes at P stand for, as a reader takes them.
+function KeptDecodeHex(P: PByte; ALen: PtrInt): TBytes;
+var
+  i, n: PtrInt;
+  h, nib: Integer;
+begin
+  Result := nil;
+  SetLength(Result, ALen div 2);
+  n := 0;
+  nib := -1;
+  for i := 0 to ALen - 1 do
+  begin
+    h := KeptHexVal(P[i]);
+    if h < 0 then Continue;
+    if nib < 0 then
+      nib := h
+    else
+    begin
+      Result[n] := Byte((nib shl 4) or h);
+      Inc(n);
+      nib := -1;
+    end;
+  end;
+  SetLength(Result, n);
+end;
+
+function KeptHexDigits(P: PByte; ALen: PtrInt): Int64;
+var
+  i: PtrInt;
+begin
+  Result := 0;
+  for i := 0 to ALen - 1 do
+    if KeptHexVal(P[i]) >= 0 then Inc(Result);
+end;
+
+procedure KeptInit(out L: TKeptLexer; const S: RawByteString);
+begin
+  FillChar(L, SizeOf(L), 0);
+  L.P := PByte(PAnsiChar(S));
+  L.Pos := 0;
+  L.Stop := Length(S);
+end;
+
+function KeptLetter(B: Byte): Boolean; inline;
+begin
+  Result := ((B >= Ord('a')) and (B <= Ord('z'))) or ((B >= Ord('A')) and (B <= Ord('Z')));
+end;
+
+function KeptNext(var L: TKeptLexer): Boolean;
+var
+  q: PtrInt;
+  v: Int64;
+  neg, digits: Boolean;
+begin
+  Result := L.Pos < L.Stop;
+  if not Result then Exit;
+  L.Param := 0;
+  L.Cut := False;
+  case L.P[L.Pos] of
+    Ord('{'):
+      begin
+        L.Kind := kkGroup;
+        Inc(L.Pos);
+      end;
+    Ord('}'):
+      begin
+        L.Kind := kkEnd;
+        Inc(L.Pos);
+      end;
+    Ord('\'):
+      begin
+        q := L.Pos + 1;
+        if (q < L.Stop) and KeptLetter(L.P[q]) then
+        begin
+          L.Kind := kkWord;
+          L.NameAt := q;
+          while (q < L.Stop) and KeptLetter(L.P[q]) do Inc(q);
+          L.NameLen := q - L.NameAt;
+          neg := (q < L.Stop) and (L.P[q] = Ord('-'));
+          if neg then Inc(q);
+          v := 0;
+          digits := False;
+          while (q < L.Stop) and (L.P[q] >= Ord('0')) and (L.P[q] <= Ord('9')) do
+          begin
+            if v < 100000000000 then v := v * 10 + (L.P[q] - Ord('0'));
+            digits := True;
+            Inc(q);
+          end;
+          if neg and not digits then Dec(q)
+          else if neg then v := -v;
+          L.Param := v;
+          if (q < L.Stop) and (L.P[q] = Ord(' ')) then Inc(q);
+          L.Pos := q;
+          if (L.NameLen = 3) and (L.P[L.NameAt] = Ord('b')) and (L.P[L.NameAt + 1] = Ord('i')) and
+            (L.P[L.NameAt + 2] = Ord('n')) and (v > 0) then
+          begin
+            L.Kind := kkBin;
+            L.DataAt := q;
+            if v > L.Stop - q then
+            begin
+              v := L.Stop - q;
+              L.Cut := True;
+            end;
+            L.DataLen := v;
+            L.Pos := q + v;
+          end;
+        end
+        else
+        begin
+          L.Kind := kkSymbol;
+          if q >= L.Stop then
+          begin
+            L.NameAt := -1;
+            L.Pos := q;
+          end
+          else
+          begin
+            L.NameAt := q;
+            L.Pos := q + 1;
+            // \'xx: its two digits are part of it
+            if L.P[q] = Ord('''') then
+            begin
+              Inc(L.Pos, 2);
+              if L.Pos > L.Stop then L.Pos := L.Stop;
+            end;
+          end;
+        end;
+      end;
+  else
+    L.Kind := kkText;
+    q := L.Pos;
+    while (q < L.Stop) and (L.P[q] <> Ord('{')) and (L.P[q] <> Ord('}')) and
+      (L.P[q] <> Ord('\')) do
+      Inc(q);
+    L.DataAt := L.Pos;
+    L.DataLen := q - L.Pos;
+    L.Pos := q;
+  end;
+end;
+
+function KeptNameIs(const L: TKeptLexer; const S: string): Boolean;
+begin
+  Result := (L.Kind = kkWord) and (L.NameLen = Length(S)) and
+    (CompareByte(L.P[L.NameAt], S[1], L.NameLen) = 0);
+end;
+
+{ L has just read a group's brace: when the group's first word (after a \*) is S, L moves past
+  that word and True. Otherwise L stays. }
+function KeptEnter(var L: TKeptLexer; const S: string): Boolean;
+var
+  m: TKeptLexer;
+begin
+  m := L;
+  if not KeptNext(m) then Exit(False);
+  if (m.Kind = kkSymbol) and (m.NameAt >= 0) and (m.P[m.NameAt] = Ord('*')) and
+    not KeptNext(m) then
+    Exit(False);
+  Result := KeptNameIs(m, S);
+  if Result then L := m;
+end;
+
+// L inside a group: to after its closing brace. False when the bytes end first.
+function KeptSkipGroup(var L: TKeptLexer): Boolean;
+var
+  depth: Integer;
+begin
+  depth := 1;
+  while KeptNext(L) do
+    case L.Kind of
+      kkGroup: Inc(depth);
+      kkEnd:
+        begin
+          Dec(depth);
+          if depth = 0 then Exit(True);
+        end;
+    end;
+  Result := False;
+end;
+
+{ L inside a group: to the first group in it named S - a child of it, or with AAnyDepth one
+  at any depth -, L past its name. False when the group ends first (L after its brace). }
+function KeptFindGroup(var L: TKeptLexer; const S: string; AAnyDepth: Boolean): Boolean;
+var
+  depth: Integer;
+begin
+  depth := 0;
+  while KeptNext(L) do
+    case L.Kind of
+      kkGroup:
+        if ((depth = 0) or AAnyDepth) and KeptEnter(L, S) then
+          Exit(True)
+        else
+          Inc(depth);
+      kkEnd:
+        begin
+          if depth = 0 then Exit(False);
+          Dec(depth);
+        end;
+    end;
+  Result := False;
+end;
+
+function KeptTextHasHex(const L: TKeptLexer): Boolean;
+var
+  i: PtrInt;
+begin
+  for i := L.DataAt to L.DataAt + L.DataLen - 1 do
+    if KeptHexVal(L.P[i]) >= 0 then Exit(True);
+  Result := False;
+end;
+
+procedure KeptPictWord(const L: TKeptLexer; var APict: TKeptPict);
+begin
+  if KeptNameIs(L, 'pngblip') then APict.Format := rpfPng
+  else if KeptNameIs(L, 'jpegblip') then APict.Format := rpfJpeg
+  else if KeptNameIs(L, 'dibitmap') then APict.Format := rpfDib
+  else if KeptNameIs(L, 'wbitmap') then APict.Format := rpfBmp
+  else if KeptNameIs(L, 'wmetafile') then APict.Format := rpfWmf
+  else if KeptNameIs(L, 'emfblip') then APict.Format := rpfEmf
+  else if KeptNameIs(L, 'picw') then APict.W := L.Param
+  else if KeptNameIs(L, 'pich') then APict.H := L.Param
+  else if KeptNameIs(L, 'picwgoal') then APict.WGoal := L.Param
+  else if KeptNameIs(L, 'pichgoal') then APict.HGoal := L.Param
+  else if KeptNameIs(L, 'picscalex') then APict.SX := L.Param
+  else if KeptNameIs(L, 'picscaley') then APict.SY := L.Param;
+end;
+
+{ The \pict group L has just entered: its words and where its image bytes are, L after
+  its closing brace. False when the bytes end inside it, and when its image bytes are not one
+  stretch (hex digits with a word or a group between them, \bin twice, \bin and hex digits):
+  no writer puts them so, and a reader of such a group would see other bytes. }
+function KeptReadPict(var L: TKeptLexer; out APict: TKeptPict): Boolean;
+var
+  depth: Integer;
+  first, last: PtrInt;
+  closed, broken, bin: Boolean;
+begin
+  FillChar(APict, SizeOf(APict), 0);
+  APict.Format := rpfUnknown;
+  APict.SX := 100;
+  APict.SY := 100;
+  depth := 1;
+  first := -1;
+  last := -1;
+  closed := False;
+  broken := False;
+  bin := False;
+  while True do
+  begin
+    if not KeptNext(L) then Exit(False);
+    case L.Kind of
+      kkGroup:
+        begin
+          Inc(depth);
+          if first >= 0 then closed := True;
+        end;
+      kkEnd:
+        begin
+          Dec(depth);
+          if depth = 0 then Break;
+        end;
+      kkWord:
+        if depth = 1 then
+        begin
+          if first >= 0 then closed := True;
+          KeptPictWord(L, APict);
+        end;
+      kkSymbol:
+        if (depth = 1) and (first >= 0) then closed := True;
+      kkText:
+        if (depth = 1) and KeptTextHasHex(L) then
+        begin
+          if closed or bin then
+            broken := True
+          else
+          begin
+            if first < 0 then first := L.DataAt;
+            last := L.DataAt + L.DataLen;
+          end;
+        end;
+      kkBin:
+        if depth = 1 then
+        begin
+          if L.Cut then Exit(False);
+          if bin or (first >= 0) then
+            broken := True
+          else
+          begin
+            bin := True;
+            APict.DataAt := L.DataAt;
+            APict.DataLen := L.DataLen;
+          end;
+        end;
+    end;
+  end;
+  if broken then Exit(False);
+  if not bin and (first >= 0) then
+  begin
+    APict.Hex := True;
+    APict.DataAt := first;
+    APict.DataLen := last - first;
+  end;
+  Result := True;
+end;
+
+{ The picture of APict for the block ASource, when the layout can show it - what
+  TTyRichPicture.DisplayData shows of a picture, worked out here once: PNG, JPEG, BMP and DIB
+  are their bytes, a metafile whose drawing is one bitmap is that bitmap; nil for anything
+  else and for no bytes. The display size is a reader's: \picwgoal / \pichgoal, else \picw /
+  \pich (hundredths of a millimetre for metafiles, pixels at 96 dpi for the rest), then
+  \picscalex / \picscaley. }
+function KeptPictureOf(const ASource: RawByteString; const APict: TKeptPict): TTyRichKeptPicture;
+var
+  count, w, h: Int64;
+  data: TBytes;
+  bm: TTyWmfBitmap;
+  fmt: TTyRichPictureFormat;
+  start, cnt: Int64;
+  ok: Boolean;
+  p: PByte;
+begin
+  Result := nil;
+  if (APict.DataLen <= 0) or (APict.DataAt < 0) or
+    (Int64(APict.DataAt) + APict.DataLen > Length(ASource)) then
+    Exit;
+  p := PByte(PAnsiChar(ASource)) + APict.DataAt;
+  if APict.Hex then count := KeptHexDigits(p, APict.DataLen) div 2
+  else count := APict.DataLen;
+  if (count <= 0) or (count > MaxInt) then Exit;
+  fmt := APict.Format;
+  start := 0;
+  cnt := count;
+  case APict.Format of
+    rpfPng, rpfJpeg, rpfBmp, rpfDib:
+      ok := True;
+    rpfWmf:
+      begin
+        // (its records are walked once: a decoded copy only for that, let go at once)
+        if APict.Hex then
+        begin
+          data := KeptDecodeHex(p, APict.DataLen);
+          ok := TyWmfSingleBitmap(data, bm);
+          data := nil;
+        end
+        else
+          ok := TyWmfSingleBitmap(p, APict.DataLen, bm);
+        if ok then
+        begin
+          fmt := rpfDib;
+          start := bm.DibStart;
+          cnt := bm.DibCount;
+        end;
+      end;
+  else
+    ok := False;
+  end;
+  if not ok or (cnt <= 0) or (start < 0) or (start + cnt > count) then Exit;
+  w := APict.WGoal;
+  h := APict.HGoal;
+  if w <= 0 then
+    if APict.Format in [rpfWmf, rpfEmf] then w := APict.W * 1440 div 2540
+    else w := APict.W * 15;
+  if h <= 0 then
+    if APict.Format in [rpfWmf, rpfEmf] then h := APict.H * 1440 div 2540
+    else h := APict.H * 15;
+  if APict.SX > 0 then w := w * APict.SX div 100;
+  if APict.SY > 0 then h := h * APict.SY div 100;
+  if w > High(Integer) then w := High(Integer) else if w < 0 then w := 0;
+  if h > High(Integer) then h := High(Integer) else if h < 0 then h := 0;
+  Result := TTyRichKeptPicture.Create(APict.Format, nil, Integer(w), Integer(h));
+  Result.FSource := ASource;
+  Result.FDataAt := APict.DataAt;
+  Result.FDataLen := APict.DataLen;
+  Result.FHex := APict.Hex;
+  Result.FShown := 1;
+  Result.FShowFormat := fmt;
+  Result.FShowStart := Integer(start);
+  Result.FShowCount := Integer(cnt);
+end;
+
+{ L has just entered a \*\shppict or a \nonshppict group: the picture of the first \pict
+  group in it (nil when it cannot be shown, or there is none), L after its brace. }
+function KeptFirstPict(var L: TKeptLexer; const ASource: RawByteString): TTyRichKeptPicture;
+var
+  depth: Integer;
+  got: Boolean;
+  pk: TKeptPict;
+begin
+  Result := nil;
+  depth := 0;
+  got := False;
+  while KeptNext(L) do
+    case L.Kind of
+      kkGroup:
+        if not got and KeptEnter(L, 'pict') then
+        begin
+          got := True;
+          if KeptReadPict(L, pk) then Result := KeptPictureOf(ASource, pk);
+        end
+        else
+          Inc(depth);
+      kkEnd:
+        begin
+          if depth = 0 then Exit;
+          Dec(depth);
+        end;
+    end;
+end;
+
+{ L inside a group, past its name: the first picture in it - a \pict group, or Word's pair of
+  a \*\shppict group and the \nonshppict group after it, the first of the two the layout can
+  show - wherever it is in the group. True when the group holds a picture (APic nil when it
+  cannot be shown). }
+function KeptFindIn(var L: TKeptLexer; const ASource: RawByteString;
+  out APic: TTyRichKeptPicture): Boolean;
+var
+  depth: Integer;
+  pk: TKeptPict;
+  m: TKeptLexer;
+begin
+  APic := nil;
+  depth := 0;
+  while KeptNext(L) do
+    case L.Kind of
+      kkGroup:
+        if KeptEnter(L, 'pict') then
+        begin
+          if KeptReadPict(L, pk) then APic := KeptPictureOf(ASource, pk);
+          Exit(True);
+        end
+        else if KeptEnter(L, 'shppict') then
+        begin
+          APic := KeptFirstPict(L, ASource);
+          if APic = nil then
+          begin
+            // its other half: the next group (past line breaks), when it is \nonshppict
+            m := L;
+            while KeptNext(m) and (m.Kind = kkText) and not KeptTextHasHex(m) do ;
+            if (m.Kind = kkGroup) and (m.Pos > L.Pos) and KeptEnter(m, 'nonshppict') then
+              APic := KeptFirstPict(m, ASource);
+          end;
+          Exit(True);
+        end
+        else if KeptEnter(L, 'nonshppict') then
+        begin
+          APic := KeptFirstPict(L, ASource);
+          Exit(True);
+        end
+        else
+          Inc(depth);
+      kkEnd:
+        begin
+          if depth = 0 then Exit(False);
+          Dec(depth);
+        end;
+    end;
+  Result := False;
+end;
+
+// L inside a group, past its name: its text (of the group itself, not of groups in it), L after its brace.
+function KeptGroupText(var L: TKeptLexer): RawByteString;
+var
+  depth: Integer;
+  s: RawByteString;
+begin
+  Result := '';
+  depth := 0;
+  while KeptNext(L) do
+    case L.Kind of
+      kkGroup: Inc(depth);
+      kkEnd:
+        begin
+          if depth = 0 then Break;
+          Dec(depth);
+        end;
+      kkText:
+        if depth = 0 then
+        begin
+          SetString(s, PAnsiChar(L.P) + L.DataAt, L.DataLen);
+          Result := Result + s;
+        end;
+    end;
+  Result := Trim(Result);
+end;
+
+{ L inside a shape's \*\shpinst group: the picture of its property pib - the \sp group whose
+  \sn group says pib, its \sv group holding the \pict group. True when it holds one (APic nil
+  when it cannot be shown). }
+function KeptPibPicture(var L: TKeptLexer; const ASource: RawByteString;
+  out APic: TTyRichKeptPicture): Boolean;
+var
+  isPib: Boolean;
+begin
+  APic := nil;
+  while KeptFindGroup(L, 'sp', False) do
+  begin
+    isPib := False;
+    while KeptNext(L) do
+    begin
+      if L.Kind = kkEnd then Break;
+      if L.Kind <> kkGroup then Continue;
+      if KeptEnter(L, 'sn') then
+        isPib := KeptGroupText(L) = 'pib'
+      else if isPib and KeptEnter(L, 'sv') then
+        Exit(KeptFindIn(L, ASource, APic))
+      else if not KeptSkipGroup(L) then
+        Exit(False);
+    end;
+  end;
+  Result := False;
+end;
+
+// The picture the block S carries for readers that cannot draw it (TTyRichOpaque.DisplayPicture).
+function KeptBlockPicture(const S: RawByteString): TTyRichKeptPicture;
+var
+  L, m: TKeptLexer;
+begin
+  Result := nil;
+  if S = '' then Exit;
+  KeptInit(L, S);
+  if not KeptNext(L) or (L.Kind <> kkGroup) then Exit;
+  if KeptEnter(L, 'mmath') then
+  begin
+    // the picture Word puts beside the equation's own words, at any depth in it
+    if KeptFindGroup(L, 'mmathPict', True) then KeptFindIn(L, S, Result);
+  end
+  else if KeptEnter(L, 'object') then
+  begin
+    if KeptFindGroup(L, 'result', False) then KeptFindIn(L, S, Result);
+  end
+  else if KeptEnter(L, 'shp') then
+  begin
+    m := L;
+    if KeptFindGroup(m, 'shprslt', False) and KeptFindIn(m, S, Result) then Exit;
+    // the result holds none: the picture the shape is filled with
+    if KeptFindGroup(L, 'shpinst', False) then KeptPibPicture(L, S, Result);
+  end;
+end;
+
+function TTyRichOpaque.DisplayPicture: TTyRichKeptPicture;
+begin
+  if not FPictureSought then
+  begin
+    FPictureSought := True;
+    // a block shown as its text (a field's result) stays its text
+    if FDisplayText = '' then
+    begin
+      Inc(GKeptPictureLookups);
+      FPicture := KeptBlockPicture(FBytes);
+      if FPicture <> nil then FPicture.AddRef;
+    end;
+  end;
+  Result := FPicture;
+end;
+
+{ ---- TTyRichKeptPicture ---- }
+
+function TTyRichKeptPicture.Clone: TTyRichObject;
+var
+  p: TTyRichKeptPicture;
+begin
+  p := TTyRichKeptPicture.Create(PictureFormat, nil, WidthTwips, HeightTwips, '', RawUc);
+  p.FSource := FSource;
+  p.FDataAt := FDataAt;
+  p.FDataLen := FDataLen;
+  p.FHex := FHex;
+  p.FShown := FShown;
+  p.FShowFormat := FShowFormat;
+  p.FShowStart := FShowStart;
+  p.FShowCount := FShowCount;
+  Result := p;
+end;
+
+function TTyRichKeptPicture.DataBytes: Int64;
+begin
+  // the block's bytes are the block's
+  Result := InstanceSize;
+end;
+
+function TTyRichKeptPicture.SharedData(out ABytes: Int64): Pointer;
+begin
+  ABytes := Length(FSource);
+  if ABytes > 0 then Result := Pointer(FSource) else Result := nil;
+end;
+
+function TTyRichKeptPicture.CanResize: Boolean;
+begin
+  Result := False;
+end;
+
+function TTyRichKeptPicture.Resized(AWidthTwips, AHeightTwips: Integer): TTyRichObject;
+begin
+  Result := nil;
+end;
+
+function TTyRichKeptPicture.ImageData: TBytes;
+begin
+  Result := nil;
+  if (FDataLen <= 0) or (FDataAt < 0) or (Int64(FDataAt) + FDataLen > Length(FSource)) then Exit;
+  if FHex then
+    Result := KeptDecodeHex(PByte(PAnsiChar(FSource)) + FDataAt, FDataLen)
+  else
+  begin
+    SetLength(Result, FDataLen);
+    Move((PByte(PAnsiChar(FSource)) + FDataAt)^, Result[0], FDataLen);
+  end;
 end;
 
 var

@@ -15289,6 +15289,7 @@ procedure VisitPictures(ALayout: TTyBlockLayout; ABlock: Integer; AVisit: TTyRic
     i, j: Integer;
     ln: TTyRichLine;
     f: TTyRichFragment;
+    pic: TTyRichPicture;
   begin
     for i := 0 to L.LineCount - 1 do
     begin
@@ -15296,8 +15297,11 @@ procedure VisitPictures(ALayout: TTyBlockLayout; ABlock: Integer; AVisit: TTyRic
       for j := ln.FirstFrag to ln.FirstFrag + ln.FragCount - 1 do
       begin
         f := L.Fragments[j];
-        if (f.Kind <> rfkObject) or not (f.Obj is TTyRichPicture) then Continue;
-        AVisit(TTyRichPicture(f.Obj), Rect(AX + f.X, AY + ln.Baseline - f.Ascent,
+        if f.Kind <> rfkObject then Continue;
+        // a picture, or the one a block of kept RTF is shown as
+        pic := TyRichShownPicture(f.Obj);
+        if pic = nil then Continue;
+        AVisit(pic, Rect(AX + f.X, AY + ln.Baseline - f.Ascent,
           AX + f.X + f.Width, AY + ln.Baseline + f.Descent), ABlock);
       end;
     end;

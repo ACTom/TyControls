@@ -1125,6 +1125,11 @@ function TyRichListMarkerText(AKind: TTyListKind; ALevel: Integer; ANumber: Int6
 { Black text, a blue selection with white text, grey placeholders and table lines: what a
   test or a probe paints with when it has no theme. }
 function TyRichDefaultPaintStyle: TTyRichPaintStyle;
+{ The picture an object is shown as: a picture is itself; a block of kept RTF with no display
+  text, the picture its own bytes carry (TTyRichOpaque.DisplayPicture - an equation, an
+  embedded object, a shape; laid out, drawn and kept by the picture cache as a picture is, in
+  line where the block stands); nil for any other object. }
+function TyRichShownPicture(AObj: TTyRichObject): TTyRichPicture;
 
 implementation
 
@@ -3264,6 +3269,7 @@ var
   ink, col: TBGRAPixel;
   drawn: UTF8String;
   box: TRect;
+  pic: TTyRichPicture;
 
   // the fragment's place and some room for glyphs that reach past it; False: nothing of it
   // is in the clip
@@ -3456,24 +3462,27 @@ begin
   for i := ln^.FirstFrag to ln^.FirstFrag + ln^.FragCount - 1 do
   begin
     f := @FFrags[i];
-    if (f^.Kind <> rfkObject) or not (f^.Obj is TTyRichPicture) then Continue;
+    if f^.Kind <> rfkObject then Continue;
+    // a picture, or the one a block of kept RTF carries
+    pic := TyRichShownPicture(f^.Obj);
+    if pic = nil then Continue;
     box := Rect(AX + f^.X, base - f^.Ascent, AX + f^.X + f^.Width, base + f^.Descent);
     if (box.Right <= AClip.Left) or (box.Left >= AClip.Right) or (box.Bottom <= AClip.Top) or
       (box.Top >= AClip.Bottom) then
       Continue;
-    if AStyle.DeferPictures and not FLayouter.PictureReady(TTyRichPicture(f^.Obj),
+    if AStyle.DeferPictures and not FLayouter.PictureReady(pic,
       box.Right - box.Left, box.Bottom - box.Top) then
     begin
       { Not decoded here: what is decoded of its bytes already, stretched (a resized picture
         keeps showing its pixels), else an empty box now - the picture when its owner has
         prepared it. }
-      if not FLayouter.DrawPictureKept(ATarget, TTyRichPicture(f^.Obj), box) then
+      if not FLayouter.DrawPictureKept(ATarget, pic, box) then
         ATarget.FillRect(box.Left, box.Top, box.Right, box.Bottom, AStyle.PlaceholderFill,
           dmDrawWithTransparency);
-      FLayouter.NoteSkippedPicture(TTyRichPicture(f^.Obj), box);
+      FLayouter.NoteSkippedPicture(pic, box);
     end
     else
-      FLayouter.DrawPicture(ATarget, TTyRichPicture(f^.Obj), box, linePx, AStyle);
+      FLayouter.DrawPicture(ATarget, pic, box, linePx, AStyle);
     sel := (f^.First >= ASelFrom) and (f^.First < ASelTo);
     if sel then
     begin
@@ -3957,9 +3966,9 @@ begin
         begin
           p^.Obj := CObj[i];
           p^.Width := 0;
-          if p^.Obj is TTyRichPicture then
+          pic := TyRichShownPicture(p^.Obj);
+          if pic <> nil then
           begin
-            pic := TTyRichPicture(p^.Obj);
             w := Px(pic.WidthTwips);
             h := Px(pic.HeightTwips);
             if (w <= 0) or (h <= 0) then
@@ -4897,7 +4906,9 @@ var
 begin
   Result := nil;
   if not APicture.DisplayData(fmt, start, count) then Exit;
-  data := APicture.Data;
+  // a kept block's picture: its bytes decoded for this decode only
+  if APicture is TTyRichKeptPicture then data := TTyRichKeptPicture(APicture).ImageData
+  else data := APicture.Data;
   if (start < 0) or (count <= 0) or (Int64(start) + count > System.Length(data)) then Exit;
   Result := TMemoryStream.Create;
   try
@@ -5042,6 +5053,16 @@ begin
   Result.DeferPictures := False;
 end;
 
+function TyRichShownPicture(AObj: TTyRichObject): TTyRichPicture;
+begin
+  if AObj is TTyRichPicture then
+    Result := TTyRichPicture(AObj)
+  else if (AObj is TTyRichOpaque) and (TTyRichOpaque(AObj).DisplayText = '') then
+    Result := TTyRichOpaque(AObj).DisplayPicture
+  else
+    Result := nil;
+end;
+
 { ---- layouter: pictures ---- }
 
 { What pictures that show the same pixels share: their bytes and the format they are read as;
@@ -5170,11 +5191,16 @@ end;
 procedure TTyRichLayouter.PictureRecount(AEntry: TObject);
 var
   e: TTyPictureEntry;
-  b: Int64;
+  b, held: Int64;
 begin
   e := TTyPictureEntry(AEntry);
   b := e.InstanceSize + ImageBytes(e.Image) + ImageBytes(e.Scaled);
-  if not e.Failed then Inc(b, System.Length(e.Pic.Data));
+  if not e.Failed then
+  begin
+    // its Data; a kept block's picture holds the block's bytes instead
+    e.Pic.SharedData(held);
+    Inc(b, held);
+  end;
   Inc(FPictureBytes, b - e.Bytes);
   e.Bytes := b;
   // pixels of these bytes: what another picture of them stands in with
