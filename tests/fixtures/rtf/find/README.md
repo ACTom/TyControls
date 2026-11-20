@@ -101,7 +101,7 @@ different places and reading the file raised. They are kept byte for byte (`.git
 | `R10.rtf` | axc |  | 7 | a line break of the file directly in upr |
 | `R11.rtf` | axyz<0D><0A>c |  | 7 | a needle with a paragraph end, text directly in upr |
 | `R12.rtf` | axyzd |  | 7 | upr nested in ud nested in upr |
-| `R13.rtf` | ax |  | - | upr in a field result: its ud is the result's text, between the field's marks |
+| `R13.rtf` | ax |  | 7 | upr in a field result: its ud is the result's text, found across the field's open mark |
 | `R14.rtf` | axyz |  | 7 | upr, any case |
 | `R15.rtf` | axyz | w | 8 | upr, whole word |
 | `T1.rtf` | yc |  | 11 | a row end inside ud right after the last cell: the next paragraph begins inside ud |

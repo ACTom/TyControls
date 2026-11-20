@@ -885,10 +885,10 @@ begin
   FRich.SelStart := 2;
   Press(VK_BACK);
   AssertEquals('Backspace: the emoji whole', 'x', FRich.Lines[0]);
-  // an object
+  // an object (one with something to show: an object with no width costs no key)
   SetText('ab');
   d := FRich.Document;
-  d.Execute(TTyRichInsertObject.Create(1, TTyRichOpaque.Create('{' + BS + '*' + BS + 'x}')));
+  d.Execute(TTyRichInsertObject.Create(1, TTyRichOpaque.Create('{' + BS + '*' + BS + 'x}', '[x]')));
   AssertEquals('an object in', Int64(3), d.Text.Length);
   FRich.SelStart := 2;
   Press(VK_BACK);
@@ -1542,7 +1542,7 @@ var
 begin
   SetText('ab');
   d := FRich.Document;
-  d.Execute(TTyRichInsertObject.Create(1, TTyRichOpaque.Create('{' + BS + '*' + BS + 'x}')));
+  d.Execute(TTyRichInsertObject.Create(1, TTyRichOpaque.Create('{' + BS + '*' + BS + 'x}', '[x]')));
   d.ClearUndo;
   FRich.SelStart := 1;
   FRich.SelLength := 1;
@@ -2753,16 +2753,22 @@ begin
   Press(VK_RETURN);
   AssertEquals('four keys inside it refused', 4, FRich.Refused);
   AssertTrue('why: ' + FRich.LastReason, Pos('field''s result', FRich.LastReason) > 0);
+  // a key that would take one of its marks selects the field instead, and tells nothing
   FRich.SelStart := 3;
   Press(VK_DELETE);
+  AssertEquals('Delete before it: the field selected', Int64(3), FRich.SelStart);
+  AssertEquals('... whole', Int64(4), FRich.SelLength);
   FRich.SelStart := 7;
   Press(VK_BACK);
-  AssertEquals('its marks alone refused', 6, FRich.Refused);
-  // a selection from before it into it, typed over
+  AssertEquals('Backspace after it: the field selected', Int64(3), FRich.SelStart);
+  AssertEquals('... whole', Int64(4), FRich.SelLength);
+  AssertEquals('its marks: nothing told', 4, FRich.Refused);
+  // a selection from before it into it, typed over: it grows over the field, told once
   FRich.SelStart := 1;
   FRich.SelLength := 4;
   Chars('y');
-  AssertEquals('half of it typed over: refused', 7, FRich.Refused);
+  AssertEquals('half of it typed over: refused', 5, FRich.Refused);
+  AssertEquals('the selection holds the field', Int64(6), FRich.SelLength);
   AssertEquals('nothing changed', len, d.Text.Length);
   AssertEquals('no step', 0, d.UndoDepth);
   // the caret through the paragraph and back, then selecting through it
