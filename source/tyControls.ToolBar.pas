@@ -145,7 +145,10 @@ type
       ButtonWidth widens this button, FBarLentWidth records what the bar imposed and
       FBarNaturalWidth what the host had; a Width still equal to the lent value is ours to
       re-derive from (so lowering ButtonWidth restores the host's width), anything else is
-      the host having written Width meanwhile and is the new natural value. 0 = nothing lent. }
+      the host having written Width meanwhile and is the new natural value. 0 = nothing lent.
+      #228: the button's own content floor is a lend of the same kind (a caption switched
+      on widens a tool of a fixed width, and switched off lets it come back), and
+      FBarNaturalWidth is kept on every pass, lent or not -- see BarNaturalWidth. }
     FBarLentWidth: Integer;
     FBarNaturalWidth: Integer;
     { True while an ImageIndex write has not yet been turned into an ImageName because there
@@ -482,6 +485,14 @@ type
     use, so the LCL-ported handler works unchanged. }
   TTyToolBarOnPaintButton = procedure(Sender: TTyCustomToolButton; AState: Integer) of object;
 
+  { What the bar remembers about a button it laid out wider than the button was: the width
+    the button had (Natural) and the width its content needed (Lent). See
+    TTyCustomToolBar.ContentFlooredWidth. }
+  TTyToolWidthLend = record
+    Ctl: TControl;
+    Natural, Lent: Integer;
+  end;
+
   TTyCustomToolBar = class(TTyCustomControl, ITyChromeHost, ITyGlyphSizeHost)
   private
     FButtonHeight: Integer;
@@ -512,6 +523,10 @@ type
     { #231: the icon size last told to the tools (HostGlyphSize), so that a change -- the
       theme, the controller's or this bar's own StyleOverride -- is noticed and passed on. }
     FSeenGlyphSize: Integer;
+    { #228: the width bookkeeping of the buttons that are not tool buttons (those keep
+      their own, FBarLentWidth / FBarNaturalWidth): one record per such child. }
+    FLends: array of TTyToolWidthLend;
+    function ContentFlooredWidth(ACtl: TControl): Integer;
     function GetButtonHeight: Integer;
     function GetButtonWidth: Integer;
     function GetButtonCount: Integer;
@@ -561,8 +576,26 @@ type
       ButtonWidth for a real tool button (TyToolFloorWidth's rule), with the lend recorded on
       the button so lowering ButtonWidth later can find the natural width again. Protected
       because TTyToolBarEx lays its own row out and must impose the SAME floor, or the two
-      bars would disagree about how wide a button is. Call it once per control per pass. }
+      bars would disagree about how wide a button is. Asking twice in a pass is harmless:
+      the second answer is derived from the same remembered natural width.
+
+      #228: a button is also raised to what it has to draw (Constraints.MinWidth), and
+      that is a lend too. LCL applies a control's constraints
+      only when its bounds CHANGE, so a floor that rose under an unchanged width -- captions
+      switched on over icon-only tools -- left the tool as narrow as it was, its caption cut
+      off; and a width the floor had pushed up never came back when the floor fell. }
     function EffectiveToolWidth(ACtl: TControl): Integer;
+    { The height of a row this pass, in device px: ButtonHeight, raised to the tallest floor
+      among AKids. }
+    function RowHeightPx(const AKids: array of TControl): Integer;
+    { Gives each button among AKids the height the row is about to have, and has one whose
+      height really changed measure itself again -- BEFORE the widths of the pass are read
+      (EffectiveToolWidth). A button's width floor can depend on its height: an icon nobody
+      sized is as tall as its box. The button measures that floor when it is invalidated, not
+      when it is resized, so a row that grew for a large icon and shrank again left its
+      buttons with the wide floor of the tall row. Protected for TTyToolBarEx, like the
+      width. }
+    procedure SettleRowHeight(const AKids: array of TControl; ARowHeight: Integer);
     function GetStyleTypeKey: string; override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
     procedure Paint; override;
@@ -571,6 +604,7 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     procedure InsertControl(AControl: TControl; Index: Integer); override;
+    procedure RemoveControl(AControl: TControl); override;
     { ITyChromeHost: the bottom hairline -- the bar's one painted border -- stays whole on top
       of a tool too tall for the row shift to keep off it. No frame and no corners: the bar
       draws neither. Virtual, so a descendant adds chrome of its own. }
@@ -1298,6 +1332,14 @@ begin
     lent value is indistinguishable and reads as still-lent — same value either way. }
   if (FBarLentWidth > 0) and (Width = FBarLentWidth) then
     Result := FBarNaturalWidth
+  { #228. A width that is exactly the button's own floor, and above the width the bar last
+    knew as natural: the floor rose, and LCL clamped the button up to it between two reads
+    (it does as soon as the button's bounds change for any other reason -- the row growing
+    taller, in the pass where a larger icon arrives). That is still the bar's to re-derive
+    from; taken for the host's, the button would stay that wide after the floor fell. }
+  else if (FBarNaturalWidth > 0) and (Width > FBarNaturalWidth)
+          and (Width = Constraints.MinWidth) then
+    Result := FBarNaturalWidth
   else
     Result := Width;
 end;
@@ -1307,11 +1349,9 @@ var
   nat: Integer;
 begin
   nat := BarNaturalWidth;
+  FBarNaturalWidth := nat;   // remembered on every pass, lent or not: see BarNaturalWidth
   if AImposed <> nat then
-  begin
-    FBarNaturalWidth := nat;
-    FBarLentWidth := AImposed;
-  end
+    FBarLentWidth := AImposed
   else
     FBarLentWidth := 0;   // laying out at the natural width is not a lend
 end;
@@ -2038,18 +2078,113 @@ var
   btn: TTyCustomToolButton;
   nat: Integer;
 begin
-  if not (ACtl is TTyCustomToolButton) then Exit(ACtl.Width);   // LCL floors only tool buttons
+  if not (ACtl is TTyCustomToolButton) then
+  begin
+    // ButtonWidth floors only tool buttons (LCL); what a button has to draw floors any button.
+    if ACtl is TTyCustomButton then
+      Exit(ContentFlooredWidth(ACtl));
+    Exit(ACtl.Width);
+  end;
   btn := TTyCustomToolButton(ACtl);
   nat := btn.BarNaturalWidth;
   // ButtonWidth is logical px ("same units as ButtonHeight"); the width it floors is a
   // child's real one, in device px.
   Result := TyToolFloorWidth(nat, MulDiv(GetButtonWidth, LayoutPPI, 96), btn.Style,
     btn.AutoSize);
+  { The content floor (see the declaration). An auto-sized button is at it already: its
+    floor and the width LCL gives it are one measurement. }
+  if btn.Constraints.MinWidth > Result then
+    Result := btn.Constraints.MinWidth;
   { Record the lend NOW, against the natural width just read — the SetBounds that applies
     Result follows in the same pass. For a button the pass then hides instead (the Ex bar's
     overflow set), Width keeps the natural value, the equality test fails, and the stale
     record self-heals to "the host's width" on the next read. }
   btn.RecordBarImposedWidth(Result);
+end;
+
+function TTyCustomToolBar.RowHeightPx(const AKids: array of TControl): Integer;
+var
+  i: Integer;
+begin
+  Result := MulDiv(GetButtonHeight, LayoutPPI, 96);
+  for i := 0 to High(AKids) do
+    if AKids[i].Constraints.MinHeight > Result then Result := AKids[i].Constraints.MinHeight;
+end;
+
+type
+  { reach TTyCustomButton's guarded floor update (protected) from the bar that resizes it }
+  TTyButtonFloor = class(TTyCustomButton);
+
+procedure TTyCustomToolBar.SettleRowHeight(const AKids: array of TControl; ARowHeight: Integer);
+var
+  i, w: Integer;
+begin
+  for i := 0 to High(AKids) do
+    if (AKids[i] is TTyCustomButton) and (AKids[i].Height <> ARowHeight) then
+    begin
+      { The width goes in floored, and recorded as a lend: SetBounds applies the WIDTH
+        constraint as well, and a width it pushed up here, unrecorded, would be taken for
+        the button's own from then on. }
+      w := EffectiveToolWidth(AKids[i]);
+      AKids[i].SetBounds(AKids[i].Left, AKids[i].Top, w, ARowHeight);
+      { The floor, for the new height. Asked for directly, not through Invalidate: this pass
+        may be running INSIDE this very button's Invalidate (its floor moved, LCL re-aligned
+        its parent at once), and Invalidate does nothing a second time while its first is
+        under way -- the button whose change ran the pass kept the old row's floor. }
+      TTyButtonFloor(AKids[i]).UpdateSizeConstraints;
+    end;
+end;
+
+function TTyCustomToolBar.ContentFlooredWidth(ACtl: TControl): Integer;
+var
+  i, idx, nat: Integer;
+begin
+  idx := -1;
+  for i := 0 to High(FLends) do
+    if FLends[i].Ctl = ACtl then
+    begin
+      idx := i;
+      Break;
+    end;
+  { The two rules of TTyCustomToolButton.BarNaturalWidth: a width still equal to what was lent, or
+    one the button's own floor clamped it up to since, is the bar's to re-derive from;
+    anything else is the host having written Width meanwhile. }
+  nat := ACtl.Width;
+  if idx >= 0 then
+  begin
+    if (FLends[idx].Lent > 0) and (ACtl.Width = FLends[idx].Lent) then
+      nat := FLends[idx].Natural
+    else if (ACtl.Width > FLends[idx].Natural)
+            and (ACtl.Width = ACtl.Constraints.MinWidth) then
+      nat := FLends[idx].Natural;
+  end;
+  Result := nat;
+  if ACtl.Constraints.MinWidth > Result then
+    Result := ACtl.Constraints.MinWidth;
+  if idx < 0 then
+  begin
+    SetLength(FLends, Length(FLends) + 1);
+    idx := High(FLends);
+    FLends[idx].Ctl := ACtl;
+  end;
+  FLends[idx].Natural := nat;   // remembered on every pass, lent or not
+  if Result <> nat then
+    FLends[idx].Lent := Result
+  else
+    FLends[idx].Lent := 0;      // laid out at its own width: nothing is lent
+end;
+
+procedure TTyCustomToolBar.RemoveControl(AControl: TControl);
+var
+  i: Integer;
+begin
+  for i := High(FLends) downto 0 do
+    if FLends[i].Ctl = AControl then
+    begin
+      FLends[i] := FLends[High(FLends)];
+      SetLength(FLends, Length(FLends) - 1);
+    end;
+  inherited RemoveControl(AControl);
 end;
 
 procedure TTyCustomToolBar.InsertControl(AControl: TControl; Index: Integer);
@@ -2102,6 +2237,10 @@ begin
       { Every push button counts: a glyph, speed or tool button is a TTyCustomButton but no
         longer a TTyButton (4.0 hangs them on the custom chain, the LCL way). }
       if kids[i] is TTyCustomButton then ApplyToButton(TTyCustomButton(kids[i]));
+    end;
+    SettleRowHeight(kids, RowHeightPx(kids));
+    for i := 0 to n - 1 do
+    begin
       { The natural width, raised to ButtonWidth for a real tool button (LCL's floor).
         With ButtonWidth unset this is exactly kids[i].Width — no existing bar moves. }
       sizes[i].cx := EffectiveToolWidth(kids[i]);
