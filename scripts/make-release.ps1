@@ -134,9 +134,10 @@ Add-Tree 'docs' @('.md', '.png', '.svg', '.gif') '(^|[\\/])(superpowers([\\/]|$)
 Write-Host '-- examples (source only)'
 # The image extensions are the same set the themes rule above uses, and they are here for the
 # same reason: examples/theming keeps its OWN copy of a skin plus the photo that skin's url()
-# points at, so without them that example shipped with a dead background-image.
+# points at, so without them that example shipped with a dead background-image. '.rtf': the
+# documents examples/richedit opens from its Samples menu.
 Add-Tree 'examples' @('.pas', '.lpr', '.lpi', '.lfm', '.ico', '.tycss', '.inc', '.po', '.pot',
-                      '.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif', '.svg')
+                      '.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif', '.svg', '.rtf')
 
 # --- zip -------------------------------------------------------------------
 Write-Host '-- zipping'

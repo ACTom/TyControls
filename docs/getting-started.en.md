@@ -284,6 +284,7 @@ All examples live under `examples/` and build UI in pure code (no `.lfm`).
 | `tabcontrol/` | `TTyPageControl` + `TTyTabSheet`: ActivePage, arrow keys, overflow scrolling, drag reorder | `lazbuild examples/tabcontrol/tabcontrol_example.lpi` |
 | `spinedit/` | `TTySpinEdit` spinning, arrows / wheel, Min / Max / Increment | `lazbuild examples/spinedit/spinedit_example.lpi` |
 | `memo/` | `TTyMemo` multi-line editing, navigation, scrolling | `lazbuild examples/memo/memo_example.lpi` |
+| `richedit/` | `TTyRichEdit` as a small word processor: actions, the ruler, RTF and text files | `lazbuild examples/richedit/richedit_example.lpi` |
 | `formchrome/` | `TTyForm` borderless custom window chrome | `lazbuild examples/formchrome/formchrome_example.lpi` |
 | `theming/` | a custom `.tycss` theme + runtime hot-swap | `lazbuild examples/theming/theming_example.lpi` |
 | `demo/` | everything: all controls, three themes, custom chrome | `lazbuild examples/demo/demo.lpi` |

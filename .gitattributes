@@ -26,3 +26,6 @@ tests/fixtures/themebuilder/ai/**  -text
 # CR LF against LF, a NUL at the end). scripts/gen-richedit-fixtures.py and README.md there.
 tests/fixtures/rtf/**  -text
 tests/fixtures/txt/**  -text
+
+# The rich edit example's samples: copies of four of those, byte for byte.
+examples/richedit/samples/**  -text

@@ -287,6 +287,7 @@ TyButton:disabled         { opacity: 0.5; }
 | `tabcontrol/` | `TTyPageControl` + `TTyTabSheet` 多页容器：切换 `ActivePage`、键盘 ←/→ 导航、溢出表头滚动、拖拽重排序 | `lazbuild examples/tabcontrol/tabcontrol_example.lpi` |
 | `spinedit/` | `TTySpinEdit` 数值微调、上/下箭头、方向键/滚轮步进、Min/Max/Increment | `lazbuild examples/spinedit/spinedit_example.lpi` |
 | `memo/` | `TTyMemo` 多行文本编辑、回车换行、跨行退格/删除、导航、垂直滚动条/滚轮 | `lazbuild examples/memo/memo_example.lpi` |
+| `richedit/` | `TTyRichEdit` 小写字板：动作做的菜单和工具栏、标尺、状态栏、RTF 和纯文本 | `lazbuild examples/richedit/richedit_example.lpi` |
 | `formchrome/` | `TTyForm` 无边框自绘窗框窗口（继承 `TTyForm`） | `lazbuild examples/formchrome/formchrome_example.lpi` |
 | `theming/` | 自定义 `.tycss` 主题 + 运行时热切换 | `lazbuild examples/theming/theming_example.lpi` |
 | `demo/` | 综合示例:所有控件 + 三主题运行时热切换 + 自绘窗框 | `lazbuild examples/demo/demo.lpi` |

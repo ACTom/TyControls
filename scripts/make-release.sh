@@ -94,7 +94,8 @@ add_tree docs "/superpowers/|/gallery" md png svg gif
 echo "-- examples (source only)"
 # Image extensions match the themes rule above: examples/theming keeps its own skin plus the
 # photo its url() points at, and without them that example shipped with a dead background.
-add_tree examples "" pas lpr lpi lfm ico tycss inc po pot jpg jpeg png webp bmp gif svg
+# rtf: the documents examples/richedit opens from its Samples menu.
+add_tree examples "" pas lpr lpi lfm ico tycss inc po pot jpg jpeg png webp bmp gif svg rtf
 
 # --- archive ---------------------------------------------------------------
 echo "-- archiving"

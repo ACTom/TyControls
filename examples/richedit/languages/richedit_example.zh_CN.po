@@ -1,0 +1,210 @@
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Project-Id-Version: tycontrols-richedit_example 3.99\n"
+"Language-Team: \n"
+"Last-Translator: \n"
+"Language: zh_CN\n"
+"MIME-Version: 1.0\n"
+"Plural-Forms: nplurals=1; plural=0;\n"
+
+# --- .lfm captions/text/hints (msgid = the English source) ---
+
+#: tmainform.caption
+msgid "Rich edit example"
+msgstr "TTyRichEdit 示例"
+
+#: tmainform.bar.caption
+msgid "Rich edit  · TyControls"
+msgstr "富文本编辑  · TyControls"
+
+#: tmainform.dlgopen.title
+msgid "Open a document"
+msgstr "打开文档"
+
+#: tmainform.dlgsave.title
+msgid "Save the document"
+msgstr "保存文档"
+
+#: tmainform.actnew.caption
+msgid "&New"
+msgstr "新建(&N)"
+
+#: tmainform.actnew.hint
+msgid "New document"
+msgstr "新建文档"
+
+#: tmainform.actopen.caption
+msgid "&Open..."
+msgstr "打开(&O)..."
+
+#: tmainform.actopen.hint
+msgid "Open a document"
+msgstr "打开文档"
+
+#: tmainform.actsave.caption
+msgid "&Save"
+msgstr "保存(&S)"
+
+#: tmainform.actsave.hint
+msgid "Save"
+msgstr "保存"
+
+#: tmainform.actsaveas.caption
+msgid "Save &As..."
+msgstr "另存为(&A)..."
+
+#: tmainform.actsaveas.hint
+msgid "Save under another name"
+msgstr "以另一个名字保存"
+
+#: tmainform.actexit.caption
+msgid "E&xit"
+msgstr "退出(&X)"
+
+#: tmainform.actexit.hint
+msgid "Close the window"
+msgstr "关闭窗口"
+
+#: tmainform.mnufile.caption
+msgid "&File"
+msgstr "文件(&F)"
+
+#: tmainform.mnusamples.caption
+msgid "Sa&mples"
+msgstr "示例文档(&M)"
+
+#: tmainform.mnusampleformats.caption
+msgid "Chinese text and its formats"
+msgstr "中文和各种格式"
+
+#: tmainform.mnusampletable.caption
+msgid "A table"
+msgstr "表格"
+
+#: tmainform.mnusamplepictures.caption
+msgid "Pictures"
+msgstr "图片"
+
+#: tmainform.mnusampletoc.caption
+msgid "Word's table of contents with links"
+msgstr "Word 的目录（带链接）"
+
+#: tmainform.mnuedit.caption
+msgid "&Edit"
+msgstr "编辑(&E)"
+
+#: tmainform.mnuformat.caption
+msgid "F&ormat"
+msgstr "格式(&O)"
+
+#: tmainform.mnuinsert.caption
+msgid "&Insert"
+msgstr "插入(&I)"
+
+#: tmainform.mnuview.caption
+msgid "&View"
+msgstr "视图(&V)"
+
+#: tmainform.mnuwrap.caption
+msgid "&Wrap"
+msgstr "折行(&W)"
+
+#: tmainform.mnuwrapwindow.caption
+msgid "To the &window"
+msgstr "按窗口宽度(&W)"
+
+#: tmainform.mnuwrappage.caption
+msgid "To the &page"
+msgstr "按页宽(&P)"
+
+#: tmainform.mnuwrapnone.caption
+msgid "&No wrap"
+msgstr "不折行(&N)"
+
+#: tmainform.mnureadonly.caption
+msgid "&Read Only"
+msgstr "只读(&R)"
+
+#: tmainform.mnuskin.caption
+msgid "&Skin"
+msgstr "皮肤(&S)"
+
+#: tmainform.mnudark.caption
+msgid "&Dark"
+msgstr "暗色(&D)"
+
+# --- resourcestrings (umain) ---
+
+#: umain.rslinecolumn
+#, object-pascal-format
+msgid "Line %d, column %d"
+msgstr "第 %d 行，第 %d 列"
+
+#: umain.rszoompercent
+#, object-pascal-format
+msgid "%d %%"
+msgstr "%d %%"
+
+#: umain.rsnotfound
+#, object-pascal-format
+msgid "Cannot find \"%s\"."
+msgstr "找不到“%s”。"
+
+#: umain.rsreplaced
+#, object-pascal-format
+msgid "%d replaced."
+msgstr "替换了 %d 处。"
+
+#: umain.rsloading
+#, object-pascal-format
+msgid "Loading: %d %%"
+msgstr "正在载入：%d %%"
+
+#: umain.rsloaded
+msgid "Loaded."
+msgstr "已载入。"
+
+#: umain.rssaved
+#, object-pascal-format
+msgid "Saved: %s"
+msgstr "已保存：%s"
+
+#: umain.rsuntitled
+msgid "Untitled"
+msgstr "未命名"
+
+#: umain.rssavechanges
+msgid "The document has changed. Save it first?"
+msgstr "文档已经改过，先保存吗？"
+
+#: umain.rsopenfailed
+#, object-pascal-format
+msgid "The file cannot be opened: %s"
+msgstr "文件打不开：%s"
+
+#: umain.rssavefailed
+#, object-pascal-format
+msgid "The file cannot be saved: %s"
+msgstr "文件保存不了：%s"
+
+#: umain.rstabletitle
+msgid "Insert table"
+msgstr "插入表格"
+
+#: umain.rstableprompt
+msgid "Rows x columns:"
+msgstr "行 x 列："
+
+#: umain.rstablebadsize
+msgid "Give the size as rows x columns, for example 3 x 4."
+msgstr "请按“行 x 列”填写大小，例如 3 x 4。"
+
+#: umain.rsopenfilter
+msgid "Documents (*.rtf;*.txt)|*.rtf;*.txt|Rich text (*.rtf)|*.rtf|Text (*.txt)|*.txt|All files|*"
+msgstr "文档 (*.rtf;*.txt)|*.rtf;*.txt|RTF 文档 (*.rtf)|*.rtf|纯文本 (*.txt)|*.txt|所有文件|*"
+
+#: umain.rssavefilter
+msgid "Rich text (*.rtf)|*.rtf|Text (*.txt)|*.txt"
+msgstr "RTF 文档 (*.rtf)|*.rtf|纯文本 (*.txt)|*.txt"
