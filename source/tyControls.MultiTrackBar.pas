@@ -58,14 +58,9 @@ type
     False and the bar paints none of the track -- what the handler drew is the track. }
   TTyTrackDrawEvent = procedure(Sender: TObject; APainter: TTyPainter; const ARect: TRect;
     var ADefaultDraw: Boolean) of object;
-  { Owner-draw: thumb AIndex, asked before it is painted. ARect is the thumb as it is painted (in
-    the slider band, so narrower across than ThumbRect's hit rectangle), AStates the states it
-    is resolved with (normal / hover / active, focused for the keyboard's thumb while the bar
-    has the focus). ADefaultDraw := False leaves that thumb to the handler. A thumb dragged off
-    the track far enough to be removed on release is drawn by default with the removing look;
-    the bar's RemovingThumb names it, so a handler can draw it its own way too. }
-  TTyTrackDrawThumbEvent = procedure(Sender: TObject; APainter: TTyPainter; AIndex: Integer;
-    const ARect: TRect; AStates: TTyStateSet; var ADefaultDraw: Boolean) of object;
+  { Owner-draw of a thumb is TTyTrackDrawThumbEvent, in tyControls.TrackBar: TTyTrackBar has
+    the same event (#242). A thumb dragged off the track far enough to be removed on
+    release comes with the removing look in its style; the bar's RemovingThumb names it. }
   { Owner-draw: segment AIndex (0..ThumbCount), asked before its default fill -- for every
     segment, filled by default or not. ARect is that stretch of groove, thumb centre to thumb
     centre (SegmentSpan along the track, the groove's thickness across it); it may be empty
@@ -401,6 +396,12 @@ type
     { The bare groove, AGroove in the painter's coordinates (AMainLen long, as MainLen at
       APPI): here TyTrackGroove. Not asked when OnDrawTrack took the track over. }
     procedure PaintGroove(APainter: TTyPainter; const AGroove: TRect; AMainLen, APPI: Integer); virtual;
+    { #242. Paints one thumb: asks OnDrawThumb, then draws it as the theme says
+      (TyDrawTrackThumb) unless the handler took it. The ONE place a thumb is painted
+      from, so a descendant with a thumb of its own overrides this. The parameters are
+      the event's. }
+    procedure PaintThumb(APainter: TTyPainter; AIndex: Integer; const ARect: TRect;
+      const AStyle: TTyStyleSet; AStates: TTyStateSet); virtual;
     procedure Paint; override;
     { ---- Mouse and keyboard. ---- }
     { The value under main-axis position APos (client px), as the thumb's centre would have it. }
@@ -2347,7 +2348,7 @@ var
   procedure DrawThumb(AIndex: Integer);
   var
     States: TTyStateSet;
-    own, removing: Boolean;
+    removing: Boolean;
     thumbCls: string;
   begin
     Off := TyTrackThumbOffset(MLen, TW, FMin, FMax, FValues[AIndex], Inverted);
@@ -2363,9 +2364,6 @@ var
     else Include(States, tysNormal);
     { The thumb the keyboard drives, while the control has the focus: a theme can mark it. }
     if Focused and (AIndex = FSelectedThumb) then Include(States, tysFocused);
-    own := True;
-    if Assigned(FOnDrawThumb) then FOnDrawThumb(Self, P, AIndex, ThumbR, States, own);
-    if not own then Exit;
     { Dragged off far enough to go on release: its own class and the removing one. }
     removing := DrawnRemoving(AIndex);
     thumbCls := ThumbStyleClass(AIndex);
@@ -2382,7 +2380,9 @@ var
       Include(St.Present, tpBackground);
     end;
     if removing and (tpOpacity in St.Present) then FadeThumbStyle(St, St.Opacity);
-    TyDrawTrackThumb(P, ThumbR, St);
+    { #242: the style is resolved first, so OnDrawThumb and a descendant's PaintThumb get
+      the thumb as the bar would paint it. }
+    PaintThumb(P, AIndex, ThumbR, St, States);
   end;
 
 begin
@@ -2525,6 +2525,17 @@ var
 begin
   St := ActiveController.Model.ResolveStyle('TyTrackGroove', '', []);
   TyFillSubElement(APainter, AGroove, St, TyUniformCorners(St.BorderRadius));
+end;
+
+procedure TTyMultiTrackBarBase.PaintThumb(APainter: TTyPainter; AIndex: Integer;
+  const ARect: TRect; const AStyle: TTyStyleSet; AStates: TTyStateSet);
+var
+  dflt: Boolean;
+begin
+  dflt := True;
+  if Assigned(FOnDrawThumb) then
+    FOnDrawThumb(Self, APainter, AIndex, ARect, AStyle, AStates, dflt);
+  if dflt then TyDrawTrackThumb(APainter, ARect, AStyle);
 end;
 
 procedure TTyMultiTrackBarBase.SetLineSize(const AValue: Integer);

@@ -11079,6 +11079,7 @@ type
     property ShowSelRange;
     property TickLabels;
     property OnFormatTickLabel;
+    property OnDrawThumb;
   end;
 
   TGenTrackEdit = class(TTyCustomTrackEdit)

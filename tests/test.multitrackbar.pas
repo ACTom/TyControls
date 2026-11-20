@@ -364,7 +364,8 @@ type
     procedure DrawTrack(Sender: TObject; APainter: TTyPainter; const ARect: TRect;
       var ADefaultDraw: Boolean);
     procedure DrawThumb(Sender: TObject; APainter: TTyPainter; AIndex: Integer;
-      const ARect: TRect; AStates: TTyStateSet; var ADefaultDraw: Boolean);
+      const ARect: TRect; const AStyle: TTyStyleSet; AStates: TTyStateSet;
+  var ADefaultDraw: Boolean);
     { The bounding box of the pixels of one colour inside AWithin. }
     function InkBox(B: TBGRABitmap; const AWithin: TRect; R, G, Bl: Byte): TRect;
     function InkCount(B: TBGRABitmap; const AWithin: TRect; R, G, Bl: Byte): Integer;
@@ -410,7 +411,8 @@ type
     procedure DrawTrack(Sender: TObject; APainter: TTyPainter; const ARect: TRect;
       var ADefaultDraw: Boolean);
     procedure DrawThumb(Sender: TObject; APainter: TTyPainter; AIndex: Integer;
-      const ARect: TRect; AStates: TTyStateSet; var ADefaultDraw: Boolean);
+      const ARect: TRect; const AStyle: TTyStyleSet; AStates: TTyStateSet;
+  var ADefaultDraw: Boolean);
     procedure DrawSegment(Sender: TObject; APainter: TTyPainter; AIndex: Integer;
       const ARect: TRect; var ADefaultDraw: Boolean);
     function Ink(B: TBGRABitmap; R, G, Bl: Byte): Integer;
@@ -442,7 +444,8 @@ type
     procedure GradientSegment(Sender: TObject; APainter: TTyPainter; AIndex: Integer;
       const ARect: TRect; var ADefaultDraw: Boolean);
     procedure NoThumbs(Sender: TObject; APainter: TTyPainter; AIndex: Integer;
-      const ARect: TRect; AStates: TTyStateSet; var ADefaultDraw: Boolean);
+      const ARect: TRect; const AStyle: TTyStyleSet; AStates: TTyStateSet;
+  var ADefaultDraw: Boolean);
     { A point on ABar's track whose value is AValue (horizontal bar, no readout). }
     function At(ABar: TTyMultiTrackBarBase; AValue: Integer): TPoint;
     procedure Click(ABar: TTyMultiTrackBarBase; const P: TPoint; ADouble: Boolean = False);
@@ -565,7 +568,8 @@ type
     FSeen: string;              // `<index>:<RemovingThumb> ` per OnDrawThumb call
     procedure Wire(ABar: TTyMultiTrackBarBase);
     procedure SeeRemoving(Sender: TObject; APainter: TTyPainter; AIndex: Integer;
-      const ARect: TRect; AStates: TTyStateSet; var ADefaultDraw: Boolean);
+      const ARect: TRect; const AStyle: TTyStyleSet; AStates: TTyStateSet;
+  var ADefaultDraw: Boolean);
     procedure TrackClick(Sender: TObject; AValue: Integer; var AHandled: Boolean);
     procedure Removing(Sender: TObject; AIndex: Integer; var AAllow: Boolean);
     { A point on ABar's track (horizontal, no readout) whose value is AValue, on no thumb. }
@@ -676,7 +680,8 @@ type
     procedure SeeTrack(Sender: TObject; APainter: TTyPainter; const ARect: TRect;
       var ADefaultDraw: Boolean);
     procedure NoThumbs(Sender: TObject; APainter: TTyPainter; AIndex: Integer;
-      const ARect: TRect; AStates: TTyStateSet; var ADefaultDraw: Boolean);
+      const ARect: TRect; const AStyle: TTyStyleSet; AStates: TTyStateSet;
+  var ADefaultDraw: Boolean);
     procedure EditColor(Sender: TObject; AIndex: Integer; var AColor: TColor;
       var AHandled: Boolean);
     procedure TakeClick(Sender: TObject; AValue: Integer; var AHandled: Boolean);
@@ -3935,7 +3940,8 @@ begin
 end;
 
 procedure TTyMultiTrackOwnerDrawTest.DrawThumb(Sender: TObject; APainter: TTyPainter;
-  AIndex: Integer; const ARect: TRect; AStates: TTyStateSet; var ADefaultDraw: Boolean);
+  AIndex: Integer; const ARect: TRect; const AStyle: TTyStyleSet; AStates: TTyStateSet;
+  var ADefaultDraw: Boolean);
 var
   st: TTyState;
   s: string;
@@ -4506,7 +4512,8 @@ begin
 end;
 
 procedure TTyMultiTrackHooksTest.DrawThumb(Sender: TObject; APainter: TTyPainter;
-  AIndex: Integer; const ARect: TRect; AStates: TTyStateSet; var ADefaultDraw: Boolean);
+  AIndex: Integer; const ARect: TRect; const AStyle: TTyStyleSet; AStates: TTyStateSet;
+  var ADefaultDraw: Boolean);
 begin
   if FDropThumbs then ADefaultDraw := False;
 end;
@@ -4849,7 +4856,8 @@ begin
 end;
 
 procedure TTyMultiTrackClickTest.NoThumbs(Sender: TObject; APainter: TTyPainter;
-  AIndex: Integer; const ARect: TRect; AStates: TTyStateSet; var ADefaultDraw: Boolean);
+  AIndex: Integer; const ARect: TRect; const AStyle: TTyStyleSet; AStates: TTyStateSet;
+  var ADefaultDraw: Boolean);
 begin
   ADefaultDraw := False;
 end;
@@ -6848,7 +6856,8 @@ begin
 end;
 
 procedure TTyMultiTrackUserThumbsTest.SeeRemoving(Sender: TObject; APainter: TTyPainter;
-  AIndex: Integer; const ARect: TRect; AStates: TTyStateSet; var ADefaultDraw: Boolean);
+  AIndex: Integer; const ARect: TRect; const AStyle: TTyStyleSet; AStates: TTyStateSet;
+  var ADefaultDraw: Boolean);
 begin
   FSeen := FSeen + Format('%d:%d ', [AIndex, (Sender as TTyMultiTrackBarBase).RemovingThumb]);
 end;
@@ -7503,7 +7512,8 @@ begin
 end;
 
 procedure TTyGradientTrackBarTest.NoThumbs(Sender: TObject; APainter: TTyPainter;
-  AIndex: Integer; const ARect: TRect; AStates: TTyStateSet; var ADefaultDraw: Boolean);
+  AIndex: Integer; const ARect: TRect; const AStyle: TTyStyleSet; AStates: TTyStateSet;
+  var ADefaultDraw: Boolean);
 begin
   ADefaultDraw := False;
 end;

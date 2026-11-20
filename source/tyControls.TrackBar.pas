@@ -20,6 +20,19 @@ type
     "Jan" for 1, "$100" for 100. An empty AText leaves that tick without a label. }
   TTyTrackTickLabelEvent = procedure(Sender: TObject; AValue: Integer; var AText: string) of object;
 
+  { Owner-draw: one thumb, asked before it is painted (#242). On TTyTrackBar AIndex is 0; on
+    the multi-thumb bars it is the thumb's index. ARect is the thumb as it is painted, in
+    APainter's coordinates: in the slider band (so narrower across than ThumbRect's hit
+    rectangle), and with --track-thumb-thickness applied. AStyle is the style the bar would
+    paint it with: TyTrackThumb in AStates (normal / hover / active, focused for the thumb
+    the keyboard moves while the bar has the focus), with the thumb's own class and colour,
+    --track-thumb-radius, and the fading of a thumb being dragged off. ADefaultDraw := False
+    leaves that thumb to the handler. The hit test keeps the thumb's rectangle whatever is
+    drawn in it. }
+  TTyTrackDrawThumbEvent = procedure(Sender: TObject; APainter: TTyPainter; AIndex: Integer;
+    const ARect: TRect; const AStyle: TTyStyleSet; AStates: TTyStateSet;
+    var ADefaultDraw: Boolean) of object;
+
   { One label that survived the overlap pass of TyLayoutTrackTicks. Lead is where its leading
     edge sits along the track, in device pixels from the track's origin (the same origin as the
     thumb offset); Size is the measured text. }
@@ -85,6 +98,7 @@ type
     FValueTextPx: Integer;
     FTickLabels: Boolean;
     FOnFormatTickLabel: TTyTrackTickLabelEvent;
+    FOnDrawThumb: TTyTrackDrawThumbEvent;
     { The label strip's thickness on one tick side, measured at paint time and cached for
       CalculatePreferredSize -- the FValueTextPx arrangement, for the same reason. }
     FTickLabelPx: Integer;
@@ -109,6 +123,7 @@ type
     procedure SetShowSelRange(const AValue: Boolean);
     procedure SetTickLabels(const AValue: Boolean);
     procedure SetOnFormatTickLabel(const AValue: TTyTrackTickLabelEvent);
+    procedure SetOnDrawThumb(const AValue: TTyTrackDrawThumbEvent);
     function  ValueText: string;
     function ThumbWAtPPI(APPI: Integer): Integer;
     { #236. What the frame keeps on each edge, in device px at APPI (a TRect used as four
@@ -129,6 +144,12 @@ type
     FDragging: Boolean;
     function GetStyleTypeKey: string; override;
     procedure RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
+    { #242. Paints one thumb: asks OnDrawThumb, then draws it as the theme says
+      (TyDrawTrackThumb) unless the handler took it. The ONE place a thumb is painted
+      from, so a descendant with a thumb of its own overrides this. The parameters are
+      the event's. }
+    procedure PaintThumb(APainter: TTyPainter; AIndex: Integer; const ARect: TRect;
+      const AStyle: TTyStyleSet; AStates: TTyStateSet); virtual;
     procedure Paint; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     procedure MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer); override;
@@ -239,6 +260,9 @@ type
     property TickLabels: Boolean read FTickLabels write SetTickLabels default False;
     { Change a label's text before it is drawn ("Jan", "$100"); an empty text drops that label. }
     property OnFormatTickLabel: TTyTrackTickLabelEvent read FOnFormatTickLabel write SetOnFormatTickLabel;
+    { #242. Draw the thumb yourself: a triangle, a picture, a shape of the application's
+      own. See TTyTrackDrawThumbEvent. }
+    property OnDrawThumb: TTyTrackDrawThumbEvent read FOnDrawThumb write SetOnDrawThumb;
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
   end;
 
@@ -314,6 +338,7 @@ type
     property ShowSelRange;
     property TickLabels;
     property OnFormatTickLabel;
+    property OnDrawThumb;
   end;
 
 function TyTrackThumbOffset(AMainLen, AThumbLen, AMin, AMax, APos: Integer; AInvert: Boolean): Integer;
@@ -948,6 +973,23 @@ begin
   if FTickLabels then Invalidate;
 end;
 
+procedure TTyCustomTrackBar.SetOnDrawThumb(const AValue: TTyTrackDrawThumbEvent);
+begin
+  FOnDrawThumb := AValue;
+  Invalidate;   // the handler is what the thumb looks like
+end;
+
+procedure TTyCustomTrackBar.PaintThumb(APainter: TTyPainter; AIndex: Integer;
+  const ARect: TRect; const AStyle: TTyStyleSet; AStates: TTyStateSet);
+var
+  dflt: Boolean;
+begin
+  dflt := True;
+  if Assigned(FOnDrawThumb) then
+    FOnDrawThumb(Self, APainter, AIndex, ARect, AStyle, AStates, dflt);
+  if dflt then TyDrawTrackThumb(APainter, ARect, AStyle);
+end;
+
 function TTyCustomTrackBar.SelRangeSpan(APPI: Integer; out ALow, AHigh: Integer): Boolean;
 var
   s, e, TW, MLen, a, b: Integer;
@@ -1542,7 +1584,7 @@ begin
     TyTrackFitThumbAcross(SlideR, FOrientation, ThumbTh, ThumbR);
     ThumbRad := StyleMetric('--track-thumb-radius', -1);
     if ThumbRad >= 0 then ThumbS.BorderRadius := ThumbRad;
-    TyDrawTrackThumb(P, ThumbR, ThumbS);
+    PaintThumb(P, 0, ThumbR, ThumbS, ThumbStates);
 
     { Tick marks and their labels. Which VALUES get one is TickStyle's call (auto = every
       Frequency units, manual = only the hand-placed ones); which SIDE they are drawn on is
