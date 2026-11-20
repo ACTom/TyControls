@@ -252,14 +252,15 @@ TTyTrackThumbRemovingEvent = procedure(Sender: TObject; AIndex: Integer;
 TTyTrackDrawEvent = procedure(Sender: TObject; APainter: TTyPainter; const ARect: TRect;
   var ADefaultDraw: Boolean) of object;
 TTyTrackDrawThumbEvent = procedure(Sender: TObject; APainter: TTyPainter; AIndex: Integer;
-  const ARect: TRect; AStates: TTyStateSet; var ADefaultDraw: Boolean) of object;
+  const ARect: TRect; const AStyle: TTyStyleSet; AStates: TTyStateSet;
+  var ADefaultDraw: Boolean) of object;   // 和 TTyTrackBar 是同一个事件
 TTyTrackDrawSegmentEvent = procedure(Sender: TObject; APainter: TTyPainter; AIndex: Integer;
   const ARect: TRect; var ADefaultDraw: Boolean) of object;
 ```
 
 - `OnDrawTrack` 在画凹槽**之前**调用，`ARect` 是凹槽矩形。把 `ADefaultDraw` 设成 `False`，控件就不画凹槽，也不画区间高亮、分段和渐变——整条轨道交给你。保留 `True` 的话，默认画法会盖在你画的东西上面。
 - `OnDrawSegment` 在凹槽画完之后、每一段的默认填充**之前**调用，`AIndex` 从 `0` 到 `ThumbCount`，**每一段都调**——不管它有没有默认填充（`TTyRangeTrackBar` 的区间、`TTyMultiTrackBar` 设了 `StyleClass` 的分段才有）。`ARect` 就是默认填充用的那个矩形：沿轨道从滑块中心到滑块中心（同 `SegmentSpan`），横向是凹槽的厚度；两个滑块叠在一起时可能是空矩形。`ADefaultDraw := False` 只跳过这一段的默认填充。如果 `OnDrawTrack` 已经把 `ADefaultDraw` 设成了 `False`，整条轨道归你，分段不画，`OnDrawSegment` 也不会被调用。
-- `OnDrawThumb` 在画每个滑块**之前**调用，`ARect` 是滑块实际画出来的矩形（在滑块带里，横向比 `ThumbRect` 的命中矩形窄，有刻度时让出刻度那一条），`AStates` 是解析样式用的状态：`tysNormal` / `tysHover` / `tysActive` 三选一，控件有焦点时选中的那个滑块再加 `tysFocused`。`ADefaultDraw := False` 只跳过这一个滑块。接管了滑块，「将被删除」的样子也要自己画：看 `RemovingThumb` 是不是这个序号。区间控件里 `RemovingThumb` 是被拖出去的那一端，同一区间的另一端（序号 `RemovingThumb xor 1`）也该画成要删的样子（见第 10 节）。
+- `OnDrawThumb` 在画每个滑块**之前**调用，`ARect` 是滑块实际画出来的矩形（在滑块带里，横向比 `ThumbRect` 的命中矩形窄，有刻度时让出刻度那一条），`AStyle` 是控件本来要用的样式（滑块自己的样式类和 `Color`、`--track-thumb-radius`、拖出去时的淡化都已经算进去，颜色在 `AStyle.Background.Color`），`AStates` 是解析样式用的状态：`tysNormal` / `tysHover` / `tysActive` 三选一，控件有焦点时选中的那个滑块再加 `tysFocused`。`ADefaultDraw := False` 只跳过这一个滑块。接管了滑块，「将被删除」的样子也要自己画：看 `RemovingThumb` 是不是这个序号。区间控件里 `RemovingThumb` 是被拖出去的那一端，同一区间的另一端（序号 `RemovingThumb xor 1`）也该画成要删的样子（见第 10 节）。
 - 调用顺序就是绘制顺序：先轨道，再按序号画分段，再按序号画滑块，正在拖的（没有就是选中的）放到最后，压在上面。刻度、标签和读数总是由控件画。
 - `APainter` 的坐标就是控件的客户区坐标。需要区间或分段的位置可以用 `SegmentSpan`。
 - macOS 的 Retina 屏上，直接动 `APainter.Bitmap`（`FillRect`、`PutImage` 之类）要先把坐标换成图层像素，见[在 Retina 屏上直接画图层](../events.md#在-retina-屏上直接画图层)；只用画家自己的方法画就不用换。

@@ -44,6 +44,7 @@ uses tyControls.TrackBar;
 | `ShowValue` | `Boolean` | `False` | 在滑轨旁显示当前值（横向在右、纵向在下），字体与颜色取轨道样式 `TyTrackBar` 的 `color`。默认关——打开会占掉一条空间，滑轨相应变短（几何与命中都跟着变）。 |
 | `TickLabels` | `Boolean` | `False` | 在每条刻度外侧写上它的值，见第 6 节「刻度标签」。默认关——标签要另占一条，已经摆好的窗体不该因此变形。 |
 | `OnFormatTickLabel` | `TTyTrackTickLabelEvent` | `nil` | `procedure(Sender: TObject; AValue: Integer; var AText: string)`：画之前改写某条刻度标签的文字（「1 月」「¥100」）；改成空串就不画这一条。 |
+| `OnDrawThumb` | `TTyTrackDrawThumbEvent` | `nil` | 自己画滑块（三角形、图片、任意形状），见 [第 6 节](#自己画滑块ondrawthumb)。4.0 起。 |
 | `OnChange` | `TNotifyEvent` | `nil` | `Position` 真实变化时触发（含拖动、点击定位、方向键/翻页键步进、直接赋值）。 |
 | `TabStop` | `Boolean` | `True` | 是否参与 Tab 键导航（构造时自动置为 `True`）。 |
 | `Align` | `TAlign` | — | 父容器内的停靠方式。 |
@@ -158,6 +159,44 @@ TyDefaultController.StyleOverride := ':root { --track-thumb-length: 16px; --trac
 ```
 
 方向换成垂直时，“长”仍然沿着滑轨、“厚”仍然垂直于滑轨。滑块的颜色仍由主题的 `TyTrackThumb` 规则决定。三角形和自绘滑块 3.0 没有。
+
+### 自己画滑块：`OnDrawThumb`
+
+4.0 起（#242）。三个令牌只管得了圆角矩形这一类：圆、胶囊、窄条、方块。三角形、图片，或者应用自己的形状，在这个事件里画：
+
+```pascal
+TTyTrackDrawThumbEvent = procedure(Sender: TObject; APainter: TTyPainter; AIndex: Integer;
+  const ARect: TRect; const AStyle: TTyStyleSet; AStates: TTyStateSet;
+  var ADefaultDraw: Boolean) of object;
+```
+
+- `ARect` 是滑块实际画出来的矩形，坐标就是控件的客户区坐标：在滑块所在的带里（有刻度时让出刻度那一条），`--track-thumb-thickness` 已经算进去。
+- `AStyle` 是控件本来要用的样式：`TyTrackThumb` 规则在 `AStates` 下解析出来的结果，`--track-thumb-radius` 已经写进 `BorderRadius`。主题色在 `AStyle.Background.Color` 里，悬停、按下时主题换了颜色，这里拿到的就是换过的。
+- `AStates`：`tysNormal` / `tysHover` / `tysActive` 三选一，控件有焦点时再加 `tysFocused`。
+- `AIndex` 在 `TTyTrackBar` 上总是 `0`；多滑块一族用的是同一个事件，那里是滑块的序号（见 [multitrackbar.md](multitrackbar.md) 第 6 节）。
+- 把 `ADefaultDraw` 设成 `False`，控件就不画这个滑块，画什么都由你。保留 `True` 的话，默认的滑块会盖在你画的东西上面。
+- 命中测试不变：不管画成什么形状，能抓住滑块的仍然是 `ThumbRect` 那个矩形。
+
+一个指向下方的三角形：
+
+```pascal
+procedure TForm1.BarDrawThumb(Sender: TObject; APainter: TTyPainter; AIndex: Integer;
+  const ARect: TRect; const AStyle: TTyStyleSet; AStates: TTyStateSet;
+  var ADefaultDraw: Boolean);
+begin
+  ADefaultDraw := False;
+  APainter.BeginPath;
+  APainter.MoveTo(ARect.Left, ARect.Top);
+  APainter.LineTo(ARect.Right, ARect.Top);
+  APainter.LineTo((ARect.Left + ARect.Right) / 2, ARect.Bottom);
+  APainter.ClosePath;
+  APainter.FillPath(AStyle.Background.Color);   // 主题给滑块的颜色，悬停和按下时跟着变
+end;
+```
+
+想让三角形宽一点，把 `--track-thumb-length` 调大（比如 `16px`）；它同时决定了能抓住滑块的范围。
+
+派生类想换滑块的画法，重写 protected 的 `PaintThumb`（参数和事件一样）。基类的实现就是「先问 `OnDrawThumb`，没被接管就按主题画」，重写后不调 `inherited` 就不再问事件。
 
 ### 滑块子部件：typeKey `TyTrackThumb`
 
