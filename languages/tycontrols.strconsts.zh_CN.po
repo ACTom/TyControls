@@ -878,6 +878,14 @@ msgstr "删除列"
 msgid "Delete table"
 msgstr "删除表格"
 
+#: tycontrols.strconsts.rsrichundocellprops
+msgid "Cell properties"
+msgstr "单元格属性"
+
+#: tycontrols.strconsts.rsrichundorowprops
+msgid "Row properties"
+msgstr "行属性"
+
 #: tycontrols.strconsts.rsrichundoinsertpicture
 msgid "Insert picture"
 msgstr "插入图片"

@@ -201,7 +201,7 @@ function TyRtfListNumberText(AKind: TTyListKind; AValue: Integer): string;
 implementation
 
 uses
-  Generics.Collections, tyControls.RichEdit.TextIO;
+  Generics.Collections, tyControls.RichEdit.TextIO, tyControls.RichEdit.TableProps;
 
 const
   OutBufSize = 64 * 1024;
@@ -362,6 +362,8 @@ type
     FCurInCell: Boolean;
     FWroteRow: Boolean;
     FLastRowDef: RawByteString;
+    // the last row whose colours Note took (a row's paragraphs come one after another)
+    FNotedRow: TTyRichRow;
     FStartRowDef: RawByteString;   // the row definition in effect where the stretch began
     { The lists the model owns: the runs (one list of the list table each), the run and the
       number of each such paragraph (by its index), made while the save plans; the number
@@ -1640,6 +1642,13 @@ begin
     raise ETyRichRtfWrite.CreateFmt('RTF writer: paragraph %d is in a table row that holds ' +
       'a nested table and has changed: written from the model, the row would lose that table',
       [AIndex]);
+  // a row a property edit changed is made again: the colours it names go in the table
+  if (ACell <> nil) and (ACell.Row <> FNotedRow) then
+  begin
+    FNotedRow := ACell.Row;
+    if ACell.Row.Edited then
+      TyRichNoteRowColors(ACell.Row.BaseFormat, ACell.Row.Format, @ColorIndex);
+  end;
   for j := 0 to High(ARuns) do
   begin
     ci := CharInfo(ARuns[j].Format);
@@ -2626,7 +2635,10 @@ var
   edges: TTyRichEdges;
 begin
   def := ARow.RawFormat;
-  if def = '' then
+  if ARow.Edited then
+    // the words of what a property edit changed made again, the others as they were
+    def := TyRichRowFormatBytes(def, ARow.BaseFormat, ARow.Format, ARow.CellEdges, @ColorIndex)
+  else if def = '' then
   begin
     s := '\trowd\trgaph108';
     edges := ARow.CellEdges;

@@ -13,7 +13,8 @@ unit tyControls.RichEdit.Commands;
 interface
 
 uses
-  Classes, SysUtils, Graphics, ImgList, tyControls.RichEdit.Text, tyControls.RichEdit.Model;
+  Classes, SysUtils, Graphics, ImgList, tyControls.RichEdit.Text, tyControls.RichEdit.Model,
+  tyControls.RichEdit.TableProps;
 
 type
   { Inserts text (paragraph separators allowed) at APos; AFormat as TTyRichDocument's
@@ -391,6 +392,44 @@ type
   TTyRichDeleteColumn = class(TTyRichTableCommand)
   public
     constructor Create(ATablePos: TTyRichPos; AIndex: Integer);
+    function Description: string; override;
+  end;
+
+  { A change of table properties (TTyRichDocument.EditTableProps says what it does): only
+    the fields the properties' Valid names change. The table is named by a position inside
+    it, rows by their index as the table edits count them. CanExecute is False - Execute
+    changes nothing - when Refusal is not rtrNone (TTyRichDocument.TablePropsRefusal). One
+    undo step: an undo gives every paragraph of the rows it changed its value back, the
+    rows their places; nothing else of the table is touched. Not mergeable. }
+  TTyRichTablePropsCommand = class(TTyRichCommand)
+  private
+    FEdit: TTyRichPropEdit;
+  protected
+    procedure DoExecute(ADoc: TTyRichDocument); override;
+  public
+    function CanExecute(ADoc: TTyRichDocument): Boolean; override;
+    function Refusal(ADoc: TTyRichDocument): TTyRichTableRefusal;
+    property Edit: TTyRichPropEdit read FEdit;
+  end;
+
+  { Cells ACol0 .. ACol1 of rows ARow0 .. ARow1 of the table ATablePos is in get the fields
+    of AProps that AProps.Valid names: a border, the shading, the cell's own padding (-1: none
+    of its own, the row's then), the alignment of its content, its width (its right edge and
+    the edges after it move; not in a table with merged cells). }
+  TTyRichSetCellProps = class(TTyRichTablePropsCommand)
+  public
+    constructor Create(ATablePos: TTyRichPos; ARow0, ACol0, ARow1, ACol1: Integer;
+      const AProps: TTyRichCellProps);
+    function Description: string; override;
+  end;
+
+  { Rows ARow0 .. ARow1 of the table ATablePos is in get the fields of AProps that
+    AProps.Valid names: the height, the left (its cells move with it; not in a table with
+    merged cells), the alignment, the padding of the cells that set none (a side -1: as it
+    is). }
+  TTyRichSetRowProps = class(TTyRichTablePropsCommand)
+  public
+    constructor Create(ATablePos: TTyRichPos; ARow0, ARow1: Integer; const AProps: TTyRichRowProps);
     function Description: string; override;
   end;
 
@@ -2322,6 +2361,59 @@ begin
   AList[ACount] := FStart;
   AList[ACount + 1] := FEnd;
   Inc(ACount, 2);
+end;
+
+{ ---- the table property commands ---- }
+
+function TTyRichTablePropsCommand.Refusal(ADoc: TTyRichDocument): TTyRichTableRefusal;
+begin
+  Result := ADoc.TablePropsRefusal(FEdit);
+end;
+
+function TTyRichTablePropsCommand.CanExecute(ADoc: TTyRichDocument): Boolean;
+begin
+  Result := Refusal(ADoc) = rtrNone;
+end;
+
+procedure TTyRichTablePropsCommand.DoExecute(ADoc: TTyRichDocument);
+begin
+  EditTableProps(ADoc, FEdit);
+end;
+
+constructor TTyRichSetCellProps.Create(ATablePos: TTyRichPos; ARow0, ACol0, ARow1, ACol1: Integer;
+  const AProps: TTyRichCellProps);
+begin
+  inherited Create;
+  FEdit := Default(TTyRichPropEdit);
+  FEdit.Pos := ATablePos;
+  FEdit.Row0 := ARow0;
+  FEdit.Row1 := ARow1;
+  FEdit.Col0 := ACol0;
+  FEdit.Col1 := ACol1;
+  FEdit.OfRows := False;
+  FEdit.Cell := AProps;
+end;
+
+function TTyRichSetCellProps.Description: string;
+begin
+  Result := rsRichUndoCellProps;
+end;
+
+constructor TTyRichSetRowProps.Create(ATablePos: TTyRichPos; ARow0, ARow1: Integer;
+  const AProps: TTyRichRowProps);
+begin
+  inherited Create;
+  FEdit := Default(TTyRichPropEdit);
+  FEdit.Pos := ATablePos;
+  FEdit.Row0 := ARow0;
+  FEdit.Row1 := ARow1;
+  FEdit.OfRows := True;
+  FEdit.Row := AProps;
+end;
+
+function TTyRichSetRowProps.Description: string;
+begin
+  Result := rsRichUndoRowProps;
 end;
 
 end.

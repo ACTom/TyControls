@@ -302,6 +302,8 @@ resourcestring
   rsRichUndoInsertColumn = 'Insert column';
   rsRichUndoDeleteColumn = 'Delete column';
   rsRichUndoDeleteTable  = 'Delete table';
+  rsRichUndoCellProps    = 'Cell properties';
+  rsRichUndoRowProps     = 'Row properties';
   rsRichUndoInsertPicture = 'Insert picture';
   rsRichUndoResizeObject = 'Resize object';
   rsRichUndoSettings     = 'Document settings';

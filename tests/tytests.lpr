@@ -324,7 +324,8 @@ uses
   test.richedit.bookmarks,
   test.richedit.objevents,
   test.richedit.builder,
-  test.richedit.wordlists;
+  test.richedit.wordlists,
+  test.richedit.tableprops;
 
 type
   TTyTestRunner = class(TTestRunner)

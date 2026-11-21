@@ -6947,8 +6947,8 @@ var
   begin
     if not haveNext then
     begin
-      if nextRow.RawFormat <> '' then nextDisp := TyRtfRowDisplay(nextRow.RawFormat)
-      else nextDisp := TyDefaultRowDisplay(Max(1, nextRow.CellCount));
+      // (what its format says: its bytes, or what a property edit set)
+      nextDisp := nextRow.Display;
       haveNext := True;
     end;
     m := AIndex;
@@ -6969,8 +6969,7 @@ begin
     R.FPPI := APPI;
     R.FZoom := AZoom;
     nc := Max(1, ARow.CellCount);
-    if ARow.RawFormat <> '' then R.FDisplay := TyRtfRowDisplay(ARow.RawFormat)
-    else R.FDisplay := TyDefaultRowDisplay(nc);
+    R.FDisplay := ARow.Display;
     nextRow := NextRowOf(ADoc, ALast, ARow);
     lastRow := nextRow = nil;
     haveNext := False;

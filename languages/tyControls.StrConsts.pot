@@ -1260,6 +1260,10 @@ msgstr ""
 msgid "Add bookmark"
 msgstr ""
 
+#: tycontrols.strconsts.rsrichundocellprops
+msgid "Cell properties"
+msgstr ""
+
 #: tycontrols.strconsts.rsrichundocharformat
 msgid "Font formatting"
 msgstr ""
@@ -1358,6 +1362,10 @@ msgstr ""
 
 #: tycontrols.strconsts.rsrichundoresizeobject
 msgid "Resize object"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichundorowprops
+msgid "Row properties"
 msgstr ""
 
 #: tycontrols.strconsts.rsrichundosettings

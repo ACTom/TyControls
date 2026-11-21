@@ -1,0 +1,7 @@
+# table 2 as Word's own XML says it: the grid columns (twips), then one line per row:
+# each cell as  gridSpan / vMerge (restart = a vertical merge begins, cont = continues, - = none) / width twips / text
+grid 2076 2076 2077 2077
+row 2/-/4152/r1c1格r1c2格  1/-/2077/r1c3格  1/-/2077/r1c4格
+row 1/restart/2076/r2c1格r3c1格  1/-/2076/r2c2格  1/-/2077/r2c3格  1/-/2077/r2c4格
+row 1/cont/2076/  1/-/2076/r3c2格  2/restart/4154/r3c3格r3c4格r4c3格r4c4格
+row 1/-/2076/r4c1格  1/-/2076/r4c2格  2/cont/4154/

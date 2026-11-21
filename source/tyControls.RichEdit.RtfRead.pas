@@ -1148,7 +1148,7 @@ function TyRtfDestinationWords: TStringArray;
 implementation
 
 uses
-  tyControls.RichEdit.TextIO;
+  tyControls.RichEdit.TextIO, tyControls.RichEdit.TableProps;
 
 const
   CpSymbol = -2;
@@ -7097,9 +7097,13 @@ var
   tr: TTyRtfTableRec;
   t: TTyRichTable;
   global: Int64;
-  cut: Boolean;
+  cut, auto: Boolean;
+  colors: array of TColor;
+  raw, lastRaw: RawByteString;
+  fmt: TTyRichRowFormat;
 begin
   lastPara := IntervalParaStop(ALast) - 1;
+  colors := nil;
   Result := TTyRtfGroup.Create;
   Result.FirstSnap := AFirst;
   Result.LastSnap := ALast;
@@ -7148,9 +7152,32 @@ begin
     else t := TTyRichTable.Create([], tr.Locked, cut);
     t.AddRef;
     Result.Tables[i] := t;
+    if (tr.RowCount > 0) and (colors = nil) then
+    begin
+      // the file's colours, for the rows' borders and shading (entry 0 and automatic ones: none)
+      SetLength(colors, AParser.ColorCount);
+      for k := 0 to High(colors) do
+      begin
+        colors[k] := AParser.Color(k, auto);
+        if auto then colors[k] := clDefault;
+      end;
+    end;
+    fmt := nil;
+    lastRaw := '';
     for j := 0 to tr.RowCount - 1 do
-      t.AddRow(tr.Rows[j].CellCount, AParser.FragmentOf(tr.Rows[j].Raw), tr.Rows[j].Cellx,
-        tr.Rows[j].Nested);
+    begin
+      raw := AParser.FragmentOf(tr.Rows[j].Raw);
+      t.AddRow(tr.Rows[j].CellCount, raw, tr.Rows[j].Cellx, tr.Rows[j].Nested);
+      // (rows of the same bytes and cells - a table made by a program - read once)
+      if (fmt = nil) or (fmt.CellCount <> tr.Rows[j].CellCount) or (raw <> lastRaw) then
+      begin
+        if fmt <> nil then fmt.Release;
+        fmt := TyRichDecodeRowFormat(raw, tr.Rows[j].CellCount, colors);
+        lastRaw := raw;
+      end;
+      t.SetLastRowFormat(fmt);
+    end;
+    if fmt <> nil then fmt.Release;
   end;
 end;
 
@@ -7402,8 +7429,9 @@ begin
   if (rec^.Table >= 0) and (rec^.Table <= High(AGroup.Tables)) then
   begin
     t := AGroup.Tables[rec^.Table];
-    if (rec^.Row < t.RowCount) and (rec^.Cell < t.Rows[rec^.Row].CellCount) then
-      ACell := t.Rows[rec^.Row].Cells[rec^.Cell];
+    // (the rows as made here: an edit since may have put others in their places)
+    if (rec^.Row < t.AddedRowCount) and (rec^.Cell < t.AddedRow(rec^.Row).CellCount) then
+      ACell := t.AddedRow(rec^.Row).Cells[rec^.Cell];
   end;
   if (rec^.ListText <> '') and (FDoc.Formats.ParaFormat(rec^.Format).List.Kind <> lkNone) then
     AListText := rec^.ListText
@@ -8340,8 +8368,31 @@ type
   public
     function KeepFragment(const AFragment: RawByteString; APara: Boolean): Boolean; override;
     function RowFormat(const ARaw: RawByteString): RawByteString; override;
+    function RowLook(const ARaw: RawByteString; ACellCount: Integer): TTyRichRowFormat; override;
     function MapObject(AObj: TTyRichObject; out AText: UTF8String): TTyRichObject; override;
   end;
+
+{ A colour word the filter keeps names an entry the source's table and the target's agree
+  on (or none is kept): read by the source's colours. }
+function TTyRtfForeignFilter.RowLook(const ARaw: RawByteString;
+  ACellCount: Integer): TTyRichRowFormat;
+var
+  colors: array of TColor;
+  i: Integer;
+  auto: Boolean;
+begin
+  colors := nil;
+  if FScan <> nil then
+  begin
+    SetLength(colors, FScan.ColorCount);
+    for i := 0 to High(colors) do
+    begin
+      colors[i] := FScan.Color(i, auto);
+      if auto then colors[i] := clDefault;
+    end;
+  end;
+  Result := TyRichDecodeRowFormat(ARaw, ACellCount, colors);
+end;
 
 function TTyRtfForeignFilter.HasFont(ANum: Integer): Boolean;
 var
