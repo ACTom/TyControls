@@ -70,6 +70,7 @@ type
     procedure TestABookmarkAmong200000In100MB;
     procedure TestListItemsMadeInA100MBRtfSaveAsAKeyDoes;
     procedure TestATableCellPropertyAndARowInALongTable;
+    procedure TestAScreenOfALongStyledTable;
   private
     procedure SaveBesideFields(ABytes: Int64; ANest: Integer);
   end;
@@ -2373,6 +2374,51 @@ begin
     AssertTrue(Format('a cell''s shading in %.1f ms', [prop]), prop <= CKeystrokeMs);
     AssertTrue(Format('Tab adding a row in %.1f ms', [add]), add <= CKeystrokeMs);
     AssertTrue(Format('a cell''s shading again in %.1f ms', [again]), again <= CKeystrokeMs);
+  finally
+    bmp.Free;
+  end;
+end;
+
+{ A table of 10,000 rows whose every cell has a shading and lines of four styles and two
+  colours: a screen of it in the middle painted the first time (its rows laid out) and again. }
+procedure TTyRichEditPerfTest.TestAScreenOfALongStyledTable;
+const
+  Rows = 10000;
+var
+  bmp: TBitmap;
+  d: TTyRichDocument;
+  t0, first, again: Double;
+  p: TTyRichCellProps;
+begin
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf32bit;
+    bmp.SetSize(FRich.Width, FRich.Height);
+    FRich.Lines.Text := 'before' + LineEnding + 'after';
+    d := FRich.Document;
+    AssertTrue('a long table', d.Execute(TTyRichInsertTable.Create(d.Text.ParaStart(1), Rows, 3)));
+    p := Default(TTyRichCellProps);
+    p.Valid := [rcpShading, rcpBorderLeft, rcpBorderTop, rcpBorderRight, rcpBorderBottom];
+    p.Shading := clYellow;
+    // (sides: left, top, right, bottom)
+    p.Borders[TTyRichCellSide(0)] := TyRichBorder(rbsDouble, 30, clRed);
+    p.Borders[TTyRichCellSide(2)] := TyRichBorder(rbsDouble, 30, clRed);
+    p.Borders[TTyRichCellSide(1)] := TyRichBorder(rbsDotted, 10, clBlue);
+    p.Borders[TTyRichCellSide(3)] := TyRichBorder(rbsDashed, 30, clGreen);
+    AssertTrue('styled', d.Execute(TTyRichSetCellProps.Create(d.Text.ParaStart(1), 0, 0, Rows - 1,
+      2, p)));
+    TPerfRich(FRich).PaintInto(bmp);
+    FRich.ScrollY := d.Text.TotalHeight div 2;
+    t0 := Clock;
+    TPerfRich(FRich).PaintInto(bmp);
+    first := Clock - t0;
+    t0 := Clock;
+    TPerfRich(FRich).PaintInto(bmp);
+    again := Clock - t0;
+    Report(Format('styled table of %d rows: a screen in the middle, the first time', [Rows]), first);
+    Report('styled table: the same screen again', again);
+    AssertTrue(Format('the first time in %.1f ms', [first]), first <= CScrollMs);
+    AssertTrue(Format('again in %.1f ms', [again]), again <= CKeystrokeMs);
   finally
     bmp.Free;
   end;
