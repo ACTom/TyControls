@@ -465,7 +465,7 @@ const
     '\clpadfl3', '\trpaddfr3');
 var
   d, back: TTyRichDocument;
-  orig, got, def: RawByteString;
+  orig, got, def, first: RawByteString;
   before, after: string;
   i, a, z: Integer;
   pos: TTyRichPos;
@@ -483,8 +483,15 @@ begin
     AssertEquals('its shading', Integer(RGBToColor($99, $CC, $FF)), Integer(want.Shading));
     after := AllCells(d, 0);
     got := StrOf(SaveBytes(d));
-    // the row's definition as written: from its \trowd to its first paragraph
-    a := PosOf('\trowd \irow1', got);
+    // the row before: the file's (the header has the new colour)
+    a := PosOf('\trowd \irow0', orig);
+    z := PosOf('\trowd \irow1', orig);
+    while (z > a) and (Copy(orig, z, 4) <> '\row') do Dec(z);
+    first := Copy(orig, a, z + 4 - a);
+    a := PosOf(first, got);
+    AssertTrue('the row before', a > 0);
+    // the changed row's definition as written: the first after it, to its first paragraph
+    a := PosOf('\trowd', got, a + Length(first));
     AssertTrue('the row made again', a > 0);
     z := PosOf('\pard', got, a);
     def := Copy(got, a, z - a);
@@ -493,11 +500,6 @@ begin
         PosOf(RawByteString(Known[i]), def) > 0);
     AssertTrue('Word''s padding words as they were (left as \clpadt)',
       PosOf('\clpadl100\clpadt200\clpadb100\clpadr200', def) > 0);
-    // the other rows: the file's (the header has the new colour)
-    a := PosOf('\trowd \irow0', orig);
-    z := PosOf('\trowd \irow1', orig);
-    while (z > a) and (Copy(orig, z, 4) <> '\row') do Dec(z);
-    AssertTrue('the row before', PosOf(Copy(orig, a, z + 4 - a), got) > 0);
     AssertTrue('the rows after', EndsWith(got, Copy(orig, PosOf('\trowd \irow2', orig),
       Length(orig))));
     // read back: the very properties, every cell
@@ -807,6 +809,25 @@ begin
       d.TableParaVisits <= 3 * 3 + 6);
     AssertTrue(Format('%d steps', [d.TableEditSteps]), d.TableEditSteps <= 8);
     AssertTrue('the step keeps the row', d.UndoStep.MemSize < 4096);
+    // undone and done again: the same few reads (the undo leaves the table's rows known)
+    d.Undo;
+    d.TableParaVisits := 0;
+    d.Redo;
+    AssertTrue(Format('redone: %d paragraph visits', [d.TableParaVisits]), d.TableParaVisits <= 3 * 3 + 6);
+    AssertTrue('a row below', Exec(d, TTyRichInsertRow.Create(pos, CRichRowBelow)));
+    d.Undo;
+    d.TableParaVisits := 0;
+    d.Redo;
+    AssertTrue(Format('a row again: %d paragraph visits', [d.TableParaVisits]), d.TableParaVisits <= 2 * (3 + 2));
+    d.Undo;
+    // (a delete of a row takes its paragraphs away: the undo gives the rows back as known)
+    AssertTrue('the row below goes', Exec(d, TTyRichDeleteRow.Create(pos, Rows div 2 + 1)));
+    d.Undo;
+    d.TableParaVisits := 0;
+    d.Redo;
+    AssertTrue(Format('it goes again: %d paragraph visits', [d.TableParaVisits]),
+      d.TableParaVisits <= 2 * (2 * 3 + 2));
+    d.Undo;
     AssertEquals('set', Integer(clRed), Integer(d.CellProps(pos, Rows div 2, 1).Shading));
     // a query: the paragraph at the position only
     d.TableParaVisits := 0;
