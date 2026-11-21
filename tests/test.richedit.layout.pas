@@ -1176,7 +1176,8 @@ begin
   AssertEquals('two lines', 2, L.LineCount);
   AssertEquals('the first below the space before', 20, L.Lines[0].Top);
   AssertEquals('the second', 60, L.Lines[1].Top);
-  AssertEquals('the spacing goes above the text', 56, L.Lines[0].Baseline);
+  // Word's way: a multiple's extra goes below the text, the baseline where single puts it
+  AssertEquals('the spacing goes below the text', 36, L.Lines[0].Baseline);
   AssertEquals('the paragraph''s height', 110, L.Height);
 end;
 
@@ -2975,13 +2976,13 @@ begin
   end;
 end;
 
-{ Single line spacing is the font's own recommended line spacing: its ascent, its descent and
-  the gap it asks for between lines (Windows: tmExternalLeading), read at the size it is drawn
-  at. SimSun keeps its whole gap there (16 px at 12 pt and 96 PPI: ascent 14, descent 2, gap 2),
-  so its lines stand 18 px apart, 27 at 144 PPI; Calibri asks for none (19), Arial for 1
-  (18 + 1). The gap goes below the descent: the baseline stays where the text's own height puts
-  it. An exact spacing is exact (the gap not added, the baseline where it was); a line of two
-  fonts takes the larger ascent, descent and gap. Real fonts: Windows only. }
+{ Single line spacing is the font's own line height as Word measures it, from the font's
+  design metrics (test.richedit.linemetrics has Word's numbers): SimSun, an East Asian font,
+  1.3 times its em of 16 px at 12 pt and 96 PPI (20.8), the added 0.3 half above the text
+  (the baseline at 2.4 + 13.75), 31.2 at 144 PPI; Calibri its ascent and descent (19.5, no
+  gap), Arial with its gap (18.4). An exact spacing is exact, the baseline at 0.8 of it; a line
+  of two fonts takes the larger ascent and descent and the East Asian 0.3 of SimSun:
+  15.2 + 4.3 + 4.8. Real fonts: Windows only. }
 procedure TTyRichLayoutTest.TestSingleSpacingIsTheFontsOwnLineSpacing;
 {$IFDEF MSWINDOWS}
 var
@@ -3030,15 +3031,15 @@ begin
   lo := TTyRichLayouter.Create(dev, True);
   try
     lo.BaseFontSizeHalfPt := 24;
-    AssertEquals('SimSun 12 pt at 96 PPI: 16 + its gap of 2', 18, Pitch('SimSun', 96));
-    AssertEquals('the gap below the descent: the baseline at the ascent', 14, base);
-    AssertEquals('at 144 PPI: 24 + 3', 27, Pitch('SimSun', 144));
-    AssertEquals('Calibri: no gap of its own', 19, Pitch('Calibri', 96));
-    AssertEquals('Arial: 18 + 1', 19, Pitch('Arial', 96));
+    AssertEquals('SimSun 12 pt at 96 PPI: 1.3 x 16', 21, Pitch('SimSun', 96));
+    AssertEquals('half the 0.3 above the text', 16, base);
+    AssertEquals('at 144 PPI: 1.3 x 24', 31, Pitch('SimSun', 144));
+    AssertEquals('Calibri: no gap of its own', 20, Pitch('Calibri', 96));
+    AssertEquals('Arial: with its gap', 18, Pitch('Arial', 96));
     AssertEquals('an exact 18 pt is 24 px, whatever the font asks', 24, Pitch('SimSun', 96, 360));
-    AssertEquals('its baseline where it was: the descent above the bottom', 22, base);
-    // SimSun 14 / 2 / gap 2 and Calibri 15 / 4 / gap 0: 15 + 4 + 2
-    AssertEquals('a line of both: the larger of each', 21, Pitch('SimSun', 96, 0, 'Calibri'));
+    AssertEquals('its baseline at 0.8 of it', 19, base);
+    AssertEquals('a line of both: the larger of each and SimSun''s 0.3', 24,
+      Pitch('SimSun', 96, 0, 'Calibri'));
   finally
     lo.Free;
   end;

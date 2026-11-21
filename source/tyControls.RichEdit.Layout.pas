@@ -209,12 +209,25 @@ type
     height and style for the device's whole life. }
   TTyRichFontId = Integer;
 
-  { Pixels: above the baseline, below it, and the gap the font asks for below that (its
-    external leading: the font's own line spacing is the three together). }
+  { Pixels: above the baseline, below it (where the text is drawn), and the gap the font asks
+    for between lines (its external leading). }
   TTyRichFontMetrics = record
     Ascent: Integer;
     Descent: Integer;
     Leading: Integer;
+  end;
+
+  { What a line is measured with, in unrounded pixels (Word lays out in fractions of a point,
+    so rounding each font's metrics first would be a pixel off): the ascent, the descent and
+    the line gap of the font's design scaled to its pixel height, and whether it is an East
+    Asian font - Word gives such a font 1.3 times its ascent and descent instead of its gap.
+    EastAsianKnown False: the platform cannot tell, the layout goes by the run's charset. }
+  TTyRichLineMetrics = record
+    Ascent: Double;
+    Descent: Double;
+    Gap: Double;
+    EastAsian: Boolean;
+    EastAsianKnown: Boolean;
   end;
 
   TTyRichFontEntry = record
@@ -223,6 +236,8 @@ type
     Style: TFontStyles;
     Metrics: TTyRichFontMetrics;
     HasMetrics: Boolean;
+    LineMetrics: TTyRichLineMetrics;
+    HasLineMetrics: Boolean;
   end;
 
   { What layout measures with and painting draws with. A subclass answers the Do* calls; the
@@ -241,6 +256,8 @@ type
     procedure CheckFont(AFont: TTyRichFontId);
   protected
     function DoMetrics(AFont: TTyRichFontId): TTyRichFontMetrics; virtual; abstract;
+    { This one: Metrics' whole pixels, not East Asian. }
+    function DoLineMetrics(AFont: TTyRichFontId): TTyRichLineMetrics; virtual;
     { The advance of AText drawn as one string in AFont, in whole pixels. }
     function DoTextWidth(AFont: TTyRichFontId; const AText: UTF8String): Integer; virtual; abstract;
     { How many code points from the start of AText fit in AMaxWidth (a hint: layout checks it
@@ -265,6 +282,8 @@ type
     function FontStyle(AFont: TTyRichFontId): TFontStyles;
     { Kept per font: asked of the subclass once. }
     function Metrics(AFont: TTyRichFontId): TTyRichFontMetrics;
+    { Kept per font as well. }
+    function LineMetrics(AFont: TTyRichFontId): TTyRichLineMetrics;
     function TextWidth(AFont: TTyRichFontId; const AText: UTF8String): Integer;
     function FitCount(AFont: TTyRichFontId; const AText: UTF8String; AMaxWidth: Integer): Integer;
     function HasGlyph(AFont: TTyRichFontId; ACode: Cardinal): Boolean;
@@ -288,7 +307,11 @@ type
     baseline at). Glyphs: on Windows read from the font's own cmap table through GDI (every
     widgetset); elsewhere, where the platform's text engine substitutes missing glyphs by
     itself, a font is taken to have a CJK or emoji glyph when its name says it is such a
-    font (unverified there). Main thread only, like all drawing. }
+    font (unverified there). Line metrics: on Windows the face's design metrics through GDI
+    (the ascent, descent and external leading GDI gives it at an em of 2048 pixels) and East
+    Asian when its code-page signature names a CJK code page; elsewhere the LCL's whole
+    pixels and the platform cannot tell East Asian (the run's charset decides). Main thread
+    only, like all drawing. }
   TTyRichBgraDevice = class(TTyRichTextDevice)
   private
     FMeasure: TBGRABitmap;
@@ -298,6 +321,7 @@ type
     procedure Configure(ABmp: TBGRABitmap; AFont: TTyRichFontId);
   protected
     function DoMetrics(AFont: TTyRichFontId): TTyRichFontMetrics; override;
+    function DoLineMetrics(AFont: TTyRichFontId): TTyRichLineMetrics; override;
     function DoTextWidth(AFont: TTyRichFontId; const AText: UTF8String): Integer; override;
     function DoHasGlyph(AFont: TTyRichFontId; ACode: Cardinal): Boolean; override;
     procedure DoDrawText(ATarget: TBGRABitmap; AFont: TTyRichFontId; AX, ABaseline: Integer;
@@ -784,6 +808,9 @@ type
   TTyRichFormatFont = record
     Font: TTyRichFontId;
     Shift: Integer;
+    { The format's charset is a CJK one (Shift-JIS, Hangul, Johab, GB2312, Big5): an East
+      Asian font where the device cannot tell from the font itself. }
+    CjkCharset: Boolean;
   end;
 
   { A list item's number, remembered with the kind and level it was counted for. }
@@ -1524,6 +1551,7 @@ begin
   FFonts[FFontCount].PixelHeight := APixelHeight;
   FFonts[FFontCount].Style := st;
   FFonts[FFontCount].HasMetrics := False;
+  FFonts[FFontCount].HasLineMetrics := False;
   Result := FFontCount;
   Inc(FFontCount);
   FFontIndex.Add(key, Result);
@@ -1561,6 +1589,29 @@ begin
     FFonts[AFont].HasMetrics := True;
   end;
   Result := FFonts[AFont].Metrics;
+end;
+
+function TTyRichTextDevice.DoLineMetrics(AFont: TTyRichFontId): TTyRichLineMetrics;
+var
+  m: TTyRichFontMetrics;
+begin
+  m := Metrics(AFont);
+  Result.Ascent := m.Ascent;
+  Result.Descent := m.Descent;
+  Result.Gap := m.Leading;
+  Result.EastAsian := False;
+  Result.EastAsianKnown := True;
+end;
+
+function TTyRichTextDevice.LineMetrics(AFont: TTyRichFontId): TTyRichLineMetrics;
+begin
+  CheckFont(AFont);
+  if not FFonts[AFont].HasLineMetrics then
+  begin
+    FFonts[AFont].LineMetrics := DoLineMetrics(AFont);
+    FFonts[AFont].HasLineMetrics := True;
+  end;
+  Result := FFonts[AFont].LineMetrics;
 end;
 
 procedure TTyRichTextDevice.CountMeasure(ACodePoints: Integer);
@@ -1699,6 +1750,24 @@ function TyDeleteObject(AObject: PtrUInt): LongBool; stdcall;
   external 'gdi32' name 'DeleteObject';
 function TyGetFontData(ADC: PtrUInt; ATable, AOffset: LongWord; ABuffer: Pointer;
   ALength: LongWord): LongWord; stdcall; external 'gdi32' name 'GetFontData';
+
+type
+  // GDI's TEXTMETRICW and FONTSIGNATURE
+  TTyGdiTextMetric = record
+    Height, Ascent, Descent, InternalLeading, ExternalLeading, AveCharWidth, MaxCharWidth,
+      Weight, Overhang, DigitizedAspectX, DigitizedAspectY: LongInt;
+    FirstChar, LastChar, DefaultChar, BreakChar: WideChar;
+    Italic, Underlined, StruckOut, PitchAndFamily, CharSet: Byte;
+  end;
+  TTyGdiFontSignature = record
+    Usb: array[0..3] of LongWord;
+    Csb: array[0..1] of LongWord;
+  end;
+
+function TyGetTextMetricsW(ADC: PtrUInt; out AMetric: TTyGdiTextMetric): LongBool; stdcall;
+  external 'gdi32' name 'GetTextMetricsW';
+function TyGetTextCharsetInfo(ADC: PtrUInt; out ASig: TTyGdiFontSignature;
+  AFlags: LongWord): LongInt; stdcall; external 'gdi32' name 'GetTextCharsetInfo';
 
 {$ENDIF}
 
@@ -1896,6 +1965,8 @@ type
   TTyCoverageMap = class
   public
     Map: specialize TDictionary<string, TTyGlyphRanges>;
+    { The face's line metrics at an em of one pixel (Windows), by the same key. }
+    Design: specialize TDictionary<string, TTyRichLineMetrics>;
     constructor Create;
     destructor Destroy; override;
   end;
@@ -1904,6 +1975,7 @@ constructor TTyCoverageMap.Create;
 begin
   inherited Create;
   Map := specialize TDictionary<string, TTyGlyphRanges>.Create;
+  Design := specialize TDictionary<string, TTyRichLineMetrics>.Create;
 end;
 
 destructor TTyCoverageMap.Destroy;
@@ -1912,6 +1984,7 @@ var
 begin
   for r in Map.Values do r.Free;
   Map.Free;
+  Design.Free;
   inherited Destroy;
 end;
 
@@ -1993,6 +2066,92 @@ begin
     Result.Ascent := FontPixelHeight(AFont) * 4 div 5;
     Result.Descent := FontPixelHeight(AFont) - Result.Ascent;
   end;
+end;
+
+{ Windows: the face realised at an em of 2048 pixels (its design units, near enough), kept
+  per face and scaled to each pixel height - GDI rounds a small size's ascent and descent up
+  each, a pixel and a half too tall for Times New Roman at 12 pt. East Asian: the face's
+  code-page signature (fsCsb) names Japanese, simplified or traditional Chinese, Korean or
+  Johab - what the font declares, not tmCharSet, which follows the system's code page
+  (Segoe UI reports GB2312 on a Chinese system). Elsewhere: the LCL's whole pixels; the
+  platform cannot tell East Asian, the name says it at most (NameCovers) and the layout asks
+  the run's charset too. }
+function TTyRichBgraDevice.DoLineMetrics(AFont: TTyRichFontId): TTyRichLineMetrics;
+{$IFDEF MSWINDOWS}
+const
+  CEm = 2048;
+  CCjkCodePages = $003E0000;   // fsCsb[0] bits 17-21: 932, 936, 949, 950, 1361
+var
+  map: TTyCoverageMap;
+  key: string;
+  st: TFontStyles;
+  dsg: TTyRichLineMetrics;
+  dc, f, old: PtrUInt;
+  w: UnicodeString;
+  tm: TTyGdiTextMetric;
+  sig: TTyGdiFontSignature;
+  got: Boolean;
+  px: Double;
+{$ENDIF}
+begin
+  {$IFDEF MSWINDOWS}
+  map := TTyCoverageMap(FCoverage);
+  st := FontStyle(AFont);
+  key := LowerCase(TyEffectiveFontName(FontName(AFont))) + '|' + IntToStr(Ord(fsBold in st)) +
+    IntToStr(Ord(fsItalic in st));
+  if not map.Design.TryGetValue(key, dsg) then
+  begin
+    got := False;
+    FillChar(dsg, SizeOf(dsg), 0);
+    dc := TyCreateCompatibleDC(0);
+    if dc <> 0 then
+    try
+      w := UnicodeString(TyEffectiveFontName(FontName(AFont)));
+      f := TyCreateFontW(-CEm, 0, 0, 0, IfThen(fsBold in st, 700, 400),
+        LongWord(Ord(fsItalic in st)), 0, 0, 1 {DEFAULT_CHARSET}, 0, 0, 0, 0, PWideChar(w));
+      if f <> 0 then
+      try
+        old := TySelectObject(dc, f);
+        FillChar(tm, SizeOf(tm), 0);
+        if TyGetTextMetricsW(dc, tm) and (tm.Ascent + tm.Descent > 0) then
+        begin
+          got := True;
+          dsg.Ascent := tm.Ascent / CEm;
+          dsg.Descent := tm.Descent / CEm;
+          dsg.Gap := Max(0, tm.ExternalLeading) / CEm;
+          FillChar(sig, SizeOf(sig), 0);
+          TyGetTextCharsetInfo(dc, sig, 0);
+          dsg.EastAsian := sig.Csb[0] and CCjkCodePages <> 0;
+          dsg.EastAsianKnown := True;
+        end;
+        TySelectObject(dc, old);
+      finally
+        TyDeleteObject(f);
+      end;
+    finally
+      TyDeleteDC(dc);
+    end;
+    // no answer: the whole pixels, per size (Ascent 0 marks it)
+    if not got then dsg.Ascent := 0;
+    map.Design.Add(key, dsg);
+  end;
+  if dsg.Ascent <= 0 then
+  begin
+    Result := inherited DoLineMetrics(AFont);
+    Result.EastAsianKnown := False;
+    Exit;
+  end;
+  px := FontPixelHeight(AFont);
+  Result.Ascent := dsg.Ascent * px;
+  Result.Descent := dsg.Descent * px;
+  Result.Gap := dsg.Gap * px;
+  Result.EastAsian := dsg.EastAsian;
+  Result.EastAsianKnown := True;
+  {$ELSE}
+  Result := inherited DoLineMetrics(AFont);
+  Result.EastAsian := NameCovers(TyEffectiveFontName(FontName(AFont)), $4E00);
+  Result.EastAsianKnown := False;
+  {$ENDIF}
 end;
 
 function TTyRichBgraDevice.DoTextWidth(AFont: TTyRichFontId; const AText: UTF8String): Integer;
@@ -3633,6 +3792,45 @@ end;
 { ---- building a paragraph's layout ---- }
 
 type
+  { What a run of one font asks of its line, in unrounded pixels: its ascent and descent (a
+    super- or subscript's shift in them), the line gap above them, and - for an East Asian
+    font - its own ascent plus descent, of which the line adds 0.3 (the gap is then 0). }
+  TLineShare = record
+    Asc, Desc, Gap, East: Double;
+  end;
+
+{ Word's line measure, a font's part of it: a Latin font's own line height is its ascent, its
+  descent and its line gap, the gap above the glyph box; an East Asian font's is 1.3 times its
+  ascent and descent, the 0.3 half above and half below the glyph box (Word 16, measured:
+  SimSun's 0.14 em gap is not counted, the 1.3 stands in for it). East Asian as the font
+  declares it; where the device cannot tell, a CJK charset of the run says so. }
+function TyRichLineShare(ADev: TTyRichTextDevice; AFont: TTyRichFontId; AShift: Integer;
+  ACjkCharset: Boolean): TLineShare;
+var
+  lm: TTyRichLineMetrics;
+begin
+  lm := ADev.LineMetrics(AFont);
+  Result.Asc := lm.Ascent - AShift;
+  Result.Desc := lm.Descent + AShift;
+  if lm.EastAsian or (not lm.EastAsianKnown and ACjkCharset) then
+  begin
+    Result.Gap := 0;
+    Result.East := lm.Ascent + lm.Descent;
+  end
+  else
+  begin
+    Result.Gap := lm.Gap;
+    Result.East := 0;
+  end;
+end;
+
+{ The share's single line height (H0). }
+function TyRichSingleLine(const AShare: TLineShare): Double;
+begin
+  Result := AShare.Gap + AShare.Asc + AShare.Desc + 0.3 * AShare.East;
+end;
+
+type
   TPiece = record
     First, Count: Integer;
     Kind: TTyRichFragKind;
@@ -3642,7 +3840,8 @@ type
     Width: Integer;
     Brk: Byte;              // 0: no line may start here, 1: one may (U+000B ends its line itself)
     Obj: TTyRichObject;
-    Asc, Desc, Lead: Integer;
+    Asc, Desc: Integer;
+    Line: TLineShare;       // what it asks of its line (TyRichLineShare)
     Text: UTF8String;
   end;
 
@@ -4064,7 +4263,7 @@ begin
     m := Dev.Metrics(p^.Font);
     p^.Asc := m.Ascent - p^.Shift;
     p^.Desc := m.Descent + p^.Shift;
-    p^.Lead := m.Leading;
+    p^.Line := TyRichLineShare(Dev, p^.Font, p^.Shift, ff.CjkCharset);
     case pk of
       rfkText, rfkSpace:
         p^.Width := L.MeasureText(p^.Font, RangeText(i, j));
@@ -4090,7 +4289,11 @@ begin
             p^.Width := w;
             p^.Asc := h;
             p^.Desc := 0;
-            p^.Lead := 0;
+            // a picture stands on the baseline: as tall as it is, no gap, not East Asian
+            p^.Line.Asc := h;
+            p^.Line.Desc := 0;
+            p^.Line.Gap := 0;
+            p^.Line.East := 0;
           end
           else if (p^.Obj is TTyRichOpaque) and (TTyRichOpaque(p^.Obj).DisplayText <> '') then
           begin
@@ -4419,7 +4622,9 @@ procedure TParaBuilder.EmitLine(AStart, AEnd, AK: Integer; ALeft: Integer; var A
 var
   i, x, stop, tabItem, segStart, segW, decW, tw, xTab, lastTab: Integer;
   contentEnd, contentRight, avail, off, extra, gaps, spaces, done, add, cum: Integer;
-  maxA, maxD, maxL, natural, h, k: Integer;
+  h, k: Integer;
+  sh: TLineShare;
+  natural, base, hx: Double;
   al: TTyTabAlign;
   ld: TTyTabLeader;
   decFound: Boolean;
@@ -4643,42 +4848,61 @@ begin
             Items[i].StretchGaps := 1;
             Break;
           end;
-  // metrics
-  maxA := 0;
-  maxD := 0;
-  maxL := 0;
+  { metrics: the line's share is the largest ascent, descent and gap of its runs, and the
+    East Asian 0.3 of the largest East Asian font on it }
   if ItemCount = 0 then
   begin
     ff := L.FormatFont(AEmptyFormat, PPI, Zoom);
-    m := Dev.Metrics(ff.Font);
-    maxA := m.Ascent - ff.Shift;
-    maxD := m.Descent + ff.Shift;
-    maxL := m.Leading;
+    sh := TyRichLineShare(Dev, ff.Font, ff.Shift, ff.CjkCharset);
+  end
+  else
+  begin
+    sh.Asc := 0;
+    sh.Desc := 0;
+    sh.Gap := 0;
+    sh.East := 0;
   end;
   for i := 0 to ItemCount - 1 do
   begin
     p := @Pieces[Items[i].Piece];
-    if p^.Asc > maxA then maxA := p^.Asc;
-    if p^.Desc > maxD then maxD := p^.Desc;
-    if p^.Lead > maxL then maxL := p^.Lead;
+    if p^.Line.Asc > sh.Asc then sh.Asc := p^.Line.Asc;
+    if p^.Line.Desc > sh.Desc then sh.Desc := p^.Line.Desc;
+    if p^.Line.Gap > sh.Gap then sh.Gap := p^.Line.Gap;
+    if p^.Line.East > sh.East then sh.East := p^.Line.East;
   end;
   // the list marker sits on the first line: it is as tall as the line needs to be
   if FirstLine and Layout.FHasMarker then
   begin
-    if Layout.FMarker.Ascent > maxA then maxA := Layout.FMarker.Ascent;
-    if Layout.FMarker.Descent > maxD then maxD := Layout.FMarker.Descent;
+    if Layout.FMarker.Ascent > sh.Asc then sh.Asc := Layout.FMarker.Ascent;
+    if Layout.FMarker.Descent > sh.Desc then sh.Desc := Layout.FMarker.Descent;
   end;
-  natural := maxA + maxD + maxL;
+  { Word's rules (Word 16, measured). Single: the line's own height H0, the baseline below
+    the gap, half the East Asian 0.3 and the ascent. A multiple: m x H0, the text where single
+    puts it and the rest below. At least v: max(H0, v), the rest above. Exactly v: v, the
+    baseline at 0.8 v from the top whatever the fonts. }
+  natural := TyRichSingleLine(sh);
+  base := sh.Gap + 0.15 * sh.East + sh.Asc;
   case Pf.LineSpacing of
-    ls115: h := Round(natural * 1.15);
-    ls15: h := Round(natural * 1.5);
-    lsDouble: h := natural * 2;
-    lsExact: h := Px(Pf.LineSpacingValue);
-    lsAtLeast: h := Max(natural, Px(Pf.LineSpacingValue));
+    ls115: hx := natural * 1.15;
+    ls15: hx := natural * 1.5;
+    lsDouble: hx := natural * 2;
+    lsExact:
+      begin
+        hx := TyRichClampPx(Px(Pf.LineSpacingValue));
+        base := 0.8 * Max(0.0, Pf.LineSpacingValue * PPI * Double(Zoom) / 1440);
+        if base > hx then base := 0.8 * hx;
+      end;
+    lsAtLeast:
+      begin
+        hx := Max(natural, Pf.LineSpacingValue * PPI * Double(Zoom) / 1440);
+        base := base + (hx - natural);
+      end;
   else
-    h := natural;
+    hx := natural;
   end;
-  if h < 1 then h := 1;
+  if hx > CRichMaxLengthPx then hx := CRichMaxLengthPx;
+  h := Max(1, Round(hx));
+  if base > h then base := h;
   // the line
   with Layout do
   begin
@@ -4689,10 +4913,7 @@ begin
     ln^.Count := AEnd - AStart;
     ln^.Top := ATop;
     ln^.Height := h;
-    { what the spacing adds goes above the text; the font's gap (maxL) below its descent - an
-      exact spacing has none, its text keeps the descent above the bottom }
-    if Pf.LineSpacing = lsExact then ln^.Baseline := ATop + h - maxD
-    else ln^.Baseline := ATop + h - maxD - maxL;
+    ln^.Baseline := SatAdd(ATop, Round(base));
     ln^.Left := ALeft + off;
     ln^.ContentWidth := contentRight - ALeft;
     // a centred or right-aligned first line takes its marker along (as Word and WordPad do)
@@ -4798,6 +5019,7 @@ procedure TParaBuilder.MakeNotice(var ATop: Integer; AFormat: TTyCharFormatId);
 var
   nt: ^TTyRichFragment;
   m: TTyRichFontMetrics;
+  sh: TLineShare;
 begin
   nt := @Layout.FNotice;
   nt^.Kind := rfkText;
@@ -4816,8 +5038,9 @@ begin
   // part of the block's width: a horizontal scroll reaches its end
   Layout.FWidth := Max(Layout.FWidth, SatAdd(nt^.X, nt^.Width));
   Layout.FNoticeTop := ATop;
-  Layout.FNoticeBaseline := SatAdd(ATop, m.Ascent);
-  ATop := SatAdd(ATop, Max(1, m.Ascent + m.Descent + m.Leading));
+  sh := TyRichLineShare(Dev, nt^.Font, 0, L.FormatFont(AFormat, PPI, Zoom).CjkCharset);
+  Layout.FNoticeBaseline := SatAdd(ATop, Round(sh.Gap + 0.15 * sh.East + sh.Asc));
+  ATop := SatAdd(ATop, Max(1, Round(TyRichSingleLine(sh))));
   Layout.FTruncated := True;
 end;
 
@@ -6125,6 +6348,7 @@ begin
       end;
   end;
   Result.Font := FDevice.ResolveFont(name, px, f.Style + FBaseFontStyle);
+  Result.CjkCharset := f.Charset in [128, 129, 130, 134, 136];
   FFormatFonts.Add(AFormat, Result);
 end;
 
@@ -6320,12 +6544,11 @@ begin
 end;
 
 function TTyRichLayouter.EstimatedParaHeight(APPI: Integer; AZoom: Single): Integer;
-var
-  m: TTyRichFontMetrics;
 begin
-  m := FDevice.Metrics(FDevice.ResolveFont(FBaseFontName,
-    TyRichHalfPointsToPx(FBaseFontSizeHalfPt, APPI, AZoom), FBaseFontStyle));
-  Result := Max(1, m.Ascent + m.Descent + m.Leading);
+  // a single-spaced line of the base font, as a laid-out one measures it
+  Result := Max(1, Round(TyRichSingleLine(TyRichLineShare(FDevice, FDevice.ResolveFont(
+    FBaseFontName, TyRichHalfPointsToPx(FBaseFontSizeHalfPt, APPI, AZoom), FBaseFontStyle),
+    0, False))));
 end;
 
 function TTyRichLayouter.BuildPara(ADoc: TTyRichDocument; AIndex, AWidth, APPI: Integer;
