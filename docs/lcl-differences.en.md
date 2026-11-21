@@ -9,6 +9,7 @@ TyControls keeps LCL's property names and meanings wherever it can, so most code
 | Property | TyControls | LCL | Notes |
 |----------|-----------|-----|-------|
 | `AutoSize` (label, edit, combo box, check box, radio button) | `False` | `True` | The height follows the theme; turn it on when you want the content to decide |
+| `TTyButton.Height` | `30` | `25` | A new button takes the theme's `--control-height`. A height of 25 stored in a form ported from the LCL is shown as stored in 4.0 (the vertical padding gives way); 3.x raised it to one line of text plus the padding, 29 with the built-in themes |
 | `TTyMemo.WordWrap` | `False` | `True` | Long lines scroll sideways |
 | `TTyMemo.ScrollBars` | `ssAutoVertical` | `ssNone` | The vertical bar appears once the text overflows |
 | `TTyNumericEdit.Alignment` (and descendants) | `taRightJustify` | `taLeftJustify` | Numbers align right |

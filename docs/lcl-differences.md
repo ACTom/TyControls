@@ -9,6 +9,7 @@ TyControls 的属性名和语义尽量与 LCL 一致，从 Lazarus 移植的代�
 | 属性 | TyControls | LCL | 说明 |
 |------|-----------|-----|------|
 | `AutoSize`(标签、编辑框、组合框、复选框、单选按钮) | `False` | `True` | 高度跟主题走;需要按内容定尺寸时显式打开 |
+| `TTyButton.Height` | `30` | `25` | 新建按钮的高度取主题的 `--control-height`。从 LCL 移植来的窗体里存的 25 在 4.0 里原样显示（上下内边距让出来）；3.x 会把它撑到「一行字 + 内边距」，内置主题是 29 |
 | `TTyMemo.WordWrap` | `False` | `True` | 长行横向滚动 |
 | `TTyMemo.ScrollBars` | `ssAutoVertical` | `ssNone` | 内容超出时才出现竖向滚动条 |
 | `TTyNumericEdit.Alignment`(及其子类) | `taRightJustify` | `taLeftJustify` | 数字右对齐 |
