@@ -372,6 +372,85 @@ type
     function Description: string; override;
   end;
 
+  { How a new link's text looks: underlined, and coloured - rllTheme in the automatic colour,
+    which the control paints in its theme's link colour (a file keeps no colour for it: in
+    Word such a link is the text's own colour); rllWordBlue in Word's link blue
+    (CTyRichLinkWordBlue), a colour of the text's own that every program shows. }
+  TTyRichLinkLook = (rllTheme, rllWordBlue);
+
+  { A link (a HYPERLINK field the model owns: TTyRichFieldMark.CreateOwned) made at APos.
+    ALen > 0 and AText '': the ALen characters there become the link's text, as they are,
+    given the look ALook. AText given: it goes in place of those characters (none for ALen
+    0), in the format typed at APos with the look. Neither: AURL itself is the text. The
+    instruction is TyRichLinkInstruction(AURL); the marks take the format typed at APos (so
+    text typed beside the link is not the link's). One undo step; an undo puts back exactly
+    what was there. Refused (CanExecute False, nothing changes): AURL empty or '#'; a paragraph
+    separator in AURL or AText; a range that reaches past its paragraph's end, holds a
+    field's mark (a link is never made around another field), or has an end inside a field's
+    result; a place where the text cannot change (TTyRichDocument.CanChange). }
+  TTyRichInsertLink = class(TTyRichCommand)
+  private
+    FPos, FLen: TTyRichPos;
+    FURL, FText: UTF8String;
+    FLook: TTyRichLinkLook;
+    FOpen, FClose: TTyRichFieldMark;
+  protected
+    procedure DoExecute(ADoc: TTyRichDocument); override;
+  public
+    constructor Create(APos, ALen: TTyRichPos; const AURL, AText: string;
+      ALook: TTyRichLinkLook);
+    destructor Destroy; override;
+    function CanExecute(ADoc: TTyRichDocument): Boolean; override;
+    function Description: string; override;
+    procedure GatherObjects(var AList: TTyRichObjectList; var ACount: Integer); override;
+  end;
+
+  { The field whose open mark is at AFieldPos becomes a link to AURL: with AText '' its
+    content stays as it is (its formats, pictures, the fields in it) and only its marks are
+    new; with AText the whole field is replaced by a link holding AText, in the format of the
+    first text of the old result (the look the link had). One undo step. Refused (CanExecute
+    False): no field's open mark at AFieldPos; AURL empty or '#'; a paragraph separator in
+    AURL or AText; a field inside another field's result, or where the text cannot change. }
+  TTyRichSetLink = class(TTyRichCommand)
+  private
+    FPos: TTyRichPos;
+    FURL, FText: UTF8String;
+    FOpen, FClose: TTyRichFieldMark;
+  protected
+    procedure DoExecute(ADoc: TTyRichDocument); override;
+  public
+    constructor Create(AFieldPos: TTyRichPos; const AURL, AText: string);
+    destructor Destroy; override;
+    function CanExecute(ADoc: TTyRichDocument): Boolean; override;
+    function Description: string; override;
+    procedure GatherObjects(var AList: TTyRichObjectList; var ACount: Integer); override;
+  end;
+
+  { The field whose open mark is at AFieldPos stops being one: its two marks go, its content
+    stays as it is - text, formats (the look a link was given too), pictures, the fields in
+    it. One undo step. Refused (CanExecute False): no field's open mark at AFieldPos; a field
+    inside another field's result, or where the text cannot change. }
+  TTyRichRemoveLink = class(TTyRichCommand)
+  private
+    FPos: TTyRichPos;
+  protected
+    procedure DoExecute(ADoc: TTyRichDocument); override;
+  public
+    constructor Create(AFieldPos: TTyRichPos);
+    function CanExecute(ADoc: TTyRichDocument): Boolean; override;
+    function Description: string; override;
+  end;
+
+const
+  { Word's link blue (RGB 05 63 C1), the colour rllWordBlue gives a link's text. }
+  CTyRichLinkWordBlue = TColor($C16305);
+
+{ A HYPERLINK field's instruction for AURL, as Word writes one: "#name" is a place in the
+  document (HYPERLINK \l "name"), "target#name" a place in a target (HYPERLINK "target"
+  \l "name"), anything else a target (HYPERLINK "target"); \ and " in an argument written
+  \\ and \" (the field code's own escapes). }
+function TyRichLinkInstruction(const AURL: UTF8String): UTF8String;
+
 function TyRichRange(APos, ALen: TTyRichPos): TTyRichRange;
 { Why ACmd, a built-in command whose CanExecute said no, was refused by ADoc's rules: the
   insert and delete commands by their place (TTyRichDocument.ChangeRefusal: a row that holds
@@ -1227,6 +1306,280 @@ end;
 function TTyRichDeleteColumn.Description: string;
 begin
   Result := rsRichUndoDeleteColumn;
+end;
+
+{ ---- links ---- }
+
+function LinkArgument(const S: UTF8String): UTF8String;
+var
+  i: Integer;
+begin
+  Result := '"';
+  for i := 1 to Length(S) do
+  begin
+    if S[i] in ['\', '"'] then Result := Result + '\';
+    Result := Result + S[i];
+  end;
+  Result := Result + '"';
+end;
+
+function TyRichLinkInstruction(const AURL: UTF8String): UTF8String;
+var
+  p: Integer;
+begin
+  p := Pos('#', AURL);
+  if p = 1 then
+    Result := 'HYPERLINK \l ' + LinkArgument(Copy(AURL, 2, MaxInt))
+  else if (p > 1) and (p < Length(AURL)) then
+    Result := 'HYPERLINK ' + LinkArgument(Copy(AURL, 1, p - 1)) + ' \l ' +
+      LinkArgument(Copy(AURL, p + 1, MaxInt))
+  else
+    Result := 'HYPERLINK ' + LinkArgument(AURL);
+end;
+
+function LinkAddressOk(const AURL: UTF8String): Boolean;
+begin
+  Result := (AURL <> '') and (AURL <> '#') and not HasSeparator(AURL);
+end;
+
+{ A fresh pair of marks of a link the model owns. }
+procedure MakeLinkMarks(const AURL: UTF8String; out AOpen, AClose: TTyRichFieldMark);
+var
+  id: Int64;
+begin
+  id := TTyRichFieldMark.NewId;
+  AOpen := TTyRichFieldMark.CreateOwned(rfmOpen, id, TyRichLinkInstruction(AURL));
+  AClose := TTyRichFieldMark.CreateOwned(rfmClose, id);
+  AOpen.AddRef;
+  AClose.AddRef;
+end;
+
+procedure GatherMarks(AOpen, AClose: TTyRichFieldMark; var AList: TTyRichObjectList;
+  var ACount: Integer);
+begin
+  if ACount + 2 > Length(AList) then SetLength(AList, ACount * 2 + 4);
+  AList[ACount] := AOpen;
+  AList[ACount + 1] := AClose;
+  Inc(ACount, 2);
+end;
+
+{ The format AFormat with a link's look. }
+function LookFormat(ADoc: TTyRichDocument; AFormat: TTyCharFormatId;
+  ALook: TTyRichLinkLook): TTyCharFormatId;
+var
+  f: TTyCharFormat;
+begin
+  f := ADoc.Formats.CharFormat(AFormat);
+  Include(f.Style, fsUnderline);
+  if ALook = rllWordBlue then f.Color := CTyRichLinkWordBlue else f.Color := clDefault;
+  Result := ADoc.Formats.InternChar(f);
+end;
+
+{ [APos, APos + ALen) lies in one paragraph and holds no field mark. }
+function PlainStretch(ADoc: TTyRichDocument; APos, ALen: TTyRichPos): Boolean;
+var
+  k, i: Integer;
+  ps: Int64;
+  runs: TTyRunArray;
+begin
+  Result := False;
+  k := ADoc.Text.ParaOfPos(APos);
+  ps := ADoc.Text.ParaStart(k);
+  if APos + ALen > ps + ADoc.Text.ParaLength(k) then Exit;
+  runs := ADoc.RunsOf(k);
+  for i := 0 to High(runs) do
+    if (runs[i].Obj is TTyRichFieldMark) and (ps + runs[i].Start >= APos) and
+      (ps + runs[i].Start < APos + ALen) then
+      Exit;
+  Result := True;
+end;
+
+{ A whole field at AOpenPos - its open mark there, its close mark found - that may be
+  changed as a whole (outside every other field's result, the text changeable). Its close
+  mark's position, -1 when not. }
+function ChangeableField(ADoc: TTyRichDocument; AOpenPos: TTyRichPos): TTyRichPos;
+var
+  o: TTyRichObject;
+  c: TTyRichPos;
+begin
+  Result := -1;
+  if (AOpenPos < 0) or (AOpenPos >= ADoc.Text.Length) then Exit;
+  ADoc.BeginRead;
+  try
+    o := ADoc.ObjectAt(AOpenPos);
+    if not (o is TTyRichFieldMark) or (TTyRichFieldMark(o).Kind <> rfmOpen) then Exit;
+    c := ADoc.FieldPartner(AOpenPos);
+    if (c < 0) or not ADoc.CanChange(AOpenPos, c + 1 - AOpenPos) then Exit;
+    Result := c;
+  finally
+    ADoc.EndRead;
+  end;
+end;
+
+constructor TTyRichInsertLink.Create(APos, ALen: TTyRichPos; const AURL, AText: string;
+  ALook: TTyRichLinkLook);
+begin
+  inherited Create;
+  FPos := APos;
+  FLen := ALen;
+  FURL := AURL;
+  FText := AText;
+  FLook := ALook;
+  MakeLinkMarks(FURL, FOpen, FClose);
+end;
+
+destructor TTyRichInsertLink.Destroy;
+begin
+  // the paragraph values that use them hold their own references
+  FOpen.Release;
+  FClose.Release;
+  inherited Destroy;
+end;
+
+function TTyRichInsertLink.CanExecute(ADoc: TTyRichDocument): Boolean;
+begin
+  Result := False;
+  if not LinkAddressOk(FURL) or HasSeparator(FText) then Exit;
+  if (FPos < 0) or (FLen < 0) or (FPos + FLen > ADoc.Text.Length) then Exit;
+  ADoc.BeginRead;
+  try
+    Result := ADoc.CanChange(FPos, 0) and ((FLen = 0) or ADoc.CanChange(FPos, FLen)) and
+      PlainStretch(ADoc, FPos, FLen);
+  finally
+    ADoc.EndRead;
+  end;
+end;
+
+procedure TTyRichInsertLink.DoExecute(ADoc: TTyRichDocument);
+var
+  outside: TTyCharFormatId;
+  v: TTyCharFormat;
+  s: UTF8String;
+  n: TTyRichPos;
+begin
+  // (a redo runs this again on the text an undo put back: the same ids, the same marks)
+  s := FText;
+  if (s = '') and (FLen = 0) then s := FURL;
+  if s <> '' then
+  begin
+    if FLen > 0 then DeleteRange(ADoc, FPos, FLen);
+    outside := ADoc.TypingFormatAt(FPos);
+    n := InsertText(ADoc, FPos, s, LookFormat(ADoc, outside, FLook)).NewLen;
+  end
+  else
+  begin
+    outside := ADoc.TypingFormatAt(FPos);
+    v := TyDefaultCharFormat;
+    v.Style := [fsUnderline];
+    if FLook = rllWordBlue then v.Color := CTyRichLinkWordBlue else v.Color := clDefault;
+    ApplyCharFormat(ADoc, FPos, FLen, [cffUnderline, cffColor], v);
+    n := FLen;
+  end;
+  WrapInField(ADoc, FPos, n, FOpen, FClose, outside);
+end;
+
+function TTyRichInsertLink.Description: string;
+begin
+  Result := rsRichUndoInsertLink;
+end;
+
+procedure TTyRichInsertLink.GatherObjects(var AList: TTyRichObjectList; var ACount: Integer);
+begin
+  inherited GatherObjects(AList, ACount);
+  GatherMarks(FOpen, FClose, AList, ACount);
+end;
+
+constructor TTyRichSetLink.Create(AFieldPos: TTyRichPos; const AURL, AText: string);
+begin
+  inherited Create;
+  FPos := AFieldPos;
+  FURL := AURL;
+  FText := AText;
+  MakeLinkMarks(FURL, FOpen, FClose);
+end;
+
+destructor TTyRichSetLink.Destroy;
+begin
+  FOpen.Release;
+  FClose.Release;
+  inherited Destroy;
+end;
+
+function TTyRichSetLink.CanExecute(ADoc: TTyRichDocument): Boolean;
+begin
+  Result := LinkAddressOk(FURL) and not HasSeparator(FText) and
+    (ChangeableField(ADoc, FPos) >= 0);
+end;
+
+procedure TTyRichSetLink.DoExecute(ADoc: TTyRichDocument);
+var
+  c, ps: TTyRichPos;
+  k, i: Integer;
+  runs: TTyRunArray;
+  markFmt, textFmt: TTyCharFormatId;
+  found: Boolean;
+begin
+  if FText = '' then
+  begin
+    ReplaceFieldMarks(ADoc, FPos, FOpen, FClose);
+    Exit;
+  end;
+  c := ChangeableField(ADoc, FPos);
+  if c < 0 then raise ETyRichModel.CreateFmt('No field to change at %d', [FPos]);
+  // the marks' format and the first text's of the old result (in the open mark's paragraph)
+  k := ADoc.Text.ParaOfPos(FPos);
+  ps := ADoc.Text.ParaStart(k);
+  runs := ADoc.RunsOf(k);
+  markFmt := ADoc.TypingFormatAt(FPos);
+  textFmt := markFmt;
+  found := False;
+  for i := 0 to High(runs) do
+    if ps + runs[i].Start = FPos then
+      markFmt := runs[i].Format    // the open mark's own run
+    else if (ps + runs[i].Start > FPos) and (ps + runs[i].Start < c) and
+      (runs[i].Obj = nil) then
+    begin
+      textFmt := runs[i].Format;
+      found := True;
+      Break;
+    end;
+  // (a result with no text of its own: the editor's look)
+  if not found then textFmt := LookFormat(ADoc, markFmt, rllWordBlue);
+  DeleteRange(ADoc, FPos, c + 1 - FPos);
+  c := InsertText(ADoc, FPos, FText, textFmt).NewLen;
+  WrapInField(ADoc, FPos, c, FOpen, FClose, markFmt);
+end;
+
+function TTyRichSetLink.Description: string;
+begin
+  Result := rsRichUndoEditLink;
+end;
+
+procedure TTyRichSetLink.GatherObjects(var AList: TTyRichObjectList; var ACount: Integer);
+begin
+  inherited GatherObjects(AList, ACount);
+  GatherMarks(FOpen, FClose, AList, ACount);
+end;
+
+constructor TTyRichRemoveLink.Create(AFieldPos: TTyRichPos);
+begin
+  inherited Create;
+  FPos := AFieldPos;
+end;
+
+function TTyRichRemoveLink.CanExecute(ADoc: TTyRichDocument): Boolean;
+begin
+  Result := ChangeableField(ADoc, FPos) >= 0;
+end;
+
+procedure TTyRichRemoveLink.DoExecute(ADoc: TTyRichDocument);
+begin
+  UnwrapField(ADoc, FPos);
+end;
+
+function TTyRichRemoveLink.Description: string;
+begin
+  Result := rsRichUndoRemoveLink;
 end;
 
 end.

@@ -257,7 +257,7 @@ begin
      TTyRichEditFontGrow, TTyRichEditFontShrink, TTyRichEditClearFormat, TTyRichEditLineSpacing,
      TTyRichEditInsertRowAbove, TTyRichEditInsertRowBelow, TTyRichEditInsertColumnLeft,
      TTyRichEditInsertColumnRight, TTyRichEditDeleteRow, TTyRichEditDeleteColumn,
-     TTyRichEditDeleteTable], nil);
+     TTyRichEditDeleteTable, TTyRichEditInsertLink, TTyRichEditRemoveLink], nil);
   { The three sibling units own everything else. }
   RegisterPropertyEditors;
   RegisterComponentEditors;

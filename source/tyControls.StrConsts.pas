@@ -307,6 +307,9 @@ resourcestring
   rsRichUndoSettings     = 'Document settings';
   rsRichUndoMove         = 'Move';
   rsRichUndoCopy         = 'Copy';
+  rsRichUndoInsertLink   = 'Insert link';
+  rsRichUndoEditLink     = 'Edit link';
+  rsRichUndoRemoveLink   = 'Remove link';
 
   { --- TTyRichEdit loading and saving -----------------------------------------
     What a refused save or change says (ETyRichEdit). %s is the file. }
@@ -339,6 +342,13 @@ resourcestring
   rsRichEditRefusedNoPicture  = 'This is not a picture that can be read.';
   rsRichEditRefusedPictureFile = 'The picture file cannot be read: %s';
   rsRichEditRefusedPage       = 'The page''s margins leave no width for the text.';
+  { A link the user asked for (TTyCustomRichEdit.InsertLink, SetLink, RemoveLink) that cannot
+    be made, changed or removed there. }
+  rsRichEditRefusedPlainLink  = 'A plain text document cannot hold a link.';
+  rsRichEditRefusedLinkAddress = 'A link needs an address.';
+  rsRichEditRefusedLinkParagraphs = 'A link''s text lies within one paragraph: select text inside a paragraph (or a table cell).';
+  rsRichEditRefusedLinkAroundField = 'A link cannot be made around a link or another field.';
+  rsRichEditRefusedNoLink     = 'There is no link at the caret.';
   { A table action (TTyCustomRichEdit.InsertTable, InsertRow, DeleteColumn and the like, and
     Tab in a table's last cell) that the table or the place does not allow. The first %d
     is the most rows a table can have, the second (and the one of ...TableColumns) the most
@@ -395,6 +405,10 @@ resourcestring
   rsRichActInsertPictureHint = 'Insert a picture from a file';
   rsRichActInsertTable       = '&Table';
   rsRichActInsertTableHint   = 'Insert a table';
+  rsRichActInsertLink        = '&Link...';
+  rsRichActInsertLinkHint    = 'Insert a link, or change the link at the caret';
+  rsRichActRemoveLink        = 'Remo&ve Link';
+  rsRichActRemoveLinkHint    = 'Remove the link at the caret, keeping its text';
   rsRichActFind              = '&Find...';
   rsRichActFindHint          = 'Find';
   rsRichActReplace           = '&Replace...';

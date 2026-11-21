@@ -411,6 +411,11 @@ type
       colour - the clause the input method works on twice as thick; alpha 0: in the colour of
       the composition's text. }
     CompositionLine: TBGRAPixel;
+    { Text in the automatic colour inside a link's result (TTyRichLayouter.OnLinkField says
+      which fields are links) is drawn in this colour - the theme's link colour; a colour of
+      the text's own is drawn as it is. Only what automatic resolves to at paint time: the
+      document's formats are not changed. Alpha 0: such text is TextColor, as any. }
+    LinkColor: TBGRAPixel;
     { A picture not ready to be drawn at its box's size (not decoded, or not scaled to it) is
       not made ready by this paint: its box is filled PlaceholderFill (no frame, which would
       flash) and the layouter notes it (TakeSkippedPictures), for the owner to prepare later
@@ -621,6 +626,9 @@ type
     FShading: TColor;
     FShadeLeft, FShadeRight: Integer;
     FPaintFormats: array of TTyRichPaintFormat;
+    { The characters inside a link's result, as pairs (first, count) of the layout's
+      positions, rising (TakeLinks): where automatic text is drawn in the link colour. }
+    FLinks: array of Integer;
     { An input method's composition laid out in the paragraph (TTyRichLayouter.SetComposition):
       FCompLen characters at FCompAt that are not the document's, the input method's caret and
       clause in them. The layout's own positions (Lines, Fragments, Text, LineOfPos) count
@@ -653,6 +661,11 @@ type
     function PaintFormat(AFormat: TTyCharFormatId): TTyRichPaintFormat;
     function GroundUnder(AHighlight: TColor; const AStyle: TTyRichPaintStyle): TColor;
     procedure TakePaintFormats(ADoc: TTyRichDocument; ABaseStyle: TFontStyles);
+    procedure TakeLinks(ADoc: TTyRichDocument; AIndex: Integer; const ARuns: TTyRunArray;
+      AParaStart: TTyRichPos);
+    function InLink(AChar: Integer): Boolean;
+    function FragmentInk(const F: TTyRichFragment; const PF: TTyRichPaintFormat;
+      const AStyle: TTyRichPaintStyle): TBGRAPixel;
     function LineSelection(ALine: Integer; AFrom, ATo: TTyRichPos; out AXa, AXb: Integer): Boolean;
     procedure PaintLine(ATarget: TBGRABitmap; ALine, AX, AY: Integer; const AClip: TRect;
       const AStyle: TTyRichPaintStyle; ASelFrom, ASelTo: TTyRichPos);
@@ -821,6 +834,11 @@ type
   TTyRichFallbackEvent = procedure(Sender: TObject; const ABaseFont: string; ACode: Cardinal;
     var AFontName: string) of object;
 
+  { Is a field a link (TTyRichLayouter.OnLinkField)? ADepth 0: the field whose open mark is
+    at document position AAt; ADepth d > 0: the field open at the start AAt of a paragraph
+    that is d deep there (1 the outermost). }
+  TTyRichLinkFieldEvent = function(AAt: TTyRichPos; ADepth: Integer): Boolean of object;
+
   TTyRichFormatFont = record
     Font: TTyRichFontId;
     Shift: Integer;
@@ -846,6 +864,7 @@ type
     FBaseFontStyle: TFontStyles;
     FFallbackFonts: TStringList;
     FOnFallbackFont: TTyRichFallbackEvent;
+    FOnLinkField: TTyRichLinkFieldEvent;
     // the layout cache: by first paragraph, LRU order, two bounds
     FCache: specialize TDictionary<Integer, TTyBlockLayout>;
     FLruFirst, FLruLast: TTyBlockLayout;
@@ -1057,6 +1076,12 @@ type
       so they do when the base font changes). }
     property FallbackFonts: TStringList read FFallbackFonts;
     property OnFallbackFont: TTyRichFallbackEvent read FOnFallbackFont write SetOnFallbackFont;
+    { Asked while a paragraph is laid out, for the fields whose result holds some of its
+      characters: which are links - the text in the automatic colour there is painted in the
+      link colour (TTyRichPaintStyle.LinkColor). A field open at the paragraph's start is asked
+      only when characters of the paragraph lie in it and in no link opened in the paragraph.
+      Unassigned: no field is a link. Set it before laying out (the layouts made are kept). }
+    property OnLinkField: TTyRichLinkFieldEvent read FOnLinkField write FOnLinkField;
     property CacheHits: Int64 read FHits;
     property CacheMisses: Int64 read FMisses;
     function CachedCount: Integer;
@@ -3410,6 +3435,121 @@ begin
   end;
 end;
 
+{ The links' characters of the paragraph from its runs (the layout's positions, a
+  composition spliced in): those after an open mark of a link opened in it, up to its close
+  mark, and those in a link open at the paragraph's start - asked of OnLinkField only when
+  such characters exist, once for the paragraph. Reads nothing but the paragraph. }
+procedure TTyParaLayout.TakeLinks(ADoc: TTyRichDocument; AIndex: Integer;
+  const ARuns: TTyRunArray; AParaStart: TTyRichPos);
+var
+  ask: TTyRichLinkFieldEvent;
+  opens: array of Boolean;
+  outer: array of Boolean;
+  nOpen, nLinks, left, depth, i, d, s, e, n: Integer;
+  known, linked: Boolean;
+  m: TTyRichFieldMark;
+begin
+  FLinks := nil;
+  ask := FLayouter.OnLinkField;
+  depth := ADoc.ParaFieldDepth(AIndex);
+  // (no mark and outside every field: nothing to ask)
+  if depth = 0 then
+  begin
+    i := 0;
+    while (i <= High(ARuns)) and not (ARuns[i].Obj is TTyRichFieldMark) do Inc(i);
+    if i > High(ARuns) then Exit;
+  end;
+  opens := nil;
+  SetLength(opens, System.Length(ARuns));
+  outer := nil;
+  nOpen := 0;
+  nLinks := 0;
+  left := depth;
+  known := False;
+  n := 0;
+  for i := 0 to High(ARuns) do
+  begin
+    if ARuns[i].Obj is TTyRichFieldMark then
+    begin
+      m := TTyRichFieldMark(ARuns[i].Obj);
+      if m.Kind = rfmOpen then
+      begin
+        opens[nOpen] := ask(AParaStart + OutPos(ARuns[i].Start), 0);
+        if opens[nOpen] then Inc(nLinks);
+        Inc(nOpen);
+      end
+      else if nOpen > 0 then
+      begin
+        Dec(nOpen);
+        if opens[nOpen] then Dec(nLinks);
+      end
+      else if left > 0 then
+        Dec(left);
+      Continue;
+    end;
+    s := ARuns[i].Start;
+    if i < High(ARuns) then e := ARuns[i + 1].Start else e := FLength;
+    if e <= s then Continue;
+    linked := nLinks > 0;
+    if not linked and (left > 0) then
+    begin
+      if not known then
+      begin
+        SetLength(outer, depth + 1);
+        for d := 1 to depth do outer[d] := ask(AParaStart, d);
+        known := True;
+      end;
+      for d := 1 to left do
+        if outer[d] then linked := True;
+    end;
+    if not linked then Continue;
+    // (runs side by side: one stretch)
+    if (n > 0) and (FLinks[n - 2] + FLinks[n - 1] = s) then
+      FLinks[n - 1] := e - FLinks[n - 2]
+    else
+    begin
+      SetLength(FLinks, n + 2);
+      FLinks[n] := s;
+      FLinks[n + 1] := e - s;
+      Inc(n, 2);
+    end;
+  end;
+end;
+
+function TTyParaLayout.InLink(AChar: Integer): Boolean;
+var
+  i: Integer;
+begin
+  i := 0;
+  while i < System.Length(FLinks) do
+  begin
+    if AChar < FLinks[i] then Exit(False);
+    if AChar < FLinks[i] + FLinks[i + 1] then Exit(True);
+    Inc(i, 2);
+  end;
+  Result := False;
+end;
+
+{ A fragment's ink: TextInk's over what lies under it (GroundUnder) - with the link colour
+  for the theme's text colour where the fragment is in a link's result. }
+function TTyParaLayout.FragmentInk(const F: TTyRichFragment; const PF: TTyRichPaintFormat;
+  const AStyle: TTyRichPaintStyle): TBGRAPixel;
+var
+  st: TTyRichPaintStyle;
+begin
+  if (AStyle.LinkColor.alpha <> 0) and ((PF.Color = clDefault) or (PF.Color = clNone)) and
+    (System.Length(FLinks) > 0) and InLink(F.First) then
+  begin
+    { The theme's link colour as it is over a paragraph's shading or the document's ground (a
+      link stays a link's colour, as the theme gives it); over a highlight of its own, the
+      highlight's rule (TextInk). }
+    st := AStyle;
+    st.TextColor := AStyle.LinkColor;
+    Exit(TextInk(PF.Color, PF.Highlight, st));
+  end;
+  Result := TextInk(PF.Color, GroundUnder(PF.Highlight, AStyle), AStyle);
+end;
+
 { The selected stretch of line ALine for [AFrom, ATo) (block pixels): from the start's caret
   to the end's, a whole line that the selection goes on past to its end with its hanging
   spaces, and a mark past the end for a selected U+000B or the paragraph's separator. False
@@ -3643,7 +3783,7 @@ begin
     drawn := FragmentText(i);
     if drawn = '' then Continue;
     pf := PaintFormat(f^.Format);
-    ink := TextInk(pf.Color, GroundUnder(pf.Highlight, AStyle), AStyle);
+    ink := FragmentInk(f^, pf, AStyle);
     if hasSel then n := InkParts(AClip, x0, x1, AX + xa, AX + xb, parts)
     else n := InkParts(AClip, x0, x1, 0, 0, parts);
     for k := 0 to n - 1 do
@@ -3667,7 +3807,7 @@ begin
     px := FLayouter.Device.FontPixelHeight(f^.Font);
     th := Max(1, Round(px / 16));
     lineY := base + f^.Shift + Max(1, Round(px / 10));
-    ink := TextInk(pf.Color, GroundUnder(pf.Highlight, AStyle), AStyle);
+    ink := FragmentInk(f^, pf, AStyle);
     if (f^.Kind = rfkTab) and (f^.Leader <> ttlNone) then
     begin
       if hasSel and SelectedChars(f^) then Leader(f^, AStyle.SelectionText)
@@ -5451,6 +5591,7 @@ begin
   Result.ObjectHandleFill := BGRAWhite;
   Result.TableBorder := BGRA(128, 128, 128, 255);
   Result.CompositionLine := BGRAPixelTransparent;
+  Result.LinkColor := BGRAPixelTransparent;
   Result.DeferPictures := False;
   Result.HasGround := False;
   Result.Ground := clNone;
@@ -6682,6 +6823,7 @@ begin
       if Result.FTruncated then Result.FShownChars := Max(0, b.N - compLen)
       else Result.FShownChars := Result.FCharCount;
       Result.TakePaintFormats(ADoc, FBaseFontStyle);
+      if Assigned(FOnLinkField) then Result.TakeLinks(ADoc, AIndex, b.Runs, start);
     finally
       ADoc.EndRead;
     end;

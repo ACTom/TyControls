@@ -112,6 +112,7 @@ type
     FFontSize: Integer;
     FSpacing: TTyLineSpacing;
     FCanRowIns, FCanColIns, FCanRowDel, FCanColDel, FCanTableDel: Boolean;
+    FCanLink, FCanEditLink: Boolean;
     procedure ViewChanged(Sender: TObject);
     procedure Refresh;
   public
@@ -155,6 +156,9 @@ type
     property CanDeleteRow: Boolean read FCanRowDel;
     property CanDeleteColumn: Boolean read FCanColDel;
     property CanDeleteTable: Boolean read FCanTableDel;
+    // the link queries CanInsertLink and CanEditLink
+    property CanInsertLink: Boolean read FCanLink;
+    property CanEditLink: Boolean read FCanEditLink;
   end;
 
   { The base of the rich edit's actions: the target (RichEdit, else the focused rich edit) and
@@ -388,6 +392,37 @@ type
     property Rows: Integer read FRows write FRows default CTyRichDefaultTableSize;
     property Columns: Integer read FColumns write FColumns default CTyRichDefaultTableSize;
     property OnChooseSize: TTyRichTableSizeEvent read FOnChooseSize write FOnChooseSize;
+  end;
+
+  { Before a link is made or changed: its address and text, which the handler may change;
+    AAllow False (or an empty address) does nothing. }
+  TTyRichLinkEvent = procedure(Sender: TObject; var AURL, AText: string;
+    var AAllow: Boolean) of object;
+
+  { A link at the caret: the link the caret or the selection is in changed (SetLink), else a
+    new one over the selection (InsertLink). OnGetLink asks for the address and the text
+    first - the link's own, or '' and the selected text, given to it; a text left as it was
+    given keeps the text as it is (its formats too). With no handler nothing happens: the
+    application asks the user. Enabled: CanInsertLink or CanEditLink. }
+  TTyRichEditInsertLink = class(TTyRichEditAction)
+  private
+    FOnGetLink: TTyRichLinkEvent;
+  protected
+    procedure UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+    procedure ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+  public
+    constructor Create(AOwner: TComponent); override;
+  published
+    property OnGetLink: TTyRichLinkEvent read FOnGetLink write FOnGetLink;
+  end;
+
+  { The link at the caret stops being one, its text kept (RemoveLink). Enabled: CanEditLink. }
+  TTyRichEditRemoveLink = class(TTyRichEditAction)
+  protected
+    procedure UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+    procedure ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+  public
+    constructor Create(AOwner: TComponent); override;
   end;
 
   { A search found nothing. }
@@ -758,7 +793,7 @@ type
 
 const
   { Every action of this unit, in the order the IDE lists them. }
-  CTyRichEditActions: array[0..42] of TTyRichEditActionClass = (
+  CTyRichEditActions: array[0..44] of TTyRichEditActionClass = (
     TTyRichEditBold, TTyRichEditItalic, TTyRichEditUnderline, TTyRichEditStrikeOut,
     TTyRichEditSuperscript, TTyRichEditSubscript,
     TTyRichEditAlignLeft, TTyRichEditAlignCenter, TTyRichEditAlignRight,
@@ -772,7 +807,7 @@ const
     TTyRichEditFontGrow, TTyRichEditFontShrink, TTyRichEditClearFormat, TTyRichEditLineSpacing,
     TTyRichEditInsertRowAbove, TTyRichEditInsertRowBelow, TTyRichEditInsertColumnLeft,
     TTyRichEditInsertColumnRight, TTyRichEditDeleteRow, TTyRichEditDeleteColumn,
-    TTyRichEditDeleteTable);
+    TTyRichEditDeleteTable, TTyRichEditInsertLink, TTyRichEditRemoveLink);
 
   { The font sizes the grow and shrink actions step through (points). }
   CTyRichFontSizes: array[0..15] of Integer = (8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28,
@@ -907,7 +942,9 @@ begin
   FCanRowDel := FRich.CanDeleteRow;
   FCanColDel := FRich.CanDeleteColumn;
   FCanTableDel := FRich.CanDeleteTable;
-  Inc(FQueries, 7);
+  FCanLink := FRich.CanInsertLink;
+  FCanEditLink := FRich.CanEditLink;
+  Inc(FQueries, 9);
 end;
 
 { TTyRichEditAction }
@@ -1419,6 +1456,76 @@ begin
   if Assigned(FOnChooseSize) then FOnChooseSize(Self, nRows, nCols, go);
   if not go or (csDestroying in ARich.ComponentState) then Exit;
   ARich.InsertTable(nRows, nCols);
+end;
+
+{ TTyRichEditInsertLink }
+
+constructor TTyRichEditInsertLink.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  Caption := rsRichActInsertLink;
+  Hint := rsRichActInsertLinkHint;
+end;
+
+procedure TTyRichEditInsertLink.UpdateOn(ARich: TTyCustomRichEdit;
+  AState: TTyRichEditActionState);
+begin
+  Enabled := AState.CanInsertLink or AState.CanEditLink;
+  Checked := False;
+end;
+
+procedure TTyRichEditInsertLink.ExecuteOn(ARich: TTyCustomRichEdit;
+  AState: TTyRichEditActionState);
+var
+  editing, go: Boolean;
+  o, l: TTyRichPos;
+  url, txt, given: string;
+begin
+  editing := AState.CanEditLink;
+  if not editing and not AState.CanInsertLink then Exit;
+  if not Assigned(FOnGetLink) then Exit;
+  o := -1;
+  l := 0;
+  url := '';
+  if editing then
+  begin
+    ARich.LinkAtSelection(o, l, url);
+    // its text without its two marks
+    given := ARich.RangeText(o + 1, l - 2);
+  end
+  else
+    given := ARich.SelText;
+  txt := given;
+  go := True;
+  FOnGetLink(Self, url, txt, go);
+  // (the handler's own dialog ran: the rich edit may be gone)
+  if not go or (url = '') or (csDestroying in ARich.ComponentState) then Exit;
+  // a text left as it was: the text stays as it is, formats and all
+  if txt = given then txt := '';
+  if editing then ARich.SetLink(url, txt) else ARich.InsertLink(url, txt);
+end;
+
+{ TTyRichEditRemoveLink }
+
+constructor TTyRichEditRemoveLink.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  Caption := rsRichActRemoveLink;
+  Hint := rsRichActRemoveLinkHint;
+end;
+
+procedure TTyRichEditRemoveLink.UpdateOn(ARich: TTyCustomRichEdit;
+  AState: TTyRichEditActionState);
+begin
+  Enabled := AState.CanEditLink;
+  Checked := False;
+end;
+
+procedure TTyRichEditRemoveLink.ExecuteOn(ARich: TTyCustomRichEdit;
+  AState: TTyRichEditActionState);
+begin
+  if not AState.CanEditLink then Exit;
+  ARich.RemoveLink;
 end;
 
 { TTyRichEditFind }

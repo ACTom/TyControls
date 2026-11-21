@@ -1196,6 +1196,26 @@ type
       AObject: TTyRichObject): TTyRichChange;
     function ChangeSettings(ADoc: TTyRichDocument;
       const ASettings: TTyRichDocSettings): TTyRichChange;
+    { A field's two marks put in or taken out as a pair, around content that is there already -
+      the way a command makes a field of text or unmakes one (the primitives never take a mark
+      alone). Each raises ETyRichModel before anything changes when the place does not allow
+      it; what it does is a few records, reverted exactly.
+      WrapInField: AOpen before the ALen characters at APos and AClose after them, both in
+      AFormat (TyRichInheritFormat: the character's before APos). The range lies in one
+      paragraph, outside every field's result (both ends; ETyRichRefused with Field
+      otherwise), holds no field mark, and the text may change there (CanChange: a row that
+      holds a nested table). The document takes a reference to each mark.
+      UnwrapField: the two marks of the field whose open mark is at AOpenPos go, its content
+      stays where it is (a field over paragraphs: the paragraphs after its first are as deep
+      in fields as its start again). The field may not lie in another field's result.
+      ReplaceFieldMarks: AOpen and AClose (a new identity of their own) in place of the two
+      marks of the field whose open mark is at AOpenPos; its content stays. The same place
+      rule as UnwrapField. }
+    procedure WrapInField(ADoc: TTyRichDocument; APos, ALen: TTyRichPos;
+      AOpen, AClose: TTyRichFieldMark; AFormat: TTyCharFormatId = TyRichInheritFormat);
+    procedure UnwrapField(ADoc: TTyRichDocument; AOpenPos: TTyRichPos);
+    procedure ReplaceFieldMarks(ADoc: TTyRichDocument; AOpenPos: TTyRichPos;
+      AOpen, AClose: TTyRichFieldMark);
     { One more part of this command's work, as part of the step it is
       (TTyRichDocument.ExecutePart): it changes the document through the primitives as DoExecute
       does; its records join the step's. The default raises: a command goes on only when it
@@ -1387,6 +1407,13 @@ type
     FBaseFontName: string;
     FTableParaVisits: Int64;
     FTableEditSteps: Int64;
+    { A command's pair of field marks is going in or out (TTyRichCommand.WrapInField and its
+      siblings, which ask the field rule themselves first): the primitives do not refuse a
+      mark or a place for the field rule meanwhile - only for a row's. }
+    FMarkEdit: Integer;
+    { Paragraphs AFirst..ALast start ADelta fields deeper than they did: the field around
+      them lost its marks (UnwrapField). One record of their old values. }
+    function ShiftFieldDepths(AFirst, ALast, ADelta: Integer): TTyRichUndoData;
     function GetSaving: Boolean;
     function GetUpdating: Boolean;
     procedure Init;
@@ -5088,6 +5115,8 @@ end;
   with its open mark before the range would leave the depth below the start's, which is 0). }
 function TTyRichDocument.FieldRefused(APos, ALen: TTyRichPos): Boolean;
 begin
+  // (a command's pair of marks: it asked the rule before it began)
+  if FMarkEdit > 0 then Exit(False);
   BeginRead;
   try
     Result := (DepthAt(APos) > 0) or ((ALen > 0) and (DepthAt(APos + ALen) > 0));
@@ -6006,7 +6035,8 @@ begin
     raise ETyRichModel.CreateFmt('No object at %d', [APos]);
   if RunsOfData(d)[i].Obj = AObject then Exit(NewUndo(c));
   // a field's edge is its field's: it neither goes nor comes alone
-  if (AObject is TTyRichFieldMark) or (RunsOfData(d)[i].Obj is TTyRichFieldMark) then
+  if (FMarkEdit = 0) and ((AObject is TTyRichFieldMark) or
+    (RunsOfData(d)[i].Obj is TTyRichFieldMark)) then
     raise ETyRichModel.Create('A field mark is not replaced on its own');
   // a value is immutable: a copy of its runs with the one object put in
   runs := Copy(RunsOfData(d));
@@ -10116,6 +10146,188 @@ end;
 procedure TTyRichDocument.BreakMerge;
 begin
   FMergeBroken := True;
+end;
+
+{ ---- a field's marks as a pair ---- }
+
+type
+  { The paragraphs of ShiftFieldDepths, each given its depth plus Delta (paragraphs that
+    share a value share the new one). }
+  TTyRichDepthWalk = class
+  public
+    Doc: TTyRichDocument;
+    Undo: TTyRichUndoData;
+    Delta: Integer;
+    PrevD, PrevNew: TTyRichParaData;
+    Changed: Boolean;
+    function Map(AIndex: Integer; AData: Pointer): Pointer;
+  end;
+
+function TTyRichDepthWalk.Map(AIndex: Integer; AData: Pointer): Pointer;
+var
+  d, nd: TTyRichParaData;
+  depth: Integer;
+begin
+  d := TTyRichParaData(AData);
+  if (d = nil) and (Doc.FLoader <> nil) then d := Doc.DataOf(AIndex);
+  Undo.AddOld(d);
+  if (d <> nil) and (d = PrevD) then
+    nd := PrevNew
+  else
+  begin
+    depth := Doc.DepthOfData(d) + Delta;
+    if depth < 0 then depth := 0;
+    nd := Doc.WithDepth(d, depth);
+    PrevD := d;
+    PrevNew := nd;
+  end;
+  if nd <> d then
+  begin
+    Doc.AcquireData(nd);
+    Doc.ReleaseData(d);
+    Changed := True;
+  end;
+  Result := nd;
+end;
+
+function TTyRichDocument.ShiftFieldDepths(AFirst, ALast, ADelta: Integer): TTyRichUndoData;
+var
+  c: TTyRichChange;
+  w: TTyRichDepthWalk;
+begin
+  c := Default(TTyRichChange);
+  if (AFirst < 0) or (ALast < AFirst) or (ALast >= FText.ParaCount) then
+    raise ETyRichModel.CreateFmt('Paragraphs %d..%d out of 0..%d',
+      [AFirst, ALast, FText.ParaCount - 1]);
+  c.Pos := FText.ParaStart(AFirst);
+  Result := NewUndo(c);
+  w := TTyRichDepthWalk.Create;
+  try
+    try
+      w.Doc := Self;
+      w.Undo := Result;
+      w.Delta := ADelta;
+      Result.FFirstPara := AFirst;
+      FText.MapParaData(AFirst, ALast, @w.Map);
+      Result.SealOld;
+      if not w.Changed then
+      begin
+        Result.FChange := c;
+        Exit;
+      end;
+    except
+      Result.Free;
+      raise;
+    end;
+  finally
+    w.Free;
+  end;
+  // (nothing a reader sees changed: told as a format change, so a view lays them out again)
+  c.Kinds := [rckFormat];
+  c.OldLen := FText.ParaStart(ALast) + FText.ParaLength(ALast) - c.Pos;
+  c.NewLen := c.OldLen;
+  c.FirstPara := AFirst;
+  c.OldParaCount := ALast - AFirst + 1;
+  c.NewParaCount := c.OldParaCount;
+  Result.FChange := c;
+  Notify(c);
+end;
+
+{ The field whose open mark is at AOpenPos, for UnwrapField and ReplaceFieldMarks: its close
+  mark's position, and the field may be changed as a whole there (it lies in no other
+  field's result, nor in a row that holds a nested table). Raises otherwise. }
+function WholeFieldAt(ADoc: TTyRichDocument; AOpenPos: TTyRichPos): TTyRichPos;
+var
+  o: TTyRichObject;
+begin
+  ADoc.BeginRead;
+  try
+    o := ADoc.ObjectAt(AOpenPos);
+    if not (o is TTyRichFieldMark) or (TTyRichFieldMark(o).Kind <> rfmOpen) then
+      raise ETyRichModel.CreateFmt('No field''s open mark at %d', [AOpenPos]);
+    Result := ADoc.FieldPartner(AOpenPos);
+    if Result < 0 then
+      raise ETyRichModel.CreateFmt('The field at %d has no close mark', [AOpenPos]);
+    // both ends outside every field: it is in no result
+    ADoc.RaiseRefused(AOpenPos, Result + 1 - AOpenPos);
+  finally
+    ADoc.EndRead;
+  end;
+end;
+
+procedure TTyRichCommand.WrapInField(ADoc: TTyRichDocument; APos, ALen: TTyRichPos;
+  AOpen, AClose: TTyRichFieldMark; AFormat: TTyCharFormatId);
+var
+  t: TTyRichText;
+  k, i: Integer;
+  ps: Int64;
+  runs: TTyRunArray;
+begin
+  CheckRunning(ADoc);
+  if (AOpen = nil) or (AClose = nil) or (AOpen.Kind <> rfmOpen) or (AClose.Kind <> rfmClose) then
+    raise ETyRichModel.Create('A field is made of an open and a close mark');
+  t := ADoc.FText;
+  if (APos < 0) or (ALen < 0) or (APos + ALen > t.Length) then
+    raise ETyRichModel.CreateFmt('Range %d+%d out of 0..%d', [APos, ALen, t.Length]);
+  k := t.ParaOfPos(APos);
+  ps := t.ParaStart(k);
+  if APos + ALen > ps + t.ParaLength(k) then
+    raise ETyRichModel.Create('A field is made around text of one paragraph');
+  if AFormat <> TyRichInheritFormat then ADoc.CheckCharId(AFormat);
+  // the field rule, asked here: the primitives below do not ask it for the marks
+  ADoc.RaiseRefused(APos, 0);
+  if ALen > 0 then ADoc.RaiseRefused(APos, ALen);
+  runs := ADoc.RunsOf(k);
+  for i := 0 to High(runs) do
+    if (runs[i].Obj is TTyRichFieldMark) and (ps + runs[i].Start >= APos) and
+      (ps + runs[i].Start < APos + ALen) then
+      raise ETyRichModel.Create('A field is not made around another field');
+  Inc(ADoc.FMarkEdit);
+  try
+    // the close mark first: the open one after it would put its place in the field
+    Keep(ADoc.InsertCore(APos + ALen, TyRichObjectChar, AFormat, AClose));
+    Keep(ADoc.InsertCore(APos, TyRichObjectChar, AFormat, AOpen));
+  finally
+    Dec(ADoc.FMarkEdit);
+  end;
+end;
+
+procedure TTyRichCommand.UnwrapField(ADoc: TTyRichDocument; AOpenPos: TTyRichPos);
+var
+  c: TTyRichPos;
+  k, m: Integer;
+begin
+  CheckRunning(ADoc);
+  c := WholeFieldAt(ADoc, AOpenPos);
+  k := ADoc.FText.ParaOfPos(AOpenPos);
+  m := ADoc.FText.ParaOfPos(c);
+  Inc(ADoc.FMarkEdit);
+  try
+    Keep(ADoc.DeleteRange(c, 1));
+    Keep(ADoc.DeleteRange(AOpenPos, 1));
+    // the paragraphs that began inside the field begin one field less deep
+    if m > k then Keep(ADoc.ShiftFieldDepths(k + 1, m, -1));
+  finally
+    Dec(ADoc.FMarkEdit);
+  end;
+end;
+
+procedure TTyRichCommand.ReplaceFieldMarks(ADoc: TTyRichDocument; AOpenPos: TTyRichPos;
+  AOpen, AClose: TTyRichFieldMark);
+var
+  c: TTyRichPos;
+begin
+  CheckRunning(ADoc);
+  if (AOpen = nil) or (AClose = nil) or (AOpen.Kind <> rfmOpen) or (AClose.Kind <> rfmClose) then
+    raise ETyRichModel.Create('A field is made of an open and a close mark');
+  c := WholeFieldAt(ADoc, AOpenPos);
+  Inc(ADoc.FMarkEdit);
+  try
+    Keep(ADoc.ReplaceObject(AOpenPos, AOpen));
+    Keep(ADoc.ReplaceObject(c, AClose));
+  finally
+    Dec(ADoc.FMarkEdit);
+  end;
 end;
 
 end.

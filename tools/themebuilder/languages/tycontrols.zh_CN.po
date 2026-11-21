@@ -898,6 +898,18 @@ msgstr "移动"
 msgid "Copy"
 msgstr "复制"
 
+#: tycontrols.strconsts.rsrichundoinsertlink
+msgid "Insert link"
+msgstr "插入链接"
+
+#: tycontrols.strconsts.rsrichundoeditlink
+msgid "Edit link"
+msgstr "修改链接"
+
+#: tycontrols.strconsts.rsrichundoremovelink
+msgid "Remove link"
+msgstr "取消链接"
+
 #: tycontrols.strconsts.rsricheditincomplete
 msgid "The document was not loaded completely, so it cannot be saved."
 msgstr "文档没有完整载入,不能保存。"
@@ -986,6 +998,26 @@ msgstr "无法读取图片文件：%s"
 #: tycontrols.strconsts.rsricheditrefusedpage
 msgid "The page's margins leave no width for the text."
 msgstr "页边距没有给正文留下宽度。"
+
+#: tycontrols.strconsts.rsricheditrefusedplainlink
+msgid "A plain text document cannot hold a link."
+msgstr "纯文本文档里不能有链接。"
+
+#: tycontrols.strconsts.rsricheditrefusedlinkaddress
+msgid "A link needs an address."
+msgstr "链接需要一个地址。"
+
+#: tycontrols.strconsts.rsricheditrefusedlinkparagraphs
+msgid "A link's text lies within one paragraph: select text inside a paragraph (or a table cell)."
+msgstr "链接的文字只能在一个段落里：请在一个段落（或一个单元格）之内选择文字。"
+
+#: tycontrols.strconsts.rsricheditrefusedlinkaroundfield
+msgid "A link cannot be made around a link or another field."
+msgstr "不能在链接或其他域的外面再套一个链接。"
+
+#: tycontrols.strconsts.rsricheditrefusednolink
+msgid "There is no link at the caret."
+msgstr "光标处没有链接。"
 
 #: tycontrols.strconsts.rsricheditrefusedplaintable
 msgid "A plain text document cannot hold a table."
@@ -1173,6 +1205,22 @@ msgstr "表格(&T)"
 #: tycontrols.strconsts.rsrichactinserttablehint
 msgid "Insert a table"
 msgstr "插入表格"
+
+#: tycontrols.strconsts.rsrichactinsertlink
+msgid "&Link..."
+msgstr "链接(&L)..."
+
+#: tycontrols.strconsts.rsrichactinsertlinkhint
+msgid "Insert a link, or change the link at the caret"
+msgstr "插入链接，或修改光标处的链接"
+
+#: tycontrols.strconsts.rsrichactremovelink
+msgid "Remo&ve Link"
+msgstr "取消链接(&V)"
+
+#: tycontrols.strconsts.rsrichactremovelinkhint
+msgid "Remove the link at the caret, keeping its text"
+msgstr "取消光标处的链接，保留文字"
 
 #: tycontrols.strconsts.rsrichactfind
 msgid "&Find..."

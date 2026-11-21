@@ -857,6 +857,14 @@ msgstr ""
 msgid "Increase indent"
 msgstr ""
 
+#: tycontrols.strconsts.rsrichactinsertlink
+msgid "&Link..."
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactinsertlinkhint
+msgid "Insert a link, or change the link at the caret"
+msgstr ""
+
 #: tycontrols.strconsts.rsrichactinsertpicture
 msgid "&Picture..."
 msgstr ""
@@ -932,6 +940,14 @@ msgstr ""
 #: tycontrols.strconsts.rsrichactredohint
 msgctxt "tycontrols.strconsts.rsrichactredohint"
 msgid "Redo"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactremovelink
+msgid "Remo&ve Link"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactremovelinkhint
+msgid "Remove the link at the caret, keeping its text"
 msgstr ""
 
 #: tycontrols.strconsts.rsrichactreplace
@@ -1092,6 +1108,18 @@ msgstr ""
 msgid "The rows of this table do not all have the same number of cells: its columns cannot be inserted or deleted."
 msgstr ""
 
+#: tycontrols.strconsts.rsricheditrefusedlinkaddress
+msgid "A link needs an address."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditrefusedlinkaroundfield
+msgid "A link cannot be made around a link or another field."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditrefusedlinkparagraphs
+msgid "A link's text lies within one paragraph: select text inside a paragraph (or a table cell)."
+msgstr ""
+
 #: tycontrols.strconsts.rsricheditrefusedloading
 msgid "The document is still being loaded: it cannot be changed yet."
 msgstr ""
@@ -1114,6 +1142,10 @@ msgstr ""
 
 #: tycontrols.strconsts.rsricheditrefusednestedtable
 msgid "This table has a table inside one of its cells: its rows and columns cannot be inserted or deleted."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditrefusednolink
+msgid "There is no link at the caret."
 msgstr ""
 
 #: tycontrols.strconsts.rsricheditrefusednopicture
@@ -1139,6 +1171,10 @@ msgstr ""
 #: tycontrols.strconsts.rsricheditrefusedpicturefile
 #, object-pascal-format
 msgid "The picture file cannot be read: %s"
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditrefusedplainlink
+msgid "A plain text document cannot hold a link."
 msgstr ""
 
 #: tycontrols.strconsts.rsricheditrefusedplainpaste
@@ -1222,8 +1258,16 @@ msgstr ""
 msgid "Edit"
 msgstr ""
 
+#: tycontrols.strconsts.rsrichundoeditlink
+msgid "Edit link"
+msgstr ""
+
 #: tycontrols.strconsts.rsrichundoinsertcolumn
 msgid "Insert column"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichundoinsertlink
+msgid "Insert link"
 msgstr ""
 
 #: tycontrols.strconsts.rsrichundoinsertobject
@@ -1257,6 +1301,10 @@ msgstr ""
 #: tycontrols.strconsts.rsrichundopaste
 msgctxt "tycontrols.strconsts.rsrichundopaste"
 msgid "Paste"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichundoremovelink
+msgid "Remove link"
 msgstr ""
 
 #: tycontrols.strconsts.rsrichundoreplace

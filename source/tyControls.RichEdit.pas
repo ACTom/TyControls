@@ -776,6 +776,14 @@ type
     FAskTblState: Int64;
     FAskTblRows, FAskTblColIns, FAskTblColDel, FAskTblDelete: Boolean;
     FOnEditRefused: TTyRichEditRefusedEvent;
+    // InsertLink / SetLink's arguments, for their makers
+    FLinkArgURL, FLinkArgText: string;
+    { The fields around places the layouter (LayoutLinkField) and the link actions
+      (LinkAtSelection) asked about, for the content FLayLinkState (FieldAround): the next
+      paragraph of a long field, the next caret place in it, finds its field here. The
+      pointer's look-up keeps its own (FKnown), and counts its own reads. }
+    FLayLinkState: Int64;
+    FLayLinks: array of TTyRichKnownField;
     FOnLinkClick: TTyRichLinkClickEvent;
     { A press on a link that becomes its click when the same button comes up on the same link
       (LinkPress): the button, where, the keys, the link's open mark. Moved past the drag
@@ -1531,6 +1539,27 @@ type
     { RunMade's maker: the command made before - dropped (freed, nil) when the door ended a
       composition first, for it was made on the text before that commit. }
     function TakeMade(var APlace: TTyRichEditPlace): TTyRichCommand;
+    // links
+    { The open mark at AOpen is a HYPERLINK field's (its target in AURL). }
+    function IsLinkField(AOpen: TTyRichPos; out AURL: string): Boolean;
+    { Why a link cannot go over [AStart, AStart + ALen) now ('' it can): a place where the text
+      cannot change, an end in a field's result, a range past its paragraph's end, a range that
+      holds a field's mark. Reads the range's paragraph. }
+    function LinkPlaceRefusal(AStart, ALen: TTyRichPos): string;
+    { The link actions may be asked of the control at all: not ReadOnly, enabled, not inside the
+      document's update, the document taking edits, not a plain text document. }
+    function LinkActionsOpen: Boolean;
+    { The door's makers of InsertLink, SetLink and RemoveLink (their arguments in FLinkArg...). }
+    function MakeInsertLink(var APlace: TTyRichEditPlace): TTyRichCommand;
+    function MakeSetLink(var APlace: TTyRichEditPlace): TTyRichCommand;
+    function MakeRemoveLink(var APlace: TTyRichEditPlace): TTyRichCommand;
+    { The layouter's question (TTyRichLayouter.OnLinkField), answered from the fields known
+      to the link look-up (LinkOfChar's), so a paragraph of a long field does not search for
+      its field again. }
+    function LayoutLinkField(AAt: TTyRichPos; ADepth: Integer): Boolean;
+    { The field around APos that is ADepth deep there (FieldDepthAt): its entry in FLayLinks,
+      found once for the content (TTyRichDocument.FieldRangeAt); -1 none. }
+    function FieldAround(APos: TTyRichPos; ADepth: Integer): Integer;
     // tables
     { What the user is told when table edit AEdit is refused for AReason. }
     function TableRefusalText(AReason: TTyRichTableRefusal; const AEdit: TTyRichTableEdit): string;
@@ -2559,6 +2588,38 @@ type
       in a row that holds a nested table, not across cells. Reads the selection's two ends,
       never raises. }
     function CanInsertPicture: Boolean;
+    { Links: the user's actions, as the picture and table actions (an open composition ends
+      first; ReadOnly, disabled or inside the document's update: nothing, nothing told, False;
+      a refusal told once through EditRefused, never raised); each one undo step whose undo
+      puts the selection back.
+      InsertLink: a link to AURL ("#name" a bookmark of the document, "target#name" a place in
+      a target; Chinese and any other text as it is). A selection becomes the link's text as it
+      is, given the editor's look (underlined, Word's link blue: TTyRichInsertLink's
+      rllWordBlue); AText given goes in its place (the format typed there, with the look);
+      neither: AURL itself is the text. The caret goes behind the link. Refused: an empty
+      address, a plain text document, a selection that reaches past its paragraph's end
+      (across paragraphs or table cells), one with an end inside a field's result (a link's,
+      a table of contents'), one that holds a field (no link inside a link), a row that holds
+      a nested table. A link is a HYPERLINK field: its text is read-only as any field's result
+      - typing in it is refused; SetLink changes it.
+      SetLink: the link the caret or the selection is in (LinkAtSelection) gets AURL; with
+      AText it is replaced by a link holding AText (in the look its text had), else its text
+      stays as it is. RemoveLink: that link stops being one - its text, its formats (the look
+      too) and what else it holds stay, selected. Both refused when there is no such link and
+      for a link inside another field's result (an entry of a table of contents).
+      CanInsertLink / CanEditLink: the action would be taken now (for an action's Update);
+      reads the selection's paragraph and the fields around it, never raises. }
+    function InsertLink(const AURL: string; const AText: string = ''): Boolean;
+    function SetLink(const AURL: string; const AText: string = ''): Boolean;
+    function RemoveLink: Boolean;
+    function CanInsertLink: Boolean;
+    function CanEditLink: Boolean;
+    { The link the caret or the selection is in: a selection that is a whole link; else the
+      innermost link whose text holds the whole selection (or the caret); else, with nothing
+      selected, the link the caret stands right before or right after. AStart: its open mark's
+      position, ALength: its characters with both marks, AURL: its target as OnLinkClick gives
+      it. False: none (the variables left alone). }
+    function LinkAtSelection(var AStart, ALength: TTyRichPos; var AURL: string): Boolean;
     { The handles. When the selection is exactly one object that can be resized
       (TTyRichObject.CanResize - a picture, also one shown as a placeholder) and the user may
       edit it (not ReadOnly, enabled, the document taking edits), it shows its frame and eight
@@ -4006,6 +4067,7 @@ begin
   FPlainText := False;
   FLayouter := CreateLayouter;
   FLayouter.Document := FDoc;
+  FLayouter.OnLinkField := @LayoutLinkField;
   // the layouter empties its caches when the list changes; the view must drop its blocks too
   FFallbackListChange := FLayouter.FallbackFonts.OnChange;
   FLayouter.FallbackFonts.OnChange := @FallbackListChanged;
@@ -6325,6 +6387,295 @@ begin
   finally
     FDoc.EndRead;
   end;
+end;
+
+{ ---- making, changing and removing links ---- }
+
+function LinkTextBreaks(const S: string): Boolean;
+begin
+  Result := (Pos(#13, S) > 0) or (Pos(#10, S) > 0);
+end;
+
+function TTyCustomRichEdit.IsLinkField(AOpen: TTyRichPos; out AURL: string): Boolean;
+var
+  m: TTyRichObject;
+begin
+  AURL := '';
+  Result := False;
+  if (AOpen < 0) or (AOpen >= FDoc.Text.Length) then Exit;
+  FDoc.BeginRead;
+  try
+    m := FDoc.ObjectAt(AOpen);
+    Result := (m is TTyRichFieldMark) and (TTyRichFieldMark(m).Kind = rfmOpen) and
+      LinkTarget(TyRichFieldInstruction(FDoc, TTyRichFieldMark(m)), AURL);
+  finally
+    FDoc.EndRead;
+  end;
+end;
+
+function TTyCustomRichEdit.FieldAround(APos: TTyRichPos; ADepth: Integer): Integer;
+var
+  url: string;
+  i: Integer;
+  o, c: TTyRichPos;
+begin
+  if FLayLinkState <> FDoc.ContentState then
+  begin
+    FLayLinkState := FDoc.ContentState;
+    FLayLinks := nil;
+  end;
+  for i := 0 to High(FLayLinks) do
+    if (FLayLinks[i].Depth = ADepth) and (FLayLinks[i].Open < APos) and
+      (APos <= FLayLinks[i].Close) then
+      Exit(i);
+  Result := -1;
+  if (ADepth <= 0) or not FDoc.FieldRangeAt(APos, o, c) then Exit;
+  if Length(FLayLinks) >= 64 then FLayLinks := nil;
+  Result := Length(FLayLinks);
+  SetLength(FLayLinks, Result + 1);
+  FLayLinks[Result].Open := o;
+  FLayLinks[Result].Close := c;
+  FLayLinks[Result].Depth := ADepth;
+  FLayLinks[Result].Link := IsLinkField(o, url);
+  FLayLinks[Result].URL := url;
+end;
+
+function TTyCustomRichEdit.LayoutLinkField(AAt: TTyRichPos; ADepth: Integer): Boolean;
+var
+  url: string;
+  d, k: Integer;
+  at: TTyRichPos;
+begin
+  Result := False;
+  if ADepth <= 0 then Exit(IsLinkField(AAt, url));
+  // outward from the innermost field at the place, each one found once for the content
+  d := FDoc.FieldDepthAt(AAt);
+  at := AAt;
+  while d >= ADepth do
+  begin
+    k := FieldAround(at, d);
+    if k < 0 then Exit;
+    if d = ADepth then Exit(FLayLinks[k].Link);
+    // (the place of a field's open mark is in the field around it)
+    at := FLayLinks[k].Open;
+    Dec(d);
+  end;
+end;
+
+function TTyCustomRichEdit.LinkAtSelection(var AStart, ALength: TTyRichPos;
+  var AURL: string): Boolean;
+var
+  s, e, p, o, c, len: TTyRichPos;
+  m: TTyRichObject;
+  url: string;
+  n, k: Integer;
+
+  function Take(AO, AC: TTyRichPos): Boolean;
+  begin
+    Result := IsLinkField(AO, url);
+    if not Result then Exit;
+    AStart := AO;
+    ALength := AC - AO + 1;
+    AURL := url;
+  end;
+
+  function OpenAt(AAt: TTyRichPos): Boolean;
+  begin
+    m := FDoc.ObjectAt(AAt);
+    Result := (m is TTyRichFieldMark) and (TTyRichFieldMark(m).Kind = rfmOpen);
+  end;
+
+begin
+  Result := False;
+  if ViewBehind then Exit;
+  len := FDoc.Text.Length;
+  s := GetSelStart;
+  e := s + GetSelLength;
+  FDoc.BeginRead;
+  try
+    // a whole link selected (from the place before its open mark to the one after its close)
+    if (e > s) and (s < len) and OpenAt(s) then
+    begin
+      c := FDoc.FieldPartner(s);
+      if (c = e - 1) and Take(s, c) then Exit(True);
+    end;
+    { the fields whose text holds the selection, innermost first (found once for the content:
+      a caret moving through a long table of contents does not search for it again) }
+    p := s;
+    n := FDoc.FieldDepthAt(p);
+    while n > 0 do
+    begin
+      k := FieldAround(p, n);
+      if k < 0 then Break;
+      o := FLayLinks[k].Open;
+      c := FLayLinks[k].Close;
+      if (e <= c) and FLayLinks[k].Link then
+      begin
+        AStart := o;
+        ALength := c - o + 1;
+        AURL := FLayLinks[k].URL;
+        Exit(True);
+      end;
+      p := o;
+      Dec(n);
+    end;
+    // a caret right before or right after a link (where it rests at the link's edges)
+    if e = s then
+    begin
+      if (s < len) and OpenAt(s) then
+      begin
+        c := FDoc.FieldPartner(s);
+        if (c >= 0) and Take(s, c) then Exit(True);
+      end;
+      if s > 0 then
+      begin
+        m := FDoc.ObjectAt(s - 1);
+        if (m is TTyRichFieldMark) and (TTyRichFieldMark(m).Kind = rfmClose) then
+        begin
+          o := FDoc.FieldPartner(s - 1);
+          if (o >= 0) and Take(o, s - 1) then Exit(True);
+        end;
+      end;
+    end;
+  finally
+    FDoc.EndRead;
+  end;
+end;
+
+function TTyCustomRichEdit.LinkActionsOpen: Boolean;
+begin
+  Result := not FReadOnly and IsEnabled and not ViewBehind and (RefusalReason = '') and
+    not PlainTextDocument;
+end;
+
+function TTyCustomRichEdit.LinkPlaceRefusal(AStart, ALen: TTyRichPos): string;
+var
+  t: TTyRichText;
+  k, i: Integer;
+  ps: TTyRichPos;
+  runs: TTyRunArray;
+begin
+  if not FDoc.CanChange(AStart, 0) then Exit(ChangeRefusalText(AStart, 0));
+  if (ALen > 0) and not FDoc.CanChange(AStart, ALen) then Exit(ChangeRefusalText(AStart, ALen));
+  t := FDoc.Text;
+  k := t.ParaOfPos(AStart);
+  ps := t.ParaStart(k);
+  // (across paragraphs, and so across table cells)
+  if AStart + ALen > ps + t.ParaLength(k) then Exit(rsRichEditRefusedLinkParagraphs);
+  Result := '';
+  if ALen = 0 then Exit;
+  runs := FDoc.RunsOf(k);
+  for i := 0 to High(runs) do
+    if (runs[i].Obj is TTyRichFieldMark) and (ps + runs[i].Start >= AStart) and
+      (ps + runs[i].Start < AStart + ALen) then
+      Exit(rsRichEditRefusedLinkAroundField);
+end;
+
+function TTyCustomRichEdit.MakeInsertLink(var APlace: TTyRichEditPlace): TTyRichCommand;
+var
+  s, n: TTyRichPos;
+  reason: string;
+begin
+  Result := nil;
+  if PlainTextDocument then reason := rsRichEditRefusedPlainLink
+  else if (FLinkArgURL = '') or (FLinkArgURL = '#') or LinkTextBreaks(FLinkArgURL) then
+    reason := rsRichEditRefusedLinkAddress
+  else
+  begin
+    s := GetSelStart;
+    n := GetSelLength;
+    reason := LinkPlaceRefusal(s, n);
+    if (reason = '') and LinkTextBreaks(FLinkArgText) then
+      reason := rsRichEditRefusedLinkParagraphs;
+  end;
+  if reason <> '' then
+  begin
+    EditRefused(reason);
+    Exit;
+  end;
+  // the editor's look: what a link made in Word looks like
+  Result := TTyRichInsertLink.Create(s, n, FLinkArgURL, FLinkArgText, rllWordBlue);
+end;
+
+function TTyCustomRichEdit.MakeSetLink(var APlace: TTyRichEditPlace): TTyRichCommand;
+var
+  o, l: TTyRichPos;
+  url, reason: string;
+begin
+  Result := nil;
+  o := -1;
+  l := 0;
+  url := '';
+  if not LinkAtSelection(o, l, url) then reason := rsRichEditRefusedNoLink
+  else if not FDoc.CanChange(o, l) then reason := ChangeRefusalText(o, l)
+  else if (FLinkArgURL = '') or (FLinkArgURL = '#') or LinkTextBreaks(FLinkArgURL) then
+    reason := rsRichEditRefusedLinkAddress
+  else if LinkTextBreaks(FLinkArgText) then reason := rsRichEditRefusedLinkParagraphs
+  else reason := '';
+  if reason <> '' then
+  begin
+    EditRefused(reason);
+    Exit;
+  end;
+  Result := TTyRichSetLink.Create(o, FLinkArgURL, FLinkArgText);
+end;
+
+function TTyCustomRichEdit.MakeRemoveLink(var APlace: TTyRichEditPlace): TTyRichCommand;
+var
+  o, l: TTyRichPos;
+  url, reason: string;
+begin
+  Result := nil;
+  o := -1;
+  l := 0;
+  url := '';
+  if not LinkAtSelection(o, l, url) then reason := rsRichEditRefusedNoLink
+  else if not FDoc.CanChange(o, l) then reason := ChangeRefusalText(o, l)
+  else reason := '';
+  if reason <> '' then
+  begin
+    EditRefused(reason);
+    Exit;
+  end;
+  Result := TTyRichRemoveLink.Create(o);
+  // what was the link's text, selected (its two marks gone)
+  APlace.Anchor := o;
+  APlace.Caret := o + l - 2;
+end;
+
+function TTyCustomRichEdit.InsertLink(const AURL: string; const AText: string): Boolean;
+begin
+  FLinkArgURL := AURL;
+  FLinkArgText := AText;
+  Result := RunUserEdit(@MakeInsertLink);
+end;
+
+function TTyCustomRichEdit.SetLink(const AURL: string; const AText: string): Boolean;
+begin
+  FLinkArgURL := AURL;
+  FLinkArgText := AText;
+  Result := RunUserEdit(@MakeSetLink);
+end;
+
+function TTyCustomRichEdit.RemoveLink: Boolean;
+begin
+  Result := RunUserEdit(@MakeRemoveLink);
+end;
+
+function TTyCustomRichEdit.CanInsertLink: Boolean;
+begin
+  Result := LinkActionsOpen and (LinkPlaceRefusal(GetSelStart, GetSelLength) = '');
+end;
+
+function TTyCustomRichEdit.CanEditLink: Boolean;
+var
+  o, l: TTyRichPos;
+  url: string;
+begin
+  o := -1;
+  l := 0;
+  url := '';
+  Result := LinkActionsOpen and LinkAtSelection(o, l, url) and FDoc.CanChange(o, l);
 end;
 
 function TTyCustomRichEdit.LinkPress(AButton: TMouseButton; AShift: TShiftState;
@@ -15936,6 +16287,11 @@ begin
     AStyle.HasGround := True;
     AStyle.Ground := FDoc.DocumentColor;
   end;
+  { A link's automatic text: the package's link colour (the link label's key), a '--accent'
+    of the control's own StyleOverride too; none in the theme: the text colour. }
+  part := model.ResolveStyle('TyLinkLabelLink', StyleClass, []);
+  if tpTextColor in part.Present then AStyle.LinkColor := TyColorToBGRA(part.TextColor);
+  if OwnStyleColor('--accent', c) then AStyle.LinkColor := TyColorToBGRA(c);
 end;
 
 procedure TTyCustomRichEdit.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
