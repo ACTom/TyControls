@@ -1084,6 +1084,14 @@ msgstr ""
 msgid "%s more characters of this paragraph are not shown."
 msgstr ""
 
+#: tycontrols.strconsts.rsricheditrefusedbookmarkexists
+msgid "There is a bookmark of that name already."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditrefusedbookmarkname
+msgid "A bookmark's name begins with a letter and holds only letters, digits and \"_\" - at most 40 of them."
+msgstr ""
+
 #: tycontrols.strconsts.rsricheditrefusedcells
 msgid "A selection across table cells cannot be deleted or typed over (whole rows can)."
 msgstr ""
@@ -1144,6 +1152,10 @@ msgstr ""
 msgid "This table has a table inside one of its cells: its rows and columns cannot be inserted or deleted."
 msgstr ""
 
+#: tycontrols.strconsts.rsricheditrefusednobookmark
+msgid "There is no bookmark of that name."
+msgstr ""
+
 #: tycontrols.strconsts.rsricheditrefusednolink
 msgid "There is no link at the caret."
 msgstr ""
@@ -1171,6 +1183,10 @@ msgstr ""
 #: tycontrols.strconsts.rsricheditrefusedpicturefile
 #, object-pascal-format
 msgid "The picture file cannot be read: %s"
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditrefusedplainbookmark
+msgid "A plain text document cannot hold a bookmark."
 msgstr ""
 
 #: tycontrols.strconsts.rsricheditrefusedplainlink
@@ -1228,6 +1244,10 @@ msgstr ""
 msgid "Part %d of the command (%s) cannot be carried out"
 msgstr ""
 
+#: tycontrols.strconsts.rsrichundoaddbookmark
+msgid "Add bookmark"
+msgstr ""
+
 #: tycontrols.strconsts.rsrichundocharformat
 msgid "Font formatting"
 msgstr ""
@@ -1240,6 +1260,10 @@ msgstr ""
 #: tycontrols.strconsts.rsrichundodelete
 msgctxt "tycontrols.strconsts.rsrichundodelete"
 msgid "Delete"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichundodeletebookmark
+msgid "Delete bookmark"
 msgstr ""
 
 #: tycontrols.strconsts.rsrichundodeletecolumn
@@ -1305,6 +1329,10 @@ msgstr ""
 
 #: tycontrols.strconsts.rsrichundoremovelink
 msgid "Remove link"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichundorenamebookmark
+msgid "Rename bookmark"
 msgstr ""
 
 #: tycontrols.strconsts.rsrichundoreplace

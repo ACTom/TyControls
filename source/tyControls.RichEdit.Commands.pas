@@ -444,6 +444,56 @@ type
     function Description: string; override;
   end;
 
+  { A bookmark named AName over the ALen characters at APos (0: a place): its start mark
+    before them, its end mark after them (TTyRichBookmarkMark.CreateNew, Word's syntax). A
+    bookmark of that name already in the document (case does not matter) goes first, as in
+    Word. One undo step. Refused (CanExecute False): an empty name, the range out of the text,
+    either end of it in a field's result or where the text cannot change (CanChange). }
+  TTyRichAddBookmark = class(TTyRichCommand)
+  private
+    FPos, FLen: TTyRichPos;
+    FName: UTF8String;
+    FStart, FEnd: TTyRichBookmarkMark;
+  protected
+    procedure DoExecute(ADoc: TTyRichDocument); override;
+  public
+    constructor Create(APos, ALen: TTyRichPos; const AName: string);
+    destructor Destroy; override;
+    function CanExecute(ADoc: TTyRichDocument): Boolean; override;
+    function Description: string; override;
+    procedure GatherObjects(var AList: TTyRichObjectList; var ACount: Integer); override;
+  end;
+
+  { The bookmark named AName goes: its two marks, nothing of its text. One undo step. Refused
+    (CanExecute False): no such bookmark, a mark of it where the text cannot change. }
+  TTyRichDeleteBookmark = class(TTyRichCommand)
+  private
+    FName: UTF8String;
+  protected
+    procedure DoExecute(ADoc: TTyRichDocument); override;
+  public
+    constructor Create(const AName: string);
+    function CanExecute(ADoc: TTyRichDocument): Boolean; override;
+    function Description: string; override;
+  end;
+
+  { The bookmark named AOld is named ANew: its two marks made again with the new name, in
+    their places. One undo step. Refused (CanExecute False): no bookmark AOld, another
+    bookmark named ANew already, an empty ANew, a mark where the text cannot change. }
+  TTyRichRenameBookmark = class(TTyRichCommand)
+  private
+    FOld, FNew: UTF8String;
+    FStart, FEnd: TTyRichBookmarkMark;
+  protected
+    procedure DoExecute(ADoc: TTyRichDocument); override;
+  public
+    constructor Create(const AOld, ANew: string);
+    destructor Destroy; override;
+    function CanExecute(ADoc: TTyRichDocument): Boolean; override;
+    function Description: string; override;
+    procedure GatherObjects(var AList: TTyRichObjectList; var ACount: Integer); override;
+  end;
+
 const
   { Word's link blue (RGB 05 63 C1), the colour rllWordBlue gives a link's text. }
   CTyRichLinkWordBlue = TColor($C16305);
@@ -475,7 +525,7 @@ function TyRichTableEdit(AKind: TTyRichTableEditKind; APos: TTyRichPos; AIndex: 
 implementation
 
 uses
-  tyControls.StrConsts;
+  tyControls.StrConsts, tyControls.RichEdit.Bookmarks;
 
 function TyRichRange(APos, ALen: TTyRichPos): TTyRichRange;
 begin
@@ -1681,6 +1731,183 @@ end;
 function TTyRichRemoveLink.Description: string;
 begin
   Result := rsRichUndoRemoveLink;
+end;
+
+{ ---- bookmarks ---- }
+
+{ The bookmark named AName's two ends, ARight to change: its start's position and its end's
+  (-1: none; a bookmark with no end mark). False: none. }
+function BookmarkEnds(ADoc: TTyRichDocument; const AName: UTF8String;
+  out AStart, AEnd: TTyRichPos): Boolean;
+var
+  o: TTyRichObject;
+begin
+  Result := TyRichFindBookmark(ADoc, AName, AStart, AEnd);
+  if not Result then Exit;
+  if AEnd = AStart then
+  begin
+    ADoc.BeginRead;
+    try
+      o := ADoc.ObjectAt(AEnd);
+      if not ((o is TTyRichBookmarkMark) and (TTyRichBookmarkMark(o).Kind = rbmEnd)) then
+        AEnd := -1;
+    finally
+      ADoc.EndRead;
+    end;
+  end;
+end;
+
+function BookmarkChangeable(ADoc: TTyRichDocument; AStart, AEnd: TTyRichPos): Boolean;
+begin
+  Result := ADoc.CanChange(AStart, 1) and ((AEnd < 0) or ADoc.CanChange(AEnd, 1));
+end;
+
+constructor TTyRichAddBookmark.Create(APos, ALen: TTyRichPos; const AName: string);
+begin
+  inherited Create;
+  FPos := APos;
+  FLen := ALen;
+  FName := AName;
+  FStart := TTyRichBookmarkMark.CreateNew(rbmStart, FName);
+  FEnd := TTyRichBookmarkMark.CreateNew(rbmEnd, FName);
+  FStart.AddRef;
+  FEnd.AddRef;
+end;
+
+destructor TTyRichAddBookmark.Destroy;
+begin
+  FStart.Release;
+  FEnd.Release;
+  inherited Destroy;
+end;
+
+function TTyRichAddBookmark.CanExecute(ADoc: TTyRichDocument): Boolean;
+var
+  s, e: TTyRichPos;
+begin
+  Result := False;
+  if (FName = '') or HasSeparator(FName) then Exit;
+  if (FPos < 0) or (FLen < 0) or (FPos + FLen > ADoc.Text.Length) then Exit;
+  if not ADoc.CanChange(FPos, 0) or not ADoc.CanChange(FPos + FLen, 0) then Exit;
+  if BookmarkEnds(ADoc, FName, s, e) and not BookmarkChangeable(ADoc, s, e) then Exit;
+  Result := True;
+end;
+
+procedure TTyRichAddBookmark.DoExecute(ADoc: TTyRichDocument);
+var
+  s, e, p, n: TTyRichPos;
+begin
+  p := FPos;
+  n := FLen;
+  // the one of that name first (the end, then the start: the start's place stays)
+  if BookmarkEnds(ADoc, FName, s, e) then
+  begin
+    if e >= 0 then
+    begin
+      DeleteObjectAt(ADoc, e);
+      if e < p then Dec(p) else if e < p + n then Dec(n);
+    end;
+    DeleteObjectAt(ADoc, s);
+    if s < p then Dec(p) else if s < p + n then Dec(n);
+  end;
+  InsertObject(ADoc, p + n, FEnd);
+  InsertObject(ADoc, p, FStart);
+end;
+
+function TTyRichAddBookmark.Description: string;
+begin
+  Result := rsRichUndoAddBookmark;
+end;
+
+procedure TTyRichAddBookmark.GatherObjects(var AList: TTyRichObjectList; var ACount: Integer);
+begin
+  inherited GatherObjects(AList, ACount);
+  if ACount + 2 > Length(AList) then SetLength(AList, ACount * 2 + 4);
+  AList[ACount] := FStart;
+  AList[ACount + 1] := FEnd;
+  Inc(ACount, 2);
+end;
+
+constructor TTyRichDeleteBookmark.Create(const AName: string);
+begin
+  inherited Create;
+  FName := AName;
+end;
+
+function TTyRichDeleteBookmark.CanExecute(ADoc: TTyRichDocument): Boolean;
+var
+  s, e: TTyRichPos;
+begin
+  Result := BookmarkEnds(ADoc, FName, s, e) and BookmarkChangeable(ADoc, s, e);
+end;
+
+procedure TTyRichDeleteBookmark.DoExecute(ADoc: TTyRichDocument);
+var
+  s, e: TTyRichPos;
+begin
+  if not BookmarkEnds(ADoc, FName, s, e) then
+    raise ETyRichModel.CreateFmt('No bookmark %s', [FName]);
+  if e >= 0 then DeleteObjectAt(ADoc, e);
+  DeleteObjectAt(ADoc, s);
+end;
+
+function TTyRichDeleteBookmark.Description: string;
+begin
+  Result := rsRichUndoDeleteBookmark;
+end;
+
+constructor TTyRichRenameBookmark.Create(const AOld, ANew: string);
+begin
+  inherited Create;
+  FOld := AOld;
+  FNew := ANew;
+  FStart := TTyRichBookmarkMark.CreateNew(rbmStart, FNew);
+  FEnd := TTyRichBookmarkMark.CreateNew(rbmEnd, FNew);
+  FStart.AddRef;
+  FEnd.AddRef;
+end;
+
+destructor TTyRichRenameBookmark.Destroy;
+begin
+  FStart.Release;
+  FEnd.Release;
+  inherited Destroy;
+end;
+
+function TTyRichRenameBookmark.CanExecute(ADoc: TTyRichDocument): Boolean;
+var
+  s, e, s2, e2: TTyRichPos;
+begin
+  Result := False;
+  if (FNew = '') or HasSeparator(FNew) then Exit;
+  if not BookmarkEnds(ADoc, FOld, s, e) or not BookmarkChangeable(ADoc, s, e) then Exit;
+  // (only its own case changed: the same bookmark)
+  if not TyRichSameBookmarkName(FOld, FNew) and TyRichFindBookmark(ADoc, FNew, s2, e2) then Exit;
+  Result := True;
+end;
+
+procedure TTyRichRenameBookmark.DoExecute(ADoc: TTyRichDocument);
+var
+  s, e: TTyRichPos;
+begin
+  if not BookmarkEnds(ADoc, FOld, s, e) then
+    raise ETyRichModel.CreateFmt('No bookmark %s', [FOld]);
+  ReplaceObject(ADoc, s, FStart);
+  if e >= 0 then ReplaceObject(ADoc, e, FEnd);
+end;
+
+function TTyRichRenameBookmark.Description: string;
+begin
+  Result := rsRichUndoRenameBookmark;
+end;
+
+procedure TTyRichRenameBookmark.GatherObjects(var AList: TTyRichObjectList; var ACount: Integer);
+begin
+  inherited GatherObjects(AList, ACount);
+  if ACount + 2 > Length(AList) then SetLength(AList, ACount * 2 + 4);
+  AList[ACount] := FStart;
+  AList[ACount + 1] := FEnd;
+  Inc(ACount, 2);
 end;
 
 end.

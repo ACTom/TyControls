@@ -75,7 +75,8 @@ uses
   tyControls.ScrollBar, tyControls.TextMenu, tyControls.Controller,
   tyControls.RichEdit.Text, tyControls.RichEdit.Model, tyControls.RichEdit.Commands,
   tyControls.RichEdit.TextIO, tyControls.RichEdit.RtfRead, tyControls.RichEdit.RtfWrite,
-  tyControls.RichEdit.Layout, tyControls.RichEdit.Attrs, tyControls.RichEdit.Find;
+  tyControls.RichEdit.Layout, tyControls.RichEdit.Attrs, tyControls.RichEdit.Find,
+  tyControls.RichEdit.Bookmarks;
 
 const
   CRichZoomMin = 10;
@@ -213,6 +214,11 @@ type
     the click was made with. }
   TTyRichLinkClickEvent = procedure(Sender: TObject; const AURL: string;
     AButton: TMouseButton) of object;
+
+  { Before the control follows a link to a bookmark of its document (TTyCustomRichEdit's
+    FollowBookmarkLinks): AName the bookmark's; AAllow False stays where it is. }
+  TTyRichFollowLinkEvent = procedure(Sender: TObject; const AName: string;
+    var AAllow: Boolean) of object;
 
   { A field around a place the control has read: its open mark's place, its close mark's (-1
     not known), how deep it is (-1 not known), whether it is a link and its target. }
@@ -779,6 +785,13 @@ type
     // InsertLink / SetLink's arguments, for their makers
     FLinkArgURL, FLinkArgText: string;
     FOnLinkClick: TTyRichLinkClickEvent;
+    FFollowBookmarkLinks: Boolean;
+    FOnFollowLink: TTyRichFollowLinkEvent;
+    // BookmarkCount / BookmarkName's list, for the content FBkmState, with hidden ones or not
+    FBkmList: TStringArray;
+    FBkmState: Int64;
+    FBkmHidden, FBkmValid: Boolean;
+    FBkmArgName, FBkmArgNew: string;
     { A press on a link that becomes its click when the same button comes up on the same link
       (LinkPress): the button, where, the keys, the link's open mark. Moved past the drag
       threshold it is a press as any (ReplayPress). }
@@ -1554,6 +1567,14 @@ type
       APos's paragraph, else in one of the CRichLinkLookBack paragraphs before it (passed by
       their depths). -1: none found there. }
     function FieldOpenNear(APos: TTyRichPos; ADepth: Integer): TTyRichPos;
+    // bookmarks
+    function BookmarkList(AIncludeHidden: Boolean): TStringArray;
+    function MakeAddBookmark(var APlace: TTyRichEditPlace): TTyRichCommand;
+    function MakeDeleteBookmark(var APlace: TTyRichEditPlace): TTyRichCommand;
+    function MakeRenameBookmark(var APlace: TTyRichEditPlace): TTyRichCommand;
+    { After a link's click: a "#name" link followed to its bookmark (FollowBookmarkLinks,
+      OnFollowLink). }
+    procedure FollowLink(const AURL: string);
     // tables
     { What the user is told when table edit AEdit is refused for AReason. }
     function TableRefusalText(AReason: TTyRichTableRefusal; const AEdit: TTyRichTableEdit): string;
@@ -2241,6 +2262,15 @@ type
       dialog. The pointer is the hand where a left click would be one. As Delphi's
       TRichEdit.OnLinkClick. }
     property OnLinkClick: TTyRichLinkClickEvent read FOnLinkClick write FOnLinkClick;
+    { A click on a link to a place of the document ("#name": HYPERLINK \l "name") goes there:
+      after OnLinkClick (if any), OnFollowLink is asked, then GoToBookmark. A link with a
+      target and a place ("file#name") is never followed, nor any other: the application does
+      that (OnLinkClick). A bookmark that is not there: nothing happens. }
+    property FollowBookmarkLinks: Boolean read FFollowBookmarkLinks write FFollowBookmarkLinks
+      default True;
+    { Before a link is followed to its bookmark: AAllow False stays. The handler may free the
+      control, load another document or show a dialog. }
+    property OnFollowLink: TTyRichFollowLinkEvent read FOnFollowLink write FOnFollowLink;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -2615,6 +2645,30 @@ type
       position, ALength: its characters with both marks, AURL: its target as OnLinkClick gives
       it. False: none (the variables left alone). }
     function LinkAtSelection(var AStart, ALength: TTyRichPos; var AURL: string): Boolean;
+    { Bookmarks. Names as Word has them: compared without regard to case; one that begins
+      with "_" is hidden (Word's own, for a table of contents' headings) and counted and named
+      only with AIncludeHidden. BookmarkCount / BookmarkName: in the order of the bookmarks'
+      starts (a file read on demand is not parsed for them: tyControls.RichEdit.Bookmarks).
+      FindBookmark: AStart the position of its start mark, AEnd of its end mark (its text is
+      between them); False: none. GoToBookmark: the caret to the bookmark's start (its resting
+      place there), shown as a find shows a match - a move, not an edit (also when ReadOnly);
+      False: none. Reads only the paragraphs of the bookmark's two ends.
+      AddBookmark (a name Word takes: TyRichBookmarkNameValid), DeleteBookmark,
+      RenameBookmark: the user's actions, as InsertLink (ReadOnly, disabled or inside the
+      document's update: nothing, False; a refusal told once through EditRefused); each one
+      undo step. AddBookmark marks the selection (or the caret's place); one of that name goes
+      first. Refused: a name Word does not take, a plain text document, a place in a field's
+      result (a link's text, a table of contents), no such bookmark, a new name in use.
+      CanEditBookmarks: those would be taken now (not ReadOnly, enabled, the document taking
+      edits, not plain text). }
+    function BookmarkCount(AIncludeHidden: Boolean = False): Integer;
+    function BookmarkName(AIndex: Integer; AIncludeHidden: Boolean = False): string;
+    function FindBookmark(const AName: string; out AStart, AEnd: TTyRichPos): Boolean;
+    function GoToBookmark(const AName: string): Boolean;
+    function AddBookmark(const AName: string): Boolean;
+    function DeleteBookmark(const AName: string): Boolean;
+    function RenameBookmark(const AOld, ANew: string): Boolean;
+    function CanEditBookmarks: Boolean;
     { The handles. When the selection is exactly one object that can be resized
       (TTyRichObject.CanResize - a picture, also one shown as a placeholder) and the user may
       edit it (not ReadOnly, enabled, the document taking edits), it shows its frame and eight
@@ -3302,6 +3356,8 @@ type
     property OnZoomChange;
     property OnEditRefused;
     property OnLinkClick;
+    property FollowBookmarkLinks;
+    property OnFollowLink;
     property OnObjectResize;
     property OnDropFiles;
     property OnLoadProgress;
@@ -4063,6 +4119,7 @@ begin
   FLayouter := CreateLayouter;
   FLayouter.Document := FDoc;
   FLayouter.OnLinkField := @LayoutLinkField;
+  FFollowBookmarkLinks := True;
   // the layouter empties its caches when the list changes; the view must drop its blocks too
   FFallbackListChange := FLayouter.FallbackFonts.OnChange;
   FLayouter.FallbackFonts.OnChange := @FallbackListChanged;
@@ -6698,6 +6755,150 @@ begin
   Result := LinkActionsOpen and LinkAtSelection(o, l, url) and FDoc.CanChange(o, l);
 end;
 
+{ ---- bookmarks ---- }
+
+function TTyCustomRichEdit.BookmarkList(AIncludeHidden: Boolean): TStringArray;
+begin
+  if not FBkmValid or (FBkmState <> FDoc.ContentState) or (FBkmHidden <> AIncludeHidden) then
+  begin
+    FBkmList := TyRichBookmarkNames(FDoc, AIncludeHidden);
+    FBkmState := FDoc.ContentState;
+    FBkmHidden := AIncludeHidden;
+    FBkmValid := True;
+  end;
+  Result := FBkmList;
+end;
+
+function TTyCustomRichEdit.BookmarkCount(AIncludeHidden: Boolean): Integer;
+begin
+  Result := Length(BookmarkList(AIncludeHidden));
+end;
+
+function TTyCustomRichEdit.BookmarkName(AIndex: Integer; AIncludeHidden: Boolean): string;
+var
+  l: TStringArray;
+begin
+  l := BookmarkList(AIncludeHidden);
+  if (AIndex < 0) or (AIndex > High(l)) then
+    raise ETyRichEdit.CreateFmt('Bookmark index %d out of 0..%d', [AIndex, High(l)]);
+  Result := l[AIndex];
+end;
+
+function TTyCustomRichEdit.FindBookmark(const AName: string; out AStart,
+  AEnd: TTyRichPos): Boolean;
+begin
+  Result := TyRichFindBookmark(FDoc, AName, AStart, AEnd);
+end;
+
+function TTyCustomRichEdit.GoToBookmark(const AName: string): Boolean;
+var
+  s, e, q: TTyRichPos;
+begin
+  Result := False;
+  if ViewBehind then Exit;
+  // a move of the user's: what is being composed goes in first; it edits nothing
+  EndCompositionForUser;
+  if ViewBehind or not TyRichFindBookmark(FDoc, AName, s, e) then Exit;
+  q := SnapPos(s);
+  Select(q, q, False);
+  Moved(False);
+  Result := True;
+end;
+
+function TTyCustomRichEdit.CanEditBookmarks: Boolean;
+begin
+  Result := not FReadOnly and IsEnabled and not ViewBehind and (RefusalReason = '') and
+    not PlainTextDocument;
+end;
+
+function TTyCustomRichEdit.MakeAddBookmark(var APlace: TTyRichEditPlace): TTyRichCommand;
+var
+  s, n: TTyRichPos;
+  reason: string;
+begin
+  Result := nil;
+  s := GetSelStart;
+  n := GetSelLength;
+  if PlainTextDocument then reason := rsRichEditRefusedPlainBookmark
+  else if not TyRichBookmarkNameValid(FBkmArgName) then reason := rsRichEditRefusedBookmarkName
+  else if not FDoc.CanChange(s, 0) then reason := ChangeRefusalText(s, 0)
+  else if not FDoc.CanChange(s + n, 0) then reason := ChangeRefusalText(s + n, 0)
+  else reason := '';
+  if reason <> '' then
+  begin
+    EditRefused(reason);
+    Exit;
+  end;
+  Result := TTyRichAddBookmark.Create(s, n, FBkmArgName);
+  // the selection stays on what it held (moved over the marks that went in, as by any edit)
+  APlace.Anchor := CRichPlaceStays;
+  APlace.Caret := CRichPlaceStays;
+end;
+
+function TTyCustomRichEdit.MakeDeleteBookmark(var APlace: TTyRichEditPlace): TTyRichCommand;
+var
+  s, e: TTyRichPos;
+  reason: string;
+begin
+  Result := nil;
+  if PlainTextDocument then reason := rsRichEditRefusedPlainBookmark
+  else if not TyRichFindBookmark(FDoc, FBkmArgName, s, e) then reason := rsRichEditRefusedNoBookmark
+  else if not FDoc.CanChange(s, 1) then reason := ChangeRefusalText(s, 1)
+  else if not FDoc.CanChange(e, 1) then reason := ChangeRefusalText(e, 1)
+  else reason := '';
+  if reason <> '' then
+  begin
+    EditRefused(reason);
+    Exit;
+  end;
+  Result := TTyRichDeleteBookmark.Create(FBkmArgName);
+  APlace.Anchor := CRichPlaceStays;
+  APlace.Caret := CRichPlaceStays;
+end;
+
+function TTyCustomRichEdit.MakeRenameBookmark(var APlace: TTyRichEditPlace): TTyRichCommand;
+var
+  s, e, s2, e2: TTyRichPos;
+  reason: string;
+begin
+  Result := nil;
+  if PlainTextDocument then reason := rsRichEditRefusedPlainBookmark
+  else if not TyRichBookmarkNameValid(FBkmArgNew) then reason := rsRichEditRefusedBookmarkName
+  else if not TyRichFindBookmark(FDoc, FBkmArgName, s, e) then reason := rsRichEditRefusedNoBookmark
+  else if not TyRichSameBookmarkName(FBkmArgName, FBkmArgNew) and
+    TyRichFindBookmark(FDoc, FBkmArgNew, s2, e2) then reason := rsRichEditRefusedBookmarkExists
+  else if not FDoc.CanChange(s, 1) then reason := ChangeRefusalText(s, 1)
+  else if not FDoc.CanChange(e, 1) then reason := ChangeRefusalText(e, 1)
+  else reason := '';
+  if reason <> '' then
+  begin
+    EditRefused(reason);
+    Exit;
+  end;
+  Result := TTyRichRenameBookmark.Create(FBkmArgName, FBkmArgNew);
+  APlace.Anchor := CRichPlaceStays;
+  APlace.Caret := CRichPlaceStays;
+end;
+
+function TTyCustomRichEdit.AddBookmark(const AName: string): Boolean;
+begin
+  FBkmArgName := AName;
+  Result := RunUserEdit(@MakeAddBookmark);
+end;
+
+function TTyCustomRichEdit.DeleteBookmark(const AName: string): Boolean;
+begin
+  FBkmArgName := AName;
+  Result := RunUserEdit(@MakeDeleteBookmark);
+end;
+
+function TTyCustomRichEdit.RenameBookmark(const AOld, ANew: string): Boolean;
+begin
+  FBkmArgName := AOld;
+  FBkmArgNew := ANew;
+  Result := RunUserEdit(@MakeRenameBookmark);
+end;
+
 function TTyCustomRichEdit.LinkPress(AButton: TMouseButton; AShift: TShiftState;
   X, Y: Integer): Boolean;
 var
@@ -6736,7 +6937,28 @@ begin
   // released on the link it was pressed on: the click
   c := CharBoxAt(X, Y);
   if (c < 0) or not LinkOfChar(c, o, url) or (o <> FLinkOpen) then Exit;
+  // (a handler that frees the control ends the call here: CallHandler)
   if Assigned(FOnLinkClick) then CallHandler(@Fire);
+  FollowLink(url);
+end;
+
+procedure TTyCustomRichEdit.FollowLink(const AURL: string);
+var
+  bk: string;
+  allow: Boolean;
+
+  procedure Ask;
+  begin
+    FOnFollowLink(Self, bk, allow);
+  end;
+
+begin
+  // a place of this document only: "#name" (a target with a place is the application's)
+  if not FFollowBookmarkLinks or (Length(AURL) < 2) or (AURL[1] <> '#') then Exit;
+  bk := Copy(AURL, 2, MaxInt);
+  allow := True;
+  if Assigned(FOnFollowLink) then CallHandler(@Ask);
+  if allow then GoToBookmark(bk);
 end;
 
 { A press on a link moved past the drag threshold before its release: no click - the press it

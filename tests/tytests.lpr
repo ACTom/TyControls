@@ -320,7 +320,8 @@ uses
   test.richedit.linemetrics,
   test.richedit.apigaps,
   test.richedit.display,
-  test.richedit.links;
+  test.richedit.links,
+  test.richedit.bookmarks;
 
 type
   TTyTestRunner = class(TTestRunner)

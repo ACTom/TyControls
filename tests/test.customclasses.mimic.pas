@@ -8597,6 +8597,8 @@ type
     property OnZoomChange;
     property OnEditRefused;
     property OnLinkClick;
+    property FollowBookmarkLinks;
+    property OnFollowLink;
     property OnObjectResize;
     property OnDropFiles;
     property OnLoadProgress;

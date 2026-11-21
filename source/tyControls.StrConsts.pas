@@ -310,6 +310,9 @@ resourcestring
   rsRichUndoInsertLink   = 'Insert link';
   rsRichUndoEditLink     = 'Edit link';
   rsRichUndoRemoveLink   = 'Remove link';
+  rsRichUndoAddBookmark  = 'Add bookmark';
+  rsRichUndoDeleteBookmark = 'Delete bookmark';
+  rsRichUndoRenameBookmark = 'Rename bookmark';
 
   { --- TTyRichEdit loading and saving -----------------------------------------
     What a refused save or change says (ETyRichEdit). %s is the file. }
@@ -349,6 +352,12 @@ resourcestring
   rsRichEditRefusedLinkParagraphs = 'A link''s text lies within one paragraph: select text inside a paragraph (or a table cell).';
   rsRichEditRefusedLinkAroundField = 'A link cannot be made around a link or another field.';
   rsRichEditRefusedNoLink     = 'There is no link at the caret.';
+  { A bookmark the user asked for (TTyCustomRichEdit.AddBookmark, DeleteBookmark,
+    RenameBookmark) that cannot be added, deleted or renamed. }
+  rsRichEditRefusedPlainBookmark = 'A plain text document cannot hold a bookmark.';
+  rsRichEditRefusedBookmarkName = 'A bookmark''s name begins with a letter and holds only letters, digits and "_" - at most 40 of them.';
+  rsRichEditRefusedNoBookmark = 'There is no bookmark of that name.';
+  rsRichEditRefusedBookmarkExists = 'There is a bookmark of that name already.';
   { A table action (TTyCustomRichEdit.InsertTable, InsertRow, DeleteColumn and the like, and
     Tab in a table's last cell) that the table or the place does not allow. The first %d
     is the most rows a table can have, the second (and the one of ...TableColumns) the most

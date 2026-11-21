@@ -910,6 +910,18 @@ msgstr "修改链接"
 msgid "Remove link"
 msgstr "取消链接"
 
+#: tycontrols.strconsts.rsrichundoaddbookmark
+msgid "Add bookmark"
+msgstr "添加书签"
+
+#: tycontrols.strconsts.rsrichundodeletebookmark
+msgid "Delete bookmark"
+msgstr "删除书签"
+
+#: tycontrols.strconsts.rsrichundorenamebookmark
+msgid "Rename bookmark"
+msgstr "重命名书签"
+
 #: tycontrols.strconsts.rsricheditincomplete
 msgid "The document was not loaded completely, so it cannot be saved."
 msgstr "文档没有完整载入,不能保存。"
@@ -1018,6 +1030,22 @@ msgstr "不能在链接或其他域的外面再套一个链接。"
 #: tycontrols.strconsts.rsricheditrefusednolink
 msgid "There is no link at the caret."
 msgstr "光标处没有链接。"
+
+#: tycontrols.strconsts.rsricheditrefusedplainbookmark
+msgid "A plain text document cannot hold a bookmark."
+msgstr "纯文本文档里不能有书签。"
+
+#: tycontrols.strconsts.rsricheditrefusedbookmarkname
+msgid "A bookmark's name begins with a letter and holds only letters, digits and \"_\" - at most 40 of them."
+msgstr "书签名必须以字母或汉字开头，只能含字母、数字和“_”，最多 40 个字符。"
+
+#: tycontrols.strconsts.rsricheditrefusednobookmark
+msgid "There is no bookmark of that name."
+msgstr "没有这个名字的书签。"
+
+#: tycontrols.strconsts.rsricheditrefusedbookmarkexists
+msgid "There is a bookmark of that name already."
+msgstr "已经有这个名字的书签了。"
 
 #: tycontrols.strconsts.rsricheditrefusedplaintable
 msgid "A plain text document cannot hold a table."

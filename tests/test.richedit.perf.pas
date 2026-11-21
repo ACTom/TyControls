@@ -66,6 +66,7 @@ type
     procedure TestTheActionsOverAWhole100MBSelection;
     procedure TestARtfOf200PicturesAPlaceNeverShownAndAgain;
     procedure TestAutoHeightOfAThousandParagraphsAfterAWidthChange;
+    procedure TestABookmarkAmong200000In100MB;
   private
     procedure SaveBesideFields(ABytes: Int64; ANest: Integer);
   end;
@@ -2092,6 +2093,71 @@ begin
   end;
   Report('AutoHeight: 1,000 paragraphs after a width change (best of 3)', t);
   AssertTrue(Format('AutoHeight after a width change in %.1f ms', [t]), t <= CKeystrokeMs);
+end;
+
+{ 100 MB of paragraphs, each with a bookmark of its own around a few words (200,000): the jump
+  to one far into the file and its paint within the line of any place (100 ms); what the
+  load's index of them holds, and a name that is not there (every entry and every changed
+  paragraph looked at), reported. }
+procedure TTyRichEditPerfTest.TestABookmarkAmong200000In100MB;
+const
+  CMarks = 200000;
+var
+  path: string;
+  f: TFileStream;
+  line, pad: RawByteString;
+  i: Integer;
+  bmp: TBitmap;
+  t0, go, miss: Double;
+  s, e: TTyRichPos;
+  ld: TTyRichParaLoader;
+begin
+  CheckRoom;
+  path := NewFile('.rtf');
+  pad := '';
+  while Length(pad) < CFileBytes div CMarks - 80 do pad := pad + 'more words of the paragraph ';
+  f := TFileStream.Create(path, fmCreate);
+  try
+    line := '{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}\pard\f0 ';
+    f.WriteBuffer(line[1], Length(line));
+    for i := 1 to CMarks do
+    begin
+      line := 'Paragraph ' + IntToStr(i) + ' {\*\bkmkstart bm' + IntToStr(i) + '}its text{\*\bkmkend bm' +
+        IntToStr(i) + '} ' + pad + '\par' + #13#10;
+      f.WriteBuffer(line[1], Length(line));
+    end;
+    line := '}';
+    f.WriteBuffer(line[1], 1);
+  finally
+    f.Free;
+  end;
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf32bit;
+    bmp.SetSize(FRich.Width, FRich.Height);
+    FRich.LoadFromFile(path);
+    FRich.FinishLoading;
+    TPerfRich(FRich).PaintInto(bmp);
+    t0 := Clock;
+    AssertTrue('gone to', FRich.GoToBookmark('BM150000'));
+    TPerfRich(FRich).PaintInto(bmp);
+    go := Clock - t0;
+    Report(Format('bookmarks: a jump to one of %d in %d MB and its paint', [CMarks,
+      SizeOfFile(path) div (1024 * 1024)]), go);
+    AssertTrue('its place', FRich.FindBookmark('bm150000', s, e));
+    AssertEquals('the caret there', s, FRich.SelStart);
+    AssertTrue(Format('within the line of any place (%.1f ms)', [go]), go <= 100);
+    t0 := Clock;
+    AssertFalse('a name that is not there', FRich.FindBookmark('nothere', s, e));
+    miss := Clock - t0;
+    Report('bookmarks: a name that is not there (not asserted)', miss);
+    ld := FRich.Document.Loader;
+    AssertTrue('an index', (ld <> nil) and (ld.BookmarkIndexCount = 2 * CMarks));
+    WriteLn(Format('TTyRichEditPerfTest: bookmarks: the index holds %d ends, %d bytes ' +
+      '(%d a bookmark)', [ld.BookmarkIndexCount, ld.BookmarkIndexCount * 21, 42]));
+  finally
+    bmp.Free;
+  end;
 end;
 
 initialization

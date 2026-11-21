@@ -460,6 +460,18 @@ type
     FPreSilent: array of Boolean;
     FPreUpr: array of Byte;
     FPreUc: array of Integer;
+    { The bookmark ends the index scan met, in the file's order: where its group starts in the
+      file, the hash of its name (TyRichBookmarkHash), start (0) or end (1). The load gives
+      each the paragraph it is in (TTyRtfLoad.NoteBookmarks). }
+    FBkmGroup: array of Int64;
+    FBkmHash: array of Cardinal;
+    FBkmKind: array of Byte;
+    FBkmN: Integer;
+    { The name of the bookmark whose group is [AStart, AStop) of the buffer: its text after the
+      destination's word, decoded as the reader decodes text (\'xx in ACodePage, \uN skipping
+      AUc fallback bytes). }
+    function BookmarkName(AStart, AStop: PtrInt; ACodePage, AUc: Integer): UTF8String;
+    procedure EmitBookmark(AKind: TTyRichBookmarkKind; AStart, AStop: PtrInt);
     function Counting: Boolean; inline;
     procedure InitState;
     // the node pool
@@ -784,12 +796,18 @@ type
       offset: it holds one). }
     FMarkedSrc: array of Int64;
     FMarkedN: Integer;
+    // the paragraph (its file offset) of each of the scan's bookmark ends, the first FBkmNoted
+    FBkmPara: array of Int64;
+    FBkmNoted: Integer;
     FOnLoadProgress: TTyRtfProgressEvent;
     procedure Index(ABudget: Int64; AMinParas: Integer);
     procedure Collect;
     procedure Append(AFrom, ATo: Integer);
     // what the scan found of paragraph AIndex's fields, for ParaFieldDepths
     procedure NoteDepths(AIndex: Integer; ASrcStart: Int64);
+    { The index scan's bookmark ends whose group lies before ASrcStop are in the paragraph
+      that begins at ASrcStart (paragraphs are noted in order). }
+    procedure NoteBookmarks(ASrcStart, ASrcStop: Int64);
     procedure AddMapRange(const R: TTyRtfRange);
     procedure Finish;
     function IntervalOf(ASrc: Int64): Integer;
@@ -2802,6 +2820,7 @@ function TTyRtfParser.HandleDestination(AKw: Integer): Boolean;
 var
   content: Boolean;
   start, stop: PtrInt;
+  bk: Integer;
 begin
   Result := True;
   start := FS.GroupStart;
@@ -2964,8 +2983,17 @@ begin
       if content and ((AKw = kwDOpaque) or FS.BodyStarted) then
       begin
         EnsureBody;
+        // (the word is the destination's: a bookmark's end is a block of its own class)
+        bk := 0;
+        if AKw = kwDOpaque then
+          if (FTok.NameLen = 9) and CompareMem(@FBuf[FTok.NameStart], PChar('bkmkstart'), 9) then
+            bk := 1
+          else if (FTok.NameLen = 7) and CompareMem(@FBuf[FTok.NameStart], PChar('bkmkend'), 7) then
+            bk := 2;
         SkipAndPop;
-        EmitOpaque(start, FTokStop, '');
+        if bk = 1 then EmitBookmark(rbmStart, start, FTokStop)
+        else if bk = 2 then EmitBookmark(rbmEnd, start, FTokStop)
+        else EmitOpaque(start, FTokStop, '');
       end
       else
         SkipAndPop;
@@ -4767,6 +4795,115 @@ begin
   EmitObject(o);
 end;
 
+function TTyRtfParser.BookmarkName(AStart, AStop: PtrInt; ACodePage, AUc: Integer): UTF8String;
+var
+  lex: TTyRtfLexer;
+  t: TTyRtfToken;
+  raw: RawByteString;
+  ob: TBytes;
+  olen: PtrInt;
+  i, skip, depth: Integer;
+  named: Boolean;
+
+  procedure FlushRaw;
+  var
+    s: UTF8String;
+    k: Integer;
+  begin
+    if raw = '' then Exit;
+    s := DecodeRaw(raw, ACodePage);
+    for k := 1 to Length(s) do
+    begin
+      if olen + 1 > Length(ob) then SetLength(ob, Length(ob) * 2 + 32);
+      ob[olen] := Byte(s[k]);
+      Inc(olen);
+    end;
+    raw := '';
+  end;
+
+begin
+  Result := '';
+  lex.Init(FBuf, AStart, AStop);
+  raw := '';
+  ob := nil;
+  olen := 0;
+  skip := 0;
+  depth := 0;
+  named := False;
+  while lex.Next(t) do
+    case t.Kind of
+      rtkGroupStart: Inc(depth);
+      rtkGroupEnd: Dec(depth);
+      rtkWord:
+        if not named then
+          // the destination's own word: the name follows it
+          named := (t.NameLen >= 7) and (FBuf[t.NameStart] = Ord('b'))
+        else if (depth = 1) and (t.NameLen = 1) and (FBuf[t.NameStart] = Ord('u')) and
+          t.HasParam then
+        begin
+          FlushRaw;
+          UtfPut(ob, olen, UnicodeOfParam(t.Param));
+          skip := AUc;
+        end
+        else if (t.NameLen = 2) and (FBuf[t.NameStart] = Ord('u')) and
+          (FBuf[t.NameStart + 1] = Ord('c')) and t.HasParam then
+          AUc := t.Param;
+      rtkHex:
+        if named and (depth = 1) then
+          if skip > 0 then Dec(skip)
+          else if t.Value >= 0 then raw := raw + AnsiChar(t.Value);
+      rtkSymbol:
+        if named and (depth = 1) and (t.Value in [Ord('\'), Ord('{'), Ord('}')]) then
+          if skip > 0 then Dec(skip) else raw := raw + AnsiChar(t.Value);
+      rtkText:
+        if named and (depth = 1) then
+          for i := t.Start to t.Stop - 1 do
+          begin
+            if FBuf[i] in [10, 13, 0] then Continue;
+            if skip > 0 then
+            begin
+              Dec(skip);
+              Continue;
+            end;
+            raw := raw + AnsiChar(FBuf[i]);
+          end;
+    end;
+  FlushRaw;
+  SetLength(Result, olen);
+  if olen > 0 then Move(ob[0], Result[1], olen);
+  // (a name has no spaces: the ones around it are the file's)
+  Result := Trim(Result);
+end;
+
+procedure TTyRtfParser.EmitBookmark(AKind: TTyRichBookmarkKind; AStart, AStop: PtrInt);
+var
+  uc: Integer;
+  name: UTF8String;
+  o: TTyRichBookmarkMark;
+begin
+  uc := FS.Props.Uc;
+  name := BookmarkName(AStart, AStop, FAnsiCp, uc);
+  if Counting then
+  begin
+    // the index's entry: the paragraph it is in is given when the paragraph is (NoteBookmarks)
+    if FBkmN = Length(FBkmGroup) then
+    begin
+      SetLength(FBkmGroup, FBkmN * 2 + 16);
+      SetLength(FBkmHash, FBkmN * 2 + 16);
+      SetLength(FBkmKind, FBkmN * 2 + 16);
+    end;
+    FBkmGroup[FBkmN] := AStart;
+    FBkmHash[FBkmN] := TyRichBookmarkHash(name);
+    FBkmKind[FBkmN] := Ord(AKind);
+    Inc(FBkmN);
+    EmitObject(nil);
+    Exit;
+  end;
+  o := TTyRichBookmarkMark.Create(AKind, name, Fragment(Range(AStart, AStop)), uc);
+  FObjects.Add(o);
+  EmitObject(o);
+end;
+
 const
   // fields nested deeper than this, counted from the body (a field in a field's result is one
   // deeper), stay one object of their bytes
@@ -5981,7 +6118,12 @@ type
       out AStart, ALow: Integer): Boolean; override;
     function ParaHoldsMarks(ADoc: TTyRichDocument; AIndex: Integer;
       out AHolds: Boolean): Boolean; override;
+    function BookmarkIndexCount: Integer; override;
+    procedure BookmarkIndexEntry(AIndex: Integer; out AKind: TTyRichBookmarkKind;
+      out AHash: Cardinal; out AParaSrc, AGroupSrc: Int64); override;
+    function BookmarkIndexName(AIndex: Integer): UTF8String; override;
   end;
+
 
   TRtfBuild = class(TTyRichDocBuilder)
   end;
@@ -6044,6 +6186,46 @@ begin
   ALow := 0;
   Result := ADoc.Text.ParaLazySource(AIndex, src, nbytes);
   if Result then Load.ParaFieldDepths(src, AStart, ALow);
+end;
+
+function TRtfLoader.BookmarkIndexCount: Integer;
+begin
+  // (the entries whose paragraph the document has)
+  Result := Load.FBkmNoted;
+end;
+
+procedure TRtfLoader.BookmarkIndexEntry(AIndex: Integer; out AKind: TTyRichBookmarkKind;
+  out AHash: Cardinal; out AParaSrc, AGroupSrc: Int64);
+begin
+  AKind := TTyRichBookmarkKind(Load.FScan.FBkmKind[AIndex]);
+  AHash := Load.FScan.FBkmHash[AIndex];
+  AParaSrc := Load.FBkmPara[AIndex];
+  AGroupSrc := Load.FScan.FBkmGroup[AIndex];
+end;
+
+function TRtfLoader.BookmarkIndexName(AIndex: Integer): UTF8String;
+var
+  g: Int64;
+  lex: TTyRtfLexer;
+  t: TTyRtfToken;
+  depth: Integer;
+  p: TTyRtfParser;
+begin
+  p := Load.FScan;
+  g := p.FBkmGroup[AIndex];
+  // the group's end: its closing brace
+  lex.Init(p.FBuf, g, Length(Load.FBytes));
+  depth := 0;
+  while lex.Next(t) do
+  begin
+    if t.Kind = rtkGroupStart then Inc(depth)
+    else if t.Kind = rtkGroupEnd then
+    begin
+      Dec(depth);
+      if depth = 0 then Break;
+    end;
+  end;
+  Result := p.BookmarkName(g, t.Stop, p.FAnsiCp, 1);
 end;
 
 function TRtfLoader.ParaHoldsMarks(ADoc: TTyRichDocument; AIndex: Integer;
@@ -6211,6 +6393,16 @@ end;
 
 // Puts paragraphs AFrom..ATo-1 of the scan into the document's text after the ones there
 // (the last of them without a separator).
+procedure TTyRtfLoad.NoteBookmarks(ASrcStart, ASrcStop: Int64);
+begin
+  while (FBkmNoted < FScan.FBkmN) and (FScan.FBkmGroup[FBkmNoted] < ASrcStop) do
+  begin
+    if FBkmNoted >= Length(FBkmPara) then SetLength(FBkmPara, Length(FScan.FBkmGroup));
+    FBkmPara[FBkmNoted] := ASrcStart;
+    Inc(FBkmNoted);
+  end;
+end;
+
 procedure TTyRtfLoad.NoteDepths(AIndex: Integer; ASrcStart: Int64);
 var
   ds, dl: Integer;
@@ -6259,6 +6451,7 @@ begin
     begin
       FScan.ParaSpan(i, src, chars);
       NoteDepths(i, src.Start);
+      NoteBookmarks(src.Start, src.Stop);
       if i < ATo - 1 then sep := FSep else sep := rsNone;
       text.AppendLazyParagraph(chars, src.Start, src.Stop - src.Start, sep);
       if FMap <> nil then AddMapRange(src);
@@ -7456,6 +7649,7 @@ begin
       begin
         load.FScan.ParaSpan(i, src, chars);
         load.NoteDepths(i, src.Start);
+        load.NoteBookmarks(src.Start, src.Stop);
         if i < n - 1 then
           text.AppendLazyParagraph(chars, src.Start, src.Stop - src.Start, load.FSep)
         else
@@ -8292,6 +8486,10 @@ begin
     end;
     Exit;
   end;
+  // a bookmark whose bytes name what the target lacks: made again by its name
+  if (AObj is TTyRichBookmarkMark) and Foreign(TTyRichOpaque(AObj).Bytes, True) then
+    Exit(TTyRichBookmarkMark.CreateNew(TTyRichBookmarkMark(AObj).Kind,
+      TTyRichBookmarkMark(AObj).Name));
   if AObj is TTyRichOpaque then
   begin
     o := TTyRichOpaque(AObj);

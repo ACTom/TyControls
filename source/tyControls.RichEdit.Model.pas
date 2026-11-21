@@ -414,6 +414,31 @@ type
     property DisplayText: UTF8String read FDisplayText;
   end;
 
+  TTyRichBookmarkKind = (rbmStart, rbmEnd);
+
+  { One end of a bookmark: its start or its end, by name. A kept block with no width and
+    nothing to show, as before it had a class of its own - so the caret, the keys, the layout
+    and a writer treat it as they treat such a block (no width, never a key's step, its bytes
+    written as they are). One read from a file keeps the file's group ({\*\bkmkstart name}) and
+    is written so, byte for byte; one made here (CreateNew) is given Word's syntax, its name
+    written as text is (\uN for what is not ASCII). Name is the name decoded as the reader
+    decodes text. Names compare without regard to case (TyRichSameBookmarkName), as Word's. }
+  TTyRichBookmarkMark = class(TTyRichOpaque)
+  private
+    FKind: TTyRichBookmarkKind;
+    FName: UTF8String;
+  public
+    { Read from a file: ABytes its group as the file has it, under \uc ARawUc. }
+    constructor Create(AKind: TTyRichBookmarkKind; const AName: UTF8String;
+      const ABytes: RawByteString; ARawUc: Integer = 1);
+    { Made here: its bytes are Word's syntax for AName. }
+    constructor CreateNew(AKind: TTyRichBookmarkKind; const AName: UTF8String);
+    function Clone: TTyRichObject; override;
+    function DataBytes: Int64; override;
+    property Kind: TTyRichBookmarkKind read FKind;
+    property Name: UTF8String read FName;
+  end;
+
   TTyRichFieldMarkKind = (rfmOpen, rfmClose);
 
   { One edge of a field whose stored result is shown as the document's own content (a
@@ -919,6 +944,17 @@ type
       parsing it. False by default: not known (the paragraph is parsed to tell). }
     function ParaHoldsMarks(ADoc: TTyRichDocument; AIndex: Integer;
       out AHolds: Boolean): Boolean; virtual;
+    { The bookmark ends its index found in the file, in the file's order - so a document read
+      on demand finds a bookmark by name without parsing (tyControls.RichEdit.Bookmarks). -1 by
+      default: no index (every paragraph's value is asked). }
+    function BookmarkIndexCount: Integer; virtual;
+    { Entry AIndex: its kind, the hash of its name (TyRichBookmarkHash), the file offset of the
+      paragraph it is in (TTyRichText.ParaOfLazySource finds the paragraph while that one is
+      unedited) and of its group. }
+    procedure BookmarkIndexEntry(AIndex: Integer; out AKind: TTyRichBookmarkKind;
+      out AHash: Cardinal; out AParaSrc, AGroupSrc: Int64); virtual;
+    // entry AIndex's name, decoded from the file's bytes (nothing parsed)
+    function BookmarkIndexName(AIndex: Integer): UTF8String; virtual;
   end;
 
   TTyRichRange = record
@@ -1211,6 +1247,10 @@ type
       ReplaceFieldMarks: AOpen and AClose (a new identity of their own) in place of the two
       marks of the field whose open mark is at AOpenPos; its content stays. The same place
       rule as UnwrapField. }
+    { The one object character at APos goes, whatever it belongs to - a bookmark's end alone
+      (DeleteRange keeps a bookmark's end whose other end stays: TTyRichCommand.DeleteRange).
+      The primitive's rules hold otherwise (a field's mark is refused). }
+    function DeleteObjectAt(ADoc: TTyRichDocument; APos: TTyRichPos): TTyRichChange;
     procedure WrapInField(ADoc: TTyRichDocument; APos, ALen: TTyRichPos;
       AOpen, AClose: TTyRichFieldMark; AFormat: TTyCharFormatId = TyRichInheritFormat);
     procedure UnwrapField(ADoc: TTyRichDocument; AOpenPos: TTyRichPos);
@@ -1987,11 +2027,18 @@ function TyRichKeptPictureLookups: Int64;
   bytes made, and the bytes looked at only to count a picture's hex digits. }
 function TyRichPictureBytesMade: Int64;
 function TyRichPictureDigitsCounted: Int64;
+{ Bookmark names, as Word compares them: without regard to case (Unicode case folding of the
+  name's text). TyRichBookmarkHash is the same for two names that compare the same. }
+function TyRichSameBookmarkName(const A, B: UTF8String): Boolean;
+function TyRichBookmarkHash(const AName: UTF8String): Cardinal;
+{ Word's syntax for a bookmark's end: {\*\bkmkstart name} or {\*\bkmkend name}, the name's
+  ASCII as it is (\ { } escaped), anything else \uN with a ? for readers without Unicode. }
+function TyRichBookmarkBytes(AKind: TTyRichBookmarkKind; const AName: UTF8String): RawByteString;
 
 implementation
 
 uses
-  tyControls.StrConsts, tyControls.RichEdit.Commands, tyControls.RichEdit.Wmf,
+  LazUTF8, tyControls.StrConsts, tyControls.RichEdit.Commands, tyControls.RichEdit.Wmf,
   tyControls.RichEdit.RowFormat;
 
 var
@@ -9238,10 +9285,173 @@ begin
   Result := Keep(ADoc.InsertObject(APos, AObject, AFormat));
 end;
 
+type
+  TTyRichPosArray = array of TTyRichPos;
+
+  { The paragraphs of a deletion: which have a value to look at, and which of the file's
+    unparsed ones the load's index says hold a bookmark's end. }
+  TTyRichBkmWalk = class
+  public
+    Doc: TTyRichDocument;
+    Last: Integer;
+    Paras: array of Integer;
+    Count: Integer;
+    procedure Visit(AIndex: Integer; AData: Pointer; ASrcOffset, ASrcBytes: Int64;
+      var AContinue: Boolean);
+  end;
+
+{ The load's index (entries rising by their paragraph's offset) has an entry in the paragraph
+  at ASrc. }
+function IndexHoldsPara(ALoader: TTyRichParaLoader; ASrc: Int64): Boolean;
+var
+  lo, hi, m: Integer;
+  k: TTyRichBookmarkKind;
+  h: Cardinal;
+  p, g: Int64;
+begin
+  Result := False;
+  lo := 0;
+  hi := ALoader.BookmarkIndexCount - 1;
+  while lo <= hi do
+  begin
+    m := (lo + hi) shr 1;
+    ALoader.BookmarkIndexEntry(m, k, h, p, g);
+    if p = ASrc then Exit(True);
+    if p < ASrc then lo := m + 1 else hi := m - 1;
+  end;
+end;
+
+procedure TTyRichBkmWalk.Visit(AIndex: Integer; AData: Pointer; ASrcOffset, ASrcBytes: Int64;
+  var AContinue: Boolean);
+var
+  d: TTyRichParaData;
+  i: Integer;
+  take: Boolean;
+begin
+  if AIndex > Last then
+  begin
+    AContinue := False;
+    Exit;
+  end;
+  d := TTyRichParaData(AData);
+  take := False;
+  if d <> nil then
+  begin
+    for i := 0 to High(d.FRuns) do
+      if d.FRuns[i].Obj is TTyRichBookmarkMark then
+      begin
+        take := True;
+        Break;
+      end;
+  end
+  else if (ASrcOffset >= 0) and (Doc.FLoader <> nil) and (Doc.FLoader.BookmarkIndexCount > 0) then
+    take := IndexHoldsPara(Doc.FLoader, ASrcOffset);
+  if not take then Exit;
+  if Count = Length(Paras) then SetLength(Paras, Count * 2 + 8);
+  Paras[Count] := AIndex;
+  Inc(Count);
+end;
+
+{ The bookmark ends in [APos, APos + ALen) whose other end is not in it - rising; only those
+  outside every field's result and every table cell (a range whose stretches cannot be cut
+  there takes them). Reads the paragraphs of the range that hold one (the index tells of the
+  unparsed ones), nothing else. }
+function LoneBookmarkEnds(ADoc: TTyRichDocument; APos, ALen: TTyRichPos): TTyRichPosArray;
+var
+  w: TTyRichBkmWalk;
+  i, j, n, k, m: Integer;
+  pos: array of TTyRichPos;
+  marks: array of TTyRichBookmarkMark;
+  paired: array of Boolean;
+  runs: TTyRunArray;
+  ps, p: TTyRichPos;
+begin
+  Result := nil;
+  if (ALen <= 0) or (APos < 0) or (APos + ALen > ADoc.FText.Length) then Exit;
+  k := ADoc.FText.ParaOfPos(APos);
+  m := ADoc.FText.ParaOfPos(APos + ALen - 1);
+  w := TTyRichBkmWalk.Create;
+  try
+    w.Doc := ADoc;
+    w.Last := m;
+    ADoc.FText.WalkParas(k, @w.Visit);
+    n := 0;
+    pos := nil;
+    marks := nil;
+    ADoc.BeginRead;
+    try
+      for i := 0 to w.Count - 1 do
+      begin
+        runs := ADoc.RunsOf(w.Paras[i]);
+        ps := ADoc.FText.ParaStart(w.Paras[i]);
+        for j := 0 to High(runs) do
+        begin
+          p := ps + runs[j].Start;
+          if (p < APos) or (p >= APos + ALen) or not (runs[j].Obj is TTyRichBookmarkMark) then
+            Continue;
+          if n = Length(pos) then
+          begin
+            SetLength(pos, n * 2 + 8);
+            SetLength(marks, n * 2 + 8);
+          end;
+          pos[n] := p;
+          marks[n] := TTyRichBookmarkMark(runs[j].Obj);
+          Inc(n);
+        end;
+      end;
+      if n = 0 then Exit;
+      paired := nil;
+      SetLength(paired, n);
+      for i := 0 to n - 1 do
+        if (marks[i].Kind = rbmStart) and not paired[i] then
+          for j := i + 1 to n - 1 do
+            if (marks[j].Kind = rbmEnd) and not paired[j] and
+              TyRichSameBookmarkName(marks[i].Name, marks[j].Name) then
+            begin
+              paired[i] := True;
+              paired[j] := True;
+              Break;
+            end;
+      for i := 0 to n - 1 do
+      begin
+        if paired[i] then Continue;
+        if (ADoc.DepthAt(pos[i]) > 0) or (ADoc.CellAt(ADoc.FText.ParaOfPos(pos[i])) <> nil) then
+          Continue;
+        SetLength(Result, Length(Result) + 1);
+        Result[High(Result)] := pos[i];
+      end;
+    finally
+      ADoc.EndRead;
+    end;
+  finally
+    w.Free;
+  end;
+end;
+
 function TTyRichCommand.DeleteRange(ADoc: TTyRichDocument; APos, ALen: TTyRichPos): TTyRichChange;
+var
+  kept: TTyRichPosArray;
+  e: TTyRichPos;
+  i: Integer;
 begin
   CheckRunning(ADoc);
-  Result := Keep(ADoc.DeleteRange(APos, ALen));
+  kept := LoneBookmarkEnds(ADoc, APos, ALen);
+  if Length(kept) = 0 then
+  begin
+    Result := Keep(ADoc.DeleteRange(APos, ALen));
+    Exit;
+  end;
+  { A bookmark one of whose ends is in the range and the other not keeps both: it collapses
+    to the place where the text was, as in Word. The stretches between such ends go, the last
+    first (the places before them stay where they are). }
+  Result := Default(TTyRichChange);
+  e := APos + ALen;
+  for i := High(kept) downto 0 do
+  begin
+    if e > kept[i] + 1 then Result := Keep(ADoc.DeleteRange(kept[i] + 1, e - kept[i] - 1));
+    e := kept[i];
+  end;
+  if e > APos then Result := Keep(ADoc.DeleteRange(APos, e - APos));
 end;
 
 function TTyRichCommand.DeleteRange(ADoc: TTyRichDocument; APos, ALen: TTyRichPos;
@@ -10255,6 +10465,19 @@ begin
   end;
 end;
 
+function TTyRichCommand.DeleteObjectAt(ADoc: TTyRichDocument; APos: TTyRichPos): TTyRichChange;
+begin
+  CheckRunning(ADoc);
+  ADoc.BeginRead;
+  try
+    if ADoc.ObjectAt(APos) = nil then
+      raise ETyRichModel.CreateFmt('No object at %d', [APos]);
+  finally
+    ADoc.EndRead;
+  end;
+  Result := Keep(ADoc.DeleteRange(APos, 1));
+end;
+
 procedure TTyRichCommand.WrapInField(ADoc: TTyRichDocument; APos, ALen: TTyRichPos;
   AOpen, AClose: TTyRichFieldMark; AFormat: TTyCharFormatId);
 var
@@ -10328,6 +10551,129 @@ begin
   finally
     Dec(ADoc.FMarkEdit);
   end;
+end;
+
+{ ---- bookmarks ---- }
+
+function TyRichSameBookmarkName(const A, B: UTF8String): Boolean;
+begin
+  Result := UTF8UpperCase(A) = UTF8UpperCase(B);
+end;
+
+function TyRichBookmarkHash(const AName: UTF8String): Cardinal;
+var
+  s: UTF8String;
+  i: Integer;
+begin
+  // FNV-1a of the name's folded bytes
+  s := UTF8UpperCase(AName);
+  Result := 2166136261;
+  for i := 1 to Length(s) do
+    Result := (Result xor Byte(s[i])) * 16777619;
+end;
+
+function TyRichBookmarkBytes(AKind: TTyRichBookmarkKind; const AName: UTF8String): RawByteString;
+var
+  i, n: Integer;
+  c: Cardinal;
+  b: Byte;
+
+  procedure PutU(ACode: Cardinal);
+  begin
+    if ACode > 32767 then Result := Result + '\u' + IntToStr(Integer(ACode) - 65536) + '?'
+    else Result := Result + '\u' + IntToStr(ACode) + '?';
+  end;
+
+begin
+  if AKind = rbmStart then Result := '{\*\bkmkstart ' else Result := '{\*\bkmkend ';
+  i := 1;
+  n := Length(AName);
+  while i <= n do
+  begin
+    b := Byte(AName[i]);
+    if b < $80 then
+    begin
+      if AnsiChar(b) in ['\', '{', '}'] then Result := Result + '\';
+      Result := Result + AnsiChar(b);
+      Inc(i);
+      Continue;
+    end;
+    // a UTF-8 sequence (a stray byte: U+FFFD)
+    if (b >= $F0) and (i + 3 <= n) then
+    begin
+      c := ((b and 7) shl 18) or ((Byte(AName[i + 1]) and $3F) shl 12) or
+        ((Byte(AName[i + 2]) and $3F) shl 6) or (Byte(AName[i + 3]) and $3F);
+      Inc(i, 4);
+    end
+    else if (b >= $E0) and (i + 2 <= n) then
+    begin
+      c := ((b and $F) shl 12) or ((Byte(AName[i + 1]) and $3F) shl 6) or
+        (Byte(AName[i + 2]) and $3F);
+      Inc(i, 3);
+    end
+    else if (b >= $C0) and (i + 1 <= n) then
+    begin
+      c := ((b and $1F) shl 6) or (Byte(AName[i + 1]) and $3F);
+      Inc(i, 2);
+    end
+    else
+    begin
+      c := $FFFD;
+      Inc(i);
+    end;
+    if c > $FFFF then
+    begin
+      Dec(c, $10000);
+      PutU($D800 + (c shr 10));
+      PutU($DC00 + (c and $3FF));
+    end
+    else
+      PutU(c);
+  end;
+  Result := Result + '}';
+  SetCodePage(Result, CP_NONE, False);
+end;
+
+constructor TTyRichBookmarkMark.Create(AKind: TTyRichBookmarkKind; const AName: UTF8String;
+  const ABytes: RawByteString; ARawUc: Integer);
+begin
+  inherited Create(ABytes, '', ARawUc);
+  FKind := AKind;
+  FName := AName;
+end;
+
+constructor TTyRichBookmarkMark.CreateNew(AKind: TTyRichBookmarkKind; const AName: UTF8String);
+begin
+  Create(AKind, AName, TyRichBookmarkBytes(AKind, AName), 1);
+end;
+
+function TTyRichBookmarkMark.Clone: TTyRichObject;
+begin
+  Result := TTyRichBookmarkMark.Create(FKind, FName, Bytes, RawUc);
+end;
+
+function TTyRichBookmarkMark.DataBytes: Int64;
+begin
+  Result := inherited DataBytes + Length(FName);
+end;
+
+function TTyRichParaLoader.BookmarkIndexCount: Integer;
+begin
+  Result := -1;
+end;
+
+procedure TTyRichParaLoader.BookmarkIndexEntry(AIndex: Integer; out AKind: TTyRichBookmarkKind;
+  out AHash: Cardinal; out AParaSrc, AGroupSrc: Int64);
+begin
+  AKind := rbmStart;
+  AHash := 0;
+  AParaSrc := -1;
+  AGroupSrc := -1;
+end;
+
+function TTyRichParaLoader.BookmarkIndexName(AIndex: Integer): UTF8String;
+begin
+  Result := '';
 end;
 
 end.
