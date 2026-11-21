@@ -778,12 +778,6 @@ type
     FOnEditRefused: TTyRichEditRefusedEvent;
     // InsertLink / SetLink's arguments, for their makers
     FLinkArgURL, FLinkArgText: string;
-    { The fields around places the layouter (LayoutLinkField) and the link actions
-      (LinkAtSelection) asked about, for the content FLayLinkState (FieldAround): the next
-      paragraph of a long field, the next caret place in it, finds its field here. The
-      pointer's look-up keeps its own (FKnown), and counts its own reads. }
-    FLayLinkState: Int64;
-    FLayLinks: array of TTyRichKnownField;
     FOnLinkClick: TTyRichLinkClickEvent;
     { A press on a link that becomes its click when the same button comes up on the same link
       (LinkPress): the button, where, the keys, the link's open mark. Moved past the drag
@@ -1553,13 +1547,13 @@ type
     function MakeInsertLink(var APlace: TTyRichEditPlace): TTyRichCommand;
     function MakeSetLink(var APlace: TTyRichEditPlace): TTyRichCommand;
     function MakeRemoveLink(var APlace: TTyRichEditPlace): TTyRichCommand;
-    { The layouter's question (TTyRichLayouter.OnLinkField), answered from the fields known
-      to the link look-up (LinkOfChar's), so a paragraph of a long field does not search for
-      its field again. }
+    { The layouter's question (TTyRichLayouter.OnLinkField): the field's open mark found near
+      (FieldOpenNear), its instruction read - never a walk of a long field. }
     function LayoutLinkField(AAt: TTyRichPos; ADepth: Integer): Boolean;
-    { The field around APos that is ADepth deep there (FieldDepthAt): its entry in FLayLinks,
-      found once for the content (TTyRichDocument.FieldRangeAt); -1 none. }
-    function FieldAround(APos: TTyRichPos; ADepth: Integer): Integer;
+    { The open mark of the field around APos that is ADepth deep there (1 the outermost): in
+      APos's paragraph, else in one of the CRichLinkLookBack paragraphs before it (passed by
+      their depths). -1: none found there. }
+    function FieldOpenNear(APos: TTyRichPos; ADepth: Integer): TTyRichPos;
     // tables
     { What the user is told when table edit AEdit is refused for AReason. }
     function TableRefusalText(AReason: TTyRichTableRefusal; const AEdit: TTyRichTableEdit): string;
@@ -6413,53 +6407,82 @@ begin
   end;
 end;
 
-function TTyCustomRichEdit.FieldAround(APos: TTyRichPos; ADepth: Integer): Integer;
+{ How far back from a place the open mark of a field around it is looked for, in paragraphs
+  (passed by their depths, without reading them): a link's text is short; a field that began
+  further back - a table of contents, a field around most of a file - is taken for no link,
+  so that laying out or asking at a place in it never walks the field. }
+const
+  CRichLinkLookBack = 64;
+
+function TTyCustomRichEdit.FieldOpenNear(APos: TTyRichPos; ADepth: Integer): TTyRichPos;
 var
-  url: string;
-  i: Integer;
-  o, c: TTyRichPos;
-begin
-  if FLayLinkState <> FDoc.ContentState then
+  t: TTyRichText;
+  k, j, depth, s, low, stop: Integer;
+  ps: TTyRichPos;
+  runs: TTyRunArray;
+  found: TTyRichPos;
+
+  procedure Walk(AUpTo: TTyRichPos);
+  var
+    i: Integer;
   begin
-    FLayLinkState := FDoc.ContentState;
-    FLayLinks := nil;
+    found := -1;
+    for i := 0 to High(runs) do
+    begin
+      if ps + runs[i].Start >= AUpTo then Break;
+      if not (runs[i].Obj is TTyRichFieldMark) then Continue;
+      if TTyRichFieldMark(runs[i].Obj).Kind = rfmOpen then
+      begin
+        Inc(depth);
+        if depth = ADepth then found := ps + runs[i].Start;
+      end
+      else
+      begin
+        Dec(depth);
+        if depth < ADepth then found := -1;
+      end;
+    end;
   end;
-  for i := 0 to High(FLayLinks) do
-    if (FLayLinks[i].Depth = ADepth) and (FLayLinks[i].Open < APos) and
-      (APos <= FLayLinks[i].Close) then
-      Exit(i);
+
+begin
   Result := -1;
-  if (ADepth <= 0) or not FDoc.FieldRangeAt(APos, o, c) then Exit;
-  if Length(FLayLinks) >= 64 then FLayLinks := nil;
-  Result := Length(FLayLinks);
-  SetLength(FLayLinks, Result + 1);
-  FLayLinks[Result].Open := o;
-  FLayLinks[Result].Close := c;
-  FLayLinks[Result].Depth := ADepth;
-  FLayLinks[Result].Link := IsLinkField(o, url);
-  FLayLinks[Result].URL := url;
+  t := FDoc.Text;
+  if (ADepth <= 0) or (APos < 0) or (APos > t.Length) then Exit;
+  FDoc.BeginRead;
+  try
+    k := t.ParaOfPos(APos);
+    ps := t.ParaStart(k);
+    runs := FDoc.RunsOf(k);
+    depth := FDoc.ParaFieldDepth(k);
+    // (a paragraph that starts outside the field: its open mark is in it, or nowhere)
+    s := depth;
+    Walk(APos);
+    if (found >= 0) or (s < ADepth) then Exit(found);
+    stop := k - CRichLinkLookBack;
+    if stop < 0 then stop := 0;
+    for j := k - 1 downto stop do
+    begin
+      FDoc.ParaFieldDepths(j, s, low);
+      if low >= ADepth then Continue;
+      runs := FDoc.RunsOf(j);
+      ps := t.ParaStart(j);
+      depth := s;
+      Walk(High(Int64));
+      Exit(found);
+    end;
+  finally
+    FDoc.EndRead;
+  end;
 end;
 
 function TTyCustomRichEdit.LayoutLinkField(AAt: TTyRichPos; ADepth: Integer): Boolean;
 var
   url: string;
-  d, k: Integer;
-  at: TTyRichPos;
+  o: TTyRichPos;
 begin
-  Result := False;
   if ADepth <= 0 then Exit(IsLinkField(AAt, url));
-  // outward from the innermost field at the place, each one found once for the content
-  d := FDoc.FieldDepthAt(AAt);
-  at := AAt;
-  while d >= ADepth do
-  begin
-    k := FieldAround(at, d);
-    if k < 0 then Exit;
-    if d = ADepth then Exit(FLayLinks[k].Link);
-    // (the place of a field's open mark is in the field around it)
-    at := FLayLinks[k].Open;
-    Dec(d);
-  end;
+  o := FieldOpenNear(AAt, ADepth);
+  Result := (o >= 0) and IsLinkField(o, url);
 end;
 
 function TTyCustomRichEdit.LinkAtSelection(var AStart, ALength: TTyRichPos;
@@ -6468,7 +6491,7 @@ var
   s, e, p, o, c, len: TTyRichPos;
   m: TTyRichObject;
   url: string;
-  n, k: Integer;
+  n: Integer;
 
   function Take(AO, AC: TTyRichPos): Boolean;
   begin
@@ -6499,22 +6522,18 @@ begin
       c := FDoc.FieldPartner(s);
       if (c = e - 1) and Take(s, c) then Exit(True);
     end;
-    { the fields whose text holds the selection, innermost first (found once for the content:
-      a caret moving through a long table of contents does not search for it again) }
+    { the links whose text holds the selection, innermost first; only a link's own close mark
+      is looked for (a link is short), never that of a long field around it }
     p := s;
     n := FDoc.FieldDepthAt(p);
     while n > 0 do
     begin
-      k := FieldAround(p, n);
-      if k < 0 then Break;
-      o := FLayLinks[k].Open;
-      c := FLayLinks[k].Close;
-      if (e <= c) and FLayLinks[k].Link then
+      o := FieldOpenNear(p, n);
+      if o < 0 then Break;
+      if IsLinkField(o, url) then
       begin
-        AStart := o;
-        ALength := c - o + 1;
-        AURL := FLayLinks[k].URL;
-        Exit(True);
+        c := FDoc.FieldPartner(o);
+        if (c >= 0) and (e <= c) and Take(o, c) then Exit(True);
       end;
       p := o;
       Dec(n);
