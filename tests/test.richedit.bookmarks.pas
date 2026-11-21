@@ -19,6 +19,13 @@ uses
   test.richedit.fieldctl;
 
 type
+  { The probe with the pointer and the caret's ink to look at. }
+  TBkmProbe = class(TFieldProbe)
+  public
+    function PointerAt(X, Y: Integer): TCursor;
+    function CaretInk: Integer;
+  end;
+
   TTyRichBookmarksTest = class(TTestCase)
   private
     FCtl: TTyStyleController;
@@ -51,6 +58,8 @@ type
     procedure TestLazyFileFindsABookmarkWithoutReadingTheRest;
     procedure TestTheCaretNeverRestsBetweenBookmarkMarks;
     procedure TestADeletionThatHoldsOneEndCollapsesTheBookmark;
+    procedure TestAHomePageFollowsItsLinks;
+    procedure TestANameIsWrittenInTheFilesCodePage;
   end;
 
 implementation
@@ -89,12 +98,40 @@ begin
   if S <> '' then Move(S[1], Result[0], Length(S));
 end;
 
+{ ---- the probe ---- }
+
+function TBkmProbe.PointerAt(X, Y: Integer): TCursor;
+begin
+  Result := CursorAt(X, Y);
+end;
+
+function TBkmProbe.CaretInk: Integer;
+var
+  bmp: TBitmap;
+  x, y: Integer;
+begin
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf24bit;
+    bmp.SetSize(Width, Height);
+    bmp.Canvas.Brush.Color := clWhite;
+    bmp.Canvas.FillRect(0, 0, Width, Height);
+    DrawCaret(bmp.Canvas);
+    Result := 0;
+    for y := 0 to Height - 1 do
+      for x := 0 to Width - 1 do
+        if bmp.Canvas.Pixels[x, y] <> clWhite then Inc(Result);
+  finally
+    bmp.Free;
+  end;
+end;
+
 { ---- the suite ---- }
 
 procedure TTyRichBookmarksTest.SetUp;
 begin
   FCtl := TTyStyleController.Create(nil);
-  FRich := TFieldProbe.Create(nil);
+  FRich := TBkmProbe.Create(nil);
   FRich.Controller := FCtl;
   FRich.Font.PixelsPerInch := 96;
   FRich.SetBounds(0, 0, 600, 300);
@@ -375,11 +412,13 @@ begin
   FRich.AddBookmark('b1');
   FRich.Undo;
   AssertTrue('undone: the bytes', SaveRtf = before);
-  // a Chinese name, round trip
+  // a Chinese name in a cp936 document: the bytes Word 16 writes for it, read back
   FRich.SelStart := 14;
   AssertTrue('a Chinese name', FRich.AddBookmark('第二节'));
   saved := SaveRtf;
-  AssertTrue('written as Unicode', Pos(Rtf('{|*|bkmkstart |u31532?|u20108?|u-32126?}'), saved) > 0);
+  AssertTrue('written as Word writes it', Pos(Rtf('{|*|bkmkstart |''b5|''da|''b6|''fe|''bd|''da}'),
+    saved) > 0);
+  AssertTrue('its end too', Pos(Rtf('{|*|bkmkend |''b5|''da|''b6|''fe|''bd|''da}'), saved) > 0);
   Load(saved);
   AssertTrue('read back by its name', FRich.FindBookmark('第二节', s, e));
   AssertEquals('a place', s + 1, e);
@@ -585,6 +624,81 @@ begin
   AssertFalse('gone with the text', FRich.FindBookmark('m', s, e));
   FRich.Undo;
   AssertTrue('undone: the bytes', SaveRtf = before);
+end;
+
+{ A home page: read-only, no selection, no caret, no focus by a click. Its "#name" link is
+  under the hand, a plain left click fires it and the control goes to the bookmark - in
+  view, still no caret drawn, nothing selected. }
+procedure TTyRichBookmarksTest.TestAHomePageFollowsItsLinks;
+var
+  src: RawByteString;
+  i: Integer;
+  p, s, e: TTyRichPos;
+  r, r2: TRect;
+  x, y: Integer;
+begin
+  src := Head + 'go {|field{|*|fldinst HYPERLINK ||l "far"}{|fldrslt there}}|par ';
+  for i := 1 to 200 do src := src + 'line ' + IntToStr(i) + '|par ';
+  src := src + '{|*|bkmkstart far}the far place{|*|bkmkend far}|par }';
+  Load(Rtf(src));
+  FRich.ReadOnly := True;
+  FRich.AllowSelection := False;
+  FRich.ReadOnlyCaret := False;
+  FRich.FocusOnClick := False;
+  FRich.OnFollowLink := @Follow;
+  FRich.UpdateView;
+  p := 4;
+  r := FRich.PositionRect(p);
+  r2 := FRich.PositionRect(p + 1, True);
+  x := (r.Left + r2.Left) div 2;
+  y := (r.Top + r.Bottom) div 2;
+  AssertTrue('the hand over the link', TBkmProbe(FRich).PointerAt(x, y) = crHandPoint);
+  FRich.MDown(mbLeft, [ssLeft], x, y);
+  FRich.MUp(mbLeft, [], x, y);
+  AssertEquals('the click', 1, FClicks);
+  AssertEquals('followed', 1, FFollows);
+  AssertTrue('the bookmark', FRich.FindBookmark('far', s, e));
+  r := FRich.PositionRect(s + 1);
+  AssertTrue('the bookmark in view', (r.Bottom > r.Top) and (r.Top >= 0) and
+    (r.Bottom <= FRich.Height));
+  AssertEquals('nothing selected', 0, FRich.SelLength);
+  AssertEquals('no caret drawn', 0, TBkmProbe(FRich).CaretInk);
+  AssertFalse('no focus taken', FRich.Focused);
+end;
+
+{ A name made here is written as Word writes it: the file's code page's bytes where every
+  character has them (cp936: the bytes Word 16 wrote for 第二节), \uN for one that has none
+  there (Hangul in cp936); both read back. A link to "#第二节" made here jumps to it after a
+  save and a reload. }
+procedure TTyRichBookmarksTest.TestANameIsWrittenInTheFilesCodePage;
+var
+  saved: RawByteString;
+  s, e, p: TTyRichPos;
+begin
+  Load(Rtf(Head + 'one two|par three|par}'));
+  FRich.SelStart := 0;
+  AssertTrue('a name with no cp936 form', FRich.AddBookmark('장'));
+  FRich.SelStart := Doc.Text.ParaStart(1);
+  AssertTrue('a Chinese one', FRich.AddBookmark('第二节'));
+  FRich.SelStart := Doc.Text.Length;
+  AssertTrue('a link to it', FRich.InsertLink('#第二节', 'go'));
+  saved := SaveRtf;
+  AssertTrue('Hangul as Unicode', Pos(Rtf('{|*|bkmkstart |u-14427?}'), saved) > 0);
+  AssertTrue('Chinese as the code page''s bytes',
+    Pos(Rtf('{|*|bkmkstart |''b5|''da|''b6|''fe|''bd|''da}'), saved) > 0);
+  Load(saved);
+  AssertTrue('read back: Hangul', FRich.FindBookmark('장', s, e));
+  AssertTrue('read back: Chinese', FRich.FindBookmark('第二节', s, e));
+  AssertTrue('read back: its paragraph', Doc.Text.ParaOfPos(s) = 1);
+  FRich.ReadOnly := True;
+  FRich.OnFollowLink := @Follow;
+  p := FRich.FindText('go', 0, -1, []);
+  AssertTrue('the link', p > 0);
+  FRich.SelStart := 0;
+  ClickChar(p);
+  AssertEquals('followed', 1, FFollows);
+  AssertEquals('to its name', '第二节', FFollowName);
+  AssertTrue('the caret at it', Doc.Text.ParaOfPos(FRich.SelStart) = 1);
 end;
 
 initialization

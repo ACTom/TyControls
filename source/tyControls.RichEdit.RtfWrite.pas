@@ -333,6 +333,8 @@ type
     FNumPara, FNum: Integer;
     FNumList: TTyListFormat;
     FUc: Integer;            // the \uc the file has in effect where the stretch begins
+    // the header's \ansicpg: the code page a bookmark made here writes its name in
+    FBkmCp: Integer;
     FHavePrev: Boolean;      // a paragraph of the stretch is written and not yet ended
     { Inside a field that goes out as its bytes (TTyRichFieldMark): the fields open since its
       open mark, its own counted (0: none); FPrevInField: the paragraph written last ended
@@ -458,6 +460,9 @@ type
     procedure NoteSettings;
     procedure WriteUnit(AUnit: Cardinal);
     procedure WriteObject(AObj: TTyRichObject);
+    { A bookmark's end made here, as Word writes one: its name's characters as the bytes of
+      the header's code page (\'xx) when every one of them has them there, else as \uN. }
+    procedure WriteMadeBookmark(M: TTyRichBookmarkMark);
     procedure WritePicture(APic: TTyRichPicture);
     procedure RawPicture(APic: TTyRichPicture);
     procedure LeaveGroupsAt(APos: Int64);
@@ -2056,6 +2061,7 @@ begin
     fClose := FLoad.Scan.FontTableClose;
     cClose := FLoad.Scan.ColorTableClose;
     ansi := FLoad.Scan.AnsiCodePage;
+    FBkmCp := ansi;
     if (FFontN > FOldFontN) or FNoFontDefine then
       if fClose >= 0 then fAt := fClose else fAt := FHeaderStop;
     if FColorN > FOldColorN then
@@ -2105,6 +2111,7 @@ begin
       if ansi <> 0 then Break;
     end;
   if ansi = 0 then ansi := 1252;
+  FBkmCp := ansi;
   Sym('{');
   Word('rtf1');
   Word('ansi');
@@ -3116,7 +3123,9 @@ procedure TRtfWriter.WriteObject(AObj: TTyRichObject);
 begin
   // (a field's mark is WritePara's: its field's bytes, or nothing)
   if AObj is TTyRichFieldMark then Exit;
-  if AObj is TTyRichOpaque then
+  if (AObj is TTyRichBookmarkMark) and TTyRichBookmarkMark(AObj).Made then
+    WriteMadeBookmark(TTyRichBookmarkMark(AObj))
+  else if AObj is TTyRichOpaque then
     RawUnder(TTyRichOpaque(AObj).Bytes, AObj.RawUc)
   else if AObj is TTyRichPicture then
   begin
@@ -3126,6 +3135,52 @@ begin
   else
     // an object of a kind this writer does not know: its character stays
     WriteUnit($FFFC);
+end;
+
+procedure TRtfWriter.WriteMadeBookmark(M: TTyRichBookmarkMark);
+var
+  table: Pointer;
+  p, n, v: Integer;
+  code: Cardinal;
+  bytes: Boolean;
+  s: RawByteString;
+begin
+  table := nil;
+  if FBkmCp > 0 then table := TyRichCodePageTable(FBkmCp);
+  // the code page's bytes only when it has them for every character (Word's way)
+  bytes := table <> nil;
+  p := 1;
+  while bytes and (p <= Length(M.Name)) do
+  begin
+    n := TyRichNextChar(@M.Name[p], Length(M.Name) - p + 1, code);
+    Inc(p, n);
+    if (code >= $80) and (TyRichCodePageBytes(table, code) < $80) then bytes := False;
+  end;
+  if not bytes then
+  begin
+    RawUnder(M.Bytes, 1);
+    Exit;
+  end;
+  if M.Kind = rbmStart then s := '{\*\bkmkstart ' else s := '{\*\bkmkend ';
+  p := 1;
+  while p <= Length(M.Name) do
+  begin
+    n := TyRichNextChar(@M.Name[p], Length(M.Name) - p + 1, code);
+    Inc(p, n);
+    if code < $80 then
+    begin
+      if AnsiChar(code) in ['\', '{', '}'] then s := s + '\';
+      s := s + AnsiChar(code);
+      Continue;
+    end;
+    v := TyRichCodePageBytes(table, code);
+    if v > 255 then s := s + '\''' + LowerCase(IntToHex(v shr 8, 2)) + '\''' +
+      LowerCase(IntToHex(v and 255, 2))
+    else s := s + '\''' + LowerCase(IntToHex(v, 2));
+  end;
+  s := s + '}';
+  SetCodePage(s, CP_NONE, False);
+  RawUnder(s, 1);
 end;
 
 // ---- going on with the file ----

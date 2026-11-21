@@ -427,6 +427,7 @@ type
   private
     FKind: TTyRichBookmarkKind;
     FName: UTF8String;
+    FMade: Boolean;
   public
     { Read from a file: ABytes its group as the file has it, under \uc ARawUc. }
     constructor Create(AKind: TTyRichBookmarkKind; const AName: UTF8String;
@@ -437,6 +438,10 @@ type
     function DataBytes: Int64; override;
     property Kind: TTyRichBookmarkKind read FKind;
     property Name: UTF8String read FName;
+    { Made here (CreateNew): a writer writes it as Word writes a bookmark - its name in the
+      file's code page where every character has bytes there, Bytes (\uN) otherwise. One
+      read from a file is written as its Bytes. }
+    property Made: Boolean read FMade;
   end;
 
   TTyRichFieldMarkKind = (rfmOpen, rfmClose);
@@ -10645,11 +10650,13 @@ end;
 constructor TTyRichBookmarkMark.CreateNew(AKind: TTyRichBookmarkKind; const AName: UTF8String);
 begin
   Create(AKind, AName, TyRichBookmarkBytes(AKind, AName), 1);
+  FMade := True;
 end;
 
 function TTyRichBookmarkMark.Clone: TTyRichObject;
 begin
-  Result := TTyRichBookmarkMark.Create(FKind, FName, Bytes, RawUc);
+  if FMade then Result := TTyRichBookmarkMark.CreateNew(FKind, FName)
+  else Result := TTyRichBookmarkMark.Create(FKind, FName, Bytes, RawUc);
 end;
 
 function TTyRichBookmarkMark.DataBytes: Int64;
