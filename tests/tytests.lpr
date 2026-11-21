@@ -316,7 +316,8 @@ uses
   test.richedit.keptpictures,
   test.richedit.pictparse,
   test.richedit.ruler,
-  test.richedit.actions;
+  test.richedit.actions,
+  test.richedit.linemetrics;
 
 type
   TTyTestRunner = class(TTestRunner)
