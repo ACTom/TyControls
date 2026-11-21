@@ -69,6 +69,7 @@ type
     procedure TestABuilderOfTenThousandFormattedParagraphs;
     procedure TestABookmarkAmong200000In100MB;
     procedure TestListItemsMadeInA100MBRtfSaveAsAKeyDoes;
+    procedure TestATableCellPropertyAndARowInALongTable;
   private
     procedure SaveBesideFields(ABytes: Int64; ANest: Integer);
   end;
@@ -79,7 +80,7 @@ uses
   Math, LCLType, Controls, BGRABitmap, BGRABitmapTypes, tyControls.RichEdit.Text,
   tyControls.RichEdit.RtfRead, tyControls.RichEdit.RtfWrite, tyControls.RichEdit.Model,
   tyControls.RichEdit.Commands, tyControls.RichEdit.Find, tyControls.RichEdit.Ruler,
-  tyControls.RichEdit.Actions, tyControls.RichEdit.Builder
+  tyControls.RichEdit.Actions, tyControls.RichEdit.Builder, tyControls.RichEdit.TableProps
   {$IFDEF LCLWin32}, test.richedit.dropacross{$ENDIF};
 
 {$IFDEF MSWINDOWS}
@@ -2314,6 +2315,67 @@ begin
   AssertEquals('the paragraphs', 10001, FRich.Document.Text.ParaCount);
   Report('a builder: 10,000 formatted paragraphs built and set (best of 3)', best);
   AssertTrue(Format('built and set in %.1f ms', [best]), best <= 600);
+end;
+
+{ A table of 10,000 rows: one cell's property set (shading, through its command), from the
+  command to the end of the paint; Tab in the last cell, which adds a row, through the
+  user's door to the end of its paint; and the property again in a table a file gave. }
+procedure TTyRichEditPerfTest.TestATableCellPropertyAndARowInALongTable;
+const
+  Rows = 10000;
+var
+  bmp: TBitmap;
+  d: TTyRichDocument;
+  t: TTyRichText;
+  k: Integer;
+  t0, prop, add, again: Double;
+  info: TTyRichTableInfo;
+  p: TTyRichCellProps;
+begin
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf32bit;
+    bmp.SetSize(FRich.Width, FRich.Height);
+    FRich.WantTabs := True;
+    FRich.Lines.Text := 'before' + LineEnding + 'after';
+    d := FRich.Document;
+    t := d.Text;
+    AssertTrue('a long table', d.Execute(TTyRichInsertTable.Create(t.ParaStart(1), Rows, 2)));
+    k := 1 + 2 * (Rows div 2);
+    FRich.SelStart := t.ParaStart(k);
+    TPerfRich(FRich).PaintInto(bmp);
+    p := Default(TTyRichCellProps);
+    p.Valid := [rcpShading];
+    p.Shading := clYellow;
+    t0 := Clock;
+    AssertTrue('a shading', d.Execute(TTyRichSetCellProps.Create(t.ParaStart(k), Rows div 2, 0,
+      Rows div 2, 0, p)));
+    TPerfRich(FRich).PaintInto(bmp);
+    prop := Clock - t0;
+    Report(Format('table of %d rows: one cell''s shading, to the end of its paint', [Rows]), prop);
+    // the last cell: a row below
+    FRich.SelStart := t.ParaStart(2 * Rows);
+    TPerfRich(FRich).PaintInto(bmp);
+    t0 := Clock;
+    TPerfRich(FRich).Key(VK_TAB, []);
+    TPerfRich(FRich).PaintInto(bmp);
+    add := Clock - t0;
+    AssertTrue('a row added', d.TableInfoAt(1, info) and (info.RowCount = Rows + 1));
+    Report('table: Tab in the last cell adds a row, to the end of its paint', add);
+    // again, the next row after it
+    t0 := Clock;
+    p.Shading := clAqua;
+    AssertTrue('a shading again', d.Execute(TTyRichSetCellProps.Create(t.ParaStart(k), Rows div 2,
+      1, Rows div 2, 1, p)));
+    TPerfRich(FRich).PaintInto(bmp);
+    again := Clock - t0;
+    Report('table: another cell''s shading, to the end of its paint', again);
+    AssertTrue(Format('a cell''s shading in %.1f ms', [prop]), prop <= CKeystrokeMs);
+    AssertTrue(Format('Tab adding a row in %.1f ms', [add]), add <= CKeystrokeMs);
+    AssertTrue(Format('a cell''s shading again in %.1f ms', [again]), again <= CKeystrokeMs);
+  finally
+    bmp.Free;
+  end;
 end;
 
 initialization

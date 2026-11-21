@@ -1421,8 +1421,9 @@ begin
       d.Text.ParaStart(f + 1) - d.Text.ParaStart(f))));
     AssertEquals('cell 0, 1 has none', 'r0c0|#/r1c0|r1c1', TableShape(d, 1));
     before := Dump(d);
-    AssertTrue('a row', Exec(d, TTyRichInsertRow.Create(TablePos(d), 2)));
-    AssertEquals('the cell has an empty paragraph again', 'r0c0|/r1c0|r1c1/|', TableShape(d, 1));
+    // (an edit of rows reads the row it puts one beside: that row is the one put right)
+    AssertTrue('a row', Exec(d, TTyRichInsertRow.Create(TablePos(d), 1)));
+    AssertEquals('the cell has an empty paragraph again', 'r0c0|/|/r1c0|r1c1', TableShape(d, 1));
     CheckClean('a cell filled', d, 1);
     CheckReadBack('a cell filled', d);
     d.Undo;
@@ -1803,9 +1804,11 @@ begin
     d.TableParaVisits := 0;
     AssertTrue('one row', Exec(d, TTyRichInsertRow.Create(d.Text.ParaStart(500), Rows div 2)));
     visits := d.TableParaVisits;
-    // the check (CanExecute) and the edit each read the table and the paragraph on either
-    // side once; the cells given: the table's paragraphs once more
-    AssertEquals('paragraph visits for one row in 10000', 3 * Rows + 4, visits);
+    { the check (CanExecute) and the edit each read at most the table and the paragraph on
+      either side once, and nothing is given cells again: a row named by its index from the
+      table's first paragraph - the paragraphs up to it, twice }
+    AssertTrue(Format('%d paragraph visits for one row in 10000', [visits]),
+      visits <= 3 * Rows + 4);
   finally
     d.Free;
   end;
@@ -2221,7 +2224,12 @@ begin
       AssertTrue(Format('edit %d', [Ord(kind)]), Exec(d, TableCommand(kind, TablePos(d), 1)));
       AssertTrue(Format('edit %d: %d steps for %d paragraphs', [Ord(kind), d.TableEditSteps, paras]),
         d.TableEditSteps <= 6 * paras);
-      AssertTrue(Format('edit %d: steps counted', [Ord(kind)]), d.TableEditSteps >= paras);
+      // an edit of rows: the rows it touches; of columns: every row
+      if kind in [rtkInsertRow, rtkDeleteRow] then
+        AssertTrue(Format('edit %d: %d steps, the rows it touches', [Ord(kind), d.TableEditSteps]),
+          d.TableEditSteps <= 32)
+      else
+        AssertTrue(Format('edit %d: steps counted', [Ord(kind)]), d.TableEditSteps >= paras);
     finally
       d.Free;
     end;
@@ -2252,16 +2260,18 @@ var
 begin
   small := StepOf(100, table);
   large := StepOf(1000, table);
+  // the row it made and what the text keeps: nothing of the rows it did not touch
   AssertTrue(Format('a row in 1000 rows: %d bytes, in 100: %d', [large, small]),
-    large - small >= 1800 * 40);
-  // the new table it keeps for a redo, the old table and every paragraph's old value
+    large <= small + 256);
   AssertTrue(Format('a row in 1000 rows: %d bytes, the table %d', [large, table]),
-    large >= 2 * table + 2000 * 40);
+    large < table div 16);
+  AssertTrue(Format('a row counts what it keeps (%d bytes)', [large]),
+    large >= TTyRichRow.InstanceSize + 2 * TTyRichCell.InstanceSize);
   // a history bound by its own count
   d := TTyRichDocument.Create;
   try
     AssertTrue('a table', Exec(d, TTyRichInsertTable.Create(0, 1000, 2)));
-    d.MaxUndoBytes := 4 * 1024 * 1024;
+    d.MaxUndoBytes := 64 * large;
     for i := 1 to 200 do
       AssertTrue('a row', Exec(d, TTyRichInsertRow.Create(0, 500)));
     AssertTrue(Format('%d bytes held under %d', [d.HistoryBytes, d.MaxUndoBytes]),
@@ -2276,7 +2286,8 @@ end;
 procedure TTyRichTablesTest.TestASourceOnlyWhereAFileIs;
 var
   d: TTyRichDocument;
-  i, n: Integer;
+  i, n, k: Integer;
+  own: array of Pointer;
 begin
   d := TableDoc(3, 2);
   try
@@ -2289,11 +2300,20 @@ begin
   end;
   d := LoadDoc(FixtureBytes('re-zh-table.rtf'));
   try
+    // (an edit of rows gives no paragraph of the rows it leaves a value: they are the file's own)
+    k := FirstTablePara(d);
+    SetLength(own, 9);
+    for i := 0 to 8 do own[i] := d.Text.ParaData[k + i];
     AssertTrue('a row', Exec(d, TTyRichInsertRow.Create(TablePos(d), 1)));
     n := 0;
     for i := 0 to d.Text.ParaCount - 1 do
       if d.ValueSource(d.Text.ParaData[i]) <> nil then Inc(n);
-    AssertEquals('a file''s rows: each of their paragraphs has one', 9, n);
+    AssertEquals('a file''s rows: none needs one', 0, n);
+    for i := 0 to 2 do
+      AssertTrue(Format('row 0, paragraph %d: its very value', [i]), d.Text.ParaData[k + i] = own[i]);
+    for i := 3 to 8 do
+      AssertTrue(Format('rows 1, 2, paragraph %d: its very value', [i]),
+        d.Text.ParaData[k + 3 + i] = own[i]);
   finally
     d.Free;
   end;
@@ -2673,7 +2693,10 @@ begin
           AssertTrue(msg + ': below', Exec(d, TTyRichInsertRow.Create(p, CRichRowBelow)))
         else
           AssertTrue(msg + ': above', Exec(d, TTyRichInsertRow.Create(p, CRichRowAbove)));
-        AssertEquals(msg + ': the same reads', visits, d.TableParaVisits);
+        { (by its index from the table's first paragraph: the rows up to it; by a position: the
+          position's row too, on the way to the row above it - in the check and the edit) }
+        AssertTrue(msg + Format(': no more reads (%d, by its index %d)', [d.TableParaVisits,
+          visits]), d.TableParaVisits <= visits + 2 * 2);
         AssertEquals(msg + ': the same table', TableShape(e, 1), TableShape(d, 1));
         after := Dump(d);
         d.Undo;

@@ -7964,6 +7964,30 @@ begin
     U.AddPart(Doc.InsertText(Doc.FText.Length, #13#10));
     U.AddPart(SetCells(Doc.FText.ParaCount - 1, [nil], [rckStructure]));
   end;
+  { A table whose rows are not known (a plain delete took a row's last paragraph; the shape
+    was read whole): its rows are put right first, as a step of this edit, and it is edited
+    as one whose rows are known - the table read whole being the window. A part a loader cut
+    is not: its parts become one table below. }
+  if not Shape.Window and (Shape.RowCount > 0) then
+  begin
+    t := Shape.Rows[0].Row.FTable;
+    changed := not t.FCut;
+    for r := 0 to Shape.RowCount - 1 do
+      if (Shape.Rows[r].Row.FTable <> t) or
+         ((r > 0) and (Shape.Rows[r].Row.FIndex <= Shape.Rows[r - 1].Row.FIndex)) then
+        changed := False;
+    if changed then
+    begin
+      rows := nil;
+      SetLength(rows, Shape.RowCount);
+      for r := 0 to Shape.RowCount - 1 do rows[r] := Shape.Rows[r].Row;
+      U.AddPart(Doc.SpliceRows(t, 0, Length(t.FRows), rows, True));
+      Shape.Window := True;
+      Shape.Base := 0;
+      Shape.Table := t;
+      Shape.RowIndex := Edit.Index;
+    end;
+  end;
   if Edit.Kind in [rtkInsertRow, rtkDeleteRow] then PlanRows else PlanColumns;
   // the shape row each plan row is, and the new cell of each old one
   rowOf := nil;
@@ -8135,6 +8159,77 @@ begin
   Result := TTyRichParaData(AData).FSource;
 end;
 
+{ TableRefusal for a table whose rows are known (TTyRichTable.FRowsValid, no part a loader
+  cut): only the rows the edit touches are read (S a window: the row an edit of rows puts
+  one beside or takes, every row for a column). S.Window False and rtrNone: not such a
+  table - the caller reads it whole. }
+function WindowRefusal(ADoc: TTyRichDocument; const AEdit: TTyRichTableEdit; APara: Integer;
+  out S: TTyRichShape): TTyRichTableRefusal;
+var
+  c: TTyRichCell;
+  t: TTyRichTable;
+  n, ik, idx, w0, w1, cells: Integer;
+begin
+  S := Default(TTyRichShape);
+  Result := rtrNone;
+  c := ADoc.CellAt(APara);
+  if (c = nil) or c.FRow.FTable.FCut or not c.FRow.FTable.FRowsValid then Exit;
+  t := c.FRow.FTable;
+  n := Length(t.FRows);
+  ik := c.FRow.FIndex;
+  if (ik < 0) or (ik >= n) or (t.FRows[ik] <> c.FRow) then Exit;
+  Result := TableLock(t);
+  if Result <> rtrNone then
+  begin
+    // (refused: no row is read, but the answer is the window's)
+    S.Window := True;
+    Exit;
+  end;
+  case AEdit.Kind of
+    rtkInsertRow:
+      begin
+        if AEdit.Index = CRichRowAbove then idx := ik
+        else if AEdit.Index = CRichRowBelow then idx := ik + 1
+        else idx := AEdit.Index;
+        S.Window := True;
+        if (idx < 0) or (idx > n) then Exit(rtrOutOfRange);
+        if idx > 0 then w0 := idx - 1 else w0 := 0;
+        w1 := w0;
+      end;
+    rtkDeleteRow:
+      begin
+        idx := AEdit.Index;
+        S.Window := True;
+        if (idx < 0) or (idx >= n) then Exit(rtrOutOfRange);
+        w0 := idx;
+        w1 := idx;
+      end;
+  else
+    begin
+      idx := AEdit.Index;
+      w0 := 0;
+      w1 := n - 1;
+    end;
+  end;
+  if not ReadRowWindow(ADoc, APara, t, w0, w1, S) then
+  begin
+    // the paragraphs are not where its rows say: as if they were not known
+    t.FRowsValid := False;
+    S := Default(TTyRichShape);
+    Exit(rtrNone);
+  end;
+  S.RowIndex := idx;
+  if AEdit.Kind in [rtkInsertColumn, rtkDeleteColumn] then
+  begin
+    if not S.Regular or not S.Ordered then Exit(rtrIrregularRows);
+    cells := Length(S.Rows[0].Cells);
+    if (idx < 0) or (idx > cells) or ((AEdit.Kind = rtkDeleteColumn) and (idx = cells)) then
+      Exit(rtrOutOfRange);
+    if (AEdit.Kind = rtkInsertColumn) and (cells >= CRichMaxTableCols) then Exit(rtrOutOfRange);
+  end;
+  if not S.Ordered then Exit(rtrIrregularRows);
+end;
+
 { TTyRichDocument.TableEditRefusal, and for an edit of a table its shape in S (read once: the
   edit goes by it). Call it inside a read scope. }
 function TableRefusal(ADoc: TTyRichDocument; const AEdit: TTyRichTableEdit;
@@ -8162,6 +8257,8 @@ begin
     if ADoc.FieldRefused(AEdit.Pos, 0) then Exit(rtrInField);
     Exit(rtrNone);
   end;
+  Result := WindowRefusal(ADoc, AEdit, k, S);
+  if S.Window or (Result <> rtrNone) then Exit;
   Result := ReadTableShape(ADoc, k, S);
   if Result <> rtrNone then Exit;
   if S.Locked <> rtrNone then Exit(S.Locked);

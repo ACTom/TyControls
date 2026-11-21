@@ -930,12 +930,14 @@ begin
   AssertEquals('no table paragraph visited', 0, d.TableParaVisits);
   AssertTrue(Format('%d paragraphs laid out', [FRich.LaidParas]), FRich.LaidParas < 100);
   AssertFalse('no step', d.CanUndo);
-  // a row by Tab in the last cell, and by InsertRow: the engine's own reads of the table only
+  { a row by Tab in the last cell, and by InsertRow: the engine's own reads only - of the row
+    beside the position (a row named by its place reads that row, not the table) }
   d.TableParaVisits := 0;
-  AssertTrue('the engine''s row', d.Execute(TTyRichInsertRow.Create(t.ParaStart(1), Rows)));
+  AssertTrue('the engine''s row', d.Execute(TTyRichInsertRow.Create(t.ParaStart(2 * Rows),
+    CRichRowBelow)));
   engine := d.TableParaVisits;
   d.Undo;
-  AssertTrue('the engine reads the table', engine > 2 * Rows);
+  AssertTrue(Format('the engine reads the row (%d)', [engine]), (engine > 0) and (engine <= 16));
   FRich.SelStart := t.ParaStart(2 * Rows);
   d.TableParaVisits := 0;
   Press(VK_TAB);
