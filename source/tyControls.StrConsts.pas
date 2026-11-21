@@ -467,6 +467,8 @@ resourcestring
   rsRichActClearFormatHint   = 'Clear formatting';
   rsRichActLineSpacing       = 'Line &Spacing';
   rsRichActLineSpacingHint   = 'Line spacing';
+  rsRichActParaSpacing       = 'Paragraph S&pacing';
+  rsRichActParaSpacingHint   = 'Space before and after the paragraph';
   rsRichActRowAbove          = 'Insert Row &Above';
   rsRichActRowAboveHint      = 'Insert a row above';
   rsRichActRowBelow          = 'Insert Row &Below';

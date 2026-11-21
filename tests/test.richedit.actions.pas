@@ -115,6 +115,8 @@ type
     procedure TestTheFontActions;
     procedure TestClearFormattingGivesTheDefaultBack;
     procedure TestTheLineSpacingAction;
+    procedure TestTheLineSpacingActionTakesAnyMultiple;
+    procedure TestTheParagraphSpacingAction;
     procedure TestTheTableOperations;
     procedure TestCanInsertPictureReadsThePlace;
     procedure TestAnIdleRoundAsksTheControlNothing;
@@ -1876,6 +1878,91 @@ begin
   AssertTrue('1.5', FRich.Paragraph.LineSpacingRule = ls15);
   AssertTrue('checked', UpdatedOn(half).Checked);
   AssertFalse('single unchecked', UpdatedOn(one).Checked);
+end;
+
+{ Multiple: any multiple of the line's own height (1.08, 3), to a 240th as a file holds it;
+  checked by the first paragraph's multiple; a named one (2) the named rule; a Multiple of 0
+  is the Spacing rule as before. }
+procedure TTyRichEditActionsTest.TestTheLineSpacingActionTakesAnyMultiple;
+var
+  m108, m3, m2, single: TTyRichEditLineSpacing;
+  depth: Integer;
+begin
+  m108 := TTyRichEditLineSpacing(Make(TTyRichEditLineSpacing));
+  m108.Multiple := 1.08;
+  m3 := TTyRichEditLineSpacing(Make(TTyRichEditLineSpacing));
+  m3.Multiple := 3;
+  m2 := TTyRichEditLineSpacing(Make(TTyRichEditLineSpacing));
+  m2.Multiple := 2;
+  single := TTyRichEditLineSpacing(Make(TTyRichEditLineSpacing));
+  Select(2, 0);
+  AssertFalse('1.08 not yet', UpdatedOn(m108).Checked);
+  depth := FRich.Document.UndoDepth;
+  m108.Execute;
+  AssertEquals('one step', depth + 1, FRich.Document.UndoDepth);
+  AssertEquals('1.08 times', 1.08, FRich.Paragraph.LineSpacingMultiple, 0.005);
+  AssertTrue('a multiple of its own', FRich.Paragraph.LineSpacingRule = lsMultiple);
+  AssertTrue('1.08 checked', UpdatedOn(m108).Checked);
+  AssertFalse('3 not', UpdatedOn(m3).Checked);
+  AssertFalse('single not', UpdatedOn(single).Checked);
+  m3.Execute;
+  AssertEquals('3 times', 3, FRich.Paragraph.LineSpacingMultiple, 0.005);
+  AssertTrue('3 checked', UpdatedOn(m3).Checked);
+  AssertFalse('1.08 no longer', UpdatedOn(m108).Checked);
+  m2.Execute;
+  AssertTrue('2: the named rule', FRich.Paragraph.LineSpacingRule = lsDouble);
+  AssertTrue('2 checked', UpdatedOn(m2).Checked);
+  single.Execute;
+  AssertTrue('a Multiple of 0: the Spacing rule', FRich.Paragraph.LineSpacingRule = lsSingle);
+  AssertTrue('single checked', UpdatedOn(single).Checked);
+end;
+
+{ The space before and after: Before / After points (-1 a side left as it is), one undo step
+  through the format API; checked by the first paragraph the selection touches; with no
+  side given there is nothing to do (grey). }
+procedure TTyRichEditActionsTest.TestTheParagraphSpacingAction;
+var
+  b12, b0, a6, both, none: TTyRichEditParagraphSpacing;
+  depth: Integer;
+begin
+  b12 := TTyRichEditParagraphSpacing(Make(TTyRichEditParagraphSpacing));
+  b12.Before := 12;
+  b0 := TTyRichEditParagraphSpacing(Make(TTyRichEditParagraphSpacing));
+  b0.Before := 0;
+  a6 := TTyRichEditParagraphSpacing(Make(TTyRichEditParagraphSpacing));
+  a6.After := 6;
+  both := TTyRichEditParagraphSpacing(Make(TTyRichEditParagraphSpacing));
+  both.Before := 6;
+  both.After := 6;
+  none := TTyRichEditParagraphSpacing(Make(TTyRichEditParagraphSpacing));
+  Select(2, 0);
+  AssertFalse('no side: grey', UpdatedOn(none).Enabled);
+  AssertTrue('a side: may', UpdatedOn(b12).Enabled);
+  AssertTrue('0 before now', UpdatedOn(b0).Checked);
+  AssertFalse('12 not yet', UpdatedOn(b12).Checked);
+  depth := FRich.Document.UndoDepth;
+  b12.Execute;
+  AssertEquals('one step', depth + 1, FRich.Document.UndoDepth);
+  AssertEquals('named as the format API''s', rsRichUndoParaFormat, FRich.Document.UndoDescription);
+  AssertEquals('12 pt before', 12, FRich.Paragraph.SpaceBefore);
+  AssertEquals('after left as it was', 0, FRich.Paragraph.SpaceAfter);
+  AssertTrue('12 checked', UpdatedOn(b12).Checked);
+  AssertFalse('0 no longer', UpdatedOn(b0).Checked);
+  a6.Execute;
+  AssertEquals('6 pt after', 6, FRich.Paragraph.SpaceAfter);
+  AssertEquals('before left as it was', 12, FRich.Paragraph.SpaceBefore);
+  AssertTrue('6 after checked', UpdatedOn(a6).Checked);
+  AssertFalse('both 6: not yet', UpdatedOn(both).Checked);
+  both.Execute;
+  AssertEquals('6 before', 6, FRich.Paragraph.SpaceBefore);
+  AssertTrue('both checked', UpdatedOn(both).Checked);
+  // the same before, another after: not both
+  a6.After := 12;
+  a6.Execute;
+  AssertEquals('6 before still', 6, FRich.Paragraph.SpaceBefore);
+  AssertFalse('before the same, after not: not checked', UpdatedOn(both).Checked);
+  FRich.ReadOnly := True;
+  AssertFalse('read-only: grey', UpdatedOn(b12).Enabled);
 end;
 
 { The table operations: the control's own, each one undo step named as the control names it;

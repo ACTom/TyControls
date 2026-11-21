@@ -919,6 +919,14 @@ msgstr ""
 msgid "Numbered list"
 msgstr ""
 
+#: tycontrols.strconsts.rsrichactparaspacing
+msgid "Paragraph S&pacing"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactparaspacinghint
+msgid "Space before and after the paragraph"
+msgstr ""
+
 #: tycontrols.strconsts.rsrichactpaste
 msgid "&Paste"
 msgstr ""

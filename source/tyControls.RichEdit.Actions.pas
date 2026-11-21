@@ -111,6 +111,8 @@ type
     FFontName: string;
     FFontSize: Integer;
     FSpacing: TTyLineSpacing;
+    FMultiple: Double;
+    FSpaceBefore, FSpaceAfter: Integer;
     FCanRowIns, FCanColIns, FCanRowDel, FCanColDel, FCanTableDel: Boolean;
     FCanLink, FCanEditLink: Boolean;
     procedure ViewChanged(Sender: TObject);
@@ -151,6 +153,12 @@ type
     property FontName: string read FFontName;
     property FontSize: Integer read FFontSize;
     property LineSpacing: TTyLineSpacing read FSpacing;
+    { Paragraph.LineSpacingMultiple (0 for an exact or an at-least spacing), SpaceBefore and
+      SpaceAfter (points) - the first paragraph the selection touches (meaningful with
+      Readable). }
+    property LineMultiple: Double read FMultiple;
+    property SpaceBefore: Integer read FSpaceBefore;
+    property SpaceAfter: Integer read FSpaceAfter;
     property CanInsertRow: Boolean read FCanRowIns;
     property CanInsertColumn: Boolean read FCanColIns;
     property CanDeleteRow: Boolean read FCanRowDel;
@@ -712,13 +720,16 @@ type
     property ShortCut default CTyRichKeyClearFormat;
   end;
 
-  { The paragraphs' line spacing rule: Spacing (single, 1.15, 1.5, double; an exact or an
-    at-least spacing keeps its height, a paragraph with none takes the line's own). Checked:
-    the first paragraph the selection touches has that rule (the format API reads no
-    consistency for spacing). Enabled: CanFormatParagraphs. }
+  { The paragraphs' line spacing: Multiple times the line's own height when it is above 0 (1.08,
+    3 - any multiple, to a 240th as a file holds it), else the rule Spacing (single, 1.15,
+    1.5, double; an exact or an at-least spacing keeps its height, a paragraph with none takes
+    the line's own). Checked: the first paragraph the selection touches has that spacing (the
+    format API reads no consistency for spacing). Enabled: CanFormatParagraphs. }
   TTyRichEditLineSpacing = class(TTyRichEditAction)
   private
     FSpacing: TTyLineSpacing;
+    FMultiple: Double;
+    function IsMultipleStored: Boolean;
   protected
     procedure UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
     procedure ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
@@ -726,6 +737,24 @@ type
     constructor Create(AOwner: TComponent); override;
   published
     property Spacing: TTyLineSpacing read FSpacing write FSpacing default lsSingle;
+    property Multiple: Double read FMultiple write FMultiple stored IsMultipleStored;
+  end;
+
+  { The space before and after the paragraphs the selection touches: Before and After in
+    points, each -1 (the default) to leave that side as it is - 0, 6, 12 as Word's menu has
+    them, or both at once. Checked: the first paragraph the selection touches has the sides
+    given. Enabled: CanFormatParagraphs, and a side given. }
+  TTyRichEditParagraphSpacing = class(TTyRichEditAction)
+  private
+    FBefore, FAfter: Integer;
+  protected
+    procedure UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+    procedure ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+  public
+    constructor Create(AOwner: TComponent); override;
+  published
+    property Before: Integer read FBefore write FBefore default -1;
+    property After: Integer read FAfter write FAfter default -1;
   end;
 
   { ---- table operations: the control's own, Enabled by its own Can... at the caret ---- }
@@ -793,7 +822,7 @@ type
 
 const
   { Every action of this unit, in the order the IDE lists them. }
-  CTyRichEditActions: array[0..44] of TTyRichEditActionClass = (
+  CTyRichEditActions: array[0..45] of TTyRichEditActionClass = (
     TTyRichEditBold, TTyRichEditItalic, TTyRichEditUnderline, TTyRichEditStrikeOut,
     TTyRichEditSuperscript, TTyRichEditSubscript,
     TTyRichEditAlignLeft, TTyRichEditAlignCenter, TTyRichEditAlignRight,
@@ -807,7 +836,8 @@ const
     TTyRichEditFontGrow, TTyRichEditFontShrink, TTyRichEditClearFormat, TTyRichEditLineSpacing,
     TTyRichEditInsertRowAbove, TTyRichEditInsertRowBelow, TTyRichEditInsertColumnLeft,
     TTyRichEditInsertColumnRight, TTyRichEditDeleteRow, TTyRichEditDeleteColumn,
-    TTyRichEditDeleteTable, TTyRichEditInsertLink, TTyRichEditRemoveLink);
+    TTyRichEditDeleteTable, TTyRichEditInsertLink, TTyRichEditRemoveLink,
+    TTyRichEditParagraphSpacing);
 
   { The font sizes the grow and shrink actions step through (points). }
   CTyRichFontSizes: array[0..15] of Integer = (8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28,
@@ -920,7 +950,10 @@ begin
     FFontName := FRich.SelAttributes.Name;
     FFontSize := FRich.SelAttributes.Size;
     FSpacing := FRich.Paragraph.LineSpacingRule;
-    Inc(FQueries, 10);
+    FMultiple := FRich.Paragraph.LineSpacingMultiple;
+    FSpaceBefore := FRich.Paragraph.SpaceBefore;
+    FSpaceAfter := FRich.Paragraph.SpaceAfter;
+    Inc(FQueries, 13);
   end
   else
   begin
@@ -934,6 +967,9 @@ begin
     FFontName := '';
     FFontSize := 0;
     FSpacing := lsSingle;
+    FMultiple := 1;
+    FSpaceBefore := 0;
+    FSpaceAfter := 0;
   end;
   FCanTable := FRich.CanInsertTable;
   FCanPicture := FRich.CanInsertPicture;
@@ -2103,11 +2139,21 @@ begin
   FSpacing := lsSingle;
 end;
 
+function TTyRichEditLineSpacing.IsMultipleStored: Boolean;
+begin
+  Result := FMultiple <> 0;
+end;
+
 procedure TTyRichEditLineSpacing.UpdateOn(ARich: TTyCustomRichEdit;
   AState: TTyRichEditActionState);
 begin
   Enabled := AState.CanFormatParagraphs;
-  Checked := AState.Readable and (AState.LineSpacing = FSpacing);
+  // a multiple: the same to a 240th, as the document keeps it
+  if FMultiple > 0 then
+    Checked := AState.Readable and (AState.LineMultiple > 0) and
+      (Round(AState.LineMultiple * 240) = Round(FMultiple * 240))
+  else
+    Checked := AState.Readable and (AState.LineSpacing = FSpacing);
 end;
 
 procedure TTyRichEditLineSpacing.ExecuteOn(ARich: TTyCustomRichEdit;
@@ -2116,8 +2162,50 @@ var
   f: TTyParaFormat;
 begin
   f := TyDefaultParaFormat;
-  f.LineSpacing := FSpacing;
+  if FMultiple > 0 then TyRichSetLineMultiple(f, FMultiple)
+  else f.LineSpacing := FSpacing;
   ARich.ApplyParagraphFormat([pffSpacingRule], f);
+end;
+
+{ TTyRichEditParagraphSpacing }
+
+constructor TTyRichEditParagraphSpacing.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  Caption := rsRichActParaSpacing;
+  Hint := rsRichActParaSpacingHint;
+  FBefore := -1;
+  FAfter := -1;
+end;
+
+procedure TTyRichEditParagraphSpacing.UpdateOn(ARich: TTyCustomRichEdit;
+  AState: TTyRichEditActionState);
+begin
+  Enabled := AState.CanFormatParagraphs and ((FBefore >= 0) or (FAfter >= 0));
+  Checked := AState.Readable and ((FBefore >= 0) or (FAfter >= 0)) and
+    ((FBefore < 0) or (AState.SpaceBefore = FBefore)) and
+    ((FAfter < 0) or (AState.SpaceAfter = FAfter));
+end;
+
+procedure TTyRichEditParagraphSpacing.ExecuteOn(ARich: TTyCustomRichEdit;
+  AState: TTyRichEditActionState);
+var
+  f: TTyParaFormat;
+  m: TTyParaFormatMask;
+begin
+  f := TyDefaultParaFormat;
+  m := [];
+  if FBefore >= 0 then
+  begin
+    Include(m, pffSpaceBefore);
+    f.SpaceBefore := FBefore * 20;
+  end;
+  if FAfter >= 0 then
+  begin
+    Include(m, pffSpaceAfter);
+    f.SpaceAfter := FAfter * 20;
+  end;
+  if m <> [] then ARich.ApplyParagraphFormat(m, f);
 end;
 
 { ---- tables ---- }

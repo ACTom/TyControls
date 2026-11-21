@@ -1432,6 +1432,14 @@ msgstr "行距(&S)"
 msgid "Line spacing"
 msgstr "行距"
 
+#: tycontrols.strconsts.rsrichactparaspacing
+msgid "Paragraph S&pacing"
+msgstr "段落间距(&P)"
+
+#: tycontrols.strconsts.rsrichactparaspacinghint
+msgid "Space before and after the paragraph"
+msgstr "段前和段后的间距"
+
 #: tycontrols.strconsts.rsrichactrowabove
 msgid "Insert Row &Above"
 msgstr "在上方插入行(&A)"

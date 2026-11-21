@@ -64,7 +64,7 @@ uses
   tyControls.TyLabel, tyControls.UpDown, tyControls.URLEdit, tyControls.ValueListEditor;
 
 const
-  Palette: array[0..243] of TComponentClass = (
+  Palette: array[0..244] of TComponentClass = (
     TTyAboutDialog, TTyAccordion, TTyActivityBar, TTyActivityIndicator,
     TTyAdvancedComboBox, TTyAdvancedListBox, TTyAlert, TTyAnalogClock,
     TTyArrow, TTyBadge, TTyBalloonHint, TTyBevel,
@@ -116,6 +116,7 @@ const
     TTyRichEditInsertRowAbove, TTyRichEditInsertRowBelow, TTyRichEditInsertColumnLeft,
     TTyRichEditInsertColumnRight, TTyRichEditDeleteRow, TTyRichEditDeleteColumn,
     TTyRichEditDeleteTable, TTyRichEditInsertLink, TTyRichEditRemoveLink,
+    TTyRichEditParagraphSpacing,
     TTySaveDialog, TTySavePictureDialog, TTySavePreviewDialog, TTyScrollBar,
     TTyScrollBox, TTyScrollPanel, TTySegmented, TTySelectPathDialog,
     TTySelectValueDialog, TTyShadowLabel, TTyShape, TTyShellComboBox,
