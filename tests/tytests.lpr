@@ -20,7 +20,7 @@ uses
   test.calculator, test.calcedit,
   test.bevel, test.divider, test.paintpanel, test.sizebox,
   test.radiogroup, test.checkgroup, test.toolgrouppanel,
-  test.scrollbox, test.scrollbox.bars, test.scrollpanel, test.expanel, test.expanel.section, test.accordion,
+  test.scrollbox, test.scrollbox.bars, test.scrollbox.barprops, test.scrollpanel, test.expanel, test.expanel.section, test.accordion,
   test.gridpanel, test.gridcell, test.relativepanel, test.frame, test.themedcolor,
   test.toolbarex, test.controlbar, test.coolbar,
   test.headercontrol, test.listgrouppanel, test.listgrouppanel.entries,

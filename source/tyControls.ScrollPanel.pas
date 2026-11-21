@@ -98,6 +98,8 @@ type
   { TTyScrollPanel publishes TTyCustomScrollPanel's properties; everything lives in TTyCustomScrollPanel. }
   TTyScrollPanel = class(TTyCustomScrollPanel)
   published
+    property HorzScrollBar;
+    property VertScrollBar;
     property Version;
     property Enabled;
     property Visible;

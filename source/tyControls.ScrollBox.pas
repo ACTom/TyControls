@@ -4,9 +4,47 @@ interface
 uses
   Classes, SysUtils, Types, Controls, Graphics, LCLType, LMessages,
   tyControls.Types, tyControls.Painter, tyControls.Base, tyControls.Controller,
-  tyControls.Panel, tyControls.ScrollBar, tyControls.ScrollContent;
+  tyControls.Panel, tyControls.ScrollBar, tyControls.ScrollContent,
+  tyControls.Css.Parser;        // TyOverrideWith -- the bars' Visible writes StyleOverride (#240)
 
 type
+  TTyCustomScrollBox = class;
+
+  { #240. HorzScrollBar / VertScrollBar of a scroll box, under the LCL's names, so code and
+    forms ported from TScrollBox need no change to hide a bar.
+
+    Visible is a VIEW of the token --scrollbox-bars (#239) and keeps no state. Reading it
+    answers whether the box may show that bar, wherever that was said -- its own
+    StyleOverride or the theme -- as `if Box.VertScrollBar.Visible` in ported code expects.
+    Writing it rewrites the token in the box's own StyleOverride, the other bar kept as it
+    is; once the box says no more than the theme does, the declaration is taken out again.
+    Hence `stored False`: the form file holds StyleOverride and nothing else.
+
+    As in the LCL, a bar that may show is still shown only while the content overflows.
+
+    The LCL's TControlScrollBar publishes six more properties, and a form saved from a
+    TScrollBox may carry any of them: Increment, Page, Position, Range, Smooth, Tracking.
+    They are READ AND LET GO (DefineProperties), so such a form loads as it is; they are
+    not properties here, because nothing in this box would follow them -- the range and the
+    page come from the content and the viewport, and a drag of the thumb always tracks. }
+  TTyScrollBoxBar = class(TPersistent)
+  private
+    FBox: TTyCustomScrollBox;
+    FVertical: Boolean;
+    function GetVisible: Boolean;
+    procedure SetVisible(AValue: Boolean);
+    procedure DropInteger(Reader: TReader);
+    procedure DropBoolean(Reader: TReader);
+  protected
+    function GetOwner: TPersistent; override;
+    procedure DefineProperties(Filer: TFiler); override;
+  public
+    constructor Create(ABox: TTyCustomScrollBox; AVertical: Boolean);
+    procedure Assign(Source: TPersistent); override;
+  published
+    property Visible: Boolean read GetVisible write SetVisible stored False default True;
+  end;
+
   { TTyScrollBox — a scrolling viewport for oversized child content.
 
     Descends from TTyCustomPanel for the frame + container plumbing, but carries its OWN
@@ -51,6 +89,7 @@ type
       that the bar is there and owns a gutter. With no token set, FAxisV = FVScrollBar.Visible
       and FAxisH = FHScrollBar.Visible at every moment -- they are written side by side. }
     FAxisV, FAxisH: Boolean;
+    FHorzBarProps, FVertBarProps: TTyScrollBoxBar;   // #240: HorzScrollBar / VertScrollBar
     FMaxX, FMaxY: Integer;
     FSyncing: Boolean;           // reentrancy guard while we drive the bars
     FInScrollBy: Boolean;        // guard so re-docking the bars is ignored by range calc
@@ -78,6 +117,8 @@ type
     procedure VScrollBarChange(Sender: TObject);
     procedure HScrollBarChange(Sender: TObject);
     procedure SetScrollBarAutoHide(const AValue: TTyScrollBarAutoHide);
+    procedure SetHorzBarProps(AValue: TTyScrollBoxBar);
+    procedure SetVertBarProps(AValue: TTyScrollBoxBar);
     { 把「指针在本控件（或它里面的任何一个子控件）身上」转发给两条条。
       见 CMMouseEnter。 }
     procedure NoteHostHover(AHovered: Boolean);
@@ -264,11 +305,16 @@ type
       the embedded bars; for what the three values mean see TTyScrollBar.AutoHide. }
     property ScrollBarAutoHide: TTyScrollBarAutoHide
       read FScrollBarAutoHide write SetScrollBarAutoHide default sbahDefault;
+    { #240: whether each bar may show, under the LCL's names -- see TTyScrollBoxBar. }
+    property HorzScrollBar: TTyScrollBoxBar read FHorzBarProps write SetHorzBarProps;
+    property VertScrollBar: TTyScrollBoxBar read FVertBarProps write SetVertBarProps;
   end;
 
   { TTyScrollBox publishes TTyCustomScrollBox's properties; everything lives in TTyCustomScrollBox. }
   TTyScrollBox = class(TTyCustomScrollBox)
   published
+    property HorzScrollBar;
+    property VertScrollBar;
     property Version;
     property Enabled;
     property Visible;
@@ -410,10 +456,102 @@ begin
   AHorizontal := (s <> 'vertical') and (s <> 'none');
 end;
 
+{ TTyScrollBoxBar (#240) }
+
+const
+  TyScrollBoxBarsToken = '--scrollbox-bars';
+  TyScrollBoxBarsWords: array[Boolean, Boolean] of string =   // [vertical, horizontal]
+    (('none', 'horizontal'), ('vertical', 'both'));
+
+constructor TTyScrollBoxBar.Create(ABox: TTyCustomScrollBox; AVertical: Boolean);
+begin
+  inherited Create;
+  FBox := ABox;
+  FVertical := AVertical;
+end;
+
+function TTyScrollBoxBar.GetOwner: TPersistent;
+begin
+  Result := FBox;
+end;
+
+function TTyScrollBoxBar.GetVisible: Boolean;
+var
+  v, h: Boolean;
+begin
+  TyScrollBoxBars(FBox.StyleToken(TyScrollBoxBarsToken, ''), v, h);   // as the box reads it
+  if FVertical then Result := v else Result := h;
+end;
+
+procedure TTyScrollBoxBar.SetVisible(AValue: Boolean);
+var
+  v, h, themeV, themeH: Boolean;
+  word: string;
+begin
+  { Set to the value it shows, nothing is rewritten: the Object Inspector, a copy and
+    Assign all do that, and a token written by hand has to survive it. }
+  if GetVisible = AValue then Exit;
+  TyScrollBoxBars(FBox.StyleToken(TyScrollBoxBarsToken, ''), v, h);
+  if FVertical then v := AValue else h := AValue;
+  { What the theme alone would give this box. Saying the same is saying nothing: the
+    declaration goes, and the box follows the theme from then on. }
+  TyScrollBoxBars(FBox.ActiveController.Model.ResolveToken(TyScrollBoxBarsToken), themeV, themeH);
+  if (v = themeV) and (h = themeH) then
+    word := ''
+  else
+    word := TyScrollBoxBarsWords[v, h];
+  FBox.StyleOverride := TyOverrideWith(FBox.StyleOverride, TyScrollBoxBarsToken, word);
+end;
+
+procedure TTyScrollBoxBar.Assign(Source: TPersistent);
+begin
+  if Source is TTyScrollBoxBar then
+    Visible := TTyScrollBoxBar(Source).Visible
+  else
+    inherited Assign(Source);
+end;
+
+procedure TTyScrollBoxBar.DropInteger(Reader: TReader);
+begin
+  Reader.ReadInteger;
+end;
+
+procedure TTyScrollBoxBar.DropBoolean(Reader: TReader);
+begin
+  Reader.ReadBoolean;
+end;
+
+procedure TTyScrollBoxBar.DefineProperties(Filer: TFiler);
+begin
+  inherited DefineProperties(Filer);
+  { The rest of LCL's TControlScrollBar, for a form saved from a TScrollBox: read, never
+    written (no writer, no data). See the class comment for why they are not properties. }
+  Filer.DefineProperty('Increment', @DropInteger, nil, False);
+  Filer.DefineProperty('Page', @DropInteger, nil, False);
+  Filer.DefineProperty('Position', @DropInteger, nil, False);
+  Filer.DefineProperty('Range', @DropInteger, nil, False);
+  Filer.DefineProperty('Smooth', @DropBoolean, nil, False);
+  Filer.DefineProperty('Tracking', @DropBoolean, nil, False);
+end;
+
 { TTyCustomScrollBox }
+
+procedure TTyCustomScrollBox.SetHorzBarProps(AValue: TTyScrollBoxBar);
+begin
+  FHorzBarProps.Assign(AValue);
+end;
+
+procedure TTyCustomScrollBox.SetVertBarProps(AValue: TTyScrollBoxBar);
+begin
+  FVertBarProps.Assign(AValue);
+end;
 
 constructor TTyCustomScrollBox.Create(AOwner: TComponent);
 begin
+  { #240: before inherited -- it sizes the box, which measures, and nothing here may find
+    these nil. They only hold a pointer back to the box. }
+  FHorzBarProps := TTyScrollBoxBar.Create(Self, False);
+  FVertBarProps := TTyScrollBoxBar.Create(Self, True);
   // NB: inherited Create (TTyPanel) sets Width/Height, which fires Resize ->
   // UpdateScrollRange -> EnsureBars. Fields are zero-initialized by the RTL before
   // that runs, so EnsureBars lazily creates the ONE bar pair and stores it; do NOT
@@ -438,6 +576,9 @@ destructor TTyCustomScrollBox.Destroy;
 begin
   // FVScrollBar / FHScrollBar are owned by Self (Create(Self)) -> freed by TComponent.
   inherited Destroy;
+  { #240: after inherited -- tearing the box down may still read the token through them. }
+  FreeAndNil(FHorzBarProps);
+  FreeAndNil(FVertBarProps);
 end;
 
 function TTyCustomScrollBox.GetStyleTypeKey: string;

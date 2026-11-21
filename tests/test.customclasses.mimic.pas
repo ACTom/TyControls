@@ -8739,6 +8739,8 @@ type
 
   TGenScrollBox = class(TTyCustomScrollBox)
   published
+    property HorzScrollBar;
+    property VertScrollBar;
     property Version;
     property Enabled;
     property Visible;
@@ -8865,6 +8867,8 @@ type
 
   TGenScrollPanel = class(TTyCustomScrollPanel)
   published
+    property HorzScrollBar;
+    property VertScrollBar;
     property Version;
     property Enabled;
     property Visible;
