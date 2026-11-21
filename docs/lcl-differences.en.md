@@ -31,6 +31,7 @@ TyControls keeps LCL's property names and meanings wherever it can, so most code
 - **`TTyTreeView.AutoExpand` follows Delphi**: the node that gets the focus expands, and the one it left collapses. In LCL it means "expand a node when a child is added to it".
 - **`TTyTitleBar` looks the same when disabled.** It stands for the window itself, and a window does not grey out; to show that a window cannot be used, disable what is in it.
 - **A form's own `Font` does not override the theme.** The whole window takes its font from the theme; change the theme or use `StyleOverride`. A font set on a control itself still applies.
+- **`HorzScrollBar` / `VertScrollBar` of a `TTyScrollBox` have `Visible` only** (from 4.0). LCL's `Increment`, `Page`, `Position`, `Range`, `Smooth` and `Tracking` are read and dropped when a form file carries them, so a form ported from a `TScrollBox` loads as it is; code that uses them has to lose those lines.
 - **`TTyScrollPanel.AutoPan` is driven by the host.** Call `AutoPanTo` from `OnDragOver` while dragging and `StopAutoPan` when the drag ends.
 - **`TTyColorDialog.Color` is a `TTyColor` (`$AARRGGBB`, with alpha), not a `TColor`.** `clRed` assigned to it is a transparent blue; use `LCLColor` to read and write a `TColor`.
 - **`Delete` in a `TTyDateTimePicker` clears the whole date to NULL**, as `N` does (LCL knows only `N`). Set `NullInputAllowed := False` to keep the user from clearing it.

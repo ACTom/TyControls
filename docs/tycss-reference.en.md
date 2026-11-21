@@ -599,6 +599,9 @@ section 5 of [controls/scrollbox.md](controls/scrollbox.md).
 
 New in 3.0.5. Earlier versions ignore the token.
 
+A 4.0 scroll box also has `HorzScrollBar.Visible` and `VertScrollBar.Visible`, named as in the
+LCL; they read and write this token in the box's own `StyleOverride`.
+
 ---
 
 ## 4. Selectors and Style Resolution

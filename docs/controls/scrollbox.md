@@ -56,7 +56,10 @@ uses tyControls.ScrollBox;
 |------|------|--------|------|
 | `ScrollBarAutoHide` | `TTyScrollBarAutoHide` | `sbahDefault` | 两条内嵌滚动条闲下来之后要不要淡出，转发给它们。默认跟主题走，三个值的含义与主题令牌见 [scrollbar.md](scrollbar.md) §7。 |
 
-本控件自己声明的就这一个，下面那些声明在父类（`TTyCustomPanel`、`TTyCustomControl` 或 LCL）里，由 `TTyScrollBox` 发布。
+| `HorzScrollBar` | `TTyScrollBoxBar` | `Visible = True` | 横向滚动条可不可以显示，LCL 同名。只有 `Visible` 一个子属性，读写的是本控件 `StyleOverride` 里的令牌 `--scrollbox-bars`，自己不存值。见 [第 5 节](#不显示滚动条--scrollbox-bars)。4.0 起。 |
+| `VertScrollBar` | `TTyScrollBoxBar` | `Visible = True` | 竖向滚动条，同上。4.0 起。 |
+
+本控件自己声明的就这三个，下面那些声明在父类（`TTyCustomPanel`、`TTyCustomControl` 或 LCL）里，由 `TTyScrollBox` 发布。
 
 ### 声明在父类、由 TTyScrollBox 发布的成员
 
@@ -119,6 +122,23 @@ Box.StyleOverride := '--scrollbox-bars: none;';       // 不显示滚动条，�
 - 不是这四个词的值按 `both` 处理。
 
 这对应 LCL `TScrollBox` 的 `HorzScrollBar.Visible` / `VertScrollBar.Visible`。3.0 线不增加 published 属性，所以走令牌。3.0.5 新增。
+
+#### 4.0：`HorzScrollBar.Visible` / `VertScrollBar.Visible`
+
+4.0 起这两个属性也有了（#240），名字和 LCL 一样，所以从 `TScrollBox` 移植来的代码和窗体不用改。`TTyScrollPanel` 同样有。
+
+```pascal
+Box.HorzScrollBar.Visible := False;   // StyleOverride 里多了一条 --scrollbox-bars: vertical;
+Box.VertScrollBar.Visible := False;   // 变成 --scrollbox-bars: none;
+Box.HorzScrollBar.Visible := True;    // 变成 --scrollbox-bars: horizontal;
+Box.VertScrollBar.Visible := True;    // 这条声明删掉了，回到主题的值
+```
+
+- 属性和令牌是同一份数据。在 `StyleOverride` 里手写 `--scrollbox-bars`，属性跟着变；改属性，`StyleOverride` 里的这条声明跟着变，其他内容原样不动。
+- 窗体文件里只存 `StyleOverride`，不存这两个属性。
+- 读 `Visible` 得到的是这个滚动框**实际可以显示**哪条滚动条，令牌写在主题里也算。主题写了 `--scrollbox-bars: none` 时两个都是 `False`；这时把某个设成 `True`，本控件自己的 `StyleOverride` 里会写上相应的值，盖过主题。
+- 和 LCL 一样，`Visible = True` 只表示「可以显示」，内容没有超出时滚动条仍然不出现。
+- **LCL 那边的其他属性。** `TControlScrollBar` 还发布了 `Increment`、`Page`、`Position`、`Range`、`Smooth`、`Tracking`。从 `TScrollBox` 存出来的窗体文件里带着它们时，加载照常成功，这些值读进来就丢掉，不出现在对象检查器里，再保存也不会写回去。它们在这里没有对应的东西：滚动范围和页大小由内容和视口决定，拖动滑块时总是实时跟随。代码里用到这几个属性的地方需要自己删掉。
 
 > **控件内部：「这一轴能不能滚」和「这条滚动条显不显示」是两件事。** 以前两者是同一个标志（滚动条的 `Visible`），夹取、滚轮和子控件布局区都读它。现在各有各的答案：`FAxisV` / `FAxisH` 表示内容在这一轴上超出，`FMaxX` / `FMaxY` 是能滚多远，滚动条的 `Visible` 只表示这一条在场并且占着一条槽。不设令牌时两组值时刻相等。滚动条不显示时，某一轴开始或停止滚动不会有 `Visible` 的变化去通知 LCL，所以滚动框自己请求一轮布局（否则超出视口的一列 `alTop` 行会叠在最后一行可见行上）。
 

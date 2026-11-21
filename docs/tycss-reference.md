@@ -567,6 +567,9 @@ typeKey 与文本类控件引用。它们都是普通 `--变量`,可被主题作
 
 3.0.5 新增。更早的版本不认这个令牌。
 
+4.0 的滚动框另有 LCL 同名的 `HorzScrollBar.Visible` / `VertScrollBar.Visible`,读写的就是滚动框自己
+`StyleOverride` 里的这个令牌。
+
 ---
 
 ## 4. 选择器与样式解析

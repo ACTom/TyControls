@@ -31,6 +31,7 @@ TyControls 的属性名和语义尽量与 LCL 一致，从 Lazarus 移植的代�
 - **`TTyTreeView.AutoExpand` 沿用 Delphi 的语义**:焦点移到哪个节点就展开哪个，离开的节点收起。LCL 的含义是"给节点添加子节点时展开它"。
 - **`TTyTitleBar` 禁用后外观不变。** 它代表窗口本身，窗口不会变灰;要表示"窗口不可用"请禁用窗口里的内容。
 - **窗体自己的 `Font` 不覆盖主题。** 整个窗口的字体来自主题;要换字体，改主题或用 `StyleOverride`。控件自己设置的字体照常生效。
+- **`TTyScrollBox` 的 `HorzScrollBar` / `VertScrollBar` 只有 `Visible`**(4.0 起)。LCL 的 `Increment`、`Page`、`Position`、`Range`、`Smooth`、`Tracking` 在窗体文件里出现时读进来就丢掉，所以从 `TScrollBox` 移植的窗体能直接加载;代码里用到它们的地方要删掉。
 - **`TTyScrollPanel.AutoPan` 需要宿主驱动。** 拖动经过时在 `OnDragOver` 里调用 `AutoPanTo`,拖动结束时调用 `StopAutoPan`。
 - **`TTyColorDialog.Color` 是 `TTyColor`(`$AARRGGBB`,带透明度),不是 `TColor`。** 直接把 `clRed` 赋给它，得到的是一个透明的蓝色;要按 `TColor` 读写，用 `LCLColor`。
 - **在 `TTyDateTimePicker` 里按 `Delete` 会把整个日期清成 NULL**,和 `N` 键一样(LCL 只认 `N`)。不想让用户清空，设 `NullInputAllowed := False`。
