@@ -40,7 +40,7 @@ uses
   tyControls.Dialogs.Find, tyControls.Dialogs.Font, tyControls.Dialogs.FileDialog,
   tyControls.Dialogs.SelectPath, tyControls.Dialogs.ImageCollectionEditor,
   tyControls.Dialogs.TreeNodesEditor,
-  tyControls.Edit, tyControls.Memo, tyControls.ListBox,
+  tyControls.Button, tyControls.Edit, tyControls.Memo, tyControls.ListBox,
   tyControls.ImageCollection, tyControls.TreeView, tyControls.Painter;
 
 type
@@ -134,6 +134,12 @@ begin
     if ra.Right > ABand.Right then
       Note(AWhere + ': ' + NameOf(a) + ' ' + RectStr(ra)
         + ' runs past the right of its band ' + RectStr(ABand));
+    { #241. A button's floor no longer has the theme's padding in it, so SetBounds no longer
+      lifts a button to the height it is comfortable at: a dialog that hands one a literal
+      height has to ask for that height itself, or a roomy theme squeezes the button. }
+    if (a is TTyCustomButton) and (a.Height < TTyCustomButton(a).ComfortableHeight) then
+      Note(AWhere + ': ' + NameOf(a) + ' is ' + IntToStr(a.Height) + ' high, under its comfortable '
+        + IntToStr(TTyCustomButton(a).ComfortableHeight));
 
     for j := i + 1 to AParent.ControlCount - 1 do
     begin

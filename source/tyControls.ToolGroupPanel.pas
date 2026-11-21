@@ -260,7 +260,7 @@ begin
     spacingPx := MulDiv(FSpacing, ppi, 96);
     rowH := MulDiv(FButtonHeight, ppi, 96);
     for i := 0 to n - 1 do
-      if list[i].Constraints.MinHeight > rowH then rowH := list[i].Constraints.MinHeight;
+      if TyComfortableHeight(list[i]) > rowH then rowH := TyComfortableHeight(list[i]);   // #241
     rects := TyToolFlowRects(cr, sizes, spacingPx, rowH);
     for i := 0 to n - 1 do
       list[i].SetBounds(rects[i].Left, rects[i].Top, list[i].Width, rowH);

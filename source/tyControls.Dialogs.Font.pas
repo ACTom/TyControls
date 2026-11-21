@@ -247,7 +247,7 @@ begin
   FColorBtn := TTyButton.Create(Self);
   FColorBtn.Parent := Self;
   FColorBtn.Caption := rsDlgFontColor;
-  FColorBtn.SetBounds(colX, y, Px(cColW), Px(cBtnH));
+  FColorBtn.SetBounds(colX, y, Px(cColW), Max(Px(cBtnH), FColorBtn.ComfortableHeight));   // #241: never under its comfortable height
   FColorBtn.OnClick := @ColorBtnClick;
 
   // Preview strip spans the full content width along the bottom (finalized by

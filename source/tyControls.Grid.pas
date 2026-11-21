@@ -14000,6 +14000,9 @@ begin
   y := FFilterSelAll.Top + FFilterSelAll.Height + ScaleI(4);
   FFilterList.SetBounds(pad, y, sw, ScaleI(200));
   y := FFilterList.Top + FFilterList.Height + ScaleI(8);
+  { #241: the two buttons at their comfortable height when that is more than the row --
+    what SetBounds used to clamp them up to. }
+  bh := Max(bh, Max(FFilterOk.ComfortableHeight, FFilterCancel.ComfortableHeight));
   FFilterOk.SetBounds(FFilterPanel.Width - pad - 2 * ScaleI(68) - ScaleI(6), y,
     ScaleI(68), bh);
   FFilterCancel.SetBounds(FFilterPanel.Width - pad - ScaleI(68), y, ScaleI(68), bh);

@@ -80,7 +80,7 @@ function TyEditImageCollection(ACollection: TTyCustomImageCollection): Boolean;
 implementation
 
 uses
-  Dialogs;   // TOpenOption (ofAllowMultiSelect)
+  Dialogs, Math;   // TOpenOption (ofAllowMultiSelect)
 
 function TyBuildImageCollectionEditor(ASource: TTyCustomImageCollection): TTyImageCollectionEditorForm;
 begin
@@ -177,7 +177,7 @@ begin
     a tight column beats buttons hidden behind the action strip. }
   for i := 0 to High(btns) do
   begin
-    btns[i].SetBounds(x, y, Px(BtnW), btnH);
+    btns[i].SetBounds(x, y, Px(BtnW), Max(btnH, btns[i].ComfortableHeight));   // #241: never under its comfortable height
     y := btns[i].Top + btns[i].Height + Px(Gap) div 2;
     if y > r.Bottom - Px(TyDlgPad) then y := r.Bottom - Px(TyDlgPad);
   end;

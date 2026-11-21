@@ -945,10 +945,13 @@ begin
     C.CallMeasure(96, tw, th);
 
     // 24px glyph + the 6px default gap + one caption line + 4px top and 4px bottom padding.
-    AssertEquals('glyph + gap + caption line + padding', 24 + 6 + th + 8, C.Constraints.MinHeight);
+    AssertEquals('comfortable: glyph + gap + caption line + padding', 24 + 6 + th + 8, C.ComfortableHeight);
+    { #241: the floor is the stack itself; the theme here has no border to add. }
+    AssertEquals('the floor: glyph + gap + caption line', 24 + 6 + th, C.Constraints.MinHeight);
     C.GlyphSize := 48;
     AssertEquals('a 24px bigger glyph raises the floor by exactly 24',
-      24 + 6 + th + 8 + 24, C.Constraints.MinHeight);
+      24 + 6 + th + 24, C.Constraints.MinHeight);
+    AssertEquals('and the comfortable height with it', 24 + 6 + th + 8 + 24, C.ComfortableHeight);
   finally
     C.Free; Icons.Free; Ctl.Free;
   end;
@@ -975,8 +978,9 @@ begin
     C.Caption := '';
     C.GlyphSize := 24;
     C.Invalidate;
-    AssertEquals('a pure-icon tile is floored at the glyph plus the padding, nothing else',
-      24 + 8, C.Constraints.MinHeight);
+    AssertEquals('a pure-icon tile is comfortable at the glyph plus the padding, nothing else',
+      24 + 8, C.ComfortableHeight);
+    AssertEquals('and floored at the glyph (#241)', 24, C.Constraints.MinHeight);
   finally
     C.Free; Icons.Free; Ctl.Free;
   end;
@@ -1018,8 +1022,10 @@ begin
       least it can be, with the gap and the caption's line, so the caption is not left without
       room. That is a number of its own, not one read off the box, so it is still no ratchet. }
     C.CallMeasure(96, tw, th);
-    AssertEquals('the floor is the least stacked glyph, the gap, the caption line and the padding',
-      TyGlyphStackedMin + TyGlyphButtonGap + th + 8, atSixtyFour);
+    AssertEquals('the floor is the least stacked glyph, the gap and the caption line',
+      TyGlyphStackedMin + TyGlyphButtonGap + th, atSixtyFour);
+    AssertEquals('and the comfortable height adds the padding (#241)',
+      TyGlyphStackedMin + TyGlyphButtonGap + th + 8, C.ComfortableHeight);
   finally
     C.Free; Icons.Free; Ctl.Free;
   end;

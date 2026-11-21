@@ -164,8 +164,10 @@ begin
   try
     b := d.AddButton('确定', mrOk, True, False);
     AssertTrue('precondition: the theme really does want a taller button than the classic box',
-      b.Constraints.MinHeight > 30);
-    AssertEquals('the button is as tall as its own minimum', b.Constraints.MinHeight, b.Height);
+      b.ComfortableHeight > 30);
+    { #241: the height the strip gives it is its comfortable one -- the caption and the
+      theme's padding -- not the floor, which no longer has the padding in it. }
+    AssertEquals('the button is as tall as it is comfortable', b.ComfortableHeight, b.Height);
     AssertTrue('and it sits INSIDE the strip (bottom ' + IntToStr(b.Top + b.Height)
       + ' vs strip ' + IntToStr(b.Parent.ClientHeight) + ')',
       b.Top + b.Height <= b.Parent.ClientHeight);

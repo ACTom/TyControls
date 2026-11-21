@@ -552,8 +552,10 @@ begin
 
     AssertTrue('premise: a 40px line is far taller than the 8px swatch minimum',
       th > TyColorButtonMinSwatch);
-    AssertEquals('the height floor is the swatch minimum plus 4px+4px of padding',
-      TyColorButtonMinSwatch + 8, B.Constraints.MinHeight);
+    AssertEquals('comfortable: the swatch minimum plus 4px+4px of padding',
+      TyColorButtonMinSwatch + 8, B.ComfortableHeight);
+    AssertEquals('the floor is the swatch minimum itself (#241)',
+      TyColorButtonMinSwatch, B.Constraints.MinHeight);
   finally
     B.Free; Ctl.Free;
   end;
@@ -577,10 +579,11 @@ begin
     B.Invalidate;
     B.CallMeasure(96, tw, th);
 
-    AssertEquals('the height floor is one hex line plus the vertical padding',
-      th + 8, B.Constraints.MinHeight);
+    AssertEquals('comfortable: one hex line plus the vertical padding',
+      th + 8, B.ComfortableHeight);
+    AssertEquals('the floor is the hex line (#241)', th, B.Constraints.MinHeight);
     AssertTrue('...and it really is above the swatch-only floor',
-      B.Constraints.MinHeight > TyColorButtonMinSwatch + 8);
+      B.Constraints.MinHeight > TyColorButtonMinSwatch);
   finally
     B.Free; Ctl.Free;
   end;

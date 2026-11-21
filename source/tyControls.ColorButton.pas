@@ -397,7 +397,7 @@ begin
   // 管(见下面的 PreferredHeight),所以直接读当前的客户区高度——排版把行高定成多少,
   // 色块就是多大的方块。
   minSwatch := MulDiv(TyColorButtonMinSwatch, ppi, 96);
-  swatch := ClientHeight - padV;
+  swatch := ContentBoxHeight(ClientHeight, ppi, S);   // #241: as RenderTo insets it
   if swatch < minSwatch then swatch := minSwatch;
   if ContentText <> '' then
     // 方块 + 间隙 + 文字(Caption 优先,否则 '#RRGGBB'),正是 DrawContent 摆的三件东西。

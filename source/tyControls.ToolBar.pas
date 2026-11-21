@@ -2244,7 +2244,7 @@ var
 begin
   Result := MulDiv(GetButtonHeight, LayoutPPI, 96);
   for i := 0 to High(AKids) do
-    if AKids[i].Constraints.MinHeight > Result then Result := AKids[i].Constraints.MinHeight;
+    if TyComfortableHeight(AKids[i]) > Result then Result := TyComfortableHeight(AKids[i]);   // #241
 end;
 
 type
@@ -2401,7 +2401,7 @@ begin
     spacingPx := MulDiv(FButtonSpacing, ppi, 96);
     bh := MulDiv(GetButtonHeight, ppi, 96);
     for i := 0 to n - 1 do
-      if kids[i].Constraints.MinHeight > bh then bh := kids[i].Constraints.MinHeight;
+      if TyComfortableHeight(kids[i]) > bh then bh := TyComfortableHeight(kids[i]);   // #241
     padY := MulDiv(ContentPadY, ppi, 96);
     { LCL's TRAILING Wrap -> the solver's LEADING break, through the one function that shift
       lives in. With no tool button carrying Wrap the result is all-False, which the solver

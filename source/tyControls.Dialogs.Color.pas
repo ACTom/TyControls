@@ -655,7 +655,7 @@ begin
   FAddCustomBtn.Caption := rsDlgAddCustomColor;
   btnW := Px(CustomBtnW);
   if FAddCustomBtn.Constraints.MinWidth > btnW then btnW := FAddCustomBtn.Constraints.MinWidth;
-  btnH := Px(TyDensityHeight(nil, TyDlgEditH));
+  btnH := Max(Px(TyDensityHeight(nil, TyDlgEditH)), FAddCustomBtn.ComfortableHeight);   // #241: never under its comfortable height
   FAddCustomBtn.SetBounds(FX0, btnTop, btnW, btnH);
   FAddCustomBtn.OnClick := @AddCustomClick;
   FAddCustomBtn.Enabled := not (cdPreventFullOpen in FOptions);

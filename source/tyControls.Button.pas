@@ -28,6 +28,7 @@ type
     FShowAccelChar: Boolean;
     FShowBadge: Boolean;
     FRefitting: Boolean;   // guards the AutoSize re-fit in Invalidate against re-entry
+    FContentInsetTop, FContentInsetBottom: Integer;   // #241, see ContentInsetTop
     FBadgeValue: Integer;
     FBadgePosition: TTyBadgePosition;
     FOnBadgeDisplay: TTyBadgeDisplayEvent;
@@ -108,6 +109,25 @@ type
       Without that, one 100%->250% crossing applied the factor twice and this button went
       29 -> 175 -> 70 px across a there-and-back trip. }
     procedure DoUpdateSizeConstraints; override;
+    { #241. True when a box ABoxH tall cannot hold the content and APadSum of vertical
+      padding (both device px at APPI), so the padding has to give way. ANeed is the
+      content's height: the floor less the border, so no text is measured to answer. }
+    function PaddingGivesWay(ABoxH, APadSum, APPI: Integer; const AStyle: TTyStyleSet;
+      out ANeed: Integer): Boolean;
+    { #241. The top and bottom insets of the content box in a box ABoxH tall: ATop / ABottom
+      come in as the style's padding (device px) and go out shared between what the content
+      leaves, in their own proportion, when the box is lower than the comfortable height. }
+    procedure FitPaddingV(ABoxH, APPI: Integer; const AStyle: TTyStyleSet;
+      var ATop, ABottom: Integer);
+    { #241. The height of the content box RenderTo hands DrawContent in a box ABoxH tall at
+      APPI: ABoxH less the vertical padding, or -- lower than the comfortable height -- the
+      content's own height. A descendant that MEASURES by the content box (an icon as tall
+      as it, a colour swatch) asks here, so what it measures is what gets drawn. }
+    function ContentBoxHeight(ABoxH, APPI: Integer; const AStyle: TTyStyleSet): Integer;
+    { The vertical insets RenderTo applied for the DrawContent now running: the padding, or
+      what was left of it. For a descendant that paints outside the content box. }
+    property ContentInsetTop: Integer read FContentInsetTop;
+    property ContentInsetBottom: Integer read FContentInsetBottom;
     { Caption changes at runtime route here (CM_TEXTCHANGED); with AutoSize the button must
       re-measure to the new text (mirrors TTyTag / TTyLabel). }
     procedure TextChanged; override;
@@ -165,6 +185,12 @@ type
     // ACharCode — VK_RETURN when Default, VK_ESCAPE when Cancel. The CMDialogKey
     // handler (and headless tests) route through here.
     function WantsDialogKey(ACharCode: Word): Boolean;
+    { #241. The height this button is comfortable at, in device px: one line of content plus
+      the style's vertical padding. What a tool bar, a flow panel and a dialog size their
+      rows by, and what Constraints.MinHeight used to hold. The constraint is now the HARD
+      floor -- one line of content plus the border -- so a height below this one is kept,
+      and painted with the padding giving way. }
+    function ComfortableHeight: Integer;
     { A push button is a tab stop, exactly as the native TButton is: Tab reaches it and
       Space/Enter presses it (KeyDown below), and TTyCustomControl.MouseDown gates its
       click-to-focus on this flag, so without it a click never moved focus off whatever
@@ -291,6 +317,9 @@ type
   glance and testable without a painter, where four scattered comparisons are neither.
   AFlip = False is the identity row. }
 function TyBidiFlipBadgePosition(APos: TTyBadgePosition; AFlip: Boolean): TTyBadgePosition;
+{ #241. The height a row is sized by for AControl: a button's ComfortableHeight; for any
+  other control its own floor, Constraints.MinHeight. }
+function TyComfortableHeight(AControl: TControl): Integer;
 
 implementation
 
@@ -801,12 +830,17 @@ begin
     TyFillParentBg(Self, P, ContentRect, S);
     DrawFrame(P, ContentRect, S);
     BadgeArea := ContentRect;   // full client rect for badge positioning (pre-padding)
-    // Inset content by all four padding sides
+    { Inset content by all four padding sides. #241: in a box lower than the comfortable
+      height the top and bottom padding give way, so the content keeps its own height. }
+    FContentInsetTop := P.Scale(S.Padding.Top);
+    FContentInsetBottom := P.Scale(S.Padding.Bottom);
+    FitPaddingV(ContentRect.Bottom - ContentRect.Top, APPI, S, FContentInsetTop,
+      FContentInsetBottom);
     ContentRect := Rect(
       ContentRect.Left   + P.Scale(S.Padding.Left),
-      ContentRect.Top    + P.Scale(S.Padding.Top),
+      ContentRect.Top    + FContentInsetTop,
       ContentRect.Right  - P.Scale(S.Padding.Right),
-      ContentRect.Bottom - P.Scale(S.Padding.Bottom)
+      ContentRect.Bottom - FContentInsetBottom
     );
     DrawContent(P, ContentRect, S);
     DrawBadge(P, BadgeArea);
@@ -828,12 +862,22 @@ end;
 procedure TTyCustomButton.DoUpdateSizeConstraints;
 var
   S: TTyStyleSet;
-  ppi, padH, pw, ph: Integer;
+  ppi, borderV, pw, ph: Integer;
 begin
   if csDestroying in ComponentState then Exit;
   ppi := Font.PixelsPerInch;
   if ppi <= 0 then ppi := 96;
   S := CurrentStyle;
+  { HEIGHT — the axis CalculatePreferredSize answers 0 on (see there), so it is computed
+    here. #241: the HARD floor, the stacked ink plus the border. It used to be the ink plus
+    the top and bottom padding, which is the height a button is comfortable at
+    (ComfortableHeight) but not the least it can be: the padding can give way (RenderTo),
+    the ink cannot. A form that stores a lower button -- LCL's TButton is 25 px -- keeps it.
+    Set FIRST: the width below may be measured from the content box (an icon as tall as
+    it), and that box stands on this floor (PaddingGivesWay). }
+  borderV := 0;
+  if TyBorderVisible(S) then borderV := 2 * MulDiv(S.BorderWidth, ppi, 96);
+  Constraints.MinHeight := MeasureContentHeight(ppi) + borderV;
   { WIDTH — ask the control what it would want if it were auto-sizing, i.e. run the very
     method that measures its own content beside the code that draws it. Going through
     CalculatePreferredSize is what keeps the floor honest for every descendant without each
@@ -844,12 +888,70 @@ begin
   ph := 0;
   CalculatePreferredSize(pw, ph, True);
   if pw < 0 then pw := 0;
-  { HEIGHT — the axis CalculatePreferredSize answers 0 on (see there), so it is computed
-    here: the stacked ink plus the SAME top/bottom padding RenderTo insets by before
-    DrawContent ever sees the box. }
-  padH := MulDiv(S.Padding.Top + S.Padding.Bottom, ppi, 96);
-  Constraints.MinWidth  := pw;
-  Constraints.MinHeight := MeasureContentHeight(ppi) + padH;
+  Constraints.MinWidth := pw;
+end;
+
+function TTyCustomButton.ComfortableHeight: Integer;
+var
+  S: TTyStyleSet;
+  ppi, padV, borderV: Integer;
+begin
+  ppi := Font.PixelsPerInch;
+  if ppi <= 0 then ppi := 96;
+  S := CurrentStyle;
+  padV := MulDiv(S.Padding.Top + S.Padding.Bottom, ppi, 96);
+  borderV := 0;
+  if TyBorderVisible(S) then borderV := 2 * MulDiv(S.BorderWidth, ppi, 96);
+  { From the floor, which is the content plus the border and is there from the day the
+    button is made: no text is measured again for a container that asks every tool on
+    every layout pass. }
+  Result := Constraints.MinHeight - borderV + padV;
+end;
+
+function TTyCustomButton.PaddingGivesWay(ABoxH, APadSum, APPI: Integer;
+  const AStyle: TTyStyleSet; out ANeed: Integer): Boolean;
+var
+  fontPPI, borderV: Integer;
+begin
+  fontPPI := Font.PixelsPerInch;
+  if fontPPI <= 0 then fontPPI := 96;
+  borderV := 0;
+  if TyBorderVisible(AStyle) then borderV := 2 * MulDiv(AStyle.BorderWidth, fontPPI, 96);
+  ANeed := MulDiv(Constraints.MinHeight - borderV, APPI, fontPPI);
+  Result := (APadSum > 0) and (ABoxH < APadSum + ANeed);
+end;
+
+procedure TTyCustomButton.FitPaddingV(ABoxH, APPI: Integer; const AStyle: TTyStyleSet;
+  var ATop, ABottom: Integer);
+var
+  sum, need, spare: Integer;
+begin
+  sum := ATop + ABottom;
+  if not PaddingGivesWay(ABoxH, sum, APPI, AStyle, need) then Exit;
+  spare := ABoxH - need;
+  if spare < 0 then spare := 0;
+  ATop := MulDiv(spare, ATop, sum);
+  ABottom := spare - ATop;
+end;
+
+function TTyCustomButton.ContentBoxHeight(ABoxH, APPI: Integer;
+  const AStyle: TTyStyleSet): Integer;
+var
+  sum, need: Integer;
+begin
+  sum := MulDiv(AStyle.Padding.Top + AStyle.Padding.Bottom, APPI, 96);
+  if PaddingGivesWay(ABoxH, sum, APPI, AStyle, need) then
+    Result := need
+  else
+    Result := ABoxH - sum;
+end;
+
+function TyComfortableHeight(AControl: TControl): Integer;
+begin
+  if AControl is TTyCustomButton then
+    Result := TTyCustomButton(AControl).ComfortableHeight
+  else
+    Result := AControl.Constraints.MinHeight;
 end;
 
 procedure TTyCustomButton.TextChanged;

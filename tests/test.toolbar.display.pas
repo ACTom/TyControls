@@ -1254,17 +1254,19 @@ begin
   AssertEquals('the new size, not the one remembered', 28 + PadX(b), w2);
 end;
 
-{ The layout reads each tool's Constraints.MinHeight. A new icon size has to be in there
-  before the bar lays out again, not after the tool happens to be repainted. }
+{ The layout reads each tool's comfortable height, which stands on its Constraints.MinHeight
+  (#241). A new icon size has to be in there before the bar lays out again, not after the
+  tool happens to be repainted. }
 procedure TToolbarDisplayTest.ANewIconSizeMovesTheToolsFloorAtOnce;
 var
   b: TTyToolButton;
 begin
   b := AddTool('Save');
   FBar.StyleOverride := '--toolbar-icon-size: 16px;';
-  AssertTrue('setup: a floor under forty', b.Constraints.MinHeight < 40);
+  AssertTrue('setup: under forty', b.ComfortableHeight < 40);
   FBar.StyleOverride := '--toolbar-icon-size: 40px;';
-  AssertEquals('the floor the layout will read', 40 + PadY(b), b.Constraints.MinHeight);
+  AssertEquals('the height the layout will read', 40 + PadY(b), b.ComfortableHeight);
+  AssertTrue('and the floor under it holds the icon', b.Constraints.MinHeight >= 40);
 end;
 
 procedure TToolbarDisplayTest.ANegativeIconSizeIsNoIconSize;

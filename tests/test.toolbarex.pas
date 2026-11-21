@@ -264,7 +264,7 @@ begin
     b := MakeBtn(TB, 78);
     b.Caption := 'Command ' + IntToStr(i);
   end;
-  mh := b.Constraints.MinHeight;
+  mh := b.ComfortableHeight;   // #241: what the row is sized by; the floor is lower
   AssertTrue(Format('precondition: the button refuses to be as short as ButtonHeight '
     + '(it measured %d against ButtonHeight %d). If this fails the guard below has stopped '
     + 'exercising the defect and is fake-green.', [mh, TB.ButtonHeight]),
@@ -294,7 +294,7 @@ begin
     b := MakeBtn(TB, 78);
     b.Caption := 'Command ' + IntToStr(i);
   end;
-  mh := b.Constraints.MinHeight;
+  mh := b.ComfortableHeight;   // #241: what the row is sized by; the floor is lower
   AssertTrue('precondition: the row is taller than ButtonHeight', mh > TB.ButtonHeight);
   TB.Height := mh + 3;
   bw := TB.BorderPx;

@@ -372,6 +372,9 @@ end;
 
 function TyRunItem(AControl: TControl; AX, AY, AW, AH, AGap: Integer): Integer;
 begin
+  { #241: a button in the run is never under its comfortable height -- what SetBounds used
+    to lift it to while that height was its floor. }
+  if TyComfortableHeight(AControl) > AH then AH := TyComfortableHeight(AControl);
   AControl.SetBounds(AX, AY, AW, AH);
   Result := AControl.Left + AControl.Width + AGap;   { the control's REAL width, not AW }
 end;
@@ -654,8 +657,8 @@ var i: Integer;
 begin
   Result := Px(TyDensityHeight(Controller, cDlgBtnH));   // nil Controller -> the default one
   for i := 0 to High(FButtons) do
-    if FButtons[i].Visible and (FButtons[i].Constraints.MinHeight > Result) then
-      Result := FButtons[i].Constraints.MinHeight;
+    if FButtons[i].Visible and (FButtons[i].ComfortableHeight > Result) then
+      Result := FButtons[i].ComfortableHeight;   // #241: not the floor, which is lower
 end;
 
 function TTyDialog.ButtonBarHeight: Integer;

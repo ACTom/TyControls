@@ -66,6 +66,9 @@ type
     { #231: the chevron is a part of the bar, not one of its tools -- it keeps the size it
       takes from its cell, whatever --toolbar-icon-size says. }
     function HostGlyphSize(AFor: TControl): Integer; override;
+    { The height of one item of the overflow flyout, device px: ButtonHeight, or the
+      comfortable height of the tallest overflowed tool when that is more (#241). }
+    function FlyoutItemHeight: Integer;
     { #108: the value the constructor sets, so the designer can store the other ones. }
     property Wrapable default False;
   end;
@@ -263,6 +266,16 @@ begin
     Result := inherited HostGlyphSize(AFor);
 end;
 
+function TTyCustomToolBarEx.FlyoutItemHeight: Integer;
+var
+  i: Integer;
+begin
+  Result := MulDiv(ButtonHeight, LayoutPPI, 96);
+  for i := 0 to High(FOverflow) do
+    if (FOverflow[i] <> nil) and (TyComfortableHeight(FOverflow[i]) > Result) then
+      Result := TyComfortableHeight(FOverflow[i]);
+end;
+
 function TTyCustomToolBarEx.EnsureFlyout: TTyPopupSurface;
 begin
   if FPopup = nil then
@@ -438,7 +451,7 @@ begin
       base was fixed, the override that duplicates its layout was not. }
     rowH := MulDiv(ButtonHeight, ppi, 96);
     for i := 0 to n - 1 do
-      if kids[i].Constraints.MinHeight > rowH then rowH := kids[i].Constraints.MinHeight;
+      if TyComfortableHeight(kids[i]) > rowH then rowH := TyComfortableHeight(kids[i]);   // #241
 
     { ROW TOP — keep the row OUT of the strip RenderTo strokes the bottom hairline into.
       A tool button is a windowed child: it paints after the bar and erases its whole rect to
@@ -521,10 +534,7 @@ begin
   ppi := LayoutPPI;
   pad := MulDiv(4, ppi, 96);
   gap := MulDiv(ButtonSpacing, ppi, 96);
-  itemH := MulDiv(ButtonHeight, ppi, 96);
-  for i := 0 to High(FPopupItems) do
-    if (FPopupItems[i] <> nil) and (FPopupItems[i].Constraints.MinHeight > itemH) then
-      itemH := FPopupItems[i].Constraints.MinHeight;
+  itemH := FlyoutItemHeight;
 
   // Stack the overflow buttons vertically in the popup; keep their own OnClick intact.
   maxW := 0;

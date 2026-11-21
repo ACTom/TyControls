@@ -1033,7 +1033,7 @@ begin
       the width we are about to ask for is at least this square plus the padding, so
       that min settles on the same number. One expression is therefore honest for both
       layouts. Height is used, not proposed: it stays whatever the layout gave us. }
-    Result := ClientHeight - MulDiv(AStyle.Padding.Top + AStyle.Padding.Bottom, APPI, 96);
+    Result := ContentBoxHeight(ClientHeight, APPI, AStyle);   // #241: as RenderTo insets it
     { #229. Stacked on a caption that IS drawn, the box is shared: the glyph takes what the
       gap and the caption's line leave, and never less than TyGlyphStackedMin. It used to
       take the whole box, and the caption was left with nothing to be drawn in. }

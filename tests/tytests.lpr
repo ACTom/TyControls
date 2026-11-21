@@ -41,6 +41,7 @@ uses
   test.multitrackbar,
   test.multitrackbar.frame,
   test.trackbar.drawthumb,
+  test.button.lowheight,
   test.groupbox,
   test.tabstrip, test.tabstrip.axis, test.tabstrip.multiline, test.tabstrip.states, test.tabstrip.close, test.toolbar.display, test.css.overridewith,
   test.defaulttheme, test.spinedit, test.memo, test.memo.selection, test.memo.undo,

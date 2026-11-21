@@ -17,7 +17,7 @@ interface
 uses
   Classes, SysUtils, Types, Controls, Forms,
   tyControls.Types, tyControls.StrConsts, tyControls.Controller,
-  tyControls.Dialogs, tyControls.Button, tyControls.TreeView;
+  tyControls.Dialogs, tyControls.Button, tyControls.TreeView, Math;
 
 type
   TTySelectObjectEvent = procedure(Sender: TObject; AObject: TPersistent) of object;
@@ -142,7 +142,7 @@ begin
     a tight column beats buttons hidden behind the action strip. }
   for i := 0 to High(FButtons) do
   begin
-    FButtons[i].SetBounds(x, y, Px(BtnW), btnH);
+    FButtons[i].SetBounds(x, y, Px(BtnW), Max(btnH, FButtons[i].ComfortableHeight));   // #241: never under its comfortable height
     y := FButtons[i].Top + FButtons[i].Height + Px(Gap) div 2;
     if y > r.Bottom - Px(TyDlgPad) then y := r.Bottom - Px(TyDlgPad);
   end;

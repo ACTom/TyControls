@@ -648,9 +648,9 @@ begin
   marginPx := APainter.Scale(ActiveController.Metric(TyTransferArrowMarginVar, TyTransferArrowMargin));
   iconArea := Rect(
     AContentRect.Left   - APainter.Scale(AStyle.Padding.Left)   + marginPx,
-    AContentRect.Top    - APainter.Scale(AStyle.Padding.Top)    + marginPx,
+    AContentRect.Top    - ContentInsetTop                       + marginPx,
     AContentRect.Right  + APainter.Scale(AStyle.Padding.Right)  - marginPx,
-    AContentRect.Bottom + APainter.Scale(AStyle.Padding.Bottom) - marginPx);
+    AContentRect.Bottom + ContentInsetBottom                    - marginPx);
   for i := 0 to arrows - 1 do
   begin
     cell := TyTransferArrowRect(iconArea, arrows, i, sizePx, gapPx);
