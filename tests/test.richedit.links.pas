@@ -57,6 +57,7 @@ type
     procedure TestInsertLinkWithTextAtTheCaret;
     procedure TestSetLinkReplacesTargetAndText;
     procedure TestRemoveLinkKeepsTheText;
+    procedure TestRemoveLinkTakesTheLinksLookAway;
     procedure TestBookmarkAndMixedTargets;
     procedure TestRefusedWhereALinkCannotGo;
     procedure TestThemeLookFollowsTheSkin;
@@ -485,8 +486,8 @@ begin
   AssertEquals('its target', 'http://w.test/', UrlAt(5));
 end;
 
-{ RemoveLink: the marks go, the text and its look stay, selected; one step, undone to the
-  file's bytes; a link over two paragraphs too (its second paragraph out of every field). }
+{ RemoveLink: the marks go, the text stays, selected, without the link's look; one step,
+  undone to the file's bytes; a link over two paragraphs too (its second paragraph out of every field). }
 procedure TTyRichLinksTest.TestRemoveLinkKeepsTheText;
 var
   before, two: RawByteString;
@@ -502,7 +503,8 @@ begin
   AssertTrue('no mark left', OpenMark(3) = nil);
   AssertTrue('the text', AllText = U('ab link cd'));
   f := CharFmt(3);
-  AssertTrue('its look kept', (fsUnderline in f.Style) and (f.Color = RGBToColor(0, 0, 255)));
+  AssertFalse('no underline', fsUnderline in f.Style);
+  AssertEquals('the link blue back to automatic', clDefault, f.Color);
   AssertEquals('the text selected: from', 3, FRich.SelStart);
   AssertEquals('the text selected: length', 4, FRich.SelLength);
   AssertEquals('no link there now', '<none>', UrlAt(4));
@@ -536,6 +538,102 @@ begin
   FRich.Undo;
   AssertEquals('undone: in the field again', 1, Doc.ParaFieldDepth(1));
   AssertTrue('undone: the file''s bytes', SaveRtf = two);
+end;
+
+{ The look a link is given goes with it, and nothing else: each look made here, a link of
+  Word's own file (its Hyperlink style, its theme's link colour), a link whose text was made
+  red and bold (red and bold stay); one step with the removal, undone exactly. }
+procedure TTyRichLinksTest.TestRemoveLinkTakesTheLinksLookAway;
+var
+  look: TTyRichLinkLook;
+  f: TTyCharFormat;
+  before: RawByteString;
+  st: TFileStream;
+  b: TBytes;
+  p, depth, i: Integer;
+  styled: Boolean;
+begin
+  for look := Low(TTyRichLinkLook) to High(TTyRichLinkLook) do
+  begin
+    Load(PlainDoc);
+    before := SaveRtf;
+    AssertTrue('made', Doc.Execute(TTyRichInsertLink.Create(3, 4, 'http://x.test/', '', look)));
+    depth := Doc.UndoDepth;
+    FRich.SelStart := 5;
+    AssertTrue('removed', FRich.RemoveLink);
+    AssertEquals('one step with the look', depth + 1, Doc.UndoDepth);
+    f := CharFmt(3);
+    AssertFalse('no underline', fsUnderline in f.Style);
+    AssertEquals('the automatic colour', clDefault, f.Color);
+    AssertTrue('the text before it untouched', CharFmt(1).Color = clDefault);
+    FRich.Undo;
+    AssertTrue('undone: the link and its look', fsUnderline in CharFmt(4).Style);
+    FRich.Undo;
+    AssertTrue('the file again', SaveRtf = before);
+  end;
+  // red and bold made by the user: they stay
+  Load(PlainDoc);
+  Select(3, 4);
+  FRich.SelAttributes.Color := clRed;
+  FRich.SelAttributes.Bold := True;
+  Select(3, 4);
+  AssertTrue('made', FRich.InsertLink('http://x.test/'));
+  f := CharFmt(4);
+  AssertTrue('the link underlined', fsUnderline in f.Style);
+  AssertEquals('its own red kept by the look', clRed, f.Color);
+  FRich.SelStart := 5;
+  AssertTrue('removed', FRich.RemoveLink);
+  f := CharFmt(3);
+  AssertFalse('no underline', fsUnderline in f.Style);
+  AssertTrue('bold stays', fsBold in f.Style);
+  AssertEquals('red stays', clRed, f.Color);
+  Load(Rtf('{|rtf1|ansi|deff0{|fonttbl{|f0 Arial;}}{|colortbl;|red255|green0|blue0;}|pard|f0 ' +
+    'ab {|field{|*|fldinst HYPERLINK "http://r.test"}{|fldrslt {|ul|b|cf1 red}}} cd|par}'));
+  FRich.SelStart := 5;
+  AssertTrue('removed', FRich.RemoveLink);
+  f := CharFmt(3);
+  AssertFalse('the red link: no underline', fsUnderline in f.Style);
+  AssertTrue('its bold stays', fsBold in f.Style);
+  AssertEquals('its red stays', clRed, f.Color);
+  // Word's own links
+  st := TFileStream.Create(ExtractFilePath(ParamStr(0)) + '..' + PathDelim + 'tests' + PathDelim +
+    'fixtures' + PathDelim + 'rtf' + PathDelim + 'word-toc.rtf', fmOpenRead or fmShareDenyWrite);
+  try
+    b := nil;
+    SetLength(b, st.Size);
+    if st.Size > 0 then st.ReadBuffer(b[0], st.Size);
+  finally
+    st.Free;
+  end;
+  before := '';
+  SetLength(before, Length(b));
+  if Length(b) > 0 then Move(b[0], before[1], Length(b));
+  SetCodePage(before, CP_NONE, False);
+  Load(before);
+  p := FRich.FindText('中文网址', 0, -1, []);
+  AssertTrue('Word''s link is there', p > 0);
+  f := CharFmt(p);
+  AssertTrue('Word''s link: underlined', fsUnderline in f.Style);
+  AssertTrue('Word''s link: its theme''s link colour', TyRichIsLinkColor(f.Color));
+  styled := False;
+  for i := 0 to f.Extra.Count - 1 do
+    if Copy(f.Extra.Item(i), 1, 3) = BS + 'cs' then styled := True;
+  AssertTrue('Word''s link: its Hyperlink style', styled);
+  depth := Doc.UndoDepth;
+  FRich.SelStart := p + 1;
+  AssertEquals('Word''s link', 'https://example.com/文档?q=中文', UrlAt(p + 1));
+  FRich.SelStart := p + 1;
+  AssertTrue('Word''s link removed', FRich.RemoveLink);
+  AssertEquals('one step', depth + 1, Doc.UndoDepth);
+  f := CharFmt(p - 1);
+  AssertFalse('no underline', fsUnderline in f.Style);
+  AssertEquals('the automatic colour', clDefault, f.Color);
+  styled := False;
+  for i := 0 to f.Extra.Count - 1 do
+    if Copy(f.Extra.Item(i), 1, 3) = BS + 'cs' then styled := True;
+  AssertFalse('no Hyperlink style', styled);
+  FRich.Undo;
+  AssertTrue('undone: Word''s file byte for byte', SaveRtf = before);
 end;
 
 { A place in the document (#name) and a place in a target (target#name) are written as Word

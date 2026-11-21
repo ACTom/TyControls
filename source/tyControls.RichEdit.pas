@@ -2588,8 +2588,8 @@ type
       puts the selection back.
       InsertLink: a link to AURL ("#name" a bookmark of the document, "target#name" a place in
       a target; Chinese and any other text as it is). A selection becomes the link's text as it
-      is, given the editor's look (underlined, Word's link blue: TTyRichInsertLink's
-      rllWordBlue); AText given goes in its place (the format typed there, with the look);
+      is, given the editor's look (underlined, Word's link blue where it has no colour of its
+      own: TTyRichInsertLink's rllWordBlue); AText given goes in its place (the format typed there, with the look);
       neither: AURL itself is the text. The caret goes behind the link. Refused: an empty
       address, a plain text document, a selection that reaches past its paragraph's end
       (across paragraphs or table cells), one with an end inside a field's result (a link's,
@@ -2598,8 +2598,9 @@ type
       - typing in it is refused; SetLink changes it.
       SetLink: the link the caret or the selection is in (LinkAtSelection) gets AURL; with
       AText it is replaced by a link holding AText (in the look its text had), else its text
-      stays as it is. RemoveLink: that link stops being one - its text, its formats (the look
-      too) and what else it holds stay, selected. Both refused when there is no such link and
+      stays as it is. RemoveLink: that link stops being one - its text and what else it holds
+      stay, selected, and so do its formats but the look a link is given, which goes with it
+      as in Word (TTyRichRemoveLink: the underline, a link colour, Word's Hyperlink style). Both refused when there is no such link and
       for a link inside another field's result (an entry of a table of contents).
       CanInsertLink / CanEditLink: the action would be taken now (for an action's Update);
       reads the selection's paragraph and the fields around it, never raises. }

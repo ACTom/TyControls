@@ -375,12 +375,13 @@ type
   { How a new link's text looks: underlined, and coloured - rllTheme in the automatic colour,
     which the control paints in its theme's link colour (a file keeps no colour for it: in
     Word such a link is the text's own colour); rllWordBlue in Word's link blue
-    (CTyRichLinkWordBlue), a colour of the text's own that every program shows. }
+    (CTyRichLinkWordBlue), a colour of the text's own that every program shows. Text that has
+    a colour of its own keeps it with either look, as in Word. }
   TTyRichLinkLook = (rllTheme, rllWordBlue);
 
   { A link (a HYPERLINK field the model owns: TTyRichFieldMark.CreateOwned) made at APos.
     ALen > 0 and AText '': the ALen characters there become the link's text, as they are,
-    given the look ALook. AText given: it goes in place of those characters (none for ALen
+    given the look ALook (a colour of the text's own stays). AText given: it goes in place of those characters (none for ALen
     0), in the format typed at APos with the look. Neither: AURL itself is the text. The
     instruction is TyRichLinkInstruction(AURL); the marks take the format typed at APos (so
     text typed beside the link is not the link's). One undo step; an undo puts back exactly
@@ -427,8 +428,10 @@ type
   end;
 
   { The field whose open mark is at AFieldPos stops being one: its two marks go, its content
-    stays as it is - text, formats (the look a link was given too), pictures, the fields in
-    it. One undo step. Refused (CanExecute False): no field's open mark at AFieldPos; a field
+    stays - text, pictures, the fields in it, its formats but the look a link is given, which
+    goes with the link as in Word: the underline, a link colour (TyRichIsLinkColor) back to
+    automatic, a character style (\csN, Word's Hyperlink style); any other colour and every
+    other format stay. One undo step. Refused (CanExecute False): no field's open mark at AFieldPos; a field
     inside another field's result, or where the text cannot change. }
   TTyRichRemoveLink = class(TTyRichCommand)
   private
@@ -444,6 +447,14 @@ type
 const
   { Word's link blue (RGB 05 63 C1), the colour rllWordBlue gives a link's text. }
   CTyRichLinkWordBlue = TColor($C16305);
+  { The other colours a link's text has in files: the classic link blue (RGB 00 00 FF) and the
+    Hyperlink colour of Word's current theme (RGB 46 78 86). }
+  CTyRichLinkClassicBlue = TColor($FF0000);
+  CTyRichLinkThemeBlue = TColor($867846);
+
+{ AColor is a link's colour (one of the three above): what TTyRichRemoveLink takes back to the
+  automatic colour with the link. }
+function TyRichIsLinkColor(AColor: TColor): Boolean;
 
 { A HYPERLINK field's instruction for AURL, as Word writes one: "#name" is a place in the
   document (HYPERLINK \l "name"), "target#name" a place in a target (HYPERLINK "target"
@@ -1363,6 +1374,16 @@ begin
   Inc(ACount, 2);
 end;
 
+{ F with a link's look: underlined; with rllWordBlue, Word's link blue where its colour is
+  automatic - a colour of the text's own stays (as Word's Hyperlink style under direct
+  formatting); rllTheme leaves the colour as it is (automatic is painted the link colour). }
+procedure AddLinkLook(var F: TTyCharFormat; ALook: TTyRichLinkLook);
+begin
+  Include(F.Style, fsUnderline);
+  if (ALook = rllWordBlue) and ((F.Color = clDefault) or (F.Color = clNone)) then
+    F.Color := CTyRichLinkWordBlue;
+end;
+
 { The format AFormat with a link's look. }
 function LookFormat(ADoc: TTyRichDocument; AFormat: TTyCharFormatId;
   ALook: TTyRichLinkLook): TTyCharFormatId;
@@ -1370,8 +1391,7 @@ var
   f: TTyCharFormat;
 begin
   f := ADoc.Formats.CharFormat(AFormat);
-  Include(f.Style, fsUnderline);
-  if ALook = rllWordBlue then f.Color := CTyRichLinkWordBlue else f.Color := clDefault;
+  AddLinkLook(f, ALook);
   Result := ADoc.Formats.InternChar(f);
 end;
 
@@ -1455,7 +1475,9 @@ var
   outside: TTyCharFormatId;
   v: TTyCharFormat;
   s: UTF8String;
-  n: TTyRichPos;
+  n, a, b, ps: TTyRichPos;
+  k, i: Integer;
+  runs: TTyRunArray;
 begin
   // (a redo runs this again on the text an undo put back: the same ids, the same marks)
   s := FText;
@@ -1469,10 +1491,21 @@ begin
   else
   begin
     outside := ADoc.TypingFormatAt(FPos);
-    v := TyDefaultCharFormat;
-    v.Style := [fsUnderline];
-    if FLook = rllWordBlue then v.Color := CTyRichLinkWordBlue else v.Color := clDefault;
-    ApplyCharFormat(ADoc, FPos, FLen, [cffUnderline, cffColor], v);
+    // run by run: each keeps a colour of its own
+    k := ADoc.Text.ParaOfPos(FPos);
+    ps := ADoc.Text.ParaStart(k);
+    runs := ADoc.RunsOf(k);
+    for i := 0 to High(runs) do
+    begin
+      a := ps + runs[i].Start;
+      if i < High(runs) then b := ps + runs[i + 1].Start else b := ps + ADoc.Text.ParaLength(k);
+      if a < FPos then a := FPos;
+      if b > FPos + FLen then b := FPos + FLen;
+      if b <= a then Continue;
+      v := ADoc.Formats.CharFormat(runs[i].Format);
+      AddLinkLook(v, FLook);
+      ApplyCharFormat(ADoc, a, b - a, [cffUnderline, cffColor], v);
+    end;
     n := FLen;
   end;
   WrapInField(ADoc, FPos, n, FOpen, FClose, outside);
@@ -1572,9 +1605,77 @@ begin
   Result := ChangeableField(ADoc, FPos) >= 0;
 end;
 
-procedure TTyRichRemoveLink.DoExecute(ADoc: TTyRichDocument);
+function TyRichIsLinkColor(AColor: TColor): Boolean;
 begin
+  Result := (AColor = CTyRichLinkWordBlue) or (AColor = CTyRichLinkClassicBlue) or
+    (AColor = CTyRichLinkThemeBlue);
+end;
+
+{ F without a link's look: no underline, a link colour back to automatic, no character style
+  (\csN: a link's text in Word's files carries its Hyperlink style, which brings the look
+  back in Word). False: F has none of it. }
+function WithoutLinkLook(var F: TTyCharFormat): Boolean;
+var
+  x: TTyOpaqueAttrs;
+  i: Integer;
+  s: RawByteString;
+begin
+  Result := False;
+  if fsUnderline in F.Style then
+  begin
+    Exclude(F.Style, fsUnderline);
+    Result := True;
+  end;
+  if TyRichIsLinkColor(F.Color) then
+  begin
+    F.Color := clDefault;
+    Result := True;
+  end;
+  x := Default(TTyOpaqueAttrs);
+  for i := 0 to F.Extra.Count - 1 do
+  begin
+    s := F.Extra.Item(i);
+    if (Length(s) > 3) and (Copy(s, 1, 3) = '\cs') and (s[4] in ['0'..'9']) then
+      Result := True
+    else
+      x.Add(s);
+  end;
+  F.Extra := x;
+end;
+
+procedure TTyRichRemoveLink.DoExecute(ADoc: TTyRichDocument);
+var
+  c, e, ps, s, n: TTyRichPos;
+  k, last, i: Integer;
+  runs: TTyRunArray;
+  f: TTyCharFormat;
+begin
+  c := ChangeableField(ADoc, FPos);
+  if c < 0 then raise ETyRichModel.CreateFmt('No field to remove at %d', [FPos]);
   UnwrapField(ADoc, FPos);
+  // its text [FPos, c - 1) now: the look a link is given goes with the link, and only that
+  e := c - 1;
+  if e <= FPos then Exit;
+  k := ADoc.Text.ParaOfPos(FPos);
+  last := ADoc.Text.ParaOfPos(e);
+  while k <= last do
+  begin
+    ps := ADoc.Text.ParaStart(k);
+    runs := ADoc.RunsOf(k);
+    for i := 0 to High(runs) do
+    begin
+      if runs[i].Obj <> nil then Continue;
+      s := ps + runs[i].Start;
+      if i < High(runs) then n := ps + runs[i + 1].Start else n := ps + ADoc.Text.ParaLength(k);
+      if s < FPos then s := FPos;
+      if n > e then n := e;
+      if n <= s then Continue;
+      f := ADoc.Formats.CharFormat(runs[i].Format);
+      if WithoutLinkLook(f) then
+        ApplyCharFormat(ADoc, s, n - s, [cffUnderline, cffColor, cffExtra], f);
+    end;
+    Inc(k);
+  end;
 end;
 
 function TTyRichRemoveLink.Description: string;
