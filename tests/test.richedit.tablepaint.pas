@@ -15,7 +15,8 @@ uses
   Classes, SysUtils, Graphics, fpcunit, testregistry, BGRABitmap, BGRABitmapTypes,
   tyControls.RichEdit.Text, tyControls.RichEdit.Model, tyControls.RichEdit.Commands,
   tyControls.RichEdit.RowFormat, tyControls.RichEdit.TableProps, tyControls.RichEdit.RtfRead,
-  tyControls.RichEdit.Layout, test.richedit.layoutdevice;
+  tyControls.RichEdit.Layout, test.richedit.layoutdevice, tyControls.Controller,
+  tyControls.Painter, tyControls.RichEdit;
 
 type
   TTyRichTablePaintTest = class(TTestCase)
@@ -28,6 +29,8 @@ type
     procedure TestCrispAt150And200;
     procedure TestWordsStyledTableAsWordDrawsIt;
     procedure TestAnExactRowCutsItsContent;
+    procedure TestWordsTableEdgesAtEveryScale;
+    procedure TestAnAlignedTableAtEveryScale;
   end;
 
 implementation
@@ -618,6 +621,251 @@ begin
   finally
     d.Free;
   end;
+end;
+
+{ Word's styled table at 100, 150 and 200 % (96, 144 and 192 pixels an inch), in a light and
+  a dark style: at the middle of each cell's side on the table's outside, across the edge,
+  red / ground / red; the inside lines blue and dotted, across and down; the dashed edge
+  green - every row's block on its own. }
+procedure TTyRichTablePaintTest.TestWordsTableEdgesAtEveryScale;
+const
+  PPIs: array[0..2] of Integer = (96, 144, 192);
+var
+  d: TTyRichDocument;
+  r: array[0..2] of TPainted;
+  st: TTyRichPaintStyle;
+  k, m, row, i, j, x, y, ons, offs, ink: Integer;
+  c: TTyRichCellBox;
+  red, blue, green, ground: TBGRAPixel;
+  msg: string;
+
+  // the pixels across an edge, from APixel on, step ADX / ADY, ACount of them
+  function Across(R: TPainted; AX, AY, ADX, ADY, ACount: Integer): string;
+  var
+    n: Integer;
+    q: TBGRAPixel;
+  begin
+    Result := '';
+    for n := 0 to ACount - 1 do
+    begin
+      q := R.At(AX + n * ADX, AY + n * ADY);
+      if SamePx(q, red) then Result := Result + 'R'
+      else if SamePx(q, blue) then Result := Result + 'B'
+      else Result := Result + '.';
+    end;
+  end;
+
+begin
+  red := BGRA(255, 0, 0);
+  blue := BGRA(0, 0, 255);
+  green := BGRA(0, 128, 0);
+  d := LoadDoc(FixtureBytes('word-table-styled.rtf'));
+  try
+    k := 0;
+    while d.CellAt(k) = nil do Inc(k);
+    for m := 0 to 1 do
+    begin
+      st := Style;
+      if m = 1 then
+      begin
+        st.TextColor := BGRA(230, 230, 230);
+        st.TableBorder := BGRA(160, 160, 160);
+      end;
+      for i := 0 to High(PPIs) do
+      begin
+        msg := Format('%d ppi, style %d', [PPIs[i], m]);
+        for row := 0 to 2 do r[row] := PaintRow(d, k + 3 * row, st, PPIs[i]);
+        try
+          for row := 0 to 2 do
+          begin
+            // the left and right outside edges: across, at the middle of the row
+            y := r[row].Row.Height div 2;
+            c := r[row].Row.Cells[0];
+            ground := r[row].At(c.Left + c.LinePx[rcsLeft] div 3, y);
+            AssertEquals(msg + Format(': row %d, the left edge', [row]),
+              StringOfChar('R', c.LinePx[rcsLeft] div 3) + StringOfChar('.', c.LinePx[rcsLeft] div 3) +
+              StringOfChar('R', c.LinePx[rcsLeft] div 3),
+              Across(r[row], c.Left, y, 1, 0, c.LinePx[rcsLeft]));
+            c := r[row].Row.Cells[2];
+            AssertEquals(msg + Format(': row %d, the right edge', [row]),
+              StringOfChar('R', c.LinePx[rcsRight] div 3) + StringOfChar('.', c.LinePx[rcsRight] div 3) +
+              StringOfChar('R', c.LinePx[rcsRight] div 3),
+              Across(r[row], c.Right - c.LinePx[rcsRight], y, 1, 0, c.LinePx[rcsRight]));
+            AssertTrue(msg + ': the right edge is red', c.LineColor[rcsRight] <> clDefault);
+          end;
+          // the top and the bottom outside edges: down, at the middle of each cell
+          for j := 0 to 2 do
+          begin
+            c := r[0].Row.Cells[j];
+            AssertEquals(msg + Format(': cell 1,%d, the top edge', [j + 1]),
+              StringOfChar('R', c.LinePx[rcsTop] div 3) + StringOfChar('.', c.LinePx[rcsTop] div 3) +
+              StringOfChar('R', c.LinePx[rcsTop] div 3),
+              Across(r[0], (c.Left + c.Right) div 2, 0, 0, 1, c.LinePx[rcsTop]));
+            c := r[2].Row.Cells[j];
+            AssertEquals(msg + Format(': cell 3,%d, the bottom edge', [j + 1]),
+              StringOfChar('R', c.LinePx[rcsBottom] div 3) + StringOfChar('.', c.LinePx[rcsBottom] div 3) +
+              StringOfChar('R', c.LinePx[rcsBottom] div 3),
+              Across(r[2], (c.Left + c.Right) div 2, r[2].Row.Height - c.LinePx[rcsBottom], 0, 1,
+              c.LinePx[rcsBottom]));
+          end;
+          // the inside lines: blue, dotted - down (cell 1,2's left) and across (cell 3,1's top)
+          c := r[0].Row.Cells[1];
+          ons := 0;
+          offs := 0;
+          for y := 4 to r[0].Row.Height - 4 do
+            if SamePx(blue, r[0].At(c.Left, y)) then Inc(ons) else Inc(offs);
+          AssertTrue(msg + Format(': dotted down, %d blue %d gaps', [ons, offs]), (ons > 3) and (offs > 3));
+          c := r[2].Row.Cells[0];
+          ons := 0;
+          offs := 0;
+          for x := c.Left + 4 to c.Right - 4 do
+            if SamePx(blue, r[2].At(x, 0)) then Inc(ons) else Inc(offs);
+          AssertTrue(msg + Format(': dotted across, %d blue %d gaps', [ons, offs]), (ons > 10) and (offs > 10));
+          // where an inside line meets the outside border, the border is whole
+          c := r[1].Row.Cells[0];
+          AssertTrue(msg + ': the left border over the inside line''s end', SamePx(red, r[1].At(c.Left, 0)));
+          // the dashed edge: green
+          c := r[1].Row.Cells[2];
+          ink := 0;
+          for x := c.Left + 4 to c.Right - 4 do
+            if SamePx(green, r[1].At(x, 0)) then Inc(ink);
+          AssertTrue(msg + Format(': the dashed edge green (%d)', [ink]), ink > 10);
+        finally
+          for row := 0 to 2 do r[row].Free;
+        end;
+      end;
+    end;
+  finally
+    d.Free;
+  end;
+end;
+
+type
+  TScaledRich = class(TTyRichEdit)
+  public
+    function Area: TRect;
+    // the paint the window gets
+    procedure PaintWindow(ACanvas: TCanvas);
+  end;
+
+procedure TScaledRich.PaintWindow(ACanvas: TCanvas);
+begin
+  PaintArea(ACanvas, Rect(0, 0, Width, Height), Rect(0, 0, Width, Height), Font.PixelsPerInch, True);
+end;
+
+function TScaledRich.Area: TRect;
+begin
+  Result := TextArea(Rect(0, 0, Width, Height), Font.PixelsPerInch);
+end;
+
+{ The first run of at least AMin red pixels in the bitmap, from the top: its left and right. }
+function RedRun(B: TBGRABitmap; AMin: Integer; out ALeft, ARight: Integer): Boolean;
+var
+  x, y, s: Integer;
+  p: PBGRAPixel;
+begin
+  for y := 0 to B.Height - 1 do
+  begin
+    p := B.ScanLine[y];
+    s := -1;
+    for x := 0 to B.Width do
+      if (x < B.Width) and (p[x].red = 255) and (p[x].green = 0) and (p[x].blue = 0) then
+      begin
+        if s < 0 then s := x;
+      end
+      else
+      begin
+        if (s >= 0) and (x - s >= AMin) then
+        begin
+          ALeft := s;
+          ARight := x - 1;
+          Exit(True);
+        end;
+        s := -1;
+      end;
+  end;
+  Result := False;
+end;
+
+{ A centred table (Word's) and a right-aligned one, painted by the control at 100, 150 and
+  200 %: on a screen whose pixels the control's size and PPI count (Windows' scaling), through
+  the paint the window gets and through RenderTo; and with the device's own scale of 2 (a
+  Mac's), its size and PPI the logical ones. The table centred in the text area, or at its
+  right, within a device pixel. }
+procedure TTyRichTablePaintTest.TestAnAlignedTableAtEveryScale;
+const
+  RightRtf = '{\rtf1\ansi{\fonttbl{\f0 Arial;}}{\colortbl;\red255\green0\blue0;}' +
+    '\trowd\trqr\trgaph108\clbrdrt\brdrs\brdrw30\brdrcf1 \clbrdrb\brdrs\brdrw30\brdrcf1 ' +
+    '\cellx2880\pard\intbl a\cell\row\pard after\par}';
+var
+  ctl: TTyStyleController;
+  rich: TScaledRich;
+  bmp: TBGRABitmap;
+  s, way, which, l, rr, scale, ppi: Integer;
+  area: TRect;
+  st: TBytesStream;
+  msg: string;
+  centre2: Integer;
+begin
+  for which := 0 to 1 do
+    for s := 0 to 2 do
+      for way := 0 to 2 do
+      begin
+        // way 0: the window's paint, 1: RenderTo, 2: the device's scale (200 % only)
+        if (way = 2) and (s <> 2) then Continue;
+        scale := 1;
+        case s of
+          0: ppi := 96;
+          1: ppi := 144;
+        else
+          ppi := 192;
+        end;
+        if way = 2 then
+        begin
+          scale := 2;
+          ppi := 96;
+          TyForceDeviceScaleForTest(2, True, False);
+        end;
+        msg := Format('table %d, %d ppi x %d, way %d', [which, ppi, scale, way]);
+        ctl := TTyStyleController.Create(nil);
+        rich := TScaledRich.Create(nil);
+        try
+          rich.Controller := ctl;
+          rich.Font.PixelsPerInch := ppi;
+          rich.SetBounds(0, 0, 700 * ppi div 96, 400 * ppi div 96);
+          if which = 0 then st := TBytesStream.Create(FixtureBytes('word-table-styled.rtf'))
+          else st := TBytesStream.Create(BytesOf(RightRtf));
+          try
+            rich.LoadFromStream(st);
+          finally
+            st.Free;
+          end;
+          rich.FinishLoading;
+          bmp := TBGRABitmap.Create(rich.Width * scale, rich.Height * scale, BGRA(255, 0, 255));
+          try
+            if way = 1 then rich.RenderTo(bmp.Canvas, Rect(0, 0, rich.Width, rich.Height), ppi)
+            else rich.PaintWindow(bmp.Canvas);
+            area := rich.Area;
+            AssertTrue(msg + ': the red line', RedRun(bmp, 30, l, rr));
+            if which = 0 then
+            begin
+              // (twice the centres: no half pixels)
+              centre2 := (area.Left + area.Right) * scale;
+              AssertTrue(msg + Format(': centred - the table %d..%d, the area %d..%d (x %d)',
+                [l, rr, area.Left, area.Right, scale]), Abs((l + rr + 1) - centre2) <= 2);
+            end
+            else
+              AssertTrue(msg + Format(': at the right - the table ends at %d, the area at %d (x %d)',
+                [rr, area.Right, scale]), Abs((rr + 1) - area.Right * scale) <= 1);
+          finally
+            bmp.Free;
+          end;
+        finally
+          rich.Free;
+          ctl.Free;
+          if way = 2 then TyForceDeviceScaleForTest(0, False);
+        end;
+      end;
 end;
 
 initialization

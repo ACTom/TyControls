@@ -4014,7 +4014,8 @@ end;
 procedure TTyRowLayout.PaintRow(ATarget: TBGRABitmap; AX, AY: Integer; const AClip,
   AOld: TRect; const AStyle: TTyRichPaintStyle; ASelFrom, ASelTo: TTyRichPos);
 var
-  i, k, w: Integer;
+  i, k, w, lo, hi, next: Integer;
+  s: TTyRowCellSide;
   clip, old, cr, box: TRect;
   bx: ^TTyRichCellBox;
   it: ^TTyRichRowItem;
@@ -4062,39 +4063,45 @@ begin
         ASelTo - it^.Pos);
     end;
   end;
-  // then the lines, over them
+  { then the lines, over them - the narrower first: where two lines cross (a cell's corner)
+    the wider one, a table's outside border, is drawn over the thinner one inside it }
   ATarget.ClipRect := clip;
   try
+    lo := MaxInt;
+    hi := 0;
     for i := 0 to High(FCells) do
+      for s := Low(TTyRowCellSide) to High(TTyRowCellSide) do
+        if not FCells[i].Hidden and (s in FCells[i].Sides) then
+        begin
+          lo := Min(lo, FCells[i].LinePx[s]);
+          hi := Max(hi, FCells[i].LinePx[s]);
+        end;
+    w := lo;
+    while w <= hi do
     begin
-      bx := @FCells[i];
-      if bx^.Hidden or (bx^.Sides = []) then Continue;
-      box := Rect(AX + bx^.Left, AY, AX + bx^.Right, AY + FHeight);
-      if not Types.IntersectRect(cr, clip, box) then Continue;
-      if rcsLeft in bx^.Sides then
+      next := MaxInt;
+      for i := 0 to High(FCells) do
       begin
-        w := bx^.LinePx[rcsLeft];
-        DrawCellLine(ATarget, box.Left, box.Top, box.Left + w, box.Bottom, False,
-          bx^.LineStyle[rcsLeft], Ink(rcsLeft));
+        bx := @FCells[i];
+        if bx^.Hidden or (bx^.Sides = []) then Continue;
+        for s := Low(TTyRowCellSide) to High(TTyRowCellSide) do
+          if (s in bx^.Sides) and (bx^.LinePx[s] > w) then next := Min(next, bx^.LinePx[s]);
+        box := Rect(AX + bx^.Left, AY, AX + bx^.Right, AY + FHeight);
+        if not Types.IntersectRect(cr, clip, box) then Continue;
+        if (rcsLeft in bx^.Sides) and (bx^.LinePx[rcsLeft] = w) then
+          DrawCellLine(ATarget, box.Left, box.Top, box.Left + w, box.Bottom, False,
+            bx^.LineStyle[rcsLeft], Ink(rcsLeft));
+        if (rcsTop in bx^.Sides) and (bx^.LinePx[rcsTop] = w) then
+          DrawCellLine(ATarget, box.Left, box.Top, box.Right, box.Top + w, True,
+            bx^.LineStyle[rcsTop], Ink(rcsTop));
+        if (rcsRight in bx^.Sides) and (bx^.LinePx[rcsRight] = w) then
+          DrawCellLine(ATarget, box.Right - w, box.Top, box.Right, box.Bottom, False,
+            bx^.LineStyle[rcsRight], Ink(rcsRight));
+        if (rcsBottom in bx^.Sides) and (bx^.LinePx[rcsBottom] = w) then
+          DrawCellLine(ATarget, box.Left, box.Bottom - w, box.Right, box.Bottom, True,
+            bx^.LineStyle[rcsBottom], Ink(rcsBottom));
       end;
-      if rcsTop in bx^.Sides then
-      begin
-        w := bx^.LinePx[rcsTop];
-        DrawCellLine(ATarget, box.Left, box.Top, box.Right, box.Top + w, True,
-          bx^.LineStyle[rcsTop], Ink(rcsTop));
-      end;
-      if rcsRight in bx^.Sides then
-      begin
-        w := bx^.LinePx[rcsRight];
-        DrawCellLine(ATarget, box.Right - w, box.Top, box.Right, box.Bottom, False,
-          bx^.LineStyle[rcsRight], Ink(rcsRight));
-      end;
-      if rcsBottom in bx^.Sides then
-      begin
-        w := bx^.LinePx[rcsBottom];
-        DrawCellLine(ATarget, box.Left, box.Bottom - w, box.Right, box.Bottom, True,
-          bx^.LineStyle[rcsBottom], Ink(rcsBottom));
-      end;
+      w := next;
     end;
   finally
     ATarget.ClipRect := old;
