@@ -358,6 +358,9 @@ resourcestring
   rsRichEditRefusedBookmarkName = 'A bookmark''s name begins with a letter and holds only letters, digits and "_" - at most 40 of them.';
   rsRichEditRefusedNoBookmark = 'There is no bookmark of that name.';
   rsRichEditRefusedBookmarkExists = 'There is a bookmark of that name already.';
+  { A picture of the document handed over as an image (TTyRichPicture.AssignTo) that the
+    control itself shows as a placeholder. }
+  rsRichPictureNotShown = 'This picture cannot be made an image: it is a metafile that draws more than one bitmap, or of a format the control does not read.';
   { A table action (TTyCustomRichEdit.InsertTable, InsertRow, DeleteColumn and the like, and
     Tab in a table's last cell) that the table or the place does not allow. The first %d
     is the most rows a table can have, the second (and the one of ...TableColumns) the most

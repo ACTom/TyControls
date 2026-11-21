@@ -1244,6 +1244,10 @@ msgstr ""
 msgid "Part %d of the command (%s) cannot be carried out"
 msgstr ""
 
+#: tycontrols.strconsts.rsrichpicturenotshown
+msgid "This picture cannot be made an image: it is a metafile that draws more than one bitmap, or of a format the control does not read."
+msgstr ""
+
 #: tycontrols.strconsts.rsrichundoaddbookmark
 msgid "Add bookmark"
 msgstr ""

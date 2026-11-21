@@ -1047,6 +1047,10 @@ msgstr "没有这个名字的书签。"
 msgid "There is a bookmark of that name already."
 msgstr "已经有这个名字的书签了。"
 
+#: tycontrols.strconsts.rsrichpicturenotshown
+msgid "This picture cannot be made an image: it is a metafile that draws more than one bitmap, or of a format the control does not read."
+msgstr "这张图片无法转成图像：它是画了不止一个位图的图元文件，或是控件读不了的格式。"
+
 #: tycontrols.strconsts.rsricheditrefusedplaintable
 msgid "A plain text document cannot hold a table."
 msgstr "纯文本文档里不能有表格。"

@@ -8599,6 +8599,8 @@ type
     property OnLinkClick;
     property FollowBookmarkLinks;
     property OnFollowLink;
+    property OnObjectClick;
+    property OnObjectDblClick;
     property OnObjectResize;
     property OnDropFiles;
     property OnLoadProgress;

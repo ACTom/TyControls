@@ -208,7 +208,9 @@ type
   { AddRef/Release: freed when the count falls back to 0. The document holds one reference per
     paragraph value that uses it; a command that must re-attach it on redo holds its own. One
     that was never attached and never AddRef'd belongs to whoever created it. }
-  TTyRichRefCounted = class
+  { (A TPersistent: an object can be handed to what takes a persistent - a picture to a
+    TPicture's Assign.) }
+  TTyRichRefCounted = class(TPersistent)
   private
     FRefCount: Integer;
   public
@@ -324,6 +326,16 @@ type
       nothing can be shown, AData nil. }
     function DisplayBytes(out AFormat: TTyRichPictureFormat; out AStart, ACount: Integer;
       out AData: TBytes): Boolean;
+    { The picture as an image at its own size in pixels (not the size it is shown at) into a
+      TPicture or a TBitmap: TPicture.Assign(APicture) and TBitmap.Assign(APicture) come here.
+      PNG, JPEG, a bitmap and a metafile whose drawing is one bitmap (that bitmap); what the
+      control draws as a placeholder - any other metafile, an unknown or empty picture -
+      raises EInvalidGraphic (rsRichPictureNotShown). Its image's bytes are made for the call
+      (MakeImageData, once) and not kept. Any other Dest: as TPersistent (EConvertError). }
+    procedure AssignTo(Dest: TPersistent); override;
+    { The image file's own bytes (MakeImageData) written to AStream: a PNG, a JPEG, a bitmap,
+      a metafile as the document holds it. }
+    procedure SaveImageToStream(AStream: TStream);
     function DataBytes: Int64; override;
     // its own bytes: a resized picture shares them
     function SharedData(out ABytes: Int64): Pointer; override;
@@ -409,6 +421,9 @@ type
       by the end of the file). Looked for the first time it is asked - the layout asks when it
       first measures the block - and never again; nothing of the bytes is copied. }
     function DisplayPicture: TTyRichKeptPicture;
+    { The picture it shows (DisplayPicture) handed over as TTyRichPicture.AssignTo does; a
+      block that shows none: as TPersistent (EConvertError). }
+    procedure AssignTo(Dest: TPersistent); override;
     property Bytes: RawByteString read FBytes;
     // what stands for it on screen, as plain text: a field's result ('' for most blocks)
     property DisplayText: UTF8String read FDisplayText;
@@ -2039,6 +2054,12 @@ function TyRichBookmarkHash(const AName: UTF8String): Cardinal;
 { Word's syntax for a bookmark's end: {\*\bkmkstart name} or {\*\bkmkend name}, the name's
   ASCII as it is (\ { } escaped), anything else \uN with a ? for readers without Unicode. }
 function TyRichBookmarkBytes(AKind: TTyRichBookmarkKind; const AName: UTF8String): RawByteString;
+{ What a decoder reads of APicture: the image file's bytes the control draws (a metafile's
+  one bitmap with a bitmap file's header put in front), AFormat what to read them as; nil
+  when the control draws a placeholder for it (TTyRichPicture.DisplayBytes). The caller
+  frees it. }
+function TyRichPictureImageStream(APicture: TTyRichPicture;
+  out AFormat: TTyRichPictureFormat): TMemoryStream;
 
 implementation
 
@@ -10681,6 +10702,129 @@ end;
 function TTyRichParaLoader.BookmarkIndexName(AIndex: Integer): UTF8String;
 begin
   Result := '';
+end;
+
+{ ---- a picture handed over ---- }
+
+function PicLE16(const B: TBytes; AAt: Integer): Cardinal;
+begin
+  if (AAt < 0) or (AAt + 2 > Length(B)) then Exit(0);
+  Result := Cardinal(B[AAt]) or (Cardinal(B[AAt + 1]) shl 8);
+end;
+
+function PicLE32(const B: TBytes; AAt: Integer): Cardinal;
+begin
+  if (AAt < 0) or (AAt + 4 > Length(B)) then Exit(0);
+  Result := PicLE16(B, AAt) or (PicLE16(B, AAt + 2) shl 16);
+end;
+
+function TyRichPictureImageStream(APicture: TTyRichPicture;
+  out AFormat: TTyRichPictureFormat): TMemoryStream;
+var
+  start, count: Integer;
+  data: TBytes;
+  hs, bits, comp, used, entry, pal, off: Cardinal;
+  h: array[0..13] of Byte;
+
+  procedure Put32(AAt: Integer; AValue: Cardinal);
+  begin
+    h[AAt] := AValue and $FF;
+    h[AAt + 1] := (AValue shr 8) and $FF;
+    h[AAt + 2] := (AValue shr 16) and $FF;
+    h[AAt + 3] := (AValue shr 24) and $FF;
+  end;
+
+begin
+  Result := nil;
+  AFormat := rpfUnknown;
+  if (APicture = nil) or not APicture.DisplayBytes(AFormat, start, count, data) then Exit;
+  if (start < 0) or (count <= 0) or (Int64(start) + count > Length(data)) then Exit;
+  Result := TMemoryStream.Create;
+  try
+    if AFormat = rpfDib then
+    begin
+      // a .bmp file's header: where the bits start - after the header, the colours, the masks
+      hs := PicLE32(data, start);
+      if hs = 12 then
+      begin
+        bits := PicLE16(data, start + 10);
+        comp := 0;
+        used := 0;
+        entry := 3;
+      end
+      else
+      begin
+        bits := PicLE16(data, start + 14);
+        comp := PicLE32(data, start + 16);
+        if hs >= 36 then used := PicLE32(data, start + 32) else used := 0;
+        entry := 4;
+      end;
+      if (used = 0) and (bits >= 1) and (bits <= 8) then used := Cardinal(1) shl bits;
+      if used > 65536 then used := 0;
+      pal := used * entry;
+      if (hs = 40) and (comp = 3) then Inc(pal, 12)
+      else if (hs = 40) and (comp = 6) then Inc(pal, 16);
+      off := 14 + hs + pal;
+      FillChar(h, SizeOf(h), 0);
+      h[0] := Ord('B');
+      h[1] := Ord('M');
+      Put32(2, 14 + Cardinal(count));
+      Put32(10, off);
+      Result.WriteBuffer(h, SizeOf(h));
+    end;
+    Result.WriteBuffer(data[start], count);
+    Result.Position := 0;
+  except
+    FreeAndNil(Result);
+    raise;
+  end;
+end;
+
+procedure TTyRichPicture.AssignTo(Dest: TPersistent);
+var
+  s: TMemoryStream;
+  fmt: TTyRichPictureFormat;
+  g: TGraphic;
+begin
+  if not ((Dest is TPicture) or (Dest is TBitmap)) then
+  begin
+    inherited AssignTo(Dest);
+    Exit;
+  end;
+  s := TyRichPictureImageStream(Self, fmt);
+  if s = nil then raise EInvalidGraphic.Create(rsRichPictureNotShown);
+  try
+    case fmt of
+      rpfPng: g := TPortableNetworkGraphic.Create;
+      rpfJpeg: g := TJPEGImage.Create;
+    else
+      g := TBitmap.Create;
+    end;
+    try
+      g.LoadFromStream(s);
+      if Dest is TPicture then TPicture(Dest).Assign(g) else TBitmap(Dest).Assign(g);
+    finally
+      g.Free;
+    end;
+  finally
+    s.Free;
+  end;
+end;
+
+procedure TTyRichPicture.SaveImageToStream(AStream: TStream);
+var
+  data: TBytes;
+begin
+  data := MakeImageData;
+  if Length(data) > 0 then AStream.WriteBuffer(data[0], Length(data));
+end;
+
+procedure TTyRichOpaque.AssignTo(Dest: TPersistent);
+var
+  p: TTyRichKeptPicture;
+begin
+  p := DisplayPicture;
+  if p <> nil then p.AssignTo(Dest) else inherited AssignTo(Dest);
 end;
 
 end.

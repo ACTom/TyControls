@@ -321,7 +321,8 @@ uses
   test.richedit.apigaps,
   test.richedit.display,
   test.richedit.links,
-  test.richedit.bookmarks;
+  test.richedit.bookmarks,
+  test.richedit.objevents;
 
 type
   TTyTestRunner = class(TTestRunner)

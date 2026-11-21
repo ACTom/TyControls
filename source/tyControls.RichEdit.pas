@@ -220,6 +220,14 @@ type
   TTyRichFollowLinkEvent = procedure(Sender: TObject; const AName: string;
     var AAllow: Boolean) of object;
 
+  { A click or a double click on an object of the document (TTyCustomRichEdit.OnObjectClick,
+    OnObjectDblClick): AObject the object (a picture, a block that shows one, another block
+    with a width), APos its character's position. The object is good during the call (a
+    reference is held for it); one kept past it takes a reference of its own (AddRef). AHandled
+    True: what the control would still do with the press does not happen. }
+  TTyRichObjectClickEvent = procedure(Sender: TObject; AObject: TTyRichObject; APos: TTyRichPos;
+    AButton: TMouseButton; AShift: TShiftState; var AHandled: Boolean) of object;
+
   { A field around a place the control has read: its open mark's place, its close mark's (-1
     not known), how deep it is (-1 not known), whether it is a link and its target. }
   TTyRichKnownField = record
@@ -787,6 +795,11 @@ type
     FOnLinkClick: TTyRichLinkClickEvent;
     FFollowBookmarkLinks: Boolean;
     FOnFollowLink: TTyRichFollowLinkEvent;
+    FOnObjectClick, FOnObjectDblClick: TTyRichObjectClickEvent;
+    // the object a press began on (-1 none), with its button and point: its click's release
+    FObjPressAt: TTyRichPos;
+    FObjPressButton: TMouseButton;
+    FObjPressPoint: TPoint;
     // BookmarkCount / BookmarkName's list, for the content FBkmState, with hidden ones or not
     FBkmList: TStringArray;
     FBkmState: Int64;
@@ -1575,6 +1588,16 @@ type
     { After a link's click: a "#name" link followed to its bookmark (FollowBookmarkLinks,
       OnFollowLink). }
     procedure FollowLink(const AURL: string);
+    // objects' clicks
+    { The position of the object with a width under client point (X, Y); -1 none. }
+    function ObjectPosAtPoint(X, Y: Integer): TTyRichPos;
+    { OnObjectDblClick (ADouble) or OnObjectClick for the object at APos, through the lifetime
+      guard (the handler may free the control: ETyRichGone travels on). True: AHandled. }
+    function FireObjectEvent(ADouble: Boolean; APos: TTyRichPos; AButton: TMouseButton;
+      AShift: TShiftState): Boolean;
+    { A release of the button an object's press began with, on that object, no drag between:
+      its click. True: handled. }
+    function ObjectRelease(AButton: TMouseButton; AShift: TShiftState; X, Y: Integer): Boolean;
     // tables
     { What the user is told when table edit AEdit is refused for AReason. }
     function TableRefusalText(AReason: TTyRichTableRefusal; const AEdit: TTyRichTableEdit): string;
@@ -2271,6 +2294,22 @@ type
     { Before a link is followed to its bookmark: AAllow False stays. The handler may free the
       control, load another document or show a dialog. }
     property OnFollowLink: TTyRichFollowLinkEvent read FOnFollowLink write FOnFollowLink;
+    { A click on an object (a picture, a block that shows a picture - an equation, an embedded
+      object, a shape -, another kept block with a width; never a field's marks, a bookmark's
+      ends or anything else with no width): on the release of a press of any button that began
+      on that object and ended there without a drag or a resize. The press has done what it
+      does (a left press selects the object, a right one leaves the selection for the menu);
+      AHandled True stops what the release would still do (the click a press inside the
+      selection owes, the menu of a right click). A press that is a link's click (OnLinkClick:
+      a picture in a link) is no object's click. Also with AllowSelection False, where the
+      press selects nothing. }
+    property OnObjectClick: TTyRichObjectClickEvent read FOnObjectClick write FOnObjectClick;
+    { A double click on an object: on the second press, before what a double click does
+      (selecting the object as a word); AHandled True: that does not happen. The press's
+      release is no OnObjectClick. A handler may free the control, load another document or
+      show a modal form. }
+    property OnObjectDblClick: TTyRichObjectClickEvent read FOnObjectDblClick
+      write FOnObjectDblClick;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -2669,6 +2708,12 @@ type
     function DeleteBookmark(const AName: string): Boolean;
     function RenameBookmark(const AOld, ANew: string): Boolean;
     function CanEditBookmarks: Boolean;
+    { The object under client point (X, Y) with a width (what OnObjectClick reports), APos its
+      position; nil (APos -1) elsewhere, over a field's mark or a bookmark's end, outside the
+      laid out view. The object is good until the document is read again (a read on demand
+      may let it go): keep a reference (AddRef) to keep it. What a pointer's move asks, no
+      more. }
+    function ObjectAtPoint(X, Y: Integer; out APos: TTyRichPos): TTyRichObject;
     { The handles. When the selection is exactly one object that can be resized
       (TTyRichObject.CanResize - a picture, also one shown as a placeholder) and the user may
       edit it (not ReadOnly, enabled, the document taking edits), it shows its frame and eight
@@ -3358,6 +3403,8 @@ type
     property OnLinkClick;
     property FollowBookmarkLinks;
     property OnFollowLink;
+    property OnObjectClick;
+    property OnObjectDblClick;
     property OnObjectResize;
     property OnDropFiles;
     property OnLoadProgress;
@@ -4120,6 +4167,7 @@ begin
   FLayouter.Document := FDoc;
   FLayouter.OnLinkField := @LayoutLinkField;
   FFollowBookmarkLinks := True;
+  FObjPressAt := -1;
   // the layouter empties its caches when the list changes; the view must drop its blocks too
   FFallbackListChange := FLayouter.FallbackFonts.OnChange;
   FLayouter.FallbackFonts.OnChange := @FallbackListChanged;
@@ -5834,11 +5882,19 @@ end;
 procedure TTyCustomRichEdit.MouseDown(Button: TMouseButton; Shift: TShiftState; X, Y: Integer);
 var
   q, a, b, o, q0, s0, n0: TTyRichPos;
-  atEnd, pre: Boolean;
+  atEnd, pre, dblHandled: Boolean;
   clicks: Integer;
   h: TTyRichHandle;
   box: TRect;
+  life: TTyRichLife;
+
+  procedure DblClick;
+  begin
+    dblHandled := FireObjectEvent(True, o, Button, Shift);
+  end;
+
 begin
+  dblHandled := False;
   // (in the form designer a press selects the control, not text: no caret, no drag)
   if not IsEnabled or (csDesigning in ComponentState) then Exit;
   // (a press on a link waiting for its release: any other press ends the wait)
@@ -5917,10 +5973,16 @@ begin
   end;
   // a user action is an entry point of the loop (see SchedulingFailed)
   EndOwedLoad;
-  // the middle button: a link's click, or nothing
+  FObjPressAt := -1;
+  // the middle button: a link's click, or an object's, or nothing
   if Button = mbMiddle then
   begin
-    LinkPress(Button, Shift, X, Y);
+    if not LinkPress(Button, Shift, X, Y) and not ViewBehind then
+    begin
+      FObjPressAt := ObjectPosAtPoint(X, Y);
+      FObjPressButton := Button;
+      FObjPressPoint := Point(X, Y);
+    end;
     Exit;
   end;
   if (Button <> mbLeft) and (Button <> mbRight) then Exit;
@@ -5940,6 +6002,17 @@ begin
   end;
   // a link's click (LinkClickFires): nothing else - no caret, no selection, no object
   if (Button = mbLeft) and LinkPress(Button, Shift, X, Y) then Exit;
+  // an object under the press: its click on the release, its double click now
+  FObjPressAt := ObjectPosAtPoint(X, Y);
+  FObjPressButton := Button;
+  FObjPressPoint := Point(X, Y);
+  if (Button = mbLeft) and (ssDouble in Shift) and (FObjPressAt >= 0) then
+  begin
+    o := FObjPressAt;
+    FObjPressAt := -1;
+    Guard(life, @DblClick);
+    if life.Gone or dblHandled then Exit;
+  end;
   // no selection of the user's (AllowSelection): a press places nothing, drags nothing
   if not FAllowSelection then Exit;
   if not pre then
@@ -6805,6 +6878,75 @@ begin
   Result := True;
 end;
 
+{ ---- objects' clicks ---- }
+
+function TTyCustomRichEdit.ObjectPosAtPoint(X, Y: Integer): TTyRichPos;
+var
+  q: TTyRichPos;
+  atEnd: Boolean;
+begin
+  Result := -1;
+  if ViewBehind then Exit;
+  q := HitClient(X, Y, atEnd);
+  if q < 0 then Exit;
+  // (an object's box: one with no width has none to be on)
+  Result := ObjectAt(X, Y, Math.Min(q, FDoc.Text.Length));
+end;
+
+function TTyCustomRichEdit.ObjectAtPoint(X, Y: Integer; out APos: TTyRichPos): TTyRichObject;
+begin
+  Result := nil;
+  APos := ObjectPosAtPoint(X, Y);
+  if APos < 0 then Exit;
+  Result := FDoc.ObjectAt(APos);
+  if Result = nil then APos := -1;
+end;
+
+function TTyCustomRichEdit.FireObjectEvent(ADouble: Boolean; APos: TTyRichPos;
+  AButton: TMouseButton; AShift: TShiftState): Boolean;
+var
+  obj: TTyRichObject;
+  handled: Boolean;
+  h: TTyRichObjectClickEvent;
+
+  procedure Fire;
+  begin
+    h(Self, obj, APos, AButton, AShift, handled);
+  end;
+
+begin
+  Result := False;
+  if ADouble then h := FOnObjectDblClick else h := FOnObjectClick;
+  if not Assigned(h) or (APos < 0) or (APos >= FDoc.Text.Length) then Exit;
+  obj := FDoc.ObjectAt(APos);
+  if obj = nil then Exit;
+  handled := False;
+  // (held for the handler: one that loads another document does not free it under it)
+  obj.AddRef;
+  try
+    CallHandler(@Fire);
+  finally
+    obj.Release;
+  end;
+  Result := handled;
+end;
+
+function TTyCustomRichEdit.ObjectRelease(AButton: TMouseButton; AShift: TShiftState;
+  X, Y: Integer): Boolean;
+var
+  at: TTyRichPos;
+begin
+  Result := False;
+  at := FObjPressAt;
+  FObjPressAt := -1;
+  if (at < 0) or (AButton <> FObjPressButton) then Exit;
+  // a drag (past its threshold) or a resize between: no click
+  if (Abs(X - FObjPressPoint.X) > DragThreshold) or (Abs(Y - FObjPressPoint.Y) > DragThreshold) then
+    Exit;
+  if ObjectPosAtPoint(X, Y) <> at then Exit;
+  Result := FireObjectEvent(False, at, AButton, AShift);
+end;
+
 function TTyCustomRichEdit.CanEditBookmarks: Boolean;
 begin
   Result := not FReadOnly and IsEnabled and not ViewBehind and (RefusalReason = '') and
@@ -7137,6 +7279,11 @@ procedure TTyCustomRichEdit.MouseUp(Button: TMouseButton; Shift: TShiftState; X,
 var
   life: TTyRichLife;
 
+  procedure OtherRelease;
+  begin
+    if ObjectRelease(Button, Shift, X, Y) and (Button = mbRight) then FEatMenu := True;
+  end;
+
   procedure Work;
   begin
     // a press on a link: its click, on the same link (nothing else)
@@ -7149,6 +7296,13 @@ var
       FinishResize(X, Y, Shift)
     else
     begin
+      // an object's click: what the release still owes, not when handled
+      if ObjectRelease(Button, Shift, X, Y) then
+      begin
+        FDragPending := False;
+        FPressClickOwed := False;
+      end;
+      if life.Gone then Exit;
       // a press inside the selection let go without a drag: the click it was
       if FDragPending or FPressClickOwed then ReleasePending
       else if OwnDragging then DropOn(X, Y, Shift);
@@ -7161,7 +7315,16 @@ begin
   inherited MouseUp(Button, Shift, X, Y);
   // (another button's release lets the menu come again; the right one's is its press's)
   if Button <> mbRight then FEatMenu := False;
-  if (Button <> mbLeft) and not (FLinkPressed and (Button = FLinkButton)) then Exit;
+  // the right and the middle button: an object's click (a handled right one: no menu)
+  if (Button <> mbLeft) and not (FLinkPressed and (Button = FLinkButton)) then
+  begin
+    if FObjPressAt >= 0 then
+    begin
+      Guard(life, @OtherRelease);
+      if life.Gone then Exit;
+    end;
+    Exit;
+  end;
   // (a handler the release runs - a drop's, a click's report, a link's - may free the control)
   Guard(life, @Work);
 end;
