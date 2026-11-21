@@ -21,6 +21,9 @@ uses
 
 type
   TSelRich = class(TTyRichEdit)
+  public
+    // the next one made draws with the system's fonts (letters with descenders), not the test device
+    class var RealFonts: Boolean;
   protected
     function CreateDevice: TTyRichTextDevice; override;
     procedure WriteClipboard(const ARtf: RawByteString; const AText: string); override;
@@ -67,6 +70,7 @@ type
     procedure TestShiftArrowsGrowTheRectangle;
     procedure TestTheSelectMethods;
     procedure TestMouseZones;
+    procedure TestTheHandleCoversNoLetter;
     procedure TestDeleteClearsBackspaceRemovesRows;
     procedure TestTypingReplacesTheFirstCell;
     procedure TestFormatsReachEveryCell;
@@ -149,7 +153,8 @@ end;
 
 function TSelRich.CreateDevice: TTyRichTextDevice;
 begin
-  Result := TTyRichTestDevice.Create;
+  if RealFonts then Result := inherited CreateDevice
+  else Result := TTyRichTestDevice.Create;
 end;
 
 procedure TSelRich.WriteClipboard(const ARtf: RawByteString; const AText: string);
@@ -586,6 +591,106 @@ begin
   // away from the table: no handle
   FRich.MoveTo(300, 380, []);
   AssertTrue('no handle there', FRich.CursorAtPoint(hp.X, hp.Y) <> crSizeAll);
+end;
+
+{ The handle stands on the table's top-left corner: shown, the letters of the line above
+  (one that starts with a wide W, at the text's left edge) keep every pixel above their
+  descenders, at 100 % and 150 %; and a press on it selects the table. }
+procedure TTyRichTableSelTest.TestTheHandleCoversNoLetter;
+var
+  keep: TSelRich;
+  z, x, y, ppi, top, cut, ink: Integer;
+  g: TBGRAPixel;
+  b0, b1: TBGRABitmap;
+  a, ln, hr: TRect;
+  d: TTyRichDocument;
+  f, l: Integer;
+  p0, p1: TBGRAPixel;
+  hp: TPoint;
+begin
+  // with the system's fonts: the test device's letters fill their line, descenders or not
+  keep := FRich;
+  TSelRich.RealFonts := True;
+  try
+    FRich := TSelRich.Create(nil);
+  finally
+    TSelRich.RealFonts := False;
+  end;
+  FRich.Refusals := TStringList.Create;
+  FRich.Controller := FCtl;
+  try
+  for z := 0 to 1 do
+  begin
+    if z = 0 then ppi := 96 else ppi := 144;
+    FRich.Font.PixelsPerInch := ppi;
+    FRich.SetBounds(0, 0, 600 * ppi div 96, 300 * ppi div 96);
+    MakeTable(2, 2);
+    d := FRich.Document;
+    FRich.Lines[0] := 'Wide letters stand here: Wg';
+    FRich.UpdateView;
+    d.TableCellParas(1, 0, 0, f, l);
+    a := FRich.PositionRect(d.Text.ParaStart(f), False);
+    ln := FRich.PositionRect(0, False);
+    b0 := TBGRABitmap.Create(FRich.Width, FRich.Height, BGRA(255, 0, 255));
+    b1 := TBGRABitmap.Create(FRich.Width, FRich.Height, BGRA(255, 0, 255));
+    try
+      FRich.MoveTo(a.Left + 10, a.Top + 2, []);
+      // the handle: found by its cursor near the corner
+      hp := Point(-1, -1);
+      for y := ln.Top to a.Bottom do
+        for x := 0 to a.Left do
+          if (hp.X < 0) and (FRich.CursorAtPoint(x, y) = crSizeAll) then hp := Point(x, y);
+      AssertTrue(Format('%d: a handle', [ppi]), hp.X >= 0);
+      FRich.PaintInto(b1);
+      FRich.MoveTo(FRich.Width - 20, FRich.Height - 20, []);
+      FRich.PaintInto(b0);
+      // somewhere it is drawn
+      hr := Rect(0, ln.Top, a.Left + 20, a.Bottom);
+      top := 0;
+      for y := hr.Top to hr.Bottom - 1 do
+        for x := hr.Left to hr.Right - 1 do
+        begin
+          p0 := b0.GetPixel(x, y);
+          p1 := b1.GetPixel(x, y);
+          if (p0.red <> p1.red) or (p0.green <> p1.green) or (p0.blue <> p1.blue) then Inc(top);
+        end;
+      AssertTrue(Format('%d: the handle is drawn', [ppi]), top > 0);
+      { the line above: every pixel of its letters down to the baseline (the W's lowest ink)
+        as it was }
+      g := b0.GetPixel(FRich.Width - 30, ln.Top + 2);
+      cut := ln.Top;
+      for y := ln.Top to ln.Bottom - 1 do
+        for x := ln.Left to ln.Left + (ln.Bottom - ln.Top) do
+        begin
+          p0 := b0.GetPixel(x, y);
+          if (p0.red <> g.red) or (p0.green <> g.green) or (p0.blue <> g.blue) then cut := y + 1;
+        end;
+      AssertTrue(Format('%d: the W found', [ppi]), cut > ln.Top + 2);
+      ink := 0;
+      for y := ln.Top to cut - 1 do
+        for x := 0 to FRich.Width - 1 do
+        begin
+          p0 := b0.GetPixel(x, y);
+          if (p0.red = g.red) and (p0.green = g.green) and (p0.blue = g.blue) then Continue;
+          Inc(ink);
+          p1 := b1.GetPixel(x, y);
+          AssertTrue(Format('%d: a letter''s pixel at %d,%d', [ppi, x, y]), (p0.red = p1.red) and
+            (p0.green = p1.green) and (p0.blue = p1.blue));
+        end;
+      AssertTrue(Format('%d: letters', [ppi]), ink > 50);
+    finally
+      b0.Free;
+      b1.Free;
+    end;
+    FRich.MoveTo(a.Left + 10, a.Top + 2, []);
+    FRich.Press(hp.X, hp.Y);
+    FRich.Release(hp.X, hp.Y);
+    AssertTrue(Format('%d: the table', [ppi]), FRich.SelectedCells.WholeTable);
+  end;
+  finally
+    FRich.Free;
+    FRich := keep;
+  end;
 end;
 
 { ---- what selected cells take ---- }

@@ -21417,27 +21417,37 @@ begin
 end;
 
 { The handle of the table whose first row is block ABlock, in the view's raster (x with the
-  scroll in it, as TableZoneAt reads a point): a square of 9 scaled pixels up and left of the
-  table's top-left corner, moved right / down as far as needed to stay in the view - a table
-  at the text's left edge (most are) has no room beside it, and a handle cut away is one no
-  one can press. The one rectangle both the paint and the hit test use. }
+  scroll in it, as TableZoneAt reads a point): a square of 9 scaled pixels on the table's
+  top-left corner - centred on it across (half left into the control's padding, half over the
+  first cell's padding), a third of it above (into the bottom of the line above, where only
+  descenders reach: half would touch a letter's foot at 150 %) - so it covers no letter. Where the view does not reach that far left (the
+  table scrolled out to the left) it stays at the view's left edge; at the top, at the view's
+  top. The one rectangle both the paint and the hit test use. }
 function TTyCustomRichEdit.TableHandleRect(ABlock: Integer): TRect;
 var
-  hz, x0, y0: Integer;
+  hz, x0, y0, lim: Integer;
+  area, clip: TRect;
 begin
   hz := Math.Max(5, MulDiv(9, ViewPPI, 96)) * FScale;
-  x0 := Math.Max(TTyRowLayout(FBlocks[ABlock].Layout).Cells[0].Left - hz - 1, FScrollX);
-  y0 := Math.Max(FBlocks[ABlock].Top - hz - 1, 0);
+  // the left edge of what the surface draws (the clip reaches into the left padding)
+  area := TextArea(Rect(0, 0, Width, Height), ViewPPI);
+  clip := TextClipOf(Rect(0, 0, Width, Height), area, ViewPPI);
+  lim := FScrollX - (area.Left - clip.Left) * FScale;
+  x0 := Math.Max(TTyRowLayout(FBlocks[ABlock].Layout).Cells[0].Left - hz div 2, lim);
+  // a third above the corner: less than a line's descent, at every scale
+  y0 := Math.Max(FBlocks[ABlock].Top - hz div 3, 0);
   Result := Rect(x0, y0, x0 + hz, y0 + hz);
 end;
 
-{ The handle of the table under the pointer: a small square at the top-left corner, outside
-  the table where there is room (TableHandleRect), in the colours of an object's handles. }
+{ The handle of the table under the pointer: a small framed square on the top-left corner
+  (TableHandleRect) in the colours of an object's handles - its fill half see-through and
+  its cross thin, so what lies under it (a descender, the corner's lines) stays readable. }
 procedure TTyCustomRichEdit.PaintTableHandle(ABitmap: TBGRABitmap; AX, AY: Integer;
   const AClip: TRect; const AStyle: TTyRichPaintStyle);
 var
   k, hz, x0, y0, m: Integer;
   hr, old: TRect;
+  fill: TBGRAPixel;
 begin
   if (FHandlePara < 0) or not SelectionAllowed then Exit;
   for k := 0 to FBlockCount - 1 do
@@ -21450,7 +21460,9 @@ begin
       old := ABitmap.ClipRect;
       ABitmap.ClipRect := AClip;
       try
-        ABitmap.FillRect(x0, y0, x0 + hz, y0 + hz, AStyle.ObjectHandleFill, dmSet);
+        fill := AStyle.ObjectHandleFill;
+        fill.alpha := fill.alpha div 2;
+        ABitmap.FillRect(x0 + 1, y0 + 1, x0 + hz - 1, y0 + hz - 1, fill, dmDrawWithTransparency);
         ABitmap.Rectangle(x0, y0, x0 + hz, y0 + hz, AStyle.ObjectFrame, dmSet);
         // a cross: the four ways it moves the table's selection
         m := hz div 2;
