@@ -75,6 +75,7 @@ type
     procedure TestDocumentColorWinsOverTheTheme;
     // Word's files and Word's numbers
     procedure TestWordsShadingAndBackgroundAreRead;
+    procedure TestWord16sPageColourFile;
     procedure TestAWordFilesHeaderChangesOnlyWhereTheSettingsAre;
     procedure TestAnyMultipleIsLaidOutAsWordLaysItOut;
     procedure TestALazyFileKeepsItsLookWhenTheDefaultsChange;
@@ -111,6 +112,18 @@ const
     '\pard Plain\par'#13#10 + '}'#13#10;
   // two Han characters, UTF-8
   CHan = #$E6#$B1#$89#$E5#$AD#$97;
+
+{ The page colour's group as Word 16 writes it (a new document given a page colour, saved as
+  RTF): no \viewbksp, the shape alone; AFill a COLORREF. }
+function CWord16Back(AFill: Integer): RawByteString;
+begin
+  Result := '{\*\background {\shp{\*\shpinst\shpleft0\shptop0\shpright0\shpbottom0\shpfhdr0' +
+    '\shpbxmargin\shpbxignore\shpbymargin\shpbyignore\shpwr0\shpwrk0\shpfblwtxt1\shpz0' +
+    '\shplid1025 {\sp{\sn shapeType}{\sv 1}}{\sp{\sn fFlipH}{\sv 0}}{\sp{\sn fFlipV}{\sv 0}}' +
+    '{\sp{\sn fillColor}{\sv ' + IntToStr(AFill) + '}}{\sp{\sn fFilled}{\sv 1}}' +
+    '{\sp{\sn lineWidth}{\sv 0}}{\sp{\sn fLine}{\sv 0}}{\sp{\sn bWMode}{\sv 9}}' +
+    '{\sp{\sn fBackground}{\sv 1}} {\sp{\sn fLayoutInCell}{\sv 1}}}}}';
+end;
 
 function RawBytes(const S: RawByteString): TBytes;
 begin
@@ -597,7 +610,8 @@ begin
   FRich.DocumentColor := TColor($00DAC0CC);
   AssertEquals('read back here', TColor($00DAC0CC), FRich.DocumentColor);
   b := Saved;
-  AssertTrue('Word''s words: the shape shown', Has(b, BS + 'viewbksp1'));
+  AssertFalse('no \viewbksp: Word 16 writes the shape alone', Has(b, BS + 'viewbksp'));
+  AssertTrue('the group as Word writes it', Has(b, CWord16Back(14336204)));
   AssertTrue('Word''s words: the background shape', Has(b, '{' + BS + '*' + BS + 'background'));
   AssertTrue('its fill, a COLORREF', Has(b, '{' + BS + 'sn fillColor}{' + BS + 'sv 14336204}'));
   d := ReadBack(b);
@@ -938,7 +952,7 @@ end;
 
 { ---- Word's files ---- }
 
-{ Word's page colour is the fill of the shape in {\*\background} (with \viewbksp1); a paragraph's
+{ Word's page colour is the fill of the shape in {\*\background} (with \viewbksp1 or without); a paragraph's
   shading is \cbpat, with \cfpat mixed in by \shading. Read, and the file saved as it was. }
 procedure TTyRichApiGapsTest.TestWordsShadingAndBackgroundAreRead;
 var
@@ -956,6 +970,35 @@ begin
   AssertFalse('no background written', Has(Saved, BS + 'background'));
   AssertTrue('the paragraphs as they were', Has(Saved, BS + 'pard' + BS + 'cbpat2' + BS + 'f0'));
   UndoGivesTheFileBack('DocumentColor in a file of Word''s');
+end;
+
+{ The facts of a file Word 16 wrote: its page colour the background shape alone (no
+  \viewbksp), light green; a paragraph shaded \cbpat7 (yellow); a line 3 times its own height.
+  Read, saved byte for byte; a colour set here is written as that group and reads back. }
+procedure TTyRichApiGapsTest.TestWord16sPageColourFile;
+var
+  d: TTyRichDocument;
+  b: TBytes;
+begin
+  Load('{\rtf1\ansi\ansicpg936\deff0{\fonttbl{\f0\fnil\fcharset0 Calibri;}}'#13#10 +
+    '{\colortbl;\red0\green0\blue0;\red0\green0\blue255;\red0\green255\blue255;' +
+    '\red0\green255\blue0;\red255\green0\blue255;\red255\green0\blue0;\red255\green255\blue0;}'#13#10 +
+    '\paperw11906\paperh16838\margl1800\margr1800' + CWord16Back(12648384) + #13#10 +
+    '\pard\cbpat7\f0\fs24 Yellow\par'#13#10 + '\pard\sl720\slmult1 Three times\par'#13#10 +
+    '\pard\sl278\slmult1 Body\par'#13#10 + '}'#13#10);
+  d := FRich.Document;
+  AssertEquals('the page colour: C0 FF C0', TColor($C0FFC0), d.DocumentColor);
+  AssertEquals('the shading: yellow', clYellow, PF(d, 0).Shading);
+  AssertEquals('3 times', 3.0, TyRichLineMultiple(PF(d, 1)), 1e-9);
+  AssertEquals('the template''s 1.16', 278, PF(d, 2).LineSpacingValue);
+  // set on a document that had none: written as Word writes it, read back equal
+  Load(CBase);
+  FRich.DocumentColor := TColor($C0FFC0);
+  b := Saved;
+  AssertTrue('Word''s group: ' + AsRaw(b), Has(b, CWord16Back(12648384)));
+  AssertFalse('no \viewbksp', Has(b, BS + 'viewbksp'));
+  AssertEquals('read back', TColor($C0FFC0), ReadBack(b).DocumentColor);
+  UndoGivesTheFileBack('a page colour set');
 end;
 
 { A file of Word's: a change of a setting changes the header only where that setting is - the
@@ -990,7 +1033,7 @@ begin
   AssertEquals('the file: one defchp', 1, Length(AsRaw(Saved)) - Length(StringReplace(AsRaw(Saved),
     'defchp', 'defch', [rfReplaceAll])));
   UndoGivesTheFileBack('a Word file''s defaults');
-  // a page colour: added at the header's end, with Word's \viewbksp1
+  // a page colour: added at the header's end, as Word 16 writes it
   FRich.DocumentColor := clSilver;
   d := ReadBack(Saved);
   AssertEquals('the file: the page colour', clSilver, d.DocumentColor);

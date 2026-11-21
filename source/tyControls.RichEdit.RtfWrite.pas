@@ -1830,21 +1830,6 @@ begin
   if AWhole then Sym('}');
 end;
 
-{ The header has the word \AName (anywhere before the body; the bytes looked at as they are). }
-function HeaderHasWord(const ABytes: TBytes; AStop: Int64; const AName: RawByteString): Boolean;
-var
-  i, n: Int64;
-begin
-  n := Length(AName);
-  i := 0;
-  while i + n < AStop do
-  begin
-    if (ABytes[i] = Ord('\')) and CompareMem(@ABytes[i + 1], @AName[1], n) then Exit(True);
-    Inc(i);
-  end;
-  Result := False;
-end;
-
 // The document's settings (TTyRichDocument.Settings) are not the ones its file's header gives:
 // a header written of the file says the new ones.
 function TRtfWriter.SettingsChanged: Boolean;
@@ -1923,36 +1908,20 @@ begin
   Sym('}');
 end;
 
-// Word's page colour: {\*\background} with a shape filled in it (Word writes \viewbksp1 in
-// the header too, which shows the shape).
+// Word's page colour as Word 16 writes it: the background shape alone (no \viewbksp - a file
+// that has that word keeps it), its fill a COLORREF.
 procedure TRtfWriter.WriteBackground;
 var
   c: TColor;
 begin
   c := PlainColor(FDoc.DocumentColor);
-  Sym('{\*');
-  Word('background');
-  Sym('{');
-  Word('shp');
-  Sym('{\*');
-  Word('shpinst');
-  Word('shpleft0');
-  Word('shptop0');
-  Word('shpright0');
-  Word('shpbottom0');
-  Word('shpfhdr0');
-  Word('shpbxmargin');
-  Word('shpbymargin');
-  Word('shpwr0');
-  Word('shpwrk0');
-  Word('shpfblwtxt1');
-  Word('shpz0');
-  Word('shplid1025');
-  Sym('{\sp{\sn shapeType}{\sv 1}}{\sp{\sn fFlipH}{\sv 0}}{\sp{\sn fFlipV}{\sv 0}}');
-  Sym('{\sp{\sn fillColor}{\sv ');
+  Sym('{\*\background {\shp{\*\shpinst\shpleft0\shptop0\shpright0\shpbottom0\shpfhdr0' +
+    '\shpbxmargin\shpbxignore\shpbymargin\shpbyignore\shpwr0\shpwrk0\shpfblwtxt1\shpz0' +
+    '\shplid1025 {\sp{\sn shapeType}{\sv 1}}{\sp{\sn fFlipH}{\sv 0}}{\sp{\sn fFlipV}{\sv 0}}' +
+    '{\sp{\sn fillColor}{\sv ');
   PutInt(Red(c) or (Green(c) shl 8) or (Blue(c) shl 16));
-  Sym('}}{\sp{\sn fFilled}{\sv 1}}{\sp{\sn lineWidth}{\sv 0}}{\sp{\sn fLine}{\sv 0}}');
-  Sym('{\sp{\sn bWMode}{\sv 9}}{\sp{\sn fBackground}{\sv 1}}}}}');
+  Sym('}}{\sp{\sn fFilled}{\sv 1}}{\sp{\sn lineWidth}{\sv 0}}{\sp{\sn fLine}{\sv 0}}' +
+    '{\sp{\sn bWMode}{\sv 9}}{\sp{\sn fBackground}{\sv 1}} {\sp{\sn fLayoutInCell}{\sv 1}}}}}');
 end;
 
 // The file's header with the new fonts and colours at the end of their tables (a table the
@@ -1964,7 +1933,7 @@ procedure TRtfWriter.WriteHeaderOfFile;
 type
   TEdit = record
     At, Stop: Int64;
-    Kind: Integer;       // 1 \paperw, 2 \margl, 3 \margr, 4 background, 5 defchp, 6 defpap, 7 \viewbksp1
+    Kind: Integer;       // 1 \paperw, 2 \margl, 3 \margr, 4 background, 5 defchp, 6 defpap
     Space: Boolean;      // the file's word ended with a space
   end;
 var
@@ -1974,7 +1943,6 @@ var
   edits: array of TEdit;
   ne, ei: Integer;
   scan: TTyRtfParser;
-  none: TTyRtfRange;
 
   procedure Add(const ARange: TTyRtfRange; AKind: Integer; AWanted: Boolean);
   var
@@ -2017,9 +1985,8 @@ var
       4: WriteBackground;
       5: WriteDefChp;
       6: WriteDefPap;
-      7: Word('viewbksp1');
     end;
-    if E.Space and (E.Kind in [1, 2, 3, 7]) then PutB(Ord(' '));
+    if E.Space and (E.Kind in [1, 2, 3]) then PutB(Ord(' '));
     FNeedDelim := False;
   end;
 
@@ -2065,8 +2032,6 @@ begin
   edits := nil;
   ne := 0;
   ei := 0;
-  none.Start := -1;
-  none.Stop := -1;
   if SettingsChanged then
   begin
     scan := FLoad.Scan;
@@ -2078,8 +2043,6 @@ begin
       Add(scan.DefPapAt, 6, True);
     if FDoc.DocumentColor <> scan.DocumentColor then
     begin
-      if (FDoc.DocumentColor <> clNone) and not HeaderHasWord(bytes, FHeaderStop, 'viewbksp') then
-        Add(none, 7, True);
       Add(scan.BackgroundAt, 4, FDoc.DocumentColor <> clNone);
     end;
   end;
@@ -2171,7 +2134,6 @@ begin
   // the document's ground, as Word writes its page colour
   if FDoc.DocumentColor <> clNone then
   begin
-    Word('viewbksp1');
     WriteBackground;
   end;
   Word('viewkind4');
