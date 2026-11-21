@@ -1582,6 +1582,10 @@ type
     function FieldOpenNear(APos: TTyRichPos; ADepth: Integer): TTyRichPos;
     // bookmarks
     function BookmarkList(AIncludeHidden: Boolean): TStringArray;
+    { A jump's view (GoToBookmark): the caret's line at the view's top - unless it is in view
+      already, whole, in the view's top third (then nothing moves); near the document's end
+      the view ends at its end, as any scroll. Across: only when the caret is out of view. }
+    procedure ShowCaretAtTop;
     function MakeAddBookmark(var APlace: TTyRichEditPlace): TTyRichCommand;
     function MakeDeleteBookmark(var APlace: TTyRichEditPlace): TTyRichCommand;
     function MakeRenameBookmark(var APlace: TTyRichEditPlace): TTyRichCommand;
@@ -6903,8 +6907,38 @@ begin
   if ViewBehind or not TyRichFindBookmark(FDoc, AName, s, e) then Exit;
   q := SnapPos(s);
   Select(q, q, False);
-  Moved(False);
+  // a jump, not a find: the reader starts reading at the target
+  FWishValid := False;
+  ShowCaretAtTop;
+  CaretMoved;
+  DoSelectionChange;
   Result := True;
+end;
+
+procedure TTyCustomRichEdit.ShowCaretAtTop;
+var
+  r: TRect;
+begin
+  if ViewBehind then Exit;
+  Settle;
+  if (FViewH <= 0) or (FBlockCount = 0) then Exit;
+  if ShownCaretRaster(r) and (r.Top >= 0) and (r.Bottom <= FViewH) and (r.Top < FViewH div 3) then
+  begin
+    // where the eye is already: no scroll (only across, if the caret is out of view)
+    if (r.Left < 0) or (r.Right > FViewW) then ScrollCaretIntoView;
+    Exit;
+  end;
+  if not ShownCaretRaster(r) then
+  begin
+    // not laid out: to its paragraph by the height index first
+    ScrollRasterTo(FDoc.Text.ParaTop(FDoc.Text.ParaOfPos(FCaret)));
+    Settle;
+    if not ShownCaretRaster(r) then Exit;
+  end;
+  // its line's top at the view's top (the scroll stops at the document's end by itself)
+  if r.Top <> 0 then ScrollRasterBy(r.Top);
+  Settle;
+  if ShownCaretRaster(r) and ((r.Left < 0) or (r.Right > FViewW)) then ScrollCaretIntoView;
 end;
 
 { ---- objects' clicks ---- }

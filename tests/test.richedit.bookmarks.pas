@@ -60,6 +60,7 @@ type
     procedure TestADeletionThatHoldsOneEndCollapsesTheBookmark;
     procedure TestAHomePageFollowsItsLinks;
     procedure TestANameIsWrittenInTheFilesCodePage;
+    procedure TestAJumpShowsItsTargetAtTheTop;
   end;
 
 implementation
@@ -699,6 +700,53 @@ begin
   AssertEquals('followed', 1, FFollows);
   AssertEquals('to its name', '第二节', FFollowName);
   AssertTrue('the caret at it', Doc.Text.ParaOfPos(FRich.SelStart) = 1);
+end;
+
+{ A jump shows its target where reading starts: the contents' tenth entry followed, its
+  heading's line at the view's top (the text area's top: the padding above it); a target in
+  view in the top third already: nothing moves; the document's last heading: the view ends at
+  the document's end. }
+procedure TTyRichBookmarksTest.TestAJumpShowsItsTargetAtTheTop;
+var
+  p, s, e: TTyRichPos;
+  r: TRect;
+  src: RawByteString;
+  i: Integer;
+  y0: Int64;
+begin
+  Load(Fixture('word-toc.rtf'));
+  FRich.ReadOnly := True;
+  p := FRich.FindText('主题：用法 Usage', 0, -1, []);
+  AssertTrue('the tenth entry', p > 0);
+  ClickChar(p + 1);
+  AssertTrue('the bookmark', FRich.FindBookmark('_Toc246044267', s, e));
+  AssertEquals('the caret at the heading', Doc.Text.ParaOfPos(s), Doc.Text.ParaOfPos(FRich.SelStart));
+  r := FRich.PositionRect(FRich.SelStart);
+  AssertTrue(Format('the heading''s line at the top (%d, the text''s top %d)',
+    [r.Top, FRich.Area.Top]), Abs(r.Top - FRich.Area.Top) <= 1);
+  // already in the top third: no scroll
+  src := Head;
+  for i := 1 to 100 do src := src + 'line ' + IntToStr(i) + '|par ';
+  src := src + '{|*|bkmkstart a}first{|*|bkmkend a}|par second|par {|*|bkmkstart b}third{|*|bkmkend b}|par ';
+  for i := 1 to 100 do src := src + 'more ' + IntToStr(i) + '|par ';
+  src := src + '{|*|bkmkstart last}the last line{|*|bkmkend last}|par }';
+  Load(Rtf(src));
+  AssertTrue('to a', FRich.GoToBookmark('a'));
+  r := FRich.PositionRect(FRich.SelStart);
+  AssertTrue('a at the top', Abs(r.Top - FRich.Area.Top) <= 1);
+  y0 := FRich.ScrollY;
+  AssertTrue('to b', FRich.GoToBookmark('b'));
+  AssertEquals('b in the top third already: no scroll', y0, FRich.ScrollY);
+  FRich.FindBookmark('b', s, e);
+  AssertEquals('the caret at b', s, FRich.SelStart);
+  // the last line: the view ends at the document's end
+  AssertTrue('to the last', FRich.GoToBookmark('last'));
+  y0 := FRich.ScrollY;
+  FRich.ScrollViewBy(200);
+  AssertEquals('at the end already', y0, FRich.ScrollY);
+  r := FRich.PositionRect(FRich.SelStart);
+  AssertTrue('the last line in view', (r.Bottom > r.Top) and (r.Bottom <= FRich.Height));
+  AssertTrue('not at the top: the document ends below it', r.Top > FRich.Area.Top + 10);
 end;
 
 initialization
