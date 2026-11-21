@@ -1,0 +1,129 @@
+object BookmarkForm: TBookmarkForm
+  Left = 0
+  Height = 400
+  Top = 0
+  Width = 460
+  BorderIcons = [biSystemMenu]
+  Caption = 'Bookmarks'
+  ClientHeight = 400
+  ClientWidth = 460
+  Position = poOwnerFormCenter
+  LCLVersion = '4.4.0.0'
+  OnCreate = FormCreate
+  TitleBar = Bar
+  object Surface: TTyFormSurface
+    Left = 0
+    Height = 400
+    Top = 0
+    Width = 460
+    Align = alClient
+    object Bar: TTyTitleBar
+      Left = 0
+      Height = 34
+      Top = 0
+      Width = 460
+      Align = alTop
+      Caption = 'Bookmarks'
+      ShowMinimize = False
+      ShowMaximize = False
+    end
+    object LblName: TTyLabel
+      Left = 16
+      Height = 20
+      Top = 52
+      Width = 120
+      Caption = 'Bookmark &name:'
+      FocusControl = EdtName
+    end
+    object EdtName: TTyEdit
+      Left = 140
+      Height = 28
+      Top = 48
+      Width = 304
+      Anchors = [akTop, akLeft, akRight]
+      TabOrder = 0
+      OnChange = EdtNameChange
+    end
+    object LstBookmarks: TTyListBox
+      Left = 16
+      Height = 216
+      Top = 88
+      Width = 324
+      Anchors = [akTop, akLeft, akRight, akBottom]
+      TabOrder = 1
+      OnDblClick = LstBookmarksDblClick
+      OnSelectionChange = LstBookmarksSelectionChange
+    end
+    object BtnAdd: TTyButton
+      Left = 352
+      Height = 30
+      Top = 88
+      Width = 92
+      Anchors = [akTop, akRight]
+      Default = True
+      StyleClass = 'primary'
+      Caption = '&Add'
+      TabOrder = 2
+      OnClick = BtnAddClick
+    end
+    object BtnDelete: TTyButton
+      Left = 352
+      Height = 30
+      Top = 126
+      Width = 92
+      Anchors = [akTop, akRight]
+      Caption = '&Delete'
+      TabOrder = 3
+      OnClick = BtnDeleteClick
+    end
+    object BtnRename: TTyButton
+      Left = 352
+      Height = 30
+      Top = 164
+      Width = 92
+      Anchors = [akTop, akRight]
+      Caption = '&Rename'
+      TabOrder = 4
+      OnClick = BtnRenameClick
+    end
+    object BtnGoTo: TTyButton
+      Left = 352
+      Height = 30
+      Top = 202
+      Width = 92
+      Anchors = [akTop, akRight]
+      Caption = '&Go To'
+      TabOrder = 5
+      OnClick = BtnGoToClick
+    end
+    object ChkHidden: TTyCheckBox
+      Left = 16
+      Height = 24
+      Top = 312
+      Width = 324
+      Anchors = [akLeft, akRight, akBottom]
+      Caption = 'Show &hidden bookmarks'
+      TabOrder = 6
+      OnChange = ChkHiddenChange
+    end
+    object LblStatus: TTyLabel
+      Left = 16
+      Height = 40
+      Top = 344
+      Width = 324
+      Anchors = [akLeft, akRight, akBottom]
+      WordWrap = True
+    end
+    object BtnClose: TTyButton
+      Left = 352
+      Height = 30
+      Top = 356
+      Width = 92
+      Anchors = [akRight, akBottom]
+      Cancel = True
+      ModalResult = 2
+      Caption = 'Close'
+      TabOrder = 7
+    end
+  end
+end

@@ -21,8 +21,14 @@ unit umain;
     a few documents kept in samples/ (Chinese text and its formats, a table, pictures, Word's
     table of contents with its links) - read from a stream, so Save asks for a new name;
   - a click on a link (Word's table of contents has many) shows its address in the status bar;
-    a web or mail address opens in the system's handler, a place in the document (#name) is
-    only shown;
+    a place in the document (#name) is gone to by the rich edit itself, a web or mail address
+    opens in the system's handler, any other target is only shown;
+  - Insert > Link and Edit > Edit Link ask in a small form (ulinkform: the address, the text,
+    or one of the document's bookmarks); Insert > Bookmark lists, adds, deletes, renames and
+    goes to the bookmarks (ubookmarkform); a double click on a picture shows it at its own
+    size (uviewerform);
+  - Format > Line Spacing takes any multiple (1.08, 3), Paragraph Spacing the space before
+    and after (0, 6, 12 pt);
   - View: zoom, wrap mode, read only, plain text, the ruler, the skins and their dark mode.
   The window, the menus, the tool bars and the actions are in umain.lfm; the code here is the
   application's part: files, the boxes and swatches, the status bar, the skin menu. }
@@ -38,8 +44,9 @@ uses
   tyControls.ComboBox, tyControls.FontComboBox, tyControls.FontSizeComboBox,
   tyControls.ColorButton, tyControls.StatusBar, tyControls.Dialogs, tyControls.Dialogs.Color,
   tyControls.Dialogs.FileDialog, tyControls.RichEdit.Model, tyControls.RichEdit.Attrs,
-  tyControls.RichEdit.Layout,
-  tyControls.RichEdit, tyControls.RichEdit.Ruler, tyControls.RichEdit.Actions;
+  tyControls.RichEdit.Text, tyControls.RichEdit.Layout,
+  tyControls.RichEdit, tyControls.RichEdit.Ruler, tyControls.RichEdit.Actions,
+  ulinkform, ubookmarkform, uviewerform;
 
 type
   TMainForm = class(TTyForm)
@@ -279,6 +286,49 @@ type
     PopDeleteRow: TMenuItem;
     PopDeleteColumn: TMenuItem;
     PopDeleteTable: TMenuItem;
+    BtnInsertLink: TTySpeedButton;
+    ActSpacing108: TTyRichEditLineSpacing;
+    ActSpacing115: TTyRichEditLineSpacing;
+    ActSpacing3: TTyRichEditLineSpacing;
+    ActBefore0: TTyRichEditParagraphSpacing;
+    ActBefore6: TTyRichEditParagraphSpacing;
+    ActBefore12: TTyRichEditParagraphSpacing;
+    ActAfter0: TTyRichEditParagraphSpacing;
+    ActAfter6: TTyRichEditParagraphSpacing;
+    ActAfter12: TTyRichEditParagraphSpacing;
+    ActInsertLink: TTyRichEditInsertLink;
+    ActEditLink: TAction;
+    ActRemoveLink: TTyRichEditRemoveLink;
+    ActBookmarks: TAction;
+    MnuSepLink: TMenuItem;
+    MnuEditLink: TMenuItem;
+    MnuRemoveLink: TMenuItem;
+    MnuSpacing108: TMenuItem;
+    MnuSpacing115: TMenuItem;
+    MnuSpacing3: TMenuItem;
+    MnuParaSpacing: TMenuItem;
+    MnuBefore0: TMenuItem;
+    MnuBefore6: TMenuItem;
+    MnuBefore12: TMenuItem;
+    MnuSepSpace: TMenuItem;
+    MnuAfter0: TMenuItem;
+    MnuAfter6: TMenuItem;
+    MnuAfter12: TMenuItem;
+    MnuSepInsert: TMenuItem;
+    MnuInsertLink: TMenuItem;
+    MnuInsertBookmark: TMenuItem;
+    PopItemSpacing108: TMenuItem;
+    PopItemSpacing115: TMenuItem;
+    PopItemSpacing3: TMenuItem;
+    PopSepSpace: TMenuItem;
+    PopItemBefore0: TMenuItem;
+    PopItemBefore12: TMenuItem;
+    PopItemAfter0: TMenuItem;
+    PopItemAfter12: TMenuItem;
+    PopSepLink: TMenuItem;
+    PopInsertLink: TMenuItem;
+    PopEditLink: TMenuItem;
+    PopRemoveLink: TMenuItem;
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
     procedure FormCloseQuery(Sender: TObject; var CanClose: Boolean);
@@ -307,6 +357,12 @@ type
     procedure SizeBoxKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
     procedure SwatchColorChanged(Sender: TObject);
     procedure PopEditorPopup(Sender: TObject);
+    procedure ActInsertLinkGetLink(Sender: TObject; var AURL, AText: string; var AAllow: Boolean);
+    procedure ActEditLinkExecute(Sender: TObject);
+    procedure ActEditLinkUpdate(Sender: TObject);
+    procedure ActBookmarksExecute(Sender: TObject);
+    procedure EditorObjectDblClick(Sender: TObject; AObject: TTyRichObject; APos: TTyRichPos;
+      AButton: TMouseButton; AShift: TShiftState; var AHandled: Boolean);
     procedure EditorEditRefused(Sender: TObject; const AReason: string);
     procedure EditorLinkClick(Sender: TObject; const AURL: string; AButton: TMouseButton);
     procedure EditorLoadProgress(Sender: TObject; ADone, ATotal: Int64; var ACancel: Boolean);
@@ -364,6 +420,7 @@ resourcestring
   rsTextColorTitle = 'Text color';
   rsHighlightTitle = 'Highlight color';
   rsBadSize      = 'Give the size in points, for example 11 or 10.5.';
+  rsPicture      = 'Picture';
 
 procedure TMainForm.FormCreate(Sender: TObject);
 var
@@ -603,11 +660,18 @@ begin
   ActShowRuler.Checked := Ruler.Visible;
 end;
 
-{ The context menu: the table's operations only when the caret is in a table. }
+{ The context menu: a new link where one may be made, the link's own items in a link, the
+  table's operations only when the caret is in a table. }
 procedure TMainForm.PopEditorPopup(Sender: TObject);
 var
-  t: Boolean;
+  t, inLink, newLink: Boolean;
 begin
+  inLink := Editor.CanEditLink;
+  newLink := not inLink and Editor.CanInsertLink;
+  PopSepLink.Visible := inLink or newLink;
+  PopInsertLink.Visible := newLink;
+  PopEditLink.Visible := inLink;
+  PopRemoveLink.Visible := inLink;
   t := Editor.InTable;
   PopSepTable.Visible := t;
   PopRowAbove.Visible := t;
@@ -617,6 +681,45 @@ begin
   PopDeleteRow.Visible := t;
   PopDeleteColumn.Visible := t;
   PopDeleteTable.Visible := t;
+end;
+
+{ ---- links, bookmarks, pictures ---- }
+
+{ The link action asks here (a new link, or the one at the caret to change): the link form. }
+procedure TMainForm.ActInsertLinkGetLink(Sender: TObject; var AURL, AText: string;
+  var AAllow: Boolean);
+begin
+  AAllow := AskLink(Editor, AURL, AText);
+end;
+
+{ Edit Link: the link action on the link at the caret (it changes the one it stands in). }
+procedure TMainForm.ActEditLinkExecute(Sender: TObject);
+begin
+  ActInsertLink.Execute;
+end;
+
+{ From the record the rich edit's actions read: no query of the control per idle round. }
+procedure TMainForm.ActEditLinkUpdate(Sender: TObject);
+var
+  st: TTyRichEditActionState;
+begin
+  st := TTyRichEditActionState.Find(Editor);
+  st.Check;
+  ActEditLink.Enabled := st.CanEditLink;
+end;
+
+procedure TMainForm.ActBookmarksExecute(Sender: TObject);
+begin
+  ManageBookmarks(Editor);
+end;
+
+{ A double click on a picture, or on a block that shows one (an equation): the viewer. Any
+  other object, or a picture the control draws as a frame: what a double click does. }
+procedure TMainForm.EditorObjectDblClick(Sender: TObject; AObject: TTyRichObject;
+  APos: TTyRichPos; AButton: TMouseButton; AShift: TShiftState; var AHandled: Boolean);
+begin
+  if AButton <> mbLeft then Exit;
+  AHandled := ViewPicture(AObject, rsPicture);
 end;
 
 procedure TMainForm.SetSkin(const AName: string);
@@ -677,11 +780,12 @@ end;
 
 procedure TMainForm.EditorLinkClick(Sender: TObject; const AURL: string; AButton: TMouseButton);
 begin
-  // the control opens nothing itself: the address is shown, and the program decides
+  // the address is shown; a place in this document (#name - Word's contents point at its
+  // headings) the rich edit goes to itself after this (FollowBookmarkLinks)
   Tell(AURL);
   if AButton <> mbLeft then Exit;
-  // a place in the document (Word's contents point at its headings): only shown here
-  if (AURL <> '') and (AURL[1] = '#') then Exit;
+  // a web or mail address: the system's handler; anything else (a file, "file#name") is
+  // only shown - the control never opens one, and the example does not either
   if StartsText('http://', AURL) or StartsText('https://', AURL) or StartsText('mailto:', AURL) then
     OpenURL(AURL);
 end;

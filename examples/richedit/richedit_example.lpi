@@ -26,7 +26,7 @@
       <Item1><PackageName Value="LCL"/></Item1>
       <Item2><PackageName Value="tycontrols"/></Item2>
     </RequiredPackages>
-    <Units Count="2">
+    <Units Count="5">
       <Unit0>
         <Filename Value="richedit_example.lpr"/>
         <IsPartOfProject Value="True"/>
@@ -36,6 +36,21 @@
         <IsPartOfProject Value="True"/>
         <UnitName Value="umain"/>
       </Unit1>
+      <Unit2>
+        <Filename Value="ulinkform.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="ulinkform"/>
+      </Unit2>
+      <Unit3>
+        <Filename Value="ubookmarkform.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="ubookmarkform"/>
+      </Unit3>
+      <Unit4>
+        <Filename Value="uviewerform.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="uviewerform"/>
+      </Unit4>
     </Units>
   </ProjectOptions>
   <CompilerOptions>

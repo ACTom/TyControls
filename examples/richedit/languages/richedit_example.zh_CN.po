@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
 
-# --- .lfm captions/text/hints (msgid = the English source) ---
+# --- umain.lfm captions/text/hints (msgid = the English source) ---
 
 #: tmainform.caption
 msgid "Rich edit example"
@@ -144,28 +144,100 @@ msgid "Show the ruler"
 msgstr "显示标尺"
 
 #: tmainform.actspacing1.caption
-msgid "Single"
-msgstr "单倍"
+msgid "1.0"
+msgstr "1.0"
 
 #: tmainform.actspacing1.hint
 msgid "Single line spacing"
 msgstr "单倍行距"
 
 #: tmainform.actspacing15.caption
-msgid "1.5 Lines"
-msgstr "1.5 倍"
+msgid "1.5"
+msgstr "1.5"
 
 #: tmainform.actspacing15.hint
 msgid "One and a half line spacing"
 msgstr "1.5 倍行距"
 
 #: tmainform.actspacing2.caption
-msgid "Double"
-msgstr "双倍"
+msgid "2.0"
+msgstr "2.0"
 
 #: tmainform.actspacing2.hint
 msgid "Double line spacing"
 msgstr "双倍行距"
+
+#: tmainform.actspacing108.caption
+msgid "1.08"
+msgstr "1.08"
+
+#: tmainform.actspacing108.hint
+msgid "Line spacing 1.08"
+msgstr "1.08 倍行距"
+
+#: tmainform.actspacing115.caption
+msgid "1.15"
+msgstr "1.15"
+
+#: tmainform.actspacing115.hint
+msgid "Line spacing 1.15"
+msgstr "1.15 倍行距"
+
+#: tmainform.actspacing3.caption
+msgid "3.0"
+msgstr "3.0"
+
+#: tmainform.actspacing3.hint
+msgid "Triple line spacing"
+msgstr "3 倍行距"
+
+#: tmainform.actbefore0.caption
+msgid "0 pt Before"
+msgstr "段前 0 磅"
+
+#: tmainform.actbefore0.hint
+msgid "Space before the paragraph: 0 pt"
+msgstr "段前间距：0 磅"
+
+#: tmainform.actbefore6.caption
+msgid "6 pt Before"
+msgstr "段前 6 磅"
+
+#: tmainform.actbefore6.hint
+msgid "Space before the paragraph: 6 pt"
+msgstr "段前间距：6 磅"
+
+#: tmainform.actbefore12.caption
+msgid "12 pt Before"
+msgstr "段前 12 磅"
+
+#: tmainform.actbefore12.hint
+msgid "Space before the paragraph: 12 pt"
+msgstr "段前间距：12 磅"
+
+#: tmainform.actafter0.caption
+msgid "0 pt After"
+msgstr "段后 0 磅"
+
+#: tmainform.actafter0.hint
+msgid "Space after the paragraph: 0 pt"
+msgstr "段后间距：0 磅"
+
+#: tmainform.actafter6.caption
+msgid "6 pt After"
+msgstr "段后 6 磅"
+
+#: tmainform.actafter6.hint
+msgid "Space after the paragraph: 6 pt"
+msgstr "段后间距：6 磅"
+
+#: tmainform.actafter12.caption
+msgid "12 pt After"
+msgstr "段后 12 磅"
+
+#: tmainform.actafter12.hint
+msgid "Space after the paragraph: 12 pt"
+msgstr "段后间距：12 磅"
 
 #: tmainform.actsize8.caption
 msgid "8"
@@ -194,6 +266,22 @@ msgstr "24"
 #: tmainform.actsize36.caption
 msgid "36"
 msgstr "36"
+
+#: tmainform.acteditlink.caption
+msgid "Edit &Link..."
+msgstr "编辑链接(&L)..."
+
+#: tmainform.acteditlink.hint
+msgid "Change the address or the text of the link at the caret"
+msgstr "修改插入点所在链接的地址或文字"
+
+#: tmainform.actbookmarks.caption
+msgid "&Bookmark..."
+msgstr "书签(&B)..."
+
+#: tmainform.actbookmarks.hint
+msgid "Add, delete, rename or go to the document's bookmarks"
+msgstr "添加、删除、重命名书签，或转到书签"
 
 #: tmainform.mnufile.caption
 msgid "&File"
@@ -242,6 +330,10 @@ msgstr "突出显示(&H)"
 #: tmainform.mnulinespacing.caption
 msgid "Line &Spacing"
 msgstr "行距(&S)"
+
+#: tmainform.mnuparaspacing.caption
+msgid "Paragraph S&pacing"
+msgstr "段落间距(&P)"
 
 #: tmainform.mnuinsert.caption
 msgid "&Insert"
@@ -364,3 +456,111 @@ msgstr "突出显示颜色"
 #: umain.rsbadsize
 msgid "Give the size in points, for example 11 or 10.5."
 msgstr "请用磅数填写字号，例如 11 或 10.5。"
+
+#: umain.rspicture
+msgid "Picture"
+msgstr "图片"
+
+# --- ulinkform.lfm captions/text/hints (msgid = the English source) ---
+
+#: tlinkform.caption
+msgid "Link"
+msgstr "链接"
+
+#: tlinkform.bar.caption
+msgid "Link"
+msgstr "链接"
+
+#: tlinkform.lbladdress.caption
+msgid "&Address:"
+msgstr "地址(&A):"
+
+#: tlinkform.lbltext.caption
+msgid "&Text to display:"
+msgstr "要显示的文字(&T):"
+
+#: tlinkform.lblplaces.caption
+msgid "Or a &place in this document:"
+msgstr "或本文档中的位置(&P):"
+
+#: tlinkform.chkhidden.caption
+msgid "Show &hidden bookmarks"
+msgstr "显示隐藏的书签(&H)"
+
+#: tlinkform.btnok.caption
+msgid "OK"
+msgstr "确定"
+
+#: tlinkform.btncancel.caption
+msgid "Cancel"
+msgstr "取消"
+
+# --- ubookmarkform.lfm captions/text/hints (msgid = the English source) ---
+
+#: tbookmarkform.caption
+msgid "Bookmarks"
+msgstr "书签"
+
+#: tbookmarkform.bar.caption
+msgid "Bookmarks"
+msgstr "书签"
+
+#: tbookmarkform.lblname.caption
+msgid "Bookmark &name:"
+msgstr "书签名(&N):"
+
+#: tbookmarkform.btnadd.caption
+msgid "&Add"
+msgstr "添加(&A)"
+
+#: tbookmarkform.btndelete.caption
+msgid "&Delete"
+msgstr "删除(&D)"
+
+#: tbookmarkform.btnrename.caption
+msgid "&Rename"
+msgstr "重命名(&R)"
+
+#: tbookmarkform.btngoto.caption
+msgid "&Go To"
+msgstr "转到(&G)"
+
+#: tbookmarkform.chkhidden.caption
+msgid "Show &hidden bookmarks"
+msgstr "显示隐藏的书签(&H)"
+
+#: tbookmarkform.btnclose.caption
+msgid "Close"
+msgstr "关闭"
+
+# --- resourcestrings (ubookmarkform) ---
+
+#: ubookmarkform.rsbookmarkadded
+#, object-pascal-format
+msgid "Added: %s"
+msgstr "已添加：%s"
+
+#: ubookmarkform.rsbookmarkdeleted
+#, object-pascal-format
+msgid "Deleted: %s"
+msgstr "已删除：%s"
+
+#: ubookmarkform.rsbookmarkrenamed
+#, object-pascal-format
+msgid "Renamed to %s"
+msgstr "已重命名为 %s"
+
+#: ubookmarkform.rsbookmarknothere
+#, object-pascal-format
+msgid "No bookmark called %s."
+msgstr "没有名为 %s 的书签。"
+
+# --- uviewerform.lfm captions/text/hints (msgid = the English source) ---
+
+#: tviewerform.caption
+msgid "Picture"
+msgstr "图片"
+
+#: tviewerform.bar.caption
+msgid "Picture"
+msgstr "图片"

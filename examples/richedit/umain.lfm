@@ -204,6 +204,17 @@ object MainForm: TMainForm
         GlyphName = 'table'
         ShowCaption = False
       end
+      object BtnInsertLink: TTySpeedButton
+        Left = 406
+        Top = 4
+        Width = 28
+        Action = ActInsertLink
+        ShowHint = True
+        StyleClass = 'ghost'
+        IconFont = LucideFont
+        GlyphName = 'link'
+        ShowCaption = False
+      end
       object Sep5: TTyToolSeparator
         Left = 406
         Top = 4
@@ -570,6 +581,7 @@ object MainForm: TMainForm
       WrapMode = rwmWindow
       OnEditRefused = EditorEditRefused
       OnLinkClick = EditorLinkClick
+      OnObjectDblClick = EditorObjectDblClick
       OnLoadProgress = EditorLoadProgress
       OnModifiedChange = EditorModifiedChange
       OnSelectionChange = EditorSelectionChange
@@ -822,14 +834,14 @@ object MainForm: TMainForm
     end
     object ActSpacing1: TTyRichEditLineSpacing
       Category = 'Rich edit'
-      Caption = 'Single'
+      Caption = '1.0'
       Hint = 'Single line spacing'
       GroupIndex = 113
       RichEdit = Editor
     end
     object ActSpacing15: TTyRichEditLineSpacing
       Category = 'Rich edit'
-      Caption = '1.5 Lines'
+      Caption = '1.5'
       Hint = 'One and a half line spacing'
       Spacing = ls15
       GroupIndex = 114
@@ -837,10 +849,82 @@ object MainForm: TMainForm
     end
     object ActSpacing2: TTyRichEditLineSpacing
       Category = 'Rich edit'
-      Caption = 'Double'
+      Caption = '2.0'
       Hint = 'Double line spacing'
       Spacing = lsDouble
       GroupIndex = 115
+      RichEdit = Editor
+    end
+    object ActSpacing108: TTyRichEditLineSpacing
+      Category = 'Rich edit'
+      Caption = '1.08'
+      Hint = 'Line spacing 1.08'
+      Multiple = 1.08
+      GroupIndex = 116
+      RichEdit = Editor
+    end
+    object ActSpacing115: TTyRichEditLineSpacing
+      Category = 'Rich edit'
+      Caption = '1.15'
+      Hint = 'Line spacing 1.15'
+      Multiple = 1.15
+      GroupIndex = 117
+      RichEdit = Editor
+    end
+    object ActSpacing3: TTyRichEditLineSpacing
+      Category = 'Rich edit'
+      Caption = '3.0'
+      Hint = 'Triple line spacing'
+      Multiple = 3
+      GroupIndex = 118
+      RichEdit = Editor
+    end
+    object ActBefore0: TTyRichEditParagraphSpacing
+      Category = 'Rich edit'
+      Caption = '0 pt Before'
+      Hint = 'Space before the paragraph: 0 pt'
+      Before = 0
+      GroupIndex = 119
+      RichEdit = Editor
+    end
+    object ActBefore6: TTyRichEditParagraphSpacing
+      Category = 'Rich edit'
+      Caption = '6 pt Before'
+      Hint = 'Space before the paragraph: 6 pt'
+      Before = 6
+      GroupIndex = 120
+      RichEdit = Editor
+    end
+    object ActBefore12: TTyRichEditParagraphSpacing
+      Category = 'Rich edit'
+      Caption = '12 pt Before'
+      Hint = 'Space before the paragraph: 12 pt'
+      Before = 12
+      GroupIndex = 121
+      RichEdit = Editor
+    end
+    object ActAfter0: TTyRichEditParagraphSpacing
+      Category = 'Rich edit'
+      Caption = '0 pt After'
+      Hint = 'Space after the paragraph: 0 pt'
+      After = 0
+      GroupIndex = 122
+      RichEdit = Editor
+    end
+    object ActAfter6: TTyRichEditParagraphSpacing
+      Category = 'Rich edit'
+      Caption = '6 pt After'
+      Hint = 'Space after the paragraph: 6 pt'
+      After = 6
+      GroupIndex = 123
+      RichEdit = Editor
+    end
+    object ActAfter12: TTyRichEditParagraphSpacing
+      Category = 'Rich edit'
+      Caption = '12 pt After'
+      Hint = 'Space after the paragraph: 12 pt'
+      After = 12
+      GroupIndex = 124
       RichEdit = Editor
     end
     object ActSize8: TTyRichEditFontSize
@@ -912,6 +996,28 @@ object MainForm: TMainForm
     object ActDeleteTable: TTyRichEditDeleteTable
       Category = 'Rich edit'
       RichEdit = Editor
+    end
+    object ActInsertLink: TTyRichEditInsertLink
+      Category = 'Rich edit'
+      RichEdit = Editor
+      OnGetLink = ActInsertLinkGetLink
+    end
+    object ActEditLink: TAction
+      Category = 'Rich edit'
+      Caption = 'Edit &Link...'
+      Hint = 'Change the address or the text of the link at the caret'
+      OnExecute = ActEditLinkExecute
+      OnUpdate = ActEditLinkUpdate
+    end
+    object ActRemoveLink: TTyRichEditRemoveLink
+      Category = 'Rich edit'
+      RichEdit = Editor
+    end
+    object ActBookmarks: TAction
+      Category = 'Rich edit'
+      Caption = '&Bookmark...'
+      Hint = 'Add, delete, rename or go to the document''s bookmarks'
+      OnExecute = ActBookmarksExecute
     end
   end
   object MainMenu1: TMainMenu
@@ -997,6 +1103,15 @@ object MainForm: TMainForm
       end
       object MnuReplace: TMenuItem
         Action = ActReplace
+      end
+      object MnuSepLink: TMenuItem
+        Caption = '-'
+      end
+      object MnuEditLink: TMenuItem
+        Action = ActEditLink
+      end
+      object MnuRemoveLink: TMenuItem
+        Action = ActRemoveLink
       end
     end
     object MnuFormat: TMenuItem
@@ -1120,11 +1235,44 @@ object MainForm: TMainForm
         object MnuSpacing1: TMenuItem
           Action = ActSpacing1
         end
+        object MnuSpacing108: TMenuItem
+          Action = ActSpacing108
+        end
+        object MnuSpacing115: TMenuItem
+          Action = ActSpacing115
+        end
         object MnuSpacing15: TMenuItem
           Action = ActSpacing15
         end
         object MnuSpacing2: TMenuItem
           Action = ActSpacing2
+        end
+        object MnuSpacing3: TMenuItem
+          Action = ActSpacing3
+        end
+      end
+      object MnuParaSpacing: TMenuItem
+        Caption = 'Paragraph S&pacing'
+        object MnuBefore0: TMenuItem
+          Action = ActBefore0
+        end
+        object MnuBefore6: TMenuItem
+          Action = ActBefore6
+        end
+        object MnuBefore12: TMenuItem
+          Action = ActBefore12
+        end
+        object MnuSepSpace: TMenuItem
+          Caption = '-'
+        end
+        object MnuAfter0: TMenuItem
+          Action = ActAfter0
+        end
+        object MnuAfter6: TMenuItem
+          Action = ActAfter6
+        end
+        object MnuAfter12: TMenuItem
+          Action = ActAfter12
         end
       end
     end
@@ -1135,6 +1283,15 @@ object MainForm: TMainForm
       end
       object MnuInsertTable: TMenuItem
         Action = ActInsertTable
+      end
+      object MnuSepInsert: TMenuItem
+        Caption = '-'
+      end
+      object MnuInsertLink: TMenuItem
+        Action = ActInsertLink
+      end
+      object MnuInsertBookmark: TMenuItem
+        Action = ActBookmarks
       end
     end
     object MnuTable: TMenuItem
@@ -1226,11 +1383,35 @@ object MainForm: TMainForm
     object PopItemSpacing1: TMenuItem
       Action = ActSpacing1
     end
+    object PopItemSpacing108: TMenuItem
+      Action = ActSpacing108
+    end
+    object PopItemSpacing115: TMenuItem
+      Action = ActSpacing115
+    end
     object PopItemSpacing15: TMenuItem
       Action = ActSpacing15
     end
     object PopItemSpacing2: TMenuItem
       Action = ActSpacing2
+    end
+    object PopItemSpacing3: TMenuItem
+      Action = ActSpacing3
+    end
+    object PopSepSpace: TMenuItem
+      Caption = '-'
+    end
+    object PopItemBefore0: TMenuItem
+      Action = ActBefore0
+    end
+    object PopItemBefore12: TMenuItem
+      Action = ActBefore12
+    end
+    object PopItemAfter0: TMenuItem
+      Action = ActAfter0
+    end
+    object PopItemAfter12: TMenuItem
+      Action = ActAfter12
     end
   end
   object PopEditor: TTyPopupMenu
@@ -1251,6 +1432,18 @@ object MainForm: TMainForm
     end
     object PopSelectAll: TMenuItem
       Action = ActSelectAll
+    end
+    object PopSepLink: TMenuItem
+      Caption = '-'
+    end
+    object PopInsertLink: TMenuItem
+      Action = ActInsertLink
+    end
+    object PopEditLink: TMenuItem
+      Action = ActEditLink
+    end
+    object PopRemoveLink: TMenuItem
+      Action = ActRemoveLink
     end
     object PopSepTable: TMenuItem
       Caption = '-'

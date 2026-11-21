@@ -1,0 +1,114 @@
+object LinkForm: TLinkForm
+  Left = 0
+  Height = 400
+  Top = 0
+  Width = 480
+  BorderIcons = [biSystemMenu]
+  Caption = 'Link'
+  ClientHeight = 400
+  ClientWidth = 480
+  Position = poOwnerFormCenter
+  LCLVersion = '4.4.0.0'
+  OnCreate = FormCreate
+  TitleBar = Bar
+  object Surface: TTyFormSurface
+    Left = 0
+    Height = 400
+    Top = 0
+    Width = 480
+    Align = alClient
+    object Bar: TTyTitleBar
+      Left = 0
+      Height = 34
+      Top = 0
+      Width = 480
+      Align = alTop
+      Caption = 'Link'
+      ShowMinimize = False
+      ShowMaximize = False
+    end
+    object LblAddress: TTyLabel
+      Left = 16
+      Height = 20
+      Top = 52
+      Width = 120
+      Caption = '&Address:'
+      FocusControl = EdtAddress
+    end
+    object EdtAddress: TTyEdit
+      Left = 140
+      Height = 28
+      Top = 48
+      Width = 324
+      Anchors = [akTop, akLeft, akRight]
+      TabOrder = 0
+    end
+    object LblText: TTyLabel
+      Left = 16
+      Height = 20
+      Top = 88
+      Width = 120
+      Caption = '&Text to display:'
+      FocusControl = EdtText
+    end
+    object EdtText: TTyEdit
+      Left = 140
+      Height = 28
+      Top = 84
+      Width = 324
+      Anchors = [akTop, akLeft, akRight]
+      TabOrder = 1
+    end
+    object LblPlaces: TTyLabel
+      Left = 16
+      Height = 20
+      Top = 124
+      Width = 448
+      Anchors = [akTop, akLeft, akRight]
+      Caption = 'Or a &place in this document:'
+      FocusControl = LstPlaces
+    end
+    object LstPlaces: TTyListBox
+      Left = 16
+      Height = 168
+      Top = 148
+      Width = 448
+      Anchors = [akTop, akLeft, akRight, akBottom]
+      TabOrder = 2
+      OnSelectionChange = LstPlacesSelectionChange
+    end
+    object ChkHidden: TTyCheckBox
+      Left = 16
+      Height = 24
+      Top = 324
+      Width = 300
+      Anchors = [akLeft, akBottom]
+      Caption = 'Show &hidden bookmarks'
+      TabOrder = 3
+      OnChange = ChkHiddenChange
+    end
+    object BtnOk: TTyButton
+      Left = 272
+      Height = 30
+      Top = 356
+      Width = 92
+      Anchors = [akRight, akBottom]
+      Default = True
+      ModalResult = 1
+      StyleClass = 'primary'
+      Caption = 'OK'
+      TabOrder = 4
+    end
+    object BtnCancel: TTyButton
+      Left = 372
+      Height = 30
+      Top = 356
+      Width = 92
+      Anchors = [akRight, akBottom]
+      Cancel = True
+      ModalResult = 2
+      Caption = 'Cancel'
+      TabOrder = 5
+    end
+  end
+end

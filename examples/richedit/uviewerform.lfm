@@ -1,0 +1,39 @@
+object ViewerForm: TViewerForm
+  Left = 0
+  Height = 400
+  Top = 0
+  Width = 600
+  Caption = 'Picture'
+  ClientHeight = 400
+  ClientWidth = 600
+  KeyPreview = True
+  Position = poOwnerFormCenter
+  LCLVersion = '4.4.0.0'
+  OnCreate = FormCreate
+  OnKeyDown = FormKeyDown
+  TitleBar = Bar
+  object Surface: TTyFormSurface
+    Left = 0
+    Height = 400
+    Top = 0
+    Width = 600
+    Align = alClient
+    object Bar: TTyTitleBar
+      Left = 0
+      Height = 34
+      Top = 0
+      Width = 600
+      Align = alTop
+      Caption = 'Picture'
+      ShowMinimize = False
+    end
+    object View: TTyImageView
+      Left = 0
+      Height = 366
+      Top = 34
+      Width = 600
+      Align = alClient
+      TabOrder = 0
+    end
+  end
+end
