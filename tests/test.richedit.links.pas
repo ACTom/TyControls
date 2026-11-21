@@ -15,7 +15,7 @@ interface
 uses
   Classes, SysUtils, Types, fpcunit, testregistry, Controls, Graphics, LCLType, Forms,
   BGRABitmap, BGRABitmapTypes,
-  tyControls.Types, tyControls.Painter, tyControls.Controller, tyControls.StyleModel, tyControls.StrConsts,
+  tyControls.Types, tyControls.Painter, tyControls.Controller, tyControls.BuiltinThemes, tyControls.StyleModel, tyControls.StrConsts,
   tyControls.RichEdit.Text, tyControls.RichEdit.Model, tyControls.RichEdit.Commands,
   tyControls.RichEdit.Layout, tyControls.RichEdit, tyControls.RichEdit.Actions,
   test.richedit.fieldctl;
@@ -62,6 +62,7 @@ type
     procedure TestRefusedWhereALinkCannotGo;
     procedure TestThemeLookFollowsTheSkin;
     procedure TestWordBlueIsExplicit;
+    procedure TestALinkOnAShadedGroundIsTheLinkColour;
     procedure TestClickFiresOnAnInsertedLink;
     procedure TestTheActionsAskAndRun;
   end;
@@ -860,6 +861,42 @@ begin
   FRich.UpdateView;
   AssertTrue('a glyph', Ink(5, px));
   AssertTrue('painted in it ' + PxText(px), SamePx(px, BGRA($05, $63, $C1)));
+end;
+
+{ A link's automatic text keeps the theme's link colour over a paragraph's shading and over
+  the document's own ground (a link stays the colour the theme gives links); the automatic
+  text beside it on that ground takes the contrasting colour, as any. }
+procedure TTyRichLinksTest.TestALinkOnAShadedGroundIsTheLinkColour;
+var
+  px: TBGRAPixel;
+  mode: Integer;
+begin
+  // a skin with a dark mode of its own (light text): the contrast over yellow is dark
+  TyRegisterBuiltinThemes;
+  FCtl.ThemeName := 'default';
+  for mode := 0 to 1 do
+  begin
+    Load(PlainDoc);
+    if mode = 0 then
+    begin
+      FRich.SelStart := 0;
+      FRich.Paragraph.Shading := clYellow;
+    end
+    else
+      FRich.DocumentColor := clYellow;
+    AssertTrue('made', Doc.Execute(TTyRichInsertLink.Create(3, 4, 'http://t.test', '', rllTheme)));
+    FCtl.Mode := 'dark';
+    FRich.SelStart := Doc.Text.Length;
+    FRich.UpdateView;
+    AssertTrue('a glyph of the link', Ink(5, px));
+    AssertTrue(Format('%d: the link colour, not the contrast %s', [mode, PxText(px)]),
+      SamePx(px, LinkInk));
+    AssertTrue('a glyph beside it', Ink(1, px));
+    AssertFalse(Format('%d: the text beside it contrasts with the yellow %s', [mode, PxText(px)]),
+      SamePx(px, TextInkOfTheme));
+    AssertFalse(Format('%d: the text beside it is no link %s', [mode, PxText(px)]),
+      SamePx(px, LinkInk));
+  end;
 end;
 
 { A link made in the control is a link to the user: a click on it in a read-only control
