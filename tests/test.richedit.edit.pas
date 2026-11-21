@@ -1482,9 +1482,10 @@ begin
 end;
 
 { Tables: a key does not cross a cell's edge (Backspace at a cell's start and Delete at its
-  end do nothing, as in Word and WordPad); a selection across cells is not deleted or typed
-  over by a key (refused and told, until table editing) - the engine would leave a cell with no
-  paragraph. }
+  end do nothing, as in Word and WordPad); a selection across cells selects those cells
+  (tyControls.RichEdit.TableSel): Delete clears them and typing replaces the first one's
+  content, each one step, no cell left without a paragraph; a cut across cells is still
+  refused and told. }
 procedure TTyRichEditEditTest.TestADeletionAcrossCellsLeavesAValidDocument;
 var
   d: TTyRichDocument;
@@ -1516,23 +1517,38 @@ begin
   AssertEquals('nothing changed', before, FRich.Lines.Text);
   AssertEquals('nothing on the history', 0, d.UndoDepth);
   AssertEquals('nothing refused', 0, FRich.Refused);
-  // across the cells: refused (until table editing) - told, nothing changed
+  // across the cells: a cut is refused - told, nothing changed
   FRich.SelStart := t.ParaStart(k0) + 1;
   FRich.SelLength := t.ParaStart(k1) + 1 - (t.ParaStart(k0) + 1);
   ResetEvents;
-  Press(VK_DELETE);
-  AssertEquals('Delete across cells: refused once', 1, FRich.Refused);
-  AssertEquals('why', rsRichEditRefusedCells, FRich.LastReason);
-  Chars('Q');
-  AssertEquals('typed over: refused too', 2, FRich.Refused);
   FRich.ClipWrites := 0;
   Press(VK_X, [ssCtrl]);
-  AssertEquals('cut: refused too, before copying', 3, FRich.Refused);
+  AssertEquals('cut: refused, before copying', 1, FRich.Refused);
+  AssertEquals('why', rsRichEditRefusedCells, FRich.LastReason);
   AssertEquals('nothing copied', 0, FRich.ClipWrites);
   AssertEquals('nothing changed', before, FRich.Lines.Text);
   AssertEquals('nothing on the history', 0, d.UndoDepth);
   AssertEquals('no change event', 0, FChanges);
   AssertEquals('the selection stays', t.ParaStart(k1) + 1 - (t.ParaStart(k0) + 1), FRich.SelLength);
+  // Delete: the two cells cleared, one step, every cell keeps its paragraph
+  ResetEvents;
+  Press(VK_DELETE);
+  AssertEquals('Delete across cells: nothing refused', 0, FRich.Refused);
+  AssertEquals('Delete: one step', 1, d.UndoDepth);
+  AssertTrue('Delete: changed', before <> FRich.Lines.Text);
+  for k := 0 to t.ParaCount - 1 do
+    if d.CellAt(k) <> nil then AssertTrue('a cell', d.CellAt(k).Row <> nil);
+  FRich.Undo;
+  AssertEquals('Delete undone', before, FRich.Lines.Text);
+  // typing over them: the first cell's content replaced
+  FRich.SelStart := t.ParaStart(k0) + 1;
+  FRich.SelLength := t.ParaStart(k1) + 1 - (t.ParaStart(k0) + 1);
+  Chars('Q');
+  AssertEquals('typed over: nothing refused', 0, FRich.Refused);
+  AssertEquals('typed over: one step', 1, d.UndoDepth);
+  AssertTrue('typed over: there', Pos('Q', FRich.Lines.Text) > 0);
+  FRich.Undo;
+  AssertEquals('typing undone', before, FRich.Lines.Text);
 end;
 
 { An object is one character: typed over when it is selected, and back with the undo. }
@@ -2234,8 +2250,9 @@ end;
 
 { Until table editing: a selection that begins before a table and ends where its first
   row starts keeps its last separator when typed over or deleted (the paragraph before the
-  table stays, Word's way); whole rows, from a row's start to a row's end, a key deletes - and
-  the engine leaves a document that is whole, lays out, saves and reads back as it is. }
+  table stays, Word's way); whole rows, from a row's start to a row's end, Backspace deletes
+  (Delete clears their cells: tyControls.RichEdit.TableSel) - and the engine leaves a document
+  that is whole, lays out, saves and reads back as it is. }
 procedure TTyRichEditEditTest.TestTableEdgesFromTheKeyboard;
 var
   d, b: TTyRichDocument;
@@ -2287,7 +2304,7 @@ begin
   FRich.SelStart := t.ParaStart(kt);
   FRich.SelLength := t.ParaStart(m) - t.ParaStart(kt);
   ResetEvents;
-  Press(VK_DELETE);
+  Press(VK_BACK);
   AssertEquals('whole rows: not refused', 0, FRich.Refused);
   AssertEquals('the row''s paragraphs went', n - (m - kt), t.ParaCount);
   AssertEquals('the text is whole', '', t.CheckIntegrity);
@@ -2590,8 +2607,9 @@ begin
   FRich.Lines.Text := 'loaded by the handler';
 end;
 
-{ the across-cells refusal is told after the read scope closed: a handler that loads a
-  document there loads it (before: ETyRichModel out of the key). }
+{ the across-cells refusal (a cut's, now that Delete clears the cells) is told after the read
+  scope closed: a handler that loads a document there loads it (before: ETyRichModel out of
+  the key). }
 procedure TTyRichEditEditTest.TestARefusalAcrossCellsIsToldOutsideTheReadScope;
 var
   d: TTyRichDocument;
@@ -2613,7 +2631,7 @@ begin
   FRefusedEvents := 0;
   FRich.OnEditRefused := @LoadOnRefusal;
   try
-    Press(VK_DELETE);
+    Press(VK_X, [ssCtrl]);
   finally
     FRich.OnEditRefused := nil;
   end;
@@ -2622,10 +2640,10 @@ begin
 end;
 
 { whole rows of a table that ends the text (made by code: no RTF file ends inside a
-  table) are refused until table editing - its last paragraph has no separator to go with it,
-  and the
-  engine would leave the row's other cells with none. The first row of the same table is whole
-  rows the engine deletes cleanly. }
+  table): its last paragraph has no separator to go with it, and a key's deletion would leave
+  the row's other cells with none - so they are cells: Delete clears them, Backspace removes the
+  row as a table edit, all of the table selected the table. The first row of the same table
+  goes the same way. }
 procedure TTyRichEditEditTest.TestWholeRowsAtTheTextsEndAreRefused;
 var
   d: TTyRichDocument;
@@ -2647,21 +2665,34 @@ begin
   FRich.SelLength := t.Length - t.ParaStart(2);
   ResetEvents;
   Press(VK_DELETE);
-  AssertEquals('the last row: refused', 1, FRich.Refused);
-  AssertEquals('across cells', rsRichEditRefusedCells, FRich.LastReason);
-  AssertEquals('nothing deleted', 4, t.ParaCount);
+  AssertEquals('the last row, Delete: not refused', 0, FRich.Refused);
+  AssertEquals('cleared, not deleted', 4, t.ParaCount);
   for i := 0 to 3 do AssertTrue(Format('paragraph %d in its cell', [i]), d.CellAt(i) <> nil);
-  // everything
+  AssertEquals('cleared', 'ab', FRich.Lines[0] + FRich.Lines[1] + FRich.Lines[2] + FRich.Lines[3]);
+  AssertEquals('cleared: the text is whole', '', t.CheckIntegrity);
+  FRich.Undo;
+  FRich.SelStart := t.ParaStart(2);
+  FRich.SelLength := t.Length - t.ParaStart(2);
+  Press(VK_BACK);
+  AssertEquals('the last row, Backspace: not refused', 0, FRich.Refused);
+  AssertEquals('the last row went', 1, d.CellAt(0).Table.RowCount);
+  AssertTrue('the first row stays', (d.CellAt(0) <> nil) and (d.CellAt(1) <> nil));
+  AssertEquals('removed: the text is whole', '', t.CheckIntegrity);
+  FRich.Undo;
+  AssertEquals('back', 4, t.ParaCount);
+  // everything: Backspace takes the table
   FRich.SelectAll;
   ResetEvents;
-  Press(VK_DELETE);
-  AssertEquals('everything: refused', 1, FRich.Refused);
-  AssertEquals('everything: nothing deleted', 4, t.ParaCount);
+  Press(VK_BACK);
+  AssertEquals('everything: not refused', 0, FRich.Refused);
+  AssertTrue('everything: no table', d.CellAt(0) = nil);
+  AssertEquals('everything: the text is whole', '', t.CheckIntegrity);
+  FRich.Undo;
   // the first row: whole rows, deleted
   FRich.SelStart := 0;
   FRich.SelLength := t.ParaStart(2);
   ResetEvents;
-  Press(VK_DELETE);
+  Press(VK_BACK);
   AssertEquals('the first row: not refused', 0, FRich.Refused);
   AssertEquals('the first row went', 2, t.ParaCount);
   AssertTrue('the second row''s cells keep their paragraphs',

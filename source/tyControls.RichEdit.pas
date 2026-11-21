@@ -77,7 +77,7 @@ uses
   tyControls.RichEdit.Text, tyControls.RichEdit.Model, tyControls.RichEdit.Commands,
   tyControls.RichEdit.TextIO, tyControls.RichEdit.RtfRead, tyControls.RichEdit.RtfWrite,
   tyControls.RichEdit.Layout, tyControls.RichEdit.Attrs, tyControls.RichEdit.Find,
-  tyControls.RichEdit.Bookmarks, tyControls.RichEdit.Builder;
+  tyControls.RichEdit.Bookmarks, tyControls.RichEdit.Builder, tyControls.RichEdit.TableSel;
 
 const
   CRichZoomMin = 10;
@@ -1849,7 +1849,48 @@ type
     procedure SetGuideLine(AValue: Integer);
     function GuideLineRect: TRect;
     procedure DrawGuideLine(ACanvas: TCanvas);
+  private
+    { Cell selection (tyControls.RichEdit.TableSel): the cells the selection covers, kept
+      for the anchor, the caret and the document's state they were read for; the rows a
+      paint highlighted (a count for tests); the table whose handle shows (the first
+      paragraph of its first row, -1 none); a press on a zone and its drag. }
+    FCellArea: TTyRichCellArea;
+    FCellAreaValid: Boolean;
+    FCellAreaAnchor, FCellAreaCaret: TTyRichPos;
+    FCellAreaState: Int64;
+    FCellRowsPainted: Int64;
+    FHandlePara: Integer;
+    FCellDrag: Integer;
+    FCellDragPara, FCellDragLast: Integer;
+    function CellArea: TTyRichCellArea;
+    function CaretCellPara: Integer;
+    function SelectCells(AKind: Integer): Boolean;
+    function CellsKey(AForward: Boolean): Boolean;
+    procedure ClearCells(const AArea: TTyRichCellArea);
+    function FirstAreaCell(const AArea: TTyRichCellArea; out AFirst, ALast: Integer): Boolean;
+    function AreaCellCommand(const AArea: TTyRichCellArea; AParas: Boolean; AMaskC: TTyCharFormatMask;
+      const AChar: TTyCharFormat; AKeep: TTyCharFormatMask; AMaskP: TTyParaFormatMask;
+      const APara: TTyParaFormat): TTyRichCommand;
+    function CellsAreTheSelection(AStart, ALen: TTyRichPos): Boolean;
+    procedure CopyCells(const AArea: TTyRichCellArea);
+    function CellsFlavours(const AArea: TTyRichCellArea; out ARtf: RawByteString;
+      out AText: string): Boolean;
+    function RangeIsCells(AFrom, ALen: TTyRichPos; out AArea: TTyRichCellArea): Boolean;
+    function PasteCells(AOffer: TTyRichDropOffer; AHave: TTyRichClipFlavours; AAs: TTyRichPasteAs;
+      APos: TTyRichPos; const AName: string): Boolean;
+    function MakeCellsPaste(AOffer: TTyRichDropOffer; AHave: TTyRichClipFlavours; AAs: TTyRichPasteAs;
+      APos: TTyRichPos; const AName: string; out ATarget: TTyRichPos): TTyRichCellsEdit;
+    function TableZoneAt(X, Y: Integer; out AZone, APara: Integer): Boolean;
+    function TableZonePress(X, Y: Integer): Boolean;
+    procedure TableZoneDrag(X, Y: Integer);
+    procedure TableHandleHover(X, Y: Integer);
+    function TableHandleRect(ABlock: Integer): TRect;
+    procedure PaintTableHandle(ABitmap: TBGRABitmap; AX, AY: Integer; const AClip: TRect;
+      const AStyle: TTyRichPaintStyle);
   protected
+    { Whether the user may select at all: False, the table's zones and handle do not show
+      and the Select... methods do nothing. AllowSelection here. }
+    function SelectionAllowed: Boolean; virtual;
     { (the parents a paragraph view hearer's Enabled follows are watched again) }
     procedure SetParent(NewParent: TWinControl); override;
     function GetStyleTypeKey: string; override;
@@ -2658,6 +2699,29 @@ type
     function CanDeleteRow: Boolean;
     function CanDeleteColumn: Boolean;
     function CanDeleteTable: Boolean;
+    { Cell selection. A selection's cells are counted by its selected characters, a cell's
+      end mark (the end of its last paragraph) being one of the cell's: anchor at a cell's
+      start and caret after its end mark is that cell whole; a selection that stops before the
+      end mark is text inside the cell. Anchor and caret in two cells of one table: the
+      rectangle between them (in each row the cells under the span of the two corner cells);
+      one end outside the table: whole rows. SelectedCells: that range (InTable False: none);
+      CaretCell: the caret's table (a position in it), row and cell. The Select... methods
+      set the selection to the caret's cell, row, column or table (False: the caret is in no
+      table, or SelectionAllowed is False; a column or the whole table of a table too large
+      to be read whole is refused and told). With cells selected: Delete clears them (one
+      step), Backspace deletes the rows when whole rows are selected and the table when all of
+      it is, typing replaces the first cell's content, character and paragraph formats reach
+      every selected cell, a copy is a small table and tab-separated text. A paste of a
+      table (RTF, or tab-separated text) with the caret in a cell fills cell by cell from
+      it, adding rows below and leaving out what passes the columns (told once). }
+    function SelectedCells: TTyRichCellRange;
+    function CaretCell(out ATablePos: TTyRichPos; out ARow, ACol: Integer): Boolean;
+    function SelectCell: Boolean;
+    function SelectRow: Boolean;
+    function SelectColumn: Boolean;
+    function SelectTable: Boolean;
+    // the table rows the last paints highlighted as selected cells (a count for tests)
+    property CellRowsPainted: Int64 read FCellRowsPainted write FCellRowsPainted;
     { Pictures: the user's actions for a toolbar, a menu or an action, as the table actions
       (an open composition ends first; ReadOnly, disabled or inside the document's update:
       nothing, nothing told, False; a refusal told once through EditRefused, never raised).
@@ -4221,6 +4285,7 @@ begin
   TabStop := True;
   FZoom := 100;
   FWrapMode := rwmWindow;
+  FHandlePara := -1;
   FImeContextL := ISC_SHOWUIALL;
   FReadOnly := False;
   FWantTabs := False;
@@ -5945,12 +6010,21 @@ function TTyCustomRichEdit.CursorAt(X, Y: Integer): TCursor;
 var
   h: TTyRichHandle;
   url: string;
+  zone, zp: Integer;
 begin
   // a handle's size cursor, also where it reaches over the text beside the object
   if FResizing then Exit(HandleCursor(FResizeHandle));
   // the control's own drag of the selection: what a release would do
   if OwnDragging then Exit(DropCursor(FDropEffect));
   if not ViewBehind and ObjectHandleAt(X, Y, h) then Exit(HandleCursor(h));
+  // a table's zones: an arrow for a cell or a row, down for a column, the table's handle
+  if not ViewBehind and not FDragging and TableZoneAt(X, Y, zone, zp) then
+    case zone of
+      3: Exit(crUpArrow);
+      4: Exit(crSizeAll);
+    else
+      Exit(crArrow);
+    end;
   if PtInRect(TextArea(Rect(0, 0, Width, Height), ViewPPI), Point(X, Y)) then
   begin
     // the hand where a left click makes a link's click (not while a drag selects)
@@ -6095,6 +6169,8 @@ begin
   end;
   // a link's click (LinkClickFires): nothing else - no caret, no selection, no object
   if (Button = mbLeft) and LinkPress(Button, Shift, X, Y) then Exit;
+  // a table's zones: a cell, a row, a column, the whole table (and a drag over more)
+  if (Button = mbLeft) and not (ssShift in Shift) and TableZonePress(X, Y) then Exit;
   // an object under the press: its click on the release, its double click now
   FObjPressAt := ObjectPosAtPoint(X, Y);
   FObjPressButton := Button;
@@ -7356,6 +7432,9 @@ begin
     if not BeginSelectionDrag(X, Y, Shift) then Exit;
   // the drop's place, mark and verdict follow the pointer (the cursor below says it)
   if OwnDragging then DropOver(X, Y, Shift);
+  // a press on a table's zone dragged: more rows, columns or cells
+  if (FCellDrag <> 0) and (ssLeft in Shift) then TableZoneDrag(X, Y);
+  TableHandleHover(X, Y);
   { The arrow over the padding (a cursor set by the user is left alone): GetCursor answers it
     from where the pointer was last seen, which is what LCL-Win32 shows on the window's
     set-cursor message. GTK, Qt and Cocoa set a window's cursor only when told: the
@@ -7438,6 +7517,7 @@ var
 
   procedure Work;
   begin
+    FCellDrag := 0;
     // a press on a link: its click, on the same link (nothing else)
     if FLinkPressed then
     begin
@@ -7626,18 +7706,29 @@ begin
   Result := ALen > 0;
 end;
 
+// (cells: what their copy writes, a small table and tabbed text)
 function TTyRichSelectionOffer.ReadRtf: RawByteString;
 var
   f, n: TTyRichPos;
+  area: TTyRichCellArea;
+  txt: string;
 begin
-  if ReadRange(f, n) then Result := FOwner.RangeRtf(f, n) else Result := '';
+  Result := '';
+  if not ReadRange(f, n) then Exit;
+  if FOwner.RangeIsCells(f, n, area) and FOwner.CellsFlavours(area, Result, txt) then Exit;
+  Result := FOwner.RangeRtf(f, n);
 end;
 
 function TTyRichSelectionOffer.ReadText: string;
 var
   f, n: TTyRichPos;
+  area: TTyRichCellArea;
+  rtf: RawByteString;
 begin
-  if ReadRange(f, n) then Result := FOwner.RangeText(f, n) else Result := '';
+  Result := '';
+  if not ReadRange(f, n) then Exit;
+  if FOwner.RangeIsCells(f, n, area) and FOwner.CellsFlavours(area, rtf, Result) then Exit;
+  Result := FOwner.RangeText(f, n);
 end;
 
 function TTyRichSelectionOffer.Source: TTyCustomRichEdit;
@@ -8214,6 +8305,16 @@ var
   stepName: string;
   fl: TTyRichClipFlavours;
   files: TStringArray;
+  cells: TTyRichCellsEdit;
+  comp: TTyRichCompositeCommand;
+  at: TTyRichPos;
+  area: TTyRichCellArea;
+
+  function stepNameOf(ACopy: Boolean): string;
+  begin
+    if ACopy then Result := rsRichUndoCopy else Result := rsRichUndoMove;
+  end;
+
 begin
   Result := rdeNone;
   AWentIn := False;
@@ -8256,6 +8357,43 @@ begin
         Result := AEffect;
       Exit;
     end;
+    { A table into a cell: cell by cell, as a cut (or copy) and a paste there - for a move the
+      cut and the cells' paste in one step, the paste where the cut leaves the place. }
+    cells := MakeCellsPaste(AOffer, AOffer.Flavours, rpaBest, APos, stepNameOf(asCopy), at);
+    if cells <> nil then
+    begin
+      if asCopy then
+        cmd := cells
+      else
+      begin
+        // what the cut takes (UserRangeAllowed: a separator it keeps)
+        s := f;
+        m := n;
+        UserRangeAllowed(s, m);
+        if APos > s then cells.MoveTo(APos - m) else cells.MoveTo(APos);
+        if at > s then Dec(at, m);
+        comp := TTyRichCompositeCommand.Create(rsRichUndoMove);
+        comp.Add(TTyRichDelete.Create(s, m));
+        comp.Add(cells);
+        cmd := comp;
+      end;
+      place := Default(TTyRichEditPlace);
+      place.Anchor := at;
+      place.Caret := at;
+      if RunMade(cmd, place, True) then
+      begin
+        Result := AEffect;
+        if cells.Dropped > 0 then Refuse(rsRichEditPasteCellsDropped, True);
+      end;
+      Exit;
+    end;
+    // a copy of cells: what their copy writes, pasted (a small table), not the rows
+    if asCopy and RangeIsCells(f, n, area) then
+    begin
+      if InsertOffer(AOffer, AOffer.Flavours, APos, 0, rpaBest, rsRichUndoCopy, True) then
+        Result := AEffect;
+      Exit;
+    end;
     if asCopy then cmd := TTyRichCopy.Create(f, n, APos)
     else cmd := TTyRichMove.Create(f, n, APos);
     place := Default(TTyRichEditPlace);
@@ -8278,6 +8416,14 @@ begin
   if AEffect = rdeMove then stepName := rsRichUndoMove else stepName := rsRichUndoCopy;
   // (another rich edit's selection is read as what its cut takes, for a move)
   if AOffer is TTyRichSelectionOffer then TTyRichSelectionOffer(AOffer).FDropAs := AEffect;
+  // a table into a cell: cell by cell, as its paste
+  if PasteCells(AOffer, fl, rpaBest, APos, stepName) then
+  begin
+    Result := AEffect;
+    AOffer.Taken(AEffect);
+    AWentIn := True;
+    Exit;
+  end;
   if InsertOffer(AOffer, fl, APos, 0, rpaBest, stepName, True) then
   begin
     Result := AEffect;
@@ -10343,6 +10489,13 @@ begin
   // nothing selected: nothing put there, the clipboard keeps what it had (and nothing on a
   // page whose text is not to be taken: AllowSelection)
   if not HasSelection or not FAllowSelection then Exit;
+  { cells, not whole rows (those are the file's rows, as a copy of them always was): a small
+    table of them }
+  if TyRichCellsEditable(CellArea) and not TyRichAreaWholeRows(FDoc, CellArea) then
+  begin
+    CopyCells(CellArea);
+    Exit;
+  end;
   CopyRange(GetSelStart, GetSelLength);
 end;
 
@@ -10910,9 +11063,17 @@ var
   cmd: TTyRichCommand;
   comp: TTyRichCompositeCommand;
   place: TTyRichEditPlace;
+  f, l: Integer;
 begin
   s := GetSelStart;
   n := GetSelLength;
+  // cells selected: what is typed replaces the first cell's content (the others stay, as Word)
+  if AUser and (n > 0) and (AText <> '') and TyRichCellsEditable(CellArea) then
+    if FirstAreaCell(CellArea, f, l) then
+    begin
+      s := FDoc.Text.ParaStart(f);
+      n := FDoc.Text.ParaStart(l) + FDoc.Text.ParaLength(l) - s;
+    end;
   if (AText = '') and (n = 0) then Exit;
   if not TypingAllowed(s, n, AText, AUser) then Exit;
   if (AText = '') and (n = 0) then Exit;
@@ -10988,6 +11149,8 @@ var
   ps, pe, a, b, s, n, reach, reachEnd: TTyRichPos;
   codes: TTyRichCodes;
 begin
+  // cells selected: Delete clears them, Backspace takes whole rows or the table
+  if HasSelection and CellsKey(AForward) then Exit;
   if HasSelection then
   begin
     s := GetSelStart;
@@ -12561,14 +12724,16 @@ begin
   if not (Wanted(rcfRtf) or Wanted(rcfPicture) or Wanted(rcfText)) then Exit;
   s := GetSelStart;
   n := GetSelLength;
-  { As typing over the selection asks: the document takes edits, no row that holds a nested
-    table is in the way, the cells (may keep a selection's last separator), the cut of a
-    paragraph too long to lay out (nothing goes in past what is shown). }
-  if not EditAllowed(s, n, True, True) then Exit;
-  if not UserRangeAllowed(s, n) then Exit;
-  if LongParaRefused(s, 'x') then Exit;
   offer := TTyRichClipboardOffer.Create(Self);
   try
+    // a table (or tab-separated text) with the caret in a cell: cell by cell
+    if PasteCells(offer, have, AAs, -1, rsRichUndoPaste) then Exit;
+    { As typing over the selection asks: the document takes edits, no row that holds a nested
+      table is in the way, the cells (may keep a selection's last separator), the cut of a
+      paragraph too long to lay out (nothing goes in past what is shown). }
+    if not EditAllowed(s, n, True, True) then Exit;
+    if not UserRangeAllowed(s, n) then Exit;
+    if LongParaRefused(s, 'x') then Exit;
     InsertOffer(offer, have, s, n, AAs, rsRichUndoPaste);
   finally
     offer.Free;
@@ -13968,6 +14133,12 @@ begin
     end;
     Exit;
   end;
+  // cells selected: each cell's text
+  if CellsAreTheSelection(AStart, ALen) then
+  begin
+    RunApiEdit(AreaCellCommand(CellArea, False, AMask, AValue, keep, [], Default(TTyParaFormat)), ALen);
+    Exit;
+  end;
   RunApiEdit(TTyRichSetCharFormat.Create(TyRichRange(AStart, ALen), AMask, AValue, keep), ALen);
 end;
 
@@ -13977,6 +14148,12 @@ var
   first, last: Integer;
 begin
   if AMask = [] then Exit;
+  // cells selected: each cell's paragraphs
+  if CellsAreTheSelection(AStart, ALen) then
+  begin
+    RunApiEdit(AreaCellCommand(CellArea, True, [], Default(TTyCharFormat), [], AMask, AValue), ALen);
+    Exit;
+  end;
   ParasOfRange(AStart, ALen, first, last);
   RunApiEdit(TTyRichSetParaFormat.Create(first, last, AMask, AValue), ALen);
 end;
@@ -14810,6 +14987,7 @@ end;
 function TTyCustomRichEdit.BeginComposition: Boolean;
 var
   s, n: TTyRichPos;
+  f, l: Integer;
 begin
   if FComposing then Exit(True);
   Result := False;
@@ -14830,6 +15008,14 @@ begin
   end;
   EndOwedLoad;
   Settle;
+  { Cells selected: typing replaces the first one's content (TypeTextIn), so the composition
+    is shown there - that content becomes the selection it replaces. }
+  if (FCaret <> FSelAnchor) and TyRichCellsEditable(CellArea) and FirstAreaCell(CellArea, f, l) then
+  begin
+    Select(FDoc.Text.ParaStart(f), FDoc.Text.ParaStart(l) + FDoc.Text.ParaLength(l), False);
+    CaretMoved;
+    DoSelectionChange;
+  end;
   { Only where a character typed may go in, asked as typing asks it (TypingAllowed: the
     document takes edits, no row that holds a nested table, not across cells, not at a cut
     paragraph's cut) - one character stands for the composition, which itself counts toward
@@ -19939,10 +20125,42 @@ procedure TTyCustomRichEdit.PaintBlock(ABitmap: TBGRABitmap; AIndex, AX, AY: Int
 var
   t: TTyRichText;
   start, stop, a, b: TTyRichPos;
+  area: TTyRichCellArea;
+  rl: TTyRowLayout;
+  c: TTyRichCell;
+  lit: array of Boolean;
+  i: Integer;
 begin
   // the block's part of the selection, block-relative (past its last place: its separator)
   a := 0;
   b := 0;
+  // a row whose cells are selected: those cells whole, and no text selection in it
+  if (FCaret <> FSelAnchor) and (FBlocks[AIndex].Layout is TTyRowLayout) then
+  begin
+    area := CellArea;
+    if area.Range.InTable and (FBlocks[AIndex].FirstPara >= area.FirstPara) and
+       (FBlocks[AIndex].LastPara <= area.LastPara) then
+    begin
+      rl := TTyRowLayout(FBlocks[AIndex].Layout);
+      FDoc.BeginRead;
+      try
+        c := FDoc.CellAt(FBlocks[AIndex].FirstPara);
+        lit := nil;
+        SetLength(lit, rl.CellCount);
+        for i := 0 to High(lit) do lit[i] := (c <> nil) and TyRichCellInArea(area, c.Row, i);
+      finally
+        FDoc.EndRead;
+      end;
+      Inc(FCellRowsPainted);
+      rl.SetCellHighlight(lit);
+      try
+        rl.Paint(ABitmap, AX, AY, AClip, AStyle, 0, 0);
+      finally
+        rl.SetCellHighlight([]);
+      end;
+      Exit;
+    end;
+  end;
   if FCaret <> FSelAnchor then
   begin
     t := FDoc.Text;
@@ -20061,6 +20279,7 @@ begin
           end;
           // over every block: the handles reach past the object's line
           PaintObjectOverlay(FSurface, rArea.Left, rArea.Top, R, pst);
+          PaintTableHandle(FSurface, rArea.Left, rArea.Top, R, pst);
           FSurface.NoClip;
         end;
       finally
@@ -20218,6 +20437,7 @@ begin
           if ADefer then QueueSkipped(k);
         end;
         PaintObjectOverlay(P.Bitmap, area.Left * s, area.Top * s, rClip, st);
+        PaintTableHandle(P.Bitmap, area.Left * s, area.Top * s, rClip, st);
       finally
         P.Bitmap.NoClip;
       end;
@@ -20297,6 +20517,950 @@ begin
       clip.Right - ARect.Left, clip.Bottom - ARect.Top), clip.Left, clip.Top, sc);
   end;
   if FPendingCount > 0 then StartBackground;
+end;
+
+{ ---- cell selection ----
+
+  Nothing but the anchor and the caret: tyControls.RichEdit.TableSel reads the cells off
+  them (CellArea, kept until either moves or the document changes). }
+
+const
+  // the table zones TableZoneAt finds
+  CZoneCell = 1;
+  CZoneRow = 2;
+  CZoneColumn = 3;
+  CZoneTable = 4;
+
+function TTyCustomRichEdit.SelectionAllowed: Boolean;
+begin
+  // a page whose text is not to be taken (AllowSelection False) shows no zone and no handle
+  Result := FAllowSelection;
+end;
+
+function TTyCustomRichEdit.CellArea: TTyRichCellArea;
+begin
+  if not FCellAreaValid or (FCellAreaAnchor <> FSelAnchor) or (FCellAreaCaret <> FCaret) or
+     (FCellAreaState <> FDoc.ContentState) then
+  begin
+    if ViewBehind or (FSelAnchor = FCaret) then FCellArea := Default(TTyRichCellArea)
+    else FCellArea := TyRichCellArea(FDoc, FSelAnchor, FCaret);
+    FCellAreaAnchor := FSelAnchor;
+    FCellAreaCaret := FCaret;
+    FCellAreaState := FDoc.ContentState;
+    FCellAreaValid := True;
+  end;
+  Result := FCellArea;
+end;
+
+function TTyCustomRichEdit.SelectedCells: TTyRichCellRange;
+begin
+  Result := CellArea.Range;
+end;
+
+function TTyCustomRichEdit.CaretCell(out ATablePos: TTyRichPos; out ARow, ACol: Integer): Boolean;
+var
+  k, n: Integer;
+  c: TTyRichCell;
+begin
+  ATablePos := -1;
+  ARow := -1;
+  ACol := -1;
+  if ViewBehind then Exit(False);
+  k := CaretCellPara;
+  FDoc.BeginRead;
+  try
+    c := FDoc.CellAt(k);
+    if c = nil then Exit(False);
+    ACol := c.Index;
+  finally
+    FDoc.EndRead;
+  end;
+  Result := FDoc.TableRowIndex(k, ARow, n);
+  ATablePos := FDoc.Text.ParaStart(k);
+end;
+
+{ The paragraph the caret's cell is read from: the caret's own, or - a selection running
+  forward to a paragraph's start, as one of whole cells does (after the last cell's end mark) -
+  the paragraph of the last selected character. }
+function TTyCustomRichEdit.CaretCellPara: Integer;
+var
+  t: TTyRichText;
+begin
+  t := FDoc.Text;
+  Result := t.ParaOfPos(FCaret);
+  if (FCaret > FSelAnchor) and (Result > 0) and (t.ParaStart(Result) = FCaret) then Dec(Result);
+end;
+
+// AKind: 0 the caret's cell, 1 its row, 2 its column, 3 its table
+function TTyCustomRichEdit.SelectCells(AKind: Integer): Boolean;
+var
+  t: TTyRichText;
+  k, f, l, rf, rl: Integer;
+  c, d: TTyRichCell;
+  info: TTyRichTableInfo;
+  a, b: TTyRichPos;
+
+  // the paragraphs of the cell of index ACol in the row paragraph APara is in (its last
+  // cell when it has fewer)
+  procedure CellOfRow(APara, ACol: Integer; out AF, AL: Integer);
+  var
+    p, q, j: Integer;
+  begin
+    TyRichRowParas(FDoc, APara, p, q);
+    AF := -1;
+    AL := -1;
+    for j := p to q do
+    begin
+      d := FDoc.CellAt(j);
+      if (d.Index = ACol) or ((AF < 0) and (j = q)) or ((AF < 0) and (d.Index > ACol)) then
+      begin
+        if AF < 0 then AF := j;
+        if d.Index <> FDoc.CellAt(AF).Index then Break;
+        AL := j;
+      end;
+    end;
+  end;
+
+begin
+  Result := False;
+  if not SelectionAllowed or ViewBehind then Exit;
+  t := FDoc.Text;
+  k := CaretCellPara;
+  FDoc.BeginRead;
+  try
+    c := FDoc.CellAt(k);
+    if c = nil then Exit;
+    case AKind of
+      0: TyRichCellParasOf(FDoc, k, f, l);
+      1: TyRichRowParas(FDoc, k, f, l);
+    else
+      begin
+        // a column or the whole table: the table's first and last row (one a loader gives
+        // in parts, too large to be read whole, is not)
+        if c.Table.Cut and (FDoc.TableEditRefusal(TyRichTableEdit(rtkInsertColumn, t.ParaStart(k),
+          0)) = rtrNotWhole) then
+        begin
+          Refuse(rsRichEditRefusedSelectNotWhole, True);
+          Exit;
+        end;
+        if not FDoc.TableInfoAt(k, info) then Exit;
+        if AKind = 3 then
+        begin
+          f := info.First;
+          l := info.Last;
+        end
+        else
+        begin
+          CellOfRow(info.First, c.Index, f, rl);
+          CellOfRow(info.Last, c.Index, rf, l);
+        end;
+      end;
+    end;
+    if (f < 0) or (l < 0) then Exit;
+    a := t.ParaStart(f);
+    // after the last cell's end mark (the paragraph after it starts there)
+    b := Math.Min(t.ParaStart(l) + t.ParaLength(l) + 1, t.Length);
+  finally
+    FDoc.EndRead;
+  end;
+  Select(a, b, False);
+  FWishValid := False;
+  CaretMoved;
+  DoSelectionChange;
+  Result := True;
+end;
+
+function TTyCustomRichEdit.SelectCell: Boolean;
+begin
+  Result := SelectCells(0);
+end;
+
+function TTyCustomRichEdit.SelectRow: Boolean;
+begin
+  Result := SelectCells(1);
+end;
+
+function TTyCustomRichEdit.SelectColumn: Boolean;
+begin
+  Result := SelectCells(2);
+end;
+
+function TTyCustomRichEdit.SelectTable: Boolean;
+begin
+  Result := SelectCells(3);
+end;
+
+{ The first cell of the area in reading order: its paragraphs. }
+function TTyCustomRichEdit.FirstAreaCell(const AArea: TTyRichCellArea; out AFirst, ALast: Integer): Boolean;
+var
+  k, p, q: Integer;
+  c: TTyRichCell;
+begin
+  AFirst := -1;
+  ALast := -1;
+  Result := False;
+  if not AArea.Range.InTable then Exit;
+  FDoc.BeginRead;
+  try
+    TyRichRowParas(FDoc, AArea.FirstPara, p, q);
+    for k := p to q do
+    begin
+      c := FDoc.CellAt(k);
+      if (c <> nil) and TyRichCellInArea(AArea, c.Row, c.Index) then
+      begin
+        if AFirst < 0 then AFirst := k
+        else if FDoc.CellAt(AFirst) <> c then Break;
+        ALast := k;
+      end;
+    end;
+    Result := AFirst >= 0;
+  finally
+    FDoc.EndRead;
+  end;
+end;
+
+// The rows of the area, and in each the cells in it, as calls of AVisit (cell paragraphs).
+type
+  TTyCellVisit = procedure(ARowNo, ACol, AFirst, ALast: Integer) of object;
+
+procedure VisitArea(ADoc: TTyRichDocument; const AArea: TTyRichCellArea; AVisit: TTyCellVisit);
+var
+  k, p, q, f, r: Integer;
+  c, d: TTyRichCell;
+begin
+  k := AArea.FirstPara;
+  r := 0;
+  ADoc.BeginRead;
+  try
+    while (k >= 0) and (k <= AArea.LastPara) do
+    begin
+      TyRichRowParas(ADoc, k, p, q);
+      c := ADoc.CellAt(p);
+      // (a row that holds a nested table is its file's bytes: nothing of it changes)
+      if not c.Row.HoldsNestedTable then
+      begin
+        f := p;
+        while f <= q do
+        begin
+          d := ADoc.CellAt(f);
+          k := f;
+          while (k < q) and (ADoc.CellAt(k + 1) = d) do Inc(k);
+          if TyRichCellInArea(AArea, d.Row, d.Index) then AVisit(r, d.Index, f, k);
+          f := k + 1;
+        end;
+      end;
+      k := q + 1;
+      Inc(r);
+    end;
+  finally
+    ADoc.EndRead;
+  end;
+end;
+
+type
+  TTyCellSpan = record
+    Row, Col: Integer;
+    S, E: TTyRichPos;
+  end;
+
+  // what a walk over an area's cells gathers
+  TTyCellGather = class
+    Doc: TTyRichDocument;
+    Edit: TTyRichCellsEdit;
+    Comp: TTyRichCompositeCommand;
+    Paras: Boolean;
+    MaskC: TTyCharFormatMask;
+    CharV: TTyCharFormat;
+    Keep: TTyCharFormatMask;
+    MaskP: TTyParaFormatMask;
+    ParaV: TTyParaFormat;
+    Cells: array of TTyCellSpan;
+    procedure Clear(ARowNo, ACol, AFirst, ALast: Integer);
+    procedure Format(ARowNo, ACol, AFirst, ALast: Integer);
+    procedure Take(ARowNo, ACol, AFirst, ALast: Integer);
+  end;
+
+procedure TTyCellGather.Clear(ARowNo, ACol, AFirst, ALast: Integer);
+begin
+  Edit.AddClear(ARowNo, ACol);
+end;
+
+procedure TTyCellGather.Format(ARowNo, ACol, AFirst, ALast: Integer);
+var
+  s, e: TTyRichPos;
+begin
+  if Paras then
+    Comp.Add(TTyRichSetParaFormat.Create(AFirst, ALast, MaskP, ParaV))
+  else
+  begin
+    s := Doc.Text.ParaStart(AFirst);
+    e := Doc.Text.ParaStart(ALast) + Doc.Text.ParaLength(ALast);
+    if e > s then Comp.Add(TTyRichSetCharFormat.Create(TyRichRange(s, e - s), MaskC, CharV, Keep));
+  end;
+end;
+
+procedure TTyCellGather.Take(ARowNo, ACol, AFirst, ALast: Integer);
+var
+  n: Integer;
+begin
+  n := Length(Cells);
+  SetLength(Cells, n + 1);
+  Cells[n].Row := ARowNo;
+  Cells[n].Col := ACol;
+  Cells[n].S := Doc.Text.ParaStart(AFirst);
+  Cells[n].E := Doc.Text.ParaStart(ALast) + Doc.Text.ParaLength(ALast);
+end;
+
+function TTyCustomRichEdit.CellsAreTheSelection(AStart, ALen: TTyRichPos): Boolean;
+begin
+  Result := (ALen > 0) and (AStart = GetSelStart) and (ALen = GetSelLength) and
+    TyRichCellsEditable(CellArea);
+end;
+
+function TTyCustomRichEdit.AreaCellCommand(const AArea: TTyRichCellArea; AParas: Boolean;
+  AMaskC: TTyCharFormatMask; const AChar: TTyCharFormat; AKeep: TTyCharFormatMask;
+  AMaskP: TTyParaFormatMask; const APara: TTyParaFormat): TTyRichCommand;
+var
+  g: TTyCellGather;
+begin
+  g := TTyCellGather.Create;
+  try
+    g.Doc := FDoc;
+    g.Paras := AParas;
+    g.MaskC := AMaskC;
+    g.CharV := AChar;
+    g.Keep := AKeep;
+    g.MaskP := AMaskP;
+    g.ParaV := APara;
+    if AParas then g.Comp := TTyRichCompositeCommand.Create(rsRichUndoParaFormat)
+    else g.Comp := TTyRichCompositeCommand.Create(rsRichUndoCharFormat);
+    VisitArea(FDoc, AArea, @g.Format);
+    Result := g.Comp;
+  finally
+    g.Free;
+  end;
+end;
+
+procedure TTyCustomRichEdit.ClearCells(const AArea: TTyRichCellArea);
+var
+  g: TTyCellGather;
+  place: TTyRichEditPlace;
+  f, l: Integer;
+begin
+  if not FirstAreaCell(AArea, f, l) then Exit;
+  g := TTyCellGather.Create;
+  try
+    g.Doc := FDoc;
+    g.Edit := TTyRichCellsEdit.Create(FDoc.Text.ParaStart(AArea.FirstPara), rsRichUndoDelete);
+    VisitArea(FDoc, AArea, @g.Clear);
+    place := Default(TTyRichEditPlace);
+    // the first cell's start: nothing before it moves
+    place.Anchor := FDoc.Text.ParaStart(f);
+    place.Caret := place.Anchor;
+    RunMade(g.Edit, place, True);
+  finally
+    g.Free;
+  end;
+end;
+
+function TTyCustomRichEdit.CellsKey(AForward: Boolean): Boolean;
+var
+  area: TTyRichCellArea;
+begin
+  area := CellArea;
+  Result := TyRichCellsEditable(area);
+  if not Result then Exit;
+  if FReadOnly or not IsEnabled then Exit;
+  if not AForward then
+  begin
+    if area.Range.WholeTable then
+    begin
+      DeleteTable;
+      Exit;
+    end;
+    if TyRichAreaWholeRows(FDoc, area) then
+    begin
+      DeleteRow;
+      Exit;
+    end;
+  end;
+  ClearCells(area);
+end;
+
+{ The content [AStart, AStart + ALen) of this document as a document of its own (RTF there and
+  back: formats, objects, fields - what a copy carries). }
+function DocOfRange(ADoc: TTyRichDocument; AStart, ALen: TTyRichPos): TTyRichDocument;
+var
+  st: TBytesStream;
+begin
+  Result := TTyRichDocument.Create;
+  st := TBytesStream.Create;
+  try
+    TyRichSaveRtfRange(ADoc, st, AStart, ALen);
+    st.Position := 0;
+    try
+      TyRichLoadRtfFull(Result, st);
+    except
+      Result.Free;
+      raise;
+    end;
+  finally
+    st.Free;
+  end;
+end;
+
+procedure TTyCustomRichEdit.CopyCells(const AArea: TTyRichCellArea);
+var
+  rtf: RawByteString;
+  txt: string;
+begin
+  if CellsFlavours(AArea, rtf, txt) then WriteClipboard(rtf, txt);
+end;
+
+{ AFrom .. AFrom + ALen is cells a copy takes as a small table: both ends in one table, not
+  whole rows (those copy as the file's rows). }
+function TTyCustomRichEdit.RangeIsCells(AFrom, ALen: TTyRichPos; out AArea: TTyRichCellArea): Boolean;
+begin
+  AArea := TyRichCellArea(FDoc, AFrom, AFrom + ALen);
+  Result := TyRichCellsEditable(AArea) and not TyRichAreaWholeRows(FDoc, AArea);
+end;
+
+{ What a copy of the cells writes: a small table (RTF) and their text, a row a line, the cells
+  parted by tabs. False: no cell. }
+function TTyCustomRichEdit.CellsFlavours(const AArea: TTyRichCellArea; out ARtf: RawByteString;
+  out AText: string): Boolean;
+var
+  g: TTyCellGather;
+  d: TTyRichDocument;
+  edit: TTyRichCellsEdit;
+  rows, cols, i, k: Integer;
+  st: TBytesStream;
+  rtf: RawByteString;
+  txt, cellTxt: string;
+  colOf: array of Integer;
+  firstOfRow: array of Integer;
+begin
+  Result := False;
+  ARtf := '';
+  AText := '';
+  g := TTyCellGather.Create;
+  d := TTyRichDocument.Create;
+  try
+    g.Doc := FDoc;
+    VisitArea(FDoc, AArea, @g.Take);
+    if Length(g.Cells) = 0 then Exit;
+    // the small table: as many rows as the area's, as many cells as its widest row
+    rows := g.Cells[High(g.Cells)].Row + 1;
+    SetLength(colOf, Length(g.Cells));
+    SetLength(firstOfRow, rows);
+    cols := 0;
+    k := 0;
+    for i := 0 to High(g.Cells) do
+    begin
+      if (i = 0) or (g.Cells[i].Row <> g.Cells[i - 1].Row) then k := 0;
+      colOf[i] := k;
+      Inc(k);
+      if k > cols then cols := k;
+    end;
+    d.Execute(TTyRichInsertTable.Create(0, rows, cols));
+    edit := TTyRichCellsEdit.Create(0, rsRichUndoPaste);
+    txt := '';
+    for i := 0 to High(g.Cells) do
+    begin
+      if g.Cells[i].E > g.Cells[i].S then
+        edit.AddContent(g.Cells[i].Row, colOf[i], DocOfRange(FDoc, g.Cells[i].S,
+          g.Cells[i].E - g.Cells[i].S));
+      // the text: a row a line, its cells parted by tabs (a cell's own breaks are spaces)
+      if (i > 0) and (g.Cells[i].Row <> g.Cells[i - 1].Row) then txt := txt + LineEnding
+      else if i > 0 then txt := txt + #9;
+      cellTxt := RangeText(g.Cells[i].S, g.Cells[i].E - g.Cells[i].S);
+      cellTxt := StringReplace(StringReplace(cellTxt, #13#10, ' ', [rfReplaceAll]), #10, ' ', [rfReplaceAll]);
+      cellTxt := StringReplace(StringReplace(cellTxt, #13, ' ', [rfReplaceAll]), #9, ' ', [rfReplaceAll]);
+      txt := txt + cellTxt;
+    end;
+    d.Execute(edit);
+    st := TBytesStream.Create;
+    try
+      TyRichSaveRtf(d, st);
+      SetLength(rtf, st.Size);
+      if st.Size > 0 then Move(st.Bytes[0], rtf[1], st.Size);
+      SetCodePage(rtf, CP_NONE, False);
+    finally
+      st.Free;
+    end;
+    ARtf := rtf;
+    AText := txt;
+    Result := True;
+  finally
+    d.Free;
+    g.Free;
+  end;
+end;
+
+{ A table offered (RTF with a table, or text with tabs: a spreadsheet's) put cell by cell into
+  the table at APos, or - APos -1, a paste - at the selected cells or the caret's cell; one
+  step named AName. False: not that case (no table offered, no cell there) - the caller goes
+  on with its own rules. }
+function TTyCustomRichEdit.PasteCells(AOffer: TTyRichDropOffer; AHave: TTyRichClipFlavours;
+  AAs: TTyRichPasteAs; APos: TTyRichPos; const AName: string): Boolean;
+var
+  edit: TTyRichCellsEdit;
+  place: TTyRichEditPlace;
+  at: TTyRichPos;
+  k: Integer;
+begin
+  edit := MakeCellsPaste(AOffer, AHave, AAs, APos, AName, at);
+  Result := edit <> nil;
+  if not Result then Exit;
+  place := Default(TTyRichEditPlace);
+  place.Anchor := at;
+  place.Caret := at;
+  k := 0;
+  if RunMade(edit, place, True) then k := edit.Dropped;
+  if k > 0 then Refuse(rsRichEditPasteCellsDropped, True);
+end;
+
+{ PasteCells' command, not run (nil: not that case); ATarget: the start of the cell it fills
+  first, where the caret goes. }
+function TTyCustomRichEdit.MakeCellsPaste(AOffer: TTyRichDropOffer; AHave: TTyRichClipFlavours;
+  AAs: TTyRichPasteAs; APos: TTyRichPos; const AName: string; out ATarget: TTyRichPos): TTyRichCellsEdit;
+var
+  t: TTyRichText;
+  k, f, l, i, r, col, p, q, row0: Integer;
+  c, d: TTyRichCell;
+  area: TTyRichCellArea;
+  src: TTyRichDocument;
+  edit: TTyRichCellsEdit;
+  rtf: RawByteString;
+  txt: string;
+  lns, cells: TStringList;
+  st: TBytesStream;
+  anyTable: Boolean;
+begin
+  Result := nil;
+  ATarget := -1;
+  if FReadOnly or not IsEnabled or ViewBehind then Exit;
+  t := FDoc.Text;
+  // from the first selected cell, else the caret's cell
+  area := CellArea;
+  if APos >= 0 then
+    k := t.ParaOfPos(Math.Min(APos, t.Length))
+  else if area.Outside then
+    Exit
+  else if area.Range.InTable then
+  begin
+    if not FirstAreaCell(area, f, l) then Exit;
+    k := f;
+  end
+  else
+  begin
+    // (a selection of text in a cell, or none: from the caret's cell)
+    if HasSelection and (t.ParaOfPos(GetSelStart) <> t.ParaOfPos(GetSelStart + GetSelLength)) then
+      Exit;
+    k := t.ParaOfPos(FCaret);
+  end;
+  FDoc.BeginRead;
+  try
+    c := FDoc.CellAt(k);
+    if (c = nil) or c.Row.HoldsNestedTable then Exit;
+    col := c.Index;
+    TyRichRowParas(FDoc, k, p, q);
+    row0 := p;
+  finally
+    FDoc.EndRead;
+  end;
+  edit := TTyRichCellsEdit.Create(t.ParaStart(row0), AName);
+  try
+    anyTable := False;
+    if (rcfRtf in AHave) and ((AAs = rpaBest) or (AAs = rpaRtf)) then
+    begin
+      rtf := AOffer.ReadRtf;
+      if rtf <> '' then
+      begin
+        src := TTyRichDocument.Create;
+        try
+          st := TBytesStream.Create;
+          try
+            st.WriteBuffer(rtf[1], Length(rtf));
+            st.Position := 0;
+            try
+              TyRichLoadRtfFull(src, st);
+            except
+              FreeAndNil(src);
+            end;
+          finally
+            st.Free;
+          end;
+          if src <> nil then
+          begin
+            // its first table, cell by cell
+            k := 0;
+            src.BeginRead;
+            try
+              while (k < src.Text.ParaCount) and (src.CellAt(k) = nil) do Inc(k);
+              if k < src.Text.ParaCount then
+              begin
+                anyTable := True;
+                r := -1;
+                d := nil;
+                while (k < src.Text.ParaCount) and (src.CellAt(k) <> nil) do
+                begin
+                  c := src.CellAt(k);
+                  if (d = nil) or (c.Row <> d.Row) then Inc(r);
+                  f := k;
+                  while (k + 1 < src.Text.ParaCount) and (src.CellAt(k + 1) = c) do Inc(k);
+                  edit.AddContent(r, col + c.Index, DocOfRange(src, src.Text.ParaStart(f),
+                    src.Text.ParaStart(k) + src.Text.ParaLength(k) - src.Text.ParaStart(f)));
+                  d := c;
+                  Inc(k);
+                end;
+              end;
+            finally
+              src.EndRead;
+            end;
+          end;
+        finally
+          src.Free;
+        end;
+      end;
+    end;
+    if not anyTable and (rcfText in AHave) and ((AAs = rpaBest) or (AAs = rpaText)) then
+    begin
+      // tab-separated text (a spreadsheet's): a line a row, a tab between cells
+      txt := AOffer.ReadText;
+      if Pos(#9, txt) > 0 then
+      begin
+        anyTable := True;
+        lns := TStringList.Create;
+        cells := TStringList.Create;
+        try
+          lns.Text := txt;
+          cells.Delimiter := #9;
+          cells.StrictDelimiter := True;
+          for r := 0 to lns.Count - 1 do
+          begin
+            if (r = lns.Count - 1) and (lns[r] = '') then Break;
+            cells.DelimitedText := lns[r];
+            for i := 0 to cells.Count - 1 do edit.AddText(r, col + i, cells[i]);
+          end;
+        finally
+          cells.Free;
+          lns.Free;
+        end;
+      end;
+    end;
+    if not anyTable or (edit.Count = 0) then Exit;
+    FDoc.BeginRead;
+    try
+      TyRichRowParas(FDoc, row0, p, q);
+      f := p;
+      for i := p to q do
+        if FDoc.CellAt(i).Index = col then
+        begin
+          f := i;
+          Break;
+        end;
+    finally
+      FDoc.EndRead;
+    end;
+    ATarget := t.ParaStart(f);
+    Result := edit;
+    edit := nil;
+  finally
+    edit.Free;
+  end;
+end;
+
+{ A table's zones under client point X, Y: just inside a cell's left edge (CZoneCell), the
+  table's left margin beside a row (CZoneRow), just above a column of the table's first row
+  (CZoneColumn), the handle at the table's top-left corner (CZoneTable). APara: a paragraph of
+  that cell, row or column (the first row's), or the table's first paragraph. Each zone a
+  few device pixels wide - the text starts further in. }
+function TTyCustomRichEdit.TableZoneAt(X, Y: Integer; out AZone, APara: Integer): Boolean;
+var
+  area: TRect;
+  rx, ry, z: Int64;
+  k, i, kb: Integer;
+  r: TTyRowLayout;
+  first: Boolean;
+  c: TTyRichCell;
+  hr: TRect;
+begin
+  AZone := 0;
+  APara := -1;
+  Result := False;
+  if ViewBehind or not SelectionAllowed or (FBlockCount = 0) or (csDesigning in ComponentState) then
+    Exit;
+  area := TextArea(Rect(0, 0, Width, Height), ViewPPI);
+  rx := (Int64(X) - area.Left) * FScale + FScrollX;
+  ry := (Int64(Y) - area.Top) * FScale;
+  z := Math.Max(2, MulDiv(4, ViewPPI, 96)) * FScale;
+  // the handle
+  if FHandlePara >= 0 then
+    for k := 0 to FBlockCount - 1 do
+      if (FBlocks[k].FirstPara = FHandlePara) and (FBlocks[k].Layout is TTyRowLayout) then
+      begin
+        hr := TableHandleRect(k);
+        if (rx >= hr.Left) and (rx < hr.Right) and (ry >= hr.Top) and (ry < hr.Bottom) then
+        begin
+          AZone := CZoneTable;
+          APara := FHandlePara;
+          Exit(True);
+        end;
+      end;
+  k := 0;
+  while (k < FBlockCount - 1) and (ry >= FBlocks[k].Top + FBlocks[k].Height) do Inc(k);
+  if (ry >= FBlocks[k].Top) and (ry < FBlocks[k].Top + FBlocks[k].Height) and
+     (FBlocks[k].Layout is TTyRowLayout) then
+  begin
+    r := TTyRowLayout(FBlocks[k].Layout);
+    for i := 0 to r.CellCount - 1 do
+      if not r.Cells[i].Hidden and (rx >= r.Cells[i].Left) and (rx < r.Cells[i].Left + z) and
+         (rx < r.Cells[i].Right) and (r.Cells[i].ItemCount > 0) then
+      begin
+        AZone := CZoneCell;
+        APara := FBlocks[k].FirstPara + r.Cells[i].FirstItem;
+        Exit(True);
+      end;
+    if (rx >= r.Cells[0].Left - 3 * z) and (rx < r.Cells[0].Left) then
+    begin
+      AZone := CZoneRow;
+      APara := FBlocks[k].FirstPara;
+      Exit(True);
+    end;
+  end;
+  // just above the table's first row
+  kb := 0;
+  while (kb < FBlockCount - 1) and (ry + z >= FBlocks[kb].Top + FBlocks[kb].Height) do Inc(kb);
+  if (ry < FBlocks[kb].Top) and (ry + z >= FBlocks[kb].Top) and (FBlocks[kb].Layout is TTyRowLayout) then
+  begin
+    FDoc.BeginRead;
+    try
+      c := FDoc.CellAt(FBlocks[kb].FirstPara);
+      first := (c <> nil) and ((FBlocks[kb].FirstPara = 0) or (FDoc.CellAt(FBlocks[kb].FirstPara - 1) = nil) or
+        (FDoc.CellAt(FBlocks[kb].FirstPara - 1).Table <> c.Table));
+    finally
+      FDoc.EndRead;
+    end;
+    if first then
+    begin
+      r := TTyRowLayout(FBlocks[kb].Layout);
+      for i := 0 to r.CellCount - 1 do
+        if not r.Cells[i].Hidden and (rx >= r.Cells[i].Left) and (rx < r.Cells[i].Right) and
+           (r.Cells[i].ItemCount > 0) then
+        begin
+          AZone := CZoneColumn;
+          APara := FBlocks[kb].FirstPara + r.Cells[i].FirstItem;
+          Exit(True);
+        end;
+    end;
+  end;
+end;
+
+function TTyCustomRichEdit.TableZonePress(X, Y: Integer): Boolean;
+var
+  zone, p: Integer;
+  info: TTyRichTableInfo;
+begin
+  Result := TableZoneAt(X, Y, zone, p);
+  if not Result then Exit;
+  // the zone's selection: as the methods make it from the caret
+  Select(FDoc.Text.ParaStart(p), FDoc.Text.ParaStart(p), False);
+  case zone of
+    CZoneCell: SelectCell;
+    CZoneRow: SelectRow;
+    CZoneColumn: SelectColumn;
+  else
+    SelectTable;
+  end;
+  FCellDrag := zone;
+  FCellDragPara := p;
+  FCellDragLast := -1;
+  if (zone = CZoneColumn) and FDoc.TableInfoAt(p, info) then FCellDragLast := info.Last;
+end;
+
+{ A press on a zone dragged to client X, Y: from the pressed row, column or cell to the one
+  under the pointer. }
+procedure TTyCustomRichEdit.TableZoneDrag(X, Y: Integer);
+var
+  q, a, b: TTyRichPos;
+  atEnd: Boolean;
+  k, f0, l0, f1, l1, c0, c1: Integer;
+  c: TTyRichCell;
+  t: TTyRichText;
+
+  // the paragraphs of cell ACol in the row of paragraph APara
+  procedure CellIn(APara, ACol: Integer; out AF, AL: Integer);
+  var
+    p, s, j: Integer;
+  begin
+    TyRichRowParas(FDoc, APara, p, s);
+    AF := -1;
+    AL := -1;
+    for j := p to s do
+      if FDoc.CellAt(j).Index = ACol then
+      begin
+        if AF < 0 then AF := j;
+        AL := j;
+      end;
+    if AF < 0 then
+    begin
+      AF := s;
+      AL := s;
+    end;
+  end;
+
+begin
+  if (FCellDrag = 0) or (FCellDrag = CZoneTable) then Exit;
+  t := FDoc.Text;
+  q := HitClient(X, Y, atEnd);
+  if q < 0 then Exit;
+  k := t.ParaOfPos(Math.Min(q, t.Length));
+  FDoc.BeginRead;
+  try
+    c := FDoc.CellAt(k);
+    if (c = nil) or (FDoc.CellAt(FCellDragPara) = nil) or
+       (c.Table <> FDoc.CellAt(FCellDragPara).Table) then
+      Exit;
+    case FCellDrag of
+      CZoneRow:
+        begin
+          TyRichRowParas(FDoc, FCellDragPara, f0, l0);
+          TyRichRowParas(FDoc, k, f1, l1);
+        end;
+      CZoneColumn:
+        begin
+          if FCellDragLast < 0 then Exit;
+          c0 := FDoc.CellAt(FCellDragPara).Index;
+          c1 := c.Index;
+          CellIn(FCellDragPara, c0, f0, l0);
+          CellIn(FCellDragLast, c1, f1, l1);
+        end;
+    else
+      begin
+        TyRichCellParasOf(FDoc, FCellDragPara, f0, l0);
+        TyRichCellParasOf(FDoc, k, f1, l1);
+      end;
+    end;
+    if (FCellDrag <> CZoneColumn) and (f1 < f0) then
+    begin
+      // upward: from the end of the pressed one back to the start of this one
+      a := Math.Min(t.ParaStart(l0) + t.ParaLength(l0) + 1, t.Length);
+      b := t.ParaStart(f1);
+    end
+    else
+    begin
+      a := t.ParaStart(f0);
+      b := Math.Min(t.ParaStart(l1) + t.ParaLength(l1) + 1, t.Length);
+    end;
+  finally
+    FDoc.EndRead;
+  end;
+  if (a = FSelAnchor) and (b = FCaret) then Exit;
+  Select(a, b, False);
+  FWishValid := False;
+  CaretMoved;
+  DoSelectionChange;
+end;
+
+{ The handle of the table under the pointer shows (when that table's first row is in view). }
+procedure TTyCustomRichEdit.TableHandleHover(X, Y: Integer);
+var
+  area: TRect;
+  ry: Int64;
+  k, j, was: Integer;
+  t: TTyRichTable;
+  c: TTyRichCell;
+  zone, zp: Integer;
+begin
+  was := FHandlePara;
+  // (a viewer shows no handle: it would move nothing)
+  if ViewBehind or not SelectionAllowed or FReadOnly or (FBlockCount = 0) then
+    FHandlePara := -1
+  else if TableZoneAt(X, Y, zone, zp) and (zone = CZoneTable) then
+    // (on the handle itself: it stays)
+  else
+  begin
+    FHandlePara := -1;
+    area := TextArea(Rect(0, 0, Width, Height), ViewPPI);
+    ry := (Int64(Y) - area.Top) * FScale;
+    k := 0;
+    while (k < FBlockCount - 1) and (ry >= FBlocks[k].Top + FBlocks[k].Height) do Inc(k);
+    if (ry >= FBlocks[k].Top) and (ry < FBlocks[k].Top + FBlocks[k].Height) and
+       (FBlocks[k].Layout is TTyRowLayout) then
+    begin
+      FDoc.BeginRead;
+      try
+        t := FDoc.TableAt(FBlocks[k].FirstPara);
+        // its first row among the blocks in view
+        for j := 0 to FBlockCount - 1 do
+          if (FBlocks[j].Layout is TTyRowLayout) and (FDoc.TableAt(FBlocks[j].FirstPara) = t) then
+          begin
+            c := nil;
+            if FBlocks[j].FirstPara > 0 then c := FDoc.CellAt(FBlocks[j].FirstPara - 1);
+            if (c = nil) or (c.Table <> t) then
+            begin
+              FHandlePara := FBlocks[j].FirstPara;
+              Break;
+            end;
+          end;
+      finally
+        FDoc.EndRead;
+      end;
+    end;
+  end;
+  if FHandlePara <> was then
+  begin
+    InvalidateSurface;
+    Invalidate;
+  end;
+end;
+
+{ The handle of the table whose first row is block ABlock, in the view's raster (x with the
+  scroll in it, as TableZoneAt reads a point): a square of 9 scaled pixels up and left of the
+  table's top-left corner, moved right / down as far as needed to stay in the view - a table
+  at the text's left edge (most are) has no room beside it, and a handle cut away is one no
+  one can press. The one rectangle both the paint and the hit test use. }
+function TTyCustomRichEdit.TableHandleRect(ABlock: Integer): TRect;
+var
+  hz, x0, y0: Integer;
+begin
+  hz := Math.Max(5, MulDiv(9, ViewPPI, 96)) * FScale;
+  x0 := Math.Max(TTyRowLayout(FBlocks[ABlock].Layout).Cells[0].Left - hz - 1, FScrollX);
+  y0 := Math.Max(FBlocks[ABlock].Top - hz - 1, 0);
+  Result := Rect(x0, y0, x0 + hz, y0 + hz);
+end;
+
+{ The handle of the table under the pointer: a small square at the top-left corner, outside
+  the table where there is room (TableHandleRect), in the colours of an object's handles. }
+procedure TTyCustomRichEdit.PaintTableHandle(ABitmap: TBGRABitmap; AX, AY: Integer;
+  const AClip: TRect; const AStyle: TTyRichPaintStyle);
+var
+  k, hz, x0, y0, m: Integer;
+  hr, old: TRect;
+begin
+  if (FHandlePara < 0) or not SelectionAllowed then Exit;
+  for k := 0 to FBlockCount - 1 do
+    if (FBlocks[k].FirstPara = FHandlePara) and (FBlocks[k].Layout is TTyRowLayout) then
+    begin
+      hr := TableHandleRect(k);
+      hz := hr.Right - hr.Left;
+      x0 := AX - FScrollX + hr.Left;
+      y0 := AY + hr.Top;
+      old := ABitmap.ClipRect;
+      ABitmap.ClipRect := AClip;
+      try
+        ABitmap.FillRect(x0, y0, x0 + hz, y0 + hz, AStyle.ObjectHandleFill, dmSet);
+        ABitmap.Rectangle(x0, y0, x0 + hz, y0 + hz, AStyle.ObjectFrame, dmSet);
+        // a cross: the four ways it moves the table's selection
+        m := hz div 2;
+        ABitmap.FillRect(x0 + 2, y0 + m, x0 + hz - 2, y0 + m + 1, AStyle.ObjectFrame, dmSet);
+        ABitmap.FillRect(x0 + m, y0 + 2, x0 + m + 1, y0 + hz - 2, AStyle.ObjectFrame, dmSet);
+      finally
+        ABitmap.ClipRect := old;
+      end;
+      Exit;
+    end;
 end;
 
 { ---- keyboard and wheel ---- }

@@ -807,6 +807,8 @@ type
     FDisplay: TTyRowDisplay;
     FCells: array of TTyRichCellBox;
     FItems: array of TTyRichRowItem;
+    // the cells a cell selection has (SetCellHighlight; for the next paints)
+    FHighlight: array of Boolean;
     function GetCell(AIndex: Integer): TTyRichCellBox;
     function GetItem(AIndex: Integer): TTyRichRowItem;
     function CellAtX(AX: Integer): Integer;
@@ -836,6 +838,12 @@ type
     function ItemAt(APos: TTyRichPos): Integer;
     function CellCount: Integer;
     property Cells[AIndex: Integer]: TTyRichCellBox read GetCell;
+    { The cells a cell selection has in this row (ACells[i]: cell i; none: no cell
+      selected): each is painted whole in the selection's colour - over its shading, its
+      text in the selection's text colour - and the text selection a paint gives the row is
+      not drawn in it. The owner sets it before a paint and clears it after (the layout is
+      shared by every paint of the row). }
+    procedure SetCellHighlight(const ACells: array of Boolean);
     function ItemCount: Integer;
     property Items[AIndex: Integer]: TTyRichRowItem read GetItem;
     { What the row's format says (TyRtfRowDisplay of its RawFormat; TyDefaultRowDisplay for a
@@ -3951,6 +3959,15 @@ end;
   double line its outer thirds; dots and dashes as long as the line is wide (dashes three
   times, gaps two), counted from the target's origin so that the pieces of two cells' lines
   go on as one. }
+procedure TTyRowLayout.SetCellHighlight(const ACells: array of Boolean);
+var
+  i: Integer;
+begin
+  FHighlight := nil;
+  SetLength(FHighlight, Length(ACells));
+  for i := 0 to High(ACells) do FHighlight[i] := ACells[i];
+end;
+
 procedure DrawCellLine(ATarget: TBGRABitmap; AX0, AY0, AX1, AY1: Integer; AAcross: Boolean;
   AStyle: TTyRichBorderStyle; const AColor: TBGRAPixel);
 var
@@ -4016,6 +4033,7 @@ procedure TTyRowLayout.PaintRow(ATarget: TBGRABitmap; AX, AY: Integer; const ACl
 var
   i, k, w, lo, hi, next: Integer;
   s: TTyRowCellSide;
+  lit: Boolean;
   clip, old, cr, box: TRect;
   bx: ^TTyRichCellBox;
   it: ^TTyRichRowItem;
@@ -4043,6 +4061,7 @@ begin
     box := Rect(AX + bx^.Left, AY, AX + bx^.Right, AY + FHeight);
     if not Types.IntersectRect(cr, clip, box) then Continue;
     st := AStyle;
+    lit := (i < System.Length(FHighlight)) and FHighlight[i];
     if (bx^.Shading <> clNone) and (bx^.Shading <> clDefault) then
     begin
       ATarget.ClipRect := cr;
@@ -4054,13 +4073,29 @@ begin
       end;
       st.TextColor := TextInk(clDefault, bx^.Shading, AStyle);
     end;
+    if lit then
+    begin
+      { a cell selected whole: the selection's colour over the whole box, its text all
+        selected (in the selection's text colour, with no band of its own over the fill) }
+      ATarget.ClipRect := cr;
+      try
+        ATarget.FillRect(box.Left, box.Top, box.Right, box.Bottom, AStyle.SelectionBack,
+          dmDrawWithTransparency);
+      finally
+        ATarget.ClipRect := old;
+      end;
+      st.SelectionBack.alpha := 0;
+    end;
     for k := bx^.FirstItem to bx^.FirstItem + bx^.ItemCount - 1 do
     begin
       it := @FItems[k];
       if it^.Cell <> i then Continue;
       if (AY + it^.Y >= cr.Bottom) or (AY + it^.Y + it^.Layout.Height <= cr.Top) then Continue;
-      it^.Layout.Paint(ATarget, AX + it^.X, AY + it^.Y, cr, st, ASelFrom - it^.Pos,
-        ASelTo - it^.Pos);
+      if lit then
+        it^.Layout.Paint(ATarget, AX + it^.X, AY + it^.Y, cr, st, 0, it^.Layout.Length + 1)
+      else
+        it^.Layout.Paint(ATarget, AX + it^.X, AY + it^.Y, cr, st, ASelFrom - it^.Pos,
+          ASelTo - it^.Pos);
     end;
   end;
   { then the lines, over them - the narrower first: where two lines cross (a cell's corner)

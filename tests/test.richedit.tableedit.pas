@@ -2049,15 +2049,33 @@ begin
     // a row's paragraphs
     w := 2 + 2 * n;
     ResetEvents;
-    // a selection across a cell's edge: refused, as before
+    { a selection across a cell's edge selects those cells (tyControls.RichEdit.TableSel):
+      typing, Delete and Backspace take them, each one step }
     FRich.SelStart := t.ParaStart(f) + 1;
     FRich.SelLength := t.ParaStart(f + 1) + 1 - FRich.SelStart;
     FRich.Key8('x');
-    CheckRefused('typed over cells', False, rsRichEditRefusedCells);
+    AssertEquals('typed over cells: taken', 0, FRich.Refused);
+    AssertTrue('typed over cells: the first cell', Pos('x|', Shape(d, f)) = 1);
+    FRich.Undo;
+    AssertEquals('typed over cells: undone', before, Shape(d, f));
+    FRich.SelStart := t.ParaStart(f) + 1;
+    FRich.SelLength := t.ParaStart(f + 1) + 1 - FRich.SelStart;
     Press(VK_DELETE);
-    CheckRefused('Delete over cells', False, rsRichEditRefusedCells);
+    AssertEquals('Delete over cells: taken', 0, FRich.Refused);
+    AssertTrue('Delete over cells: cleared', Pos('|', Shape(d, f)) = 1);
+    FRich.Undo;
+    AssertEquals('Delete over cells: undone', before, Shape(d, f));
+    FRich.SelStart := t.ParaStart(f) + 1;
+    FRich.SelLength := t.ParaStart(f + 1) + 1 - FRich.SelStart;
     Press(VK_BACK);
-    CheckRefused('Backspace over cells', False, rsRichEditRefusedCells);
+    AssertEquals('Backspace over cells: taken', 0, FRich.Refused);
+    AssertTrue('Backspace over cells: changed', Shape(d, f) <> before);
+    FRich.Undo;
+    AssertEquals('Backspace over cells: undone', before, Shape(d, f));
+    // a cut, a paste of plain text and a replace over them: refused, as before
+    FRich.SelStart := t.ParaStart(f) + 1;
+    FRich.SelLength := t.ParaStart(f + 1) + 1 - FRich.SelStart;
+    ResetEvents;
     FRich.CutToClipboard;
     CheckRefused('Cut over cells', False, rsRichEditRefusedCells);
     FRich.ClipRtf := '';
@@ -2068,12 +2086,13 @@ begin
       FRich.ReplaceAll(ParaText(d, f) + LineEnding + ParaText(d, f + 1), 'y', [], skipped));
     AssertEquals('replace over cells: skipped', 1, skipped);
     AssertEquals('nothing changed', before, Shape(d, f));
-    // whole rows: Delete, Backspace and Cut take them
-    FRich.SelStart := t.ParaStart(f + w);
-    FRich.SelLength := t.ParaStart(f + 2 * w) - FRich.SelStart;
+    { whole rows: Delete clears their cells (the first row's - the inserted one is empty),
+      Backspace and Cut take them }
+    FRich.SelStart := t.ParaStart(f);
+    FRich.SelLength := t.ParaStart(f + w) - FRich.SelStart;
     Press(VK_DELETE);
     AssertEquals('Delete: whole rows', 0, FRich.Refused);
-    AssertTrue('Delete: a row less', Shape(d, f) <> before);
+    AssertTrue('Delete: their cells cleared', Shape(d, f) <> before);
     FRich.Undo;
     AssertEquals('undone', before, Shape(d, f));
     FRich.SelStart := t.ParaStart(f + w);
@@ -2089,7 +2108,7 @@ begin
     AssertTrue('Cut: a row less', Shape(d, f) <> before);
     FRich.Undo;
     AssertEquals('undone again', before, Shape(d, f));
-    // rows pasted with the caret in a cell: the cell's text
+    // rows pasted with the caret in a cell: cell by cell from it
     FRich.SelStart := t.ParaStart(f);
     FRich.ClipRtf := RowsRtf;
     FRich.ClipText := '';
@@ -2097,13 +2116,15 @@ begin
     AssertEquals('pasted into a cell: not refused', 0, FRich.Refused);
     AssertEquals('as many rows', Length(before) - Length(StringReplace(before, '/', '', [rfReplaceAll])),
       Length(Shape(d, f)) - Length(StringReplace(Shape(d, f), '/', '', [rfReplaceAll])));
-    AssertTrue('the rows'' text in the cell', Pos('p1+p2', Shape(d, f)) = 1);
+    AssertTrue('the rows'' cells in the cells', Pos('p1|p2', Shape(d, f)) = 1);
     FRich.Undo;
-    // rows pasted over whole rows: refused, with a reason that promises nothing
+    // rows pasted over whole rows: cell by cell from their first
     FRich.SelStart := t.ParaStart(f + w);
     FRich.SelLength := t.ParaStart(f + 2 * w) - FRich.SelStart;
     FRich.PasteFromClipboard;
-    CheckRefused('rows over rows', False, rsRichEditRefusedPasteRows);
+    AssertEquals('rows over rows: not refused', 0, FRich.Refused);
+    AssertTrue('rows over rows: there', Pos('/p1|p2', Shape(d, f)) > 0);
+    FRich.Undo;
     AssertEquals('nothing changed at last', before, Shape(d, f));
   end;
 end;

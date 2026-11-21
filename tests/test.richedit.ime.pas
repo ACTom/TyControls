@@ -1909,8 +1909,9 @@ begin
   AssertEquals('the selection when it began replaced, not all', 'Hello QQ', FRich.Lines[0]);
 end;
 
-{ the commit is typing - the one routine: it is refused where a typed character is (a
-  selection across cells; the cut of a long paragraph), keeps the paragraph end before a table
+{ the commit is typing - the one routine: over cells it replaces the first one's content as
+  a typed character does; it is refused where a typed character is (the cut of a long
+  paragraph), keeps the paragraph end before a table
   as typing does, and goes in in the format its composition was shown in; a composition does
   not begin where a typed character would be refused. }
 procedure TTyRichEditImeTest.TestACommitIsTypingAtEveryRule;
@@ -1955,7 +1956,7 @@ begin
   AssertEquals('the first cell as it was', cell, FRich.Lines[kt]);
   AssertEquals('as many paragraphs', n, t.ParaCount);
   FRich.Undo;
-  // across two cells: neither begins, nor goes in
+  // across two cells: typing replaces the first cell's content, and so does a commit
   k := kt + 1;
   while (k < t.ParaCount) and (d.CellAt(k) = d.CellAt(kt)) do Inc(k);
   AssertTrue('a paragraph of another cell', (k < t.ParaCount) and (d.CellAt(k) <> nil));
@@ -1963,20 +1964,21 @@ begin
   FRich.SelLength := t.ParaStart(k) + 1 - FRich.SelStart;
   ResetEvents;
   FRich.Key8('Q');
-  AssertEquals('typing across cells: refused once', 1, FRich.Refused);
-  AssertEquals('why', rsRichEditRefusedCells, FRich.LastReason);
+  AssertEquals('typing across cells: not refused', 0, FRich.Refused);
+  AssertEquals('typing across cells: the first cell', 'Q', FRich.Lines[kt]);
+  typed := FRich.Lines.Text;
+  FRich.Undo;
+  AssertEquals('typing undone', cell, FRich.Lines[kt]);
+  FRich.SelStart := t.ParaStart(kt) + 1;
+  FRich.SelLength := t.ParaStart(k) + 1 - FRich.SelStart;
   ResetEvents;
-  AssertFalse('a composition across cells does not begin', FRich.BeginComposition);
-  AssertEquals('refused once, as typing', 1, FRich.Refused);
-  AssertEquals('why: the same', rsRichEditRefusedCells, FRich.LastReason);
+  AssertTrue('a composition across cells begins', FRich.BeginComposition);
   FRich.UpdateComposition('Q');
   FRich.CommitComposition('Q');
-  AssertEquals('what the input method sends after goes nowhere, told once', 1, FRich.Refused);
-  ResetEvents;
-  FRich.CancelComposition;
-  FRich.CommitComposition('Q');
-  AssertEquals('a commit with no composition across cells: refused once', 1, FRich.Refused);
-  AssertEquals('nothing went in', cell, FRich.Lines[kt]);
+  AssertEquals('the commit across cells: not refused', 0, FRich.Refused);
+  AssertEquals('the commit as the typed character, across cells', typed, FRich.Lines.Text);
+  FRich.Undo;
+  AssertEquals('nothing left of it', cell, FRich.Lines[kt]);
   // the cut of a long paragraph
   SetText(StringOfChar('a', CRichMaxParaLayoutChars) + LineEnding + 'b');
   FRich.SelStart := CRichMaxParaLayoutChars;

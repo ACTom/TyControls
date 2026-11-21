@@ -2211,7 +2211,8 @@ begin
 end;
 
 { Rows go in as rows at the caret in a plain paragraph; with the caret in a cell, or a
-  selection in a table being replaced, as paragraphs - never a nested table. }
+  selection in a cell being replaced, cell by cell from that cell (what passes its columns left
+  out, told once) - never a nested table. }
 procedure TTyRichEditPasteTest.TestRowsAreRowsOutsideATableAndTextInOne;
 var
   d: TTyRichDocument;
@@ -2237,20 +2238,26 @@ begin
   d := FRich.Document;
   c := d.CellAt(1);
   FRich.SelStart := d.Text.ParaStart(1) + 2;
+  ResetEvents;
   FRich.PasteFromClipboard;
-  AssertEquals('in a cell: paragraphs', 5, d.Text.ParaCount);
-  for i := 1 to 3 do AssertTrue(Format('paragraph %d in the cell', [i]), d.CellAt(i) = c);
-  AssertEquals('in a cell: the text', 'cer1', Para(1));
-  // a selection in a table replaced
+  AssertEquals('in a cell: paragraphs', 3, d.Text.ParaCount);
+  AssertTrue('in a cell: the cell', d.CellAt(1) = c);
+  AssertEquals('in a cell: its first cell', 'r1', Para(1));
+  AssertEquals('in a cell: the second left out, told once', 1, FRich.Refused);
+  // a selection in a cell replaced
   LoadRtf(Target);
   d := FRich.Document;
   c := d.CellAt(1);
   FRich.SelStart := d.Text.ParaStart(1) + 1;
   FRich.SelLength := 2;
   FRich.PasteFromClipboard;
-  for i := 1 to 3 do AssertTrue(Format('a selection in a cell: paragraph %d in it', [i]), d.CellAt(i) = c);
+  AssertTrue('a selection in a cell: the cell', d.CellAt(1) = c);
+  AssertEquals('a selection in a cell: its first cell', 'r1', Para(1));
+  for i := 0 to d.Text.ParaCount - 1 do
+    AssertTrue(Format('a selection in a cell: no other table (%d)', [i]),
+      (d.CellAt(i) = nil) or (d.CellAt(i).Table = c.Table));
   AssertEquals('one table, one row', 1, c.Table.RowCount);
-  // the whole row selected: rows over it are refused (TestRowsOverWholeRowsAreRefused)
+  // the whole row selected: cell by cell too (TestRowsOverWholeRowsAreRefused)
 end;
 
 { No document-level thing comes along (page, defaults); a run with no font of its own is
@@ -2811,7 +2818,7 @@ begin
 end;
 
 { Bytes that are not UTF-8 are read as the text reader reads them (the ANSI code page), never
-  refused half way; in a cell the lines are paragraphs of that cell. }
+  refused half way; in a cell, text with tabs (a spreadsheet's) fills the cells, a line a row. }
 procedure TTyRichEditPasteTest.TestPlainTextThatIsNotUtf8AndInACell;
 var
   d: TTyRichDocument;
@@ -2849,11 +2856,16 @@ begin
   c := d.CellAt(0);
   FRich.SelStart := 1;
   Clip('', 'one'#9'two'#13#10'three');
+  ResetEvents;
   FRich.PasteFromClipboard;
   AssertEquals('in a cell: paragraphs', 3, d.Text.ParaCount);
-  for i := 0 to 1 do AssertTrue(Format('paragraph %d in the cell', [i]), d.CellAt(i) = c);
-  AssertEquals('no cells from tabs', 'xone'#9'two', Para(0));
-  AssertEquals('one row still', 1, c.Table.RowCount);
+  for i := 0 to 1 do AssertTrue(Format('paragraph %d in a cell', [i]), d.CellAt(i) <> nil);
+  AssertEquals('cells from tabs', 'one', Para(0));
+  AssertEquals('a row added for the second line', 'three', Para(1));
+  AssertEquals('two rows', 2, d.CellAt(0).Table.RowCount);
+  AssertEquals('the column that does not fit: told once', 1, FRich.Refused);
+  AssertEquals('why', rsRichEditPasteCellsDropped, FRich.LastReason);
+  AssertTrue('the first cell is the one it was', d.CellAt(0) = c);
 end;
 
 { CanPaste (the menu asks on every popup) reads nothing: only which flavours are there. }
@@ -3211,10 +3223,9 @@ begin
   end;
 end;
 
-{ A paste of rows over a selection of whole rows is refused, with a reason of its own (the
-  rows would go into the next row's first cell, and rows put into the table would need its
-  columns and theirs made one); plain content over whole rows goes in as typing over them
-  does. }
+{ A paste of rows over a selection of whole rows fills them cell by cell (what passes the
+  table's columns left out, told once); plain content over whole rows goes in as typing over
+  them does. }
 procedure TTyRichEditPasteTest.TestRowsOverWholeRowsAreRefused;
 const
   Rows = '{' + BS + 'rtf1' + BS + 'ansi' + BS + 'trowd' + BS + 'cellx1000' + BS + 'cellx2000' +
@@ -3233,9 +3244,12 @@ begin
   FRich.SelLength := d.Text.ParaStart(2) - d.Text.ParaStart(1);
   Clip(Rows, '');
   FRich.PasteFromClipboard;
-  AssertEquals('refused', 1, FRich.Refused);
-  AssertEquals('rows over rows', rsRichEditRefusedPasteRows, FRich.LastReason);
-  AssertTrue('nothing changed', SameRaw(before, d.Text.GetText(0, d.Text.Length)));
+  AssertEquals('told once', 1, FRich.Refused);
+  AssertEquals('the cell that does not fit', rsRichEditPasteCellsDropped, FRich.LastReason);
+  AssertEquals('cell by cell', 'r1', Para(1));
+  AssertEquals('the next row as it was', 'c2', Para(2));
+  FRich.Undo;
+  AssertTrue('undone', SameRaw(before, d.Text.GetText(0, d.Text.Length)));
   // RTF without rows over the same selection: as typing over it
   ResetEvents;
   FRich.SelStart := d.Text.ParaStart(1);

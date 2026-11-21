@@ -1092,6 +1092,10 @@ msgstr ""
 msgid "%s more characters of this paragraph are not shown."
 msgstr ""
 
+#: tycontrols.strconsts.rsricheditpastecellsdropped
+msgid "Some of the pasted cells did not fit in the table's columns and were left out."
+msgstr ""
+
 #: tycontrols.strconsts.rsricheditrefusedbookmarkexists
 msgid "There is a bookmark of that name already."
 msgstr ""
@@ -1219,6 +1223,10 @@ msgstr ""
 
 #: tycontrols.strconsts.rsricheditrefusedsaving
 msgid "The document is being saved: it cannot be changed meanwhile."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditrefusedselectnotwhole
+msgid "This table is too large, or not complete in its file, for a whole column or the whole table to be selected."
 msgstr ""
 
 #: tycontrols.strconsts.rsricheditrefusedtablecolumns

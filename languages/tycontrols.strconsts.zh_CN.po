@@ -1091,6 +1091,14 @@ msgstr "这个表格太大，或者在文件里不完整，不能插入或删除
 msgid "This table is too large, or not complete in its file, to be deleted as a whole."
 msgstr "这个表格太大，或者在文件里不完整，不能整个删除。"
 
+#: tycontrols.strconsts.rsricheditrefusedselectnotwhole
+msgid "This table is too large, or not complete in its file, for a whole column or the whole table to be selected."
+msgstr "这个表格太大，或者在文件里不完整，不能选中整列或整个表格。"
+
+#: tycontrols.strconsts.rsricheditpastecellsdropped
+msgid "Some of the pasted cells did not fit in the table's columns and were left out."
+msgstr "粘贴的单元格有一部分超出了表格的列，没有粘贴进去。"
+
 #: tycontrols.strconsts.rsricheditrefusedirregularrows
 msgid "The rows of this table do not all have the same number of cells: its columns cannot be inserted or deleted."
 msgstr "这个表格各行的单元格数不一样，不能插入或删除它的列。"

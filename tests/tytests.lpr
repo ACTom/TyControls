@@ -326,7 +326,8 @@ uses
   test.richedit.builder,
   test.richedit.wordlists,
   test.richedit.tableprops,
-  test.richedit.tablepaint;
+  test.richedit.tablepaint,
+  test.richedit.tablesel;
 
 type
   TTyTestRunner = class(TTestRunner)

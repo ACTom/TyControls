@@ -1978,6 +1978,11 @@ type
     function CellProps(ATablePos: TTyRichPos; ARow, ACol: Integer): TTyRichCellProps;
     { Row ARow's properties, as CellProps finds the row; Valid empty: no such row. }
     function RowProps(ATablePos: TTyRichPos; ARow: Integer): TTyRichRowProps;
+    { The row paragraph APara is in, counted as the table edits count them, and how many rows
+      its table has (a table a loader gives in parts and cannot give whole: in its part).
+      False outside a table. Reads one paragraph while the table's rows are known; otherwise
+      one walk of the table. }
+    function TableRowIndex(APara: Integer; out ARow, ARowCount: Integer): Boolean;
     { The width the text has on the page, in twips: the paper's width less the left and the
       right margin (what a page-wide layout wraps at). A table made without a width of its
       own is this wide. }
@@ -8770,6 +8775,38 @@ begin
     if row <> nil then Result := row.Format.Row;
   finally
     EndRead;
+  end;
+end;
+
+function TTyRichDocument.TableRowIndex(APara: Integer; out ARow, ARowCount: Integer): Boolean;
+var
+  c: TTyRichCell;
+  t: TTyRichTable;
+  info: TTyRichTableInfo;
+begin
+  ARow := -1;
+  ARowCount := 0;
+  if (APara < 0) or (APara >= FText.ParaCount) then Exit(False);
+  BeginRead;
+  try
+    c := CellAt(APara);
+    if c = nil then Exit(False);
+    t := c.FRow.FTable;
+    if not t.FCut and t.FRowsValid and (c.FRow.FIndex >= 0) and
+       (c.FRow.FIndex < Length(t.FRows)) and (t.FRows[c.FRow.FIndex] = c.FRow) then
+    begin
+      ARow := c.FRow.FIndex;
+      ARowCount := Length(t.FRows);
+      Exit(True);
+    end;
+  finally
+    EndRead;
+  end;
+  Result := TableInfoAt(APara, info);
+  if Result then
+  begin
+    ARow := info.Row;
+    ARowCount := info.RowCount;
   end;
 end;
 

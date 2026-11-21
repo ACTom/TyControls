@@ -375,6 +375,8 @@ resourcestring
   rsRichEditRefusedNestedTable   = 'This table has a table inside one of its cells: its rows and columns cannot be inserted or deleted.';
   rsRichEditRefusedTableNotWhole = 'This table is too large, or not complete in its file, for its rows and columns to be inserted or deleted.';
   rsRichEditRefusedDeleteNotWhole = 'This table is too large, or not complete in its file, to be deleted as a whole.';
+  rsRichEditRefusedSelectNotWhole = 'This table is too large, or not complete in its file, for a whole column or the whole table to be selected.';
+  rsRichEditPasteCellsDropped = 'Some of the pasted cells did not fit in the table''s columns and were left out.';
   rsRichEditRefusedIrregularRows = 'The rows of this table do not all have the same number of cells: its columns cannot be inserted or deleted.';
   rsRichEditRefusedTableSize     = 'A table can have 1 to %d rows and 1 to %d columns.';
   rsRichEditRefusedTableColumns  = 'This table has as many columns as a table can have (%d).';
