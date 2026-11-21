@@ -1124,6 +1124,10 @@ msgstr ""
 msgid "The caret is not in a table."
 msgstr ""
 
+#: tycontrols.strconsts.rsricheditrefusedpage
+msgid "The page's margins leave no width for the text."
+msgstr ""
+
 #: tycontrols.strconsts.rsricheditrefusedpasterows
 msgid "Table rows cannot be pasted over rows of a table: paste them outside the table, or into a cell as its text."
 msgstr ""
@@ -1262,6 +1266,10 @@ msgstr ""
 
 #: tycontrols.strconsts.rsrichundoresizeobject
 msgid "Resize object"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichundosettings
+msgid "Document settings"
 msgstr ""
 
 #: tycontrols.strconsts.rsrichundotyping

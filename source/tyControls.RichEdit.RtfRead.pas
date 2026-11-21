@@ -60,6 +60,15 @@ type
   end;
   TTyRtfRanges = array of TTyRtfRange;
 
+  // The words of a header's {\*\defchp ...} the reader takes (-1 / 0: not there).
+  TTyRtfDefChp = record
+    Font: Integer;
+    SizeHalfPt: Integer;
+    Style: TFontStyles;
+    Strike: Boolean;
+    Color: Integer;
+  end;
+
   // How the reader cut the file: the header (everything before the first paragraph: the
   // tables, \info, document properties), one range per paragraph of the document, and the
   // trailer (what follows the last paragraph: Word's closing blocks, the closing brace,
@@ -347,6 +356,15 @@ type
     FAnsiCpSet: Boolean;
     FDeff: Integer;
     FPaperW, FPaperH, FMargL, FMargR: Integer;
+    // The document's settings the header holds beside the page: its ground (Word's page
+    // colour, {\*\background}; clNone none), its defaults ({\*\defchp}, {\*\defpap}: the
+    // words DefaultCharFormat and DefaultParaFormat take from them), and where the header
+    // has each (Start -1: it has none) - what a writer puts its own in place of.
+    FDocColor: TColor;
+    FDefChp: TTyRtfDefChp;
+    FDefPap: TTyParaFormat;
+    FPaperWAt, FMargLAt, FMargRAt, FBackgroundAt, FDefChpAt, FDefPapAt,
+      FViewBkAt: TTyRtfRange;
     FFonts: array of TTyRtfFont;
     FFontCount: Integer;
     FFontsSorted: Boolean;
@@ -474,6 +492,8 @@ type
     function HandleDestination(AKw: Integer): Boolean;
     procedure BeginDest(ADest: TTyRtfDest);
     procedure EndDest(const AOld: TTyRtfProps);
+    // a header's {\*\background}, {\*\defchp} or {\*\defpap} at [AStart, AStop)
+    procedure DocGroup(AKw: Integer; AStart, AStop: PtrInt);
     procedure Extend(AWasBrace: Boolean);
     // body, paragraphs, tables
     procedure ParaStartsAt(APos: PtrInt; ADepth: Integer);
@@ -528,6 +548,8 @@ type
     function BuildCharFormat(AClass: TTyRtfCharClass; AOneShot: Boolean): TTyCharFormat;
     function CharFormatFor(AClass: TTyRtfCharClass): TTyCharFormatId;
     function PlainListWords(const ANodes: TTyRtfNodes): Boolean;
+    function CustomBulletWords(const ANodes: TTyRtfNodes; out ABullet: UTF8String): Boolean;
+    function ParaShading(const ANodes: TTyRtfNodes): TColor;
     function BuildParaFormat: TTyParaFormat;
     function ParaFormatId: TTyParaFormatId;
     function Fragment(const R: TTyRtfRange): RawByteString;
@@ -553,6 +575,18 @@ type
     procedure Resume(const AState: TTyRtfState);
     procedure CopyTablesFrom(AOther: TTyRtfParser);
     function DefaultCharFormat: TTyCharFormat;
+    // the header's {\*\defpap} (TyDefaultParaFormat without one)
+    function DefaultParaFormat: TTyParaFormat;
+    // Word's page colour ({\*\background}); clNone: none
+    property DocumentColor: TColor read FDocColor;
+    { Where the header has these (Start -1: nowhere): the last \paperwN, \marglN, \margrN
+      before the body, and the groups. }
+    property PaperWAt: TTyRtfRange read FPaperWAt;
+    property MargLAt: TTyRtfRange read FMargLAt;
+    property MargRAt: TTyRtfRange read FMargRAt;
+    property BackgroundAt: TTyRtfRange read FBackgroundAt;
+    property DefChpAt: TTyRtfRange read FDefChpAt;
+    property DefPapAt: TTyRtfRange read FDefPapAt;
     // Paragraph AIndex's text (building only), without its separator.
     function ParaText(AIndex: Integer): RawByteString;
     // The paragraphs this parser read (after a Resume: ParaRec(0) is the first after the
@@ -1106,6 +1140,10 @@ const
   kwDOpaque = 170;          // a non-text block: one object
   kwDCharExtra = 171;       // a property group: the run's Extra
   kwDParaExtra = 172;       // a property group: the paragraph's Extra
+  // the document's settings in the header: kept in its bytes, and read
+  kwDBackground = 191;      // {\*\background ...}: the page colour's shape
+  kwDDefChp = 192;          // {\*\defchp ...}: the default character format
+  kwDDefPap = 193;          // {\*\defpap ...}: the default paragraph format
 
 type
   TWordDef = record
@@ -1205,8 +1243,8 @@ const
     (N: 'nonesttables'; K: kwDNestSkip),
     // document-level destinations
     (N: 'stylesheet'; K: kwDDocSkip), (N: 'info'; K: kwDDocSkip), (N: 'generator'; K: kwDDocSkip),
-    (N: 'revtbl'; K: kwDDocSkip), (N: 'rsidtbl'; K: kwDDocSkip), (N: 'defchp'; K: kwDDocSkip),
-    (N: 'defpap'; K: kwDDocSkip), (N: 'latentstyles'; K: kwDDocSkip),
+    (N: 'revtbl'; K: kwDDocSkip), (N: 'rsidtbl'; K: kwDDocSkip), (N: 'defchp'; K: kwDDefChp),
+    (N: 'defpap'; K: kwDDefPap), (N: 'latentstyles'; K: kwDDocSkip),
     (N: 'themedata'; K: kwDDocSkip), (N: 'colorschememapping'; K: kwDDocSkip),
     (N: 'datastore'; K: kwDDocSkip), (N: 'xmlnstbl'; K: kwDDocSkip),
     (N: 'listpicture'; K: kwDDocSkip), (N: 'pgdsctbl'; K: kwDDocSkip),
@@ -1220,7 +1258,7 @@ const
     (N: 'panose'; K: kwDDocSkip), (N: 'fname'; K: kwDDocSkip), (N: 'listname'; K: kwDDocSkip),
     (N: 'leveltext'; K: kwDDocSkip), (N: 'levelnumbers'; K: kwDDocSkip),
     (N: 'picprop'; K: kwDDocSkip), (N: 'blipuid'; K: kwDDocSkip),
-    (N: 'passwordhash'; K: kwDDocSkip), (N: 'background'; K: kwDDocSkip),
+    (N: 'passwordhash'; K: kwDDocSkip), (N: 'background'; K: kwDBackground),
     (N: 'header'; K: kwDHeaderFooter), (N: 'headerl'; K: kwDHeaderFooter),
     (N: 'headerr'; K: kwDHeaderFooter), (N: 'headerf'; K: kwDHeaderFooter),
     (N: 'footer'; K: kwDHeaderFooter), (N: 'footerl'; K: kwDHeaderFooter),
@@ -1767,6 +1805,20 @@ begin
   FPaperH := 15840;
   FMargL := 1800;
   FMargR := 1800;
+  FDocColor := clNone;
+  FDefChp.Font := -1;
+  FDefChp.SizeHalfPt := 0;
+  FDefChp.Style := [];
+  FDefChp.Strike := False;
+  FDefChp.Color := 0;
+  FDefPap := TyDefaultParaFormat;
+  FPaperWAt := Range(-1, -1);
+  FMargLAt := Range(-1, -1);
+  FMargRAt := Range(-1, -1);
+  FBackgroundAt := Range(-1, -1);
+  FDefChpAt := Range(-1, -1);
+  FDefPapAt := Range(-1, -1);
+  FViewBkAt := Range(-1, -1);
   FDecNum := -100;
   FSep := #13#10;
   if TyRichPlatformLineBreak = rsLF then FSep := #10
@@ -2068,6 +2120,16 @@ begin
   FPaperH := AOther.FPaperH;
   FMargL := AOther.FMargL;
   FMargR := AOther.FMargR;
+  FDocColor := AOther.FDocColor;
+  FDefChp := AOther.FDefChp;
+  FDefPap := AOther.FDefPap;
+  FPaperWAt := AOther.FPaperWAt;
+  FMargLAt := AOther.FMargLAt;
+  FMargRAt := AOther.FMargRAt;
+  FBackgroundAt := AOther.FBackgroundAt;
+  FDefChpAt := AOther.FDefChpAt;
+  FDefPapAt := AOther.FDefPapAt;
+  FViewBkAt := AOther.FViewBkAt;
 end;
 
 // ---- the loop ----
@@ -2869,6 +2931,12 @@ begin
     kwDListTable: BeginDest(rdListTable);
     kwDOverrideTable: BeginDest(rdOverrideTable);
     kwDDocSkip, kwDFldInst, kwDFldRslt, kwDPnText, kwDUd: SkipAndPop;
+    kwDBackground, kwDDefChp, kwDDefPap:
+      begin
+        // the header's bytes as the other document-level groups; read for the settings
+        SkipAndPop;
+        if not FS.BodyStarted then DocGroup(AKw, start, FTokStop);
+      end;
     kwDNestSkip:
       begin
         MarkNested;
@@ -2966,6 +3034,142 @@ begin
     else
       Result := False;
   end;
+end;
+
+// The document's settings in the header's groups. {\*\background}: Word's page colour, the
+// fill of the shape in it ({\sp{\sn fillColor}{\sv N}}, N as a COLORREF; {\sn fFilled} 0: no
+// fill). {\*\defchp} and {\*\defpap}: the defaults, the words of them the model holds (a font,
+// a size, bold, italic, underline, strike-through, a colour; the alignment, the indents, the
+// space before and after, the line spacing) - the others stay in the header's bytes only.
+procedure TTyRtfParser.DocGroup(AKw: Integer; AStart, AStop: PtrInt);
+var
+  lex: TTyRtfLexer;
+  t: TTyRtfToken;
+  name: string;
+  depth, fill, filled, sl, slMult: Integer;
+  on: Boolean;
+  last, prop: string;
+
+  function TextOf(const T: TTyRtfToken): string;
+  begin
+    SetLength(Result, T.Stop - T.Start);
+    if T.Stop > T.Start then Move(FBuf[T.Start], Result[1], T.Stop - T.Start);
+    Result := Trim(Result);
+  end;
+
+begin
+  lex.Init(FBuf, AStart, AStop);
+  case AKw of
+    kwDBackground:
+      begin
+        FBackgroundAt := Range(AStart, AStop);
+        fill := -1;
+        filled := 1;
+        last := '';
+        prop := '';
+        while lex.Next(t) do
+          if t.Kind = rtkWord then
+          begin
+            SetLength(last, t.NameLen);
+            Move(FBuf[t.NameStart], last[1], t.NameLen);
+          end
+          else if t.Kind = rtkText then
+          begin
+            // {\sn name}{\sv value}: the text after \sn is the property, after \sv its value
+            if last = 'sn' then prop := TextOf(t)
+            else if last = 'sv' then
+            begin
+              if SameText(prop, 'fillColor') then fill := StrToIntDef(TextOf(t), -1)
+              else if SameText(prop, 'fFilled') then filled := StrToIntDef(TextOf(t), 1);
+            end;
+            last := '';
+          end;
+        if (fill >= 0) and (filled <> 0) then FDocColor := TColor(fill and $FFFFFF)
+        else FDocColor := clNone;
+      end;
+    kwDDefChp:
+      begin
+        FDefChpAt := Range(AStart, AStop);
+        depth := 0;
+        while lex.Next(t) do
+          case t.Kind of
+            rtkGroupStart: Inc(depth);
+            rtkGroupEnd: Dec(depth);
+            rtkWord:
+              if depth = 1 then
+              begin
+                SetLength(name, t.NameLen);
+                Move(FBuf[t.NameStart], name[1], t.NameLen);
+                on := not t.HasParam or (t.Param <> 0);
+                if (name = 'f') and t.HasParam then FDefChp.Font := t.Param
+                else if (name = 'fs') and t.HasParam and (t.Param > 0) then
+                  FDefChp.SizeHalfPt := t.Param
+                else if name = 'b' then
+                  if on then Include(FDefChp.Style, fsBold) else Exclude(FDefChp.Style, fsBold)
+                else if name = 'i' then
+                  if on then Include(FDefChp.Style, fsItalic) else Exclude(FDefChp.Style, fsItalic)
+                else if name = 'ul' then
+                  if on then Include(FDefChp.Style, fsUnderline)
+                  else Exclude(FDefChp.Style, fsUnderline)
+                else if name = 'ulnone' then Exclude(FDefChp.Style, fsUnderline)
+                else if name = 'strike' then FDefChp.Strike := on
+                else if (name = 'cf') and t.HasParam then FDefChp.Color := t.Param;
+              end;
+          end;
+      end;
+    kwDDefPap:
+      begin
+        FDefPapAt := Range(AStart, AStop);
+        FDefPap := TyDefaultParaFormat;
+        depth := 0;
+        sl := 0;
+        slMult := 0;
+        while lex.Next(t) do
+          case t.Kind of
+            rtkGroupStart: Inc(depth);
+            rtkGroupEnd: Dec(depth);
+            rtkWord:
+              if depth = 1 then
+              begin
+                SetLength(name, t.NameLen);
+                Move(FBuf[t.NameStart], name[1], t.NameLen);
+                if name = 'ql' then FDefPap.Align := paraLeft
+                else if name = 'qc' then FDefPap.Align := paraCenter
+                else if name = 'qr' then FDefPap.Align := paraRight
+                else if name = 'qj' then FDefPap.Align := paraJustify
+                else if t.HasParam then
+                  if name = 'li' then FDefPap.LeftIndent := t.Param
+                  else if name = 'ri' then FDefPap.RightIndent := t.Param
+                  else if name = 'fi' then FDefPap.FirstIndent := t.Param
+                  else if name = 'sb' then FDefPap.SpaceBefore := t.Param
+                  else if name = 'sa' then FDefPap.SpaceAfter := t.Param
+                  else if name = 'sl' then sl := t.Param
+                  else if name = 'slmult' then slMult := t.Param;
+              end;
+          end;
+        // the line spacing as a paragraph's (BuildParaFormat)
+        if sl <> 0 then
+          if slMult = 1 then
+          begin
+            if sl > 0 then TyRichSetLineMultiple(FDefPap, sl / 240);
+          end
+          else if sl < 0 then
+          begin
+            FDefPap.LineSpacing := lsExact;
+            FDefPap.LineSpacingValue := -sl;
+          end
+          else
+          begin
+            FDefPap.LineSpacing := lsAtLeast;
+            FDefPap.LineSpacingValue := sl;
+          end;
+      end;
+  end;
+end;
+
+function TTyRtfParser.DefaultParaFormat: TTyParaFormat;
+begin
+  Result := FDefPap;
 end;
 
 function TextIsBreaks(const T: TTyRtfToken; ABuf: PByte): Boolean;
@@ -3977,6 +4181,13 @@ begin
         else
           if p >= 0 then FMargR := p;
         end;
+        // where the header says it (a writer puts a changed page there)
+        if not FS.BodyStarted then
+          case AKw of
+            kwPaperW: FPaperWAt := Range(FTok.Start, FTok.Stop);
+            kwMargL: FMargLAt := Range(FTok.Start, FTok.Stop);
+            kwMargR: FMargRAt := Range(FTok.Start, FTok.Stop);
+          end;
         TablesChanged;
       end;
     kwUc: if p >= 0 then FS.Props.Uc := p;
@@ -4777,7 +4988,8 @@ begin
                 else
                   Silence;
               // what the reader passes over, or reads as tables and properties
-              kwDFontTbl, kwDColorTbl, kwDListTable, kwDOverrideTable, kwDDocSkip, kwDFldInst,
+              kwDFontTbl, kwDColorTbl, kwDListTable, kwDOverrideTable, kwDDocSkip,
+              kwDBackground, kwDDefChp, kwDDefPap, kwDFldInst,
               kwDPnText, kwDNestSkip, kwDListText, kwDCharExtra, kwDParaExtra, kwDPn:
                 Silence;
               kwDUd:
@@ -5294,12 +5506,147 @@ begin
   Result := hasFont and hasIndent and hasText;
 end;
 
+function CodeUtf8(ACode: Cardinal): UTF8String;
+begin
+  if ACode < $80 then Result := AnsiChar(ACode)
+  else if ACode < $800 then
+    Result := AnsiChar($C0 or (ACode shr 6)) + AnsiChar($80 or (ACode and $3F))
+  else if ACode < $10000 then
+    Result := AnsiChar($E0 or (ACode shr 12)) + AnsiChar($80 or ((ACode shr 6) and $3F)) +
+      AnsiChar($80 or (ACode and $3F))
+  else
+    Result := AnsiChar($F0 or (ACode shr 18)) + AnsiChar($80 or ((ACode shr 12) and $3F)) +
+      AnsiChar($80 or ((ACode shr 6) and $3F)) + AnsiChar($80 or (ACode and $3F));
+end;
+
+// A paragraph's shading words among its kept words (\cbpatN the fill, \cfpatN the pattern's
+// colour, \shadingN how much of the pattern's colour, in hundredths of a percent): the colour
+// it shows - clNone for none (\cbpat0, the automatic colour, and no pattern), clDefault when
+// it has no such word or one names a colour the table lacks (they are then kept as written).
+function TTyRtfParser.ParaShading(const ANodes: TTyRtfNodes): TColor;
+var
+  i, param, cb, cf, sh: Integer;
+  frag: RawByteString;
+  back, fore: TColor;
+  any: Boolean;
+begin
+  Result := clDefault;
+  any := False;
+  cb := -1;
+  cf := -1;
+  sh := 0;
+  for i := 0 to High(ANodes) do
+  begin
+    frag := Fragment(Range(ANodes[i].A, ANodes[i].B));
+    if TyRtfParaExtraKind(frag, param) <> pekTop then Continue;
+    if TyRtfFragmentIsWord(frag, 'cbpat') then cb := param
+    else if TyRtfFragmentIsWord(frag, 'cfpat') then cf := param
+    else if TyRtfFragmentIsWord(frag, 'shading') then sh := param
+    else Continue;
+    any := True;
+  end;
+  if not any then Exit;
+  if (cb >= FColorCount) or (cf >= FColorCount) or (sh < 0) or (sh > 10000) then Exit;
+  // the fill (none where it is automatic), the pattern's colour mixed in over white
+  if cb > 0 then back := ColorOf(cb, clNone) else back := clNone;
+  if sh = 0 then Exit(back);
+  if cf > 0 then fore := ColorOf(cf, clBlack) else fore := clBlack;
+  if back = clNone then back := clWhite;
+  Result := RGBToColor(
+    (Red(fore) * sh + Red(back) * (10000 - sh) + 5000) div 10000,
+    (Green(fore) * sh + Green(back) * (10000 - sh) + 5000) div 10000,
+    (Blue(fore) * sh + Blue(back) * (10000 - sh) + 5000) div 10000);
+end;
+
+// A bullet's {\*\pn ...} words as a writer here writes a bullet of its own text:
+// \pnlvlblt (the list format), \pnindent0 and {\pntxtb text} - the text in \uN escapes and
+// ASCII, no font of its own - and nothing else. ABullet: the text.
+function TTyRtfParser.CustomBulletWords(const ANodes: TTyRtfNodes; out ABullet: UTF8String): Boolean;
+var
+  i, param: Integer;
+  frag: RawByteString;
+  hasIndent, hasText: Boolean;
+
+  function Decode(const S: RawByteString; out AText: UTF8String): Boolean;
+  var
+    lex: TTyRtfLexer;
+    t: TTyRtfToken;
+    p: PByte;
+    k: PtrInt;
+    code, pending: Cardinal;
+    skip: Boolean;
+  begin
+    Result := False;
+    AText := '';
+    p := PByte(PAnsiChar(S));
+    lex.Init(p, 0, Length(S));
+    pending := 0;
+    skip := False;
+    // {\pntxtb ...}: its words after the first, its text
+    if not lex.Next(t) or (t.Kind <> rtkGroupStart) then Exit;
+    if not lex.Next(t) or (t.Kind <> rtkWord) then Exit;
+    while lex.Next(t) do
+      case t.Kind of
+        rtkGroupEnd: Break;
+        rtkWord:
+          begin
+            if (t.NameLen <> 1) or (p[t.NameStart] <> Ord('u')) or not t.HasParam then Exit;
+            code := Cardinal(t.Param and $FFFF);
+            skip := True;
+            if (code >= $D800) and (code < $DC00) then
+            begin
+              pending := code;
+              Continue;
+            end;
+            if (code >= $DC00) and (code < $E000) and (pending <> 0) then
+              code := $10000 + ((pending - $D800) shl 10) + (code - $DC00);
+            pending := 0;
+            if (code < $20) or ((code >= $D800) and (code < $E000)) then Exit;
+            AText := AText + CodeUtf8(code);
+          end;
+        rtkText:
+          for k := t.Start to t.Stop - 1 do
+            if skip then skip := False   // the \uN's fallback character (\uc1)
+            else if p[k] in [32..126] then AText := AText + AnsiChar(p[k])
+            else if not (p[k] in [10, 13]) then Exit;
+        rtkHex:
+          if skip then skip := False else Exit;
+      else
+        Exit;
+      end;
+    Result := AText <> '';
+  end;
+
+begin
+  Result := False;
+  ABullet := '';
+  if (FS.Props.Ls > 0) or (FS.Props.ListKind <> lkBullet) then Exit;
+  hasIndent := False;
+  hasText := False;
+  for i := 0 to High(ANodes) do
+  begin
+    frag := Fragment(Range(ANodes[i].A, ANodes[i].B));
+    if TyRtfParaExtraKind(frag, param) <> pekPn then Continue;
+    if TyRtfFragmentIsWord(frag, 'pnindent') and (param = 0) then hasIndent := True
+    else if (Length(frag) > 8) and (Copy(frag, 1, 8) = '{\pntxtb') and
+      (frag <> '{\pntxtb\''B7}') and (frag <> '{\pntxtb\''b7}') and
+      Decode(frag, ABullet) then
+      hasText := True
+    else
+      Exit;
+  end;
+  Result := hasIndent and hasText;
+  if not Result then ABullet := '';
+end;
+
 function TTyRtfParser.BuildParaFormat: TTyParaFormat;
 var
   i, param: Integer;
   slExtra, plain: Boolean;
   nodes: TTyRtfNodes;
   frag: RawByteString;
+  bullet: UTF8String;
+  shade: TColor;
 begin
   Result := TyDefaultParaFormat;
   SettleLists;
@@ -5332,7 +5679,14 @@ begin
           360: Result.LineSpacing := ls15;
           480: Result.LineSpacing := lsDouble;
         else
-          slExtra := True;    // a multiple the model has no name for: kept as written
+          if Sl > 0 then
+          begin
+            // any other multiple: N / 240 of the line's own height (Word's 1.08 is 259)
+            Result.LineSpacing := lsMultiple;
+            Result.LineSpacingValue := Sl;
+          end
+          else
+            slExtra := True;    // a negative multiple means nothing: kept as written
         end
       else if Sl < 0 then
       begin
@@ -5355,12 +5709,24 @@ begin
     end;
     nodes := ListNodes(ParaExtra);
     plain := PlainListWords(nodes);
+    // a bullet of its own text, as a writer here writes one: the list format says it all
+    if not plain and CustomBulletWords(nodes, bullet) then
+    begin
+      plain := True;
+      Result.List.Bullet := bullet;
+    end;
+    shade := ParaShading(nodes);
     for i := 0 to High(nodes) do
     begin
       frag := Fragment(Range(nodes[i].A, nodes[i].B));
       if plain and (TyRtfParaExtraKind(frag, param) = pekPn) then Continue;
+      // the shading's words, which the format holds as its colour
+      if (shade <> clDefault) and (TyRtfFragmentIsWord(frag, 'cbpat') or
+         TyRtfFragmentIsWord(frag, 'cfpat') or TyRtfFragmentIsWord(frag, 'shading')) then
+        Continue;
       Result.Extra.Add(frag);
     end;
+    if shade <> clDefault then Result.Shading := shade;
     if slExtra then
     begin
       Result.Extra.Add(Fragment(SlTok));
@@ -5385,12 +5751,18 @@ var
 begin
   Result := TyDefaultCharFormat;
   Result.SizeHalfPt := DefaultSize;
-  i := FontOfNum(-1);
+  // the header's {\*\defchp}: its font in place of \deff's, its size in place of 12 pt
+  if FDefChp.Font >= 0 then i := FontIndex(FDefChp.Font) else i := -1;
+  if i < 0 then i := FontOfNum(-1);
   if i >= 0 then
   begin
     Result.FontName := AsString(FFonts[i].Name);
     if FFonts[i].Charset >= 0 then Result.Charset := FFonts[i].Charset;
   end;
+  if FDefChp.SizeHalfPt > 0 then Result.SizeHalfPt := FDefChp.SizeHalfPt;
+  Result.Style := FDefChp.Style;
+  Result.Strike := FDefChp.Strike;
+  if FDefChp.Color > 0 then Result.Color := ColorOf(FDefChp.Color, clDefault);
 end;
 
 // ---- results ----
@@ -6278,6 +6650,8 @@ begin
     // the defaults as this parse read them
     TRtfBuild.SetDefaultCharFormat(FDoc, p.DefaultCharFormat);
     TRtfBuild.SetPage(FDoc, p.PaperWidth, p.PaperHeight, p.MarginLeft, p.MarginRight);
+    TRtfBuild.SetDefaultParaFormat(FDoc, p.DefaultParaFormat);
+    TRtfBuild.SetDocumentColor(FDoc, p.DocumentColor);
   finally
     p.Free;
   end;
@@ -7101,6 +7475,8 @@ begin
       TRtfBuild.SetDefaultCharFormat(ADoc, load.FScan.DefaultCharFormat);
       TRtfBuild.SetPage(ADoc, load.FScan.PaperWidth, load.FScan.PaperHeight,
         load.FScan.MarginLeft, load.FScan.MarginRight);
+      TRtfBuild.SetDefaultParaFormat(ADoc, load.FScan.DefaultParaFormat);
+      TRtfBuild.SetDocumentColor(ADoc, load.FScan.DocumentColor);
       if load.FScan.Finished then
         load.Finish
       else

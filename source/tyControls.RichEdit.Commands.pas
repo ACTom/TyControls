@@ -13,7 +13,7 @@ unit tyControls.RichEdit.Commands;
 interface
 
 uses
-  Classes, SysUtils, tyControls.RichEdit.Text, tyControls.RichEdit.Model;
+  Classes, SysUtils, Graphics, ImgList, tyControls.RichEdit.Text, tyControls.RichEdit.Model;
 
 type
   { Inserts text (paragraph separators allowed) at APos; AFormat as TTyRichDocument's
@@ -142,6 +142,40 @@ type
     property HeightTwips: Integer read FHeight;
     { After the first run that changed something: the object it put in (nil before). }
     property NewObject: TTyRichObject read FNew;
+  end;
+
+  { A picture of AGraphic - or of image AIndex of AImages, at the list's own size - at APos,
+    as TTyRichInsertObject inserts one: a PNG and a JPEG keep their bytes, any other graphic
+    becomes PNG. Shown AWidthTwips x AHeightTwips; 0 for both: its pixels at 96 dpi; one of
+    them 0: the other side kept to the picture's shape. The picture is made here, once (the
+    graphic or the list is not kept: a redo puts the same picture back). Raises ETyRichModel
+    for an empty graphic, an index not in the list, or a size below 0. }
+  TTyRichInsertPicture = class(TTyRichInsertObject)
+  private
+    class function PictureOf(AGraphic: TGraphic; AWidthTwips,
+      AHeightTwips: Integer): TTyRichPicture;
+    class function PictureOfList(AImages: TCustomImageList; AIndex, AWidthTwips,
+      AHeightTwips: Integer): TTyRichPicture;
+  public
+    constructor Create(APos: TTyRichPos; AGraphic: TGraphic; AWidthTwips: Integer = 0;
+      AHeightTwips: Integer = 0; AFormat: TTyCharFormatId = TyRichInheritFormat); overload;
+    constructor Create(APos: TTyRichPos; AImages: TCustomImageList; AIndex: Integer;
+      AWidthTwips: Integer = 0; AHeightTwips: Integer = 0;
+      AFormat: TTyCharFormatId = TyRichInheritFormat); overload;
+    function Description: string; override;
+  end;
+
+  { The document's settings (TTyRichDocument.ChangeSettings: the page, the defaults, the
+    ground) become ASettings, one step. Settings equal to the document's: no step. }
+  TTyRichChangeSettings = class(TTyRichCommand)
+  private
+    FSettings: TTyRichDocSettings;
+  protected
+    procedure DoExecute(ADoc: TTyRichDocument); override;
+  public
+    constructor Create(const ASettings: TTyRichDocSettings);
+    function Description: string; override;
+    property Settings: TTyRichDocSettings read FSettings;
   end;
 
   { Inserts the content of ASource - a document of its own, what a reader made of a
@@ -563,6 +597,119 @@ begin
   if ACount = Length(AList) then SetLength(AList, ACount * 2 + 4);
   AList[ACount] := FObject;
   Inc(ACount);
+end;
+
+{ ---- TTyRichInsertPicture ---- }
+
+class function TTyRichInsertPicture.PictureOf(AGraphic: TGraphic; AWidthTwips,
+  AHeightTwips: Integer): TTyRichPicture;
+var
+  st: TBytesStream;
+  png: TPortableNetworkGraphic;
+  fmt: TTyRichPictureFormat;
+  bytes: TBytes;
+  w, h: Integer;
+begin
+  if (AGraphic = nil) or AGraphic.Empty or (AGraphic.Width <= 0) or (AGraphic.Height <= 0) then
+    raise ETyRichModel.Create('TTyRichInsertPicture needs a picture');
+  if (AWidthTwips < 0) or (AHeightTwips < 0) then
+    raise ETyRichModel.CreateFmt('A picture cannot be shown %d x %d twips',
+      [AWidthTwips, AHeightTwips]);
+  st := TBytesStream.Create;
+  try
+    // a PNG and a JPEG as their SaveToStream gives them; anything else as PNG
+    if AGraphic is TPortableNetworkGraphic then
+    begin
+      AGraphic.SaveToStream(st);
+      fmt := rpfPng;
+    end
+    else if AGraphic is TJPEGImage then
+    begin
+      AGraphic.SaveToStream(st);
+      fmt := rpfJpeg;
+    end
+    else
+    begin
+      png := TPortableNetworkGraphic.Create;
+      try
+        png.Assign(AGraphic);
+        png.SaveToStream(st);
+      finally
+        png.Free;
+      end;
+      fmt := rpfPng;
+    end;
+    bytes := Copy(st.Bytes, 0, st.Size);
+  finally
+    st.Free;
+  end;
+  // its pixels at 96 dpi (15 twips a pixel); one side given: the other in proportion
+  w := AWidthTwips;
+  h := AHeightTwips;
+  if (w = 0) and (h = 0) then
+  begin
+    w := AGraphic.Width * 15;
+    h := AGraphic.Height * 15;
+  end
+  else if w = 0 then
+    w := Round(h * AGraphic.Width / AGraphic.Height)
+  else if h = 0 then
+    h := Round(w * AGraphic.Height / AGraphic.Width);
+  if w < 1 then w := 1;
+  if h < 1 then h := 1;
+  Result := TTyRichPicture.Create(fmt, bytes, w, h);
+end;
+
+class function TTyRichInsertPicture.PictureOfList(AImages: TCustomImageList; AIndex,
+  AWidthTwips, AHeightTwips: Integer): TTyRichPicture;
+var
+  bmp: TBitmap;
+begin
+  if (AImages = nil) or (AIndex < 0) or (AIndex >= AImages.Count) then
+    raise ETyRichModel.CreateFmt('No image %d in the image list', [AIndex]);
+  bmp := TBitmap.Create;
+  try
+    // its alpha with it (an image list's bitmaps are 32-bit)
+    AImages.GetBitmap(AIndex, bmp);
+    Result := PictureOf(bmp, AWidthTwips, AHeightTwips);
+  finally
+    bmp.Free;
+  end;
+end;
+
+constructor TTyRichInsertPicture.Create(APos: TTyRichPos; AGraphic: TGraphic; AWidthTwips,
+  AHeightTwips: Integer; AFormat: TTyCharFormatId);
+begin
+  inherited Create(APos, PictureOf(AGraphic, AWidthTwips, AHeightTwips), AFormat);
+end;
+
+constructor TTyRichInsertPicture.Create(APos: TTyRichPos; AImages: TCustomImageList;
+  AIndex: Integer; AWidthTwips, AHeightTwips: Integer; AFormat: TTyCharFormatId);
+begin
+  inherited Create(APos, PictureOfList(AImages, AIndex, AWidthTwips, AHeightTwips), AFormat);
+end;
+
+function TTyRichInsertPicture.Description: string;
+begin
+  Result := rsRichUndoInsertPicture;
+end;
+
+{ ---- TTyRichChangeSettings ---- }
+
+constructor TTyRichChangeSettings.Create(const ASettings: TTyRichDocSettings);
+begin
+  inherited Create;
+  FSettings := ASettings;
+end;
+
+procedure TTyRichChangeSettings.DoExecute(ADoc: TTyRichDocument);
+begin
+  ChangeSettings(ADoc, FSettings);
+end;
+
+function TTyRichChangeSettings.Description: string;
+begin
+  Result := rsRichUndoSettings;
 end;
 
 { ---- TTyRichResizeObject ---- }

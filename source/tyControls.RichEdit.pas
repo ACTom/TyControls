@@ -1003,6 +1003,10 @@ type
     procedure ParasOfRange(AStart, ALen: TTyRichPos; out AFirst, ALast: Integer);
     { The one door of the façades' writes: see the façades' declarations. }
     procedure RunApiEdit(ACmd: TTyRichCommand; AChars: TTyRichPos);
+    // the document's settings (DocumentColor, SetPageSetup, SetDefaultFormats)
+    function GetDocumentColor: TColor;
+    procedure SetDocumentColor(AValue: TColor);
+    procedure ApiSettings(const ASettings: TTyRichDocSettings);
     procedure ApiCharFormat(AStart, ALen: TTyRichPos; AMask: TTyCharFormatMask;
       const AValue: TTyCharFormat);
     procedure ApiParaFormat(AStart, ALen: TTyRichPos; AMask: TTyParaFormatMask;
@@ -2761,6 +2765,26 @@ type
     function InDelText(const AText: string; AStart, AReplaceLen: TTyRichPos): TTyRichPos;
     { RichMemo's CharAtPos: the position at client point (X, Y) (PositionAtPoint). }
     function CharAtPos(X, Y: Integer): TTyRichPos;
+
+    { ---- the document's own settings (edits from code: not refused by ReadOnly; one undo
+      step each - TTyRichChangeSettings; ETyRichEdit when the document takes no edit) ----
+      SetPageSetup: the paper's width and the left and right margins, twips - the width a
+      page-wide layout (WrapMode rwmPage) wraps at, and what a file gets; the paper's height
+      stays. A width the margins leave no room in raises ETyRichEdit, nothing changes.
+      SetDefaultFormats: the formats a paragraph with nothing of its own has (the
+      document's DefaultCharFormat and default paragraph format): a new document's text, the
+      paragraphs of a text file, what a file names as its defaults (RTF's \defchp and \defpap groups).
+      What a file read on demand holds keeps its look (TTyRichDocument.ChangeSettings).
+      DocumentColor: the document's own ground, drawn under the text as the file has it (the
+      theme does not change it; automatic text over it takes the contrasting colour);
+      clNone: none - the theme's ground. A file keeps it as Word's page colour. Written the
+      same as it is: no step. }
+    procedure SetPageSetup(AWidthTwips, ALeftTwips, ARightTwips: Integer);
+    procedure SetDefaultFormats(const AChar: TTyCharFormat; const APara: TTyParaFormat);
+    property DocumentColor: TColor read GetDocumentColor write SetDocumentColor;
+    { The user's action for the space before and after the paragraphs the selection touches,
+      points (ApplyParagraphFormat's rules: refused by ReadOnly, told once). }
+    function ApplyParagraphSpacing(ABeforePt, AAfterPt: Double): Boolean;
 
     { ---- finding and replacing ----
       What a match is (tyControls.RichEdit.Find): the needle against the text as it is shown -
@@ -12412,6 +12436,71 @@ begin
   Guard(life, @Work);
 end;
 
+function TTyCustomRichEdit.GetDocumentColor: TColor;
+begin
+  Result := FDoc.DocumentColor;
+end;
+
+procedure TTyCustomRichEdit.ApiSettings(const ASettings: TTyRichDocSettings);
+var
+  s: TTyRichDocSettings;
+begin
+  s := FDoc.Settings;
+  if (s.PaperWidth = ASettings.PaperWidth) and (s.PaperHeight = ASettings.PaperHeight) and
+     (s.MarginLeft = ASettings.MarginLeft) and (s.MarginRight = ASettings.MarginRight) and
+     (s.Color = ASettings.Color) and s.CharFormat.Equals(ASettings.CharFormat) and
+     s.ParaFormat.Equals(ASettings.ParaFormat) then
+    Exit;
+  // (the model's own check, told as the control tells a refusal: nothing changes)
+  if (ASettings.PaperWidth <= 0) or (ASettings.MarginLeft < 0) or (ASettings.MarginRight < 0) or
+     (Int64(ASettings.PaperWidth) - ASettings.MarginLeft - ASettings.MarginRight <= 0) then
+    raise ETyRichEdit.Create(rsRichEditRefusedPage);
+  RunApiEdit(TTyRichChangeSettings.Create(ASettings), 0);
+end;
+
+procedure TTyCustomRichEdit.SetDocumentColor(AValue: TColor);
+var
+  s: TTyRichDocSettings;
+begin
+  s := FDoc.Settings;
+  if (AValue = clDefault) or (AValue = clWindow) then AValue := clNone;
+  s.Color := AValue;
+  ApiSettings(s);
+end;
+
+procedure TTyCustomRichEdit.SetPageSetup(AWidthTwips, ALeftTwips, ARightTwips: Integer);
+var
+  s: TTyRichDocSettings;
+begin
+  s := FDoc.Settings;
+  s.PaperWidth := AWidthTwips;
+  s.MarginLeft := ALeftTwips;
+  s.MarginRight := ARightTwips;
+  ApiSettings(s);
+end;
+
+procedure TTyCustomRichEdit.SetDefaultFormats(const AChar: TTyCharFormat;
+  const APara: TTyParaFormat);
+var
+  s: TTyRichDocSettings;
+begin
+  s := FDoc.Settings;
+  s.CharFormat := AChar;
+  s.ParaFormat := APara;
+  ApiSettings(s);
+end;
+
+function TTyCustomRichEdit.ApplyParagraphSpacing(ABeforePt, AAfterPt: Double): Boolean;
+var
+  f: TTyParaFormat;
+begin
+  f := TyDefaultParaFormat;
+  // Word's bounds (0 .. 1584 pt)
+  f.SpaceBefore := TyRichPtToTwips(Math.Min(Math.Max(ABeforePt, 0), 1584));
+  f.SpaceAfter := TyRichPtToTwips(Math.Min(Math.Max(AAfterPt, 0), 1584));
+  Result := ApplyParagraphFormat([pffSpaceBefore, pffSpaceAfter], f);
+end;
+
 procedure TTyCustomRichEdit.RunApiEditIn(ACmd: TTyRichCommand; AChars: TTyRichPos;
   var ALife: TTyRichLife);
 var
@@ -15512,6 +15601,12 @@ begin
   if OwnStyleColor('--surface-sunk', c) then AStyle.PlaceholderFill := TyColorToBGRA(c);
   if OwnStyleColor('--border', c) then AStyle.PlaceholderFrame := TyColorToBGRA(c);
   AStyle.TableBorder := AStyle.TextColor;
+  // the document's own ground, drawn as it is: automatic text over it contrasts with it
+  if FDoc.DocumentColor <> clNone then
+  begin
+    AStyle.HasGround := True;
+    AStyle.Ground := FDoc.DocumentColor;
+  end;
 end;
 
 procedure TTyCustomRichEdit.RenderTo(ACanvas: TCanvas; const ARect: TRect; APPI: Integer);
@@ -18339,6 +18434,9 @@ begin
   MixPx(ps.ObjectHandleFill);
   MixPx(ps.PlaceholderFill);
   MixPx(ps.PlaceholderFrame);
+  // the document's own ground replaces the theme's under the text
+  Mix(Ord(ps.HasGround));
+  if ps.HasGround then Mix(Cardinal(ps.Ground));
   Mix(Ord(VBarShown));
   Mix(Ord(HBarShown));
   Mix(Ord(IsRightToLeft));
@@ -18534,6 +18632,13 @@ begin
       FillPaintStyle(pst);
       pst.DeferPictures := ADefer;
       ground := TyColorToBGRA(CurrentStyle.Background.Color);
+      // the document's own ground in place of the theme's, under the text (the frame stays)
+      if pst.HasGround then
+      begin
+        ground := ColorToBGRA(ColorToRGB(pst.Ground));
+        if full then FSurface.FillRect(rClip.Left, rClip.Top, rClip.Right, rClip.Bottom, ground,
+          dmSet);
+      end;
       { A block's ink may reach past its box (a descender, an italic, a picture frame): the
         blocks next to a region are painted into it too (clipped), as a full redraw would leave
         them. No block of today's layouts inks outside its box (painting the neighbours changes
@@ -18697,6 +18802,9 @@ begin
       P.PrepareTextGround(rClip);
       FillPaintStyle(st);
       st.DeferPictures := ADefer;
+      if st.HasGround then
+        P.Bitmap.FillRect(rClip.Left, rClip.Top, rClip.Right, rClip.Bottom,
+          ColorToBGRA(ColorToRGB(st.Ground)), dmSet);
       P.Bitmap.ClipRect := rClip;
       FLayouter.BeginPaintPass;
       try

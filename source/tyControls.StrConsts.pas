@@ -304,6 +304,7 @@ resourcestring
   rsRichUndoDeleteTable  = 'Delete table';
   rsRichUndoInsertPicture = 'Insert picture';
   rsRichUndoResizeObject = 'Resize object';
+  rsRichUndoSettings     = 'Document settings';
   rsRichUndoMove         = 'Move';
   rsRichUndoCopy         = 'Copy';
 
@@ -337,6 +338,7 @@ resourcestring
   rsRichEditRefusedMetafile   = 'A metafile (WMF or EMF) cannot be inserted as a picture.';
   rsRichEditRefusedNoPicture  = 'This is not a picture that can be read.';
   rsRichEditRefusedPictureFile = 'The picture file cannot be read: %s';
+  rsRichEditRefusedPage       = 'The page''s margins leave no width for the text.';
   { A table action (TTyCustomRichEdit.InsertTable, InsertRow, DeleteColumn and the like, and
     Tab in a table's last cell) that the table or the place does not allow. The first %d
     is the most rows a table can have, the second (and the one of ...TableColumns) the most

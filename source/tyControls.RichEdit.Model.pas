@@ -97,7 +97,11 @@ type
   { paraLeft..paraJustify, not paLeft..: Menus.TPopupAlignment already has paLeft,
     paCenter and paRight, and the control units use Menus. }
   TTyParaAlign = (paraLeft, paraCenter, paraRight, paraJustify);
-  TTyLineSpacing = (lsSingle, ls115, ls15, lsDouble, lsExact, lsAtLeast);
+  { lsMultiple: any other multiple, LineSpacingValue / 240 times the line's own height (a
+    file's \slN\slmult1: Word's 1.08 is 259) - the four named ones are never written so
+    (TyRichSetLineMultiple), so equal spacings are equal formats. Last, so that the ordinals
+    of the others, which a form streams, stay. }
+  TTyLineSpacing = (lsSingle, ls115, ls15, lsDouble, lsExact, lsAtLeast, lsMultiple);
   TTyTabAlign = (ttaLeft, ttaCenter, ttaRight, ttaDecimal);
   TTyTabLeader = (ttlNone, ttlDot, ttlHyphen, ttlUnderline, ttlThick, ttlEqual);
 
@@ -115,6 +119,9 @@ type
     Kind: TTyListKind;
     Level: Integer;
     StartAt: Integer;
+    { A bullet's own text in place of the round bullet ('' for that one); nothing for a
+      numbered kind. One nil pointer when empty. }
+    Bullet: UTF8String;
   end;
 
   TTyParaFormat = record
@@ -125,10 +132,14 @@ type
     SpaceBefore: Integer;
     SpaceAfter: Integer;
     LineSpacing: TTyLineSpacing;
-    LineSpacingValue: Integer;   // twips, for lsExact and lsAtLeast
+    { twips, for lsExact and lsAtLeast; 240ths of the line's own height for lsMultiple }
+    LineSpacingValue: Integer;
     Tabs: TTyTabStops;
     List: TTyListFormat;
     RtlPar: Boolean;        // kept and written back, not rendered (no bidirectional layout)
+    { The paragraph's own ground (RTF \cbpat, with \cfpat and \shading mixed in), a colour of
+      the document's: clNone for none. }
+    Shading: TColor;
     Extra: TTyOpaqueAttrs;
     function Equals(const B: TTyParaFormat): Boolean;
     function Hash: Cardinal;
@@ -159,11 +170,14 @@ type
     pffSpacingRule  the line spacing rule; a height stays where the rule is exactly or at
                     least (a paragraph without one takes AValue's), else it is 0;
     pffSpacingHeight the height (LineSpacingValue), the rule staying where it is exactly or
-                    at least, else at least (Word's way). }
+                    at least, else at least (Word's way).
+    Three more set a field or a part of the list record alone: pffShading (Shading),
+    pffListLevel (List.Level, the kind and the rest staying), pffListBullet (List.Bullet). }
   TTyParaFormatField = (pffAlign, pffLeftIndent, pffRightIndent, pffFirstIndent,
     pffSpaceBefore, pffSpaceAfter, pffLineSpacing, pffTabs, pffList, pffRtlPar, pffExtra,
     pffStartIndent, pffOffset, pffFirstLine, pffHeadIndent, pffListIndents,
-    pffListKind, pffListStart, pffSpacingRule, pffSpacingHeight);
+    pffListKind, pffListStart, pffSpacingRule, pffSpacingHeight, pffShading, pffListLevel,
+    pffListBullet);
   TTyParaFormatMask = set of TTyParaFormatField;
 
   { Equal formats get the same id; ids are never reused, so an id an undo record keeps stays
@@ -714,6 +728,17 @@ type
 
   TTyRichChangeEvent = procedure(Sender: TObject; const AChange: TTyRichChange) of object;
 
+  { What a document has besides its paragraphs (TTyRichDocument.Settings): the page, in twips
+    (what a page-wide layout wraps at), the formats of a paragraph with nothing of its own
+    (DefaultCharFormat, DefaultParaFormatId), and the document's own ground - clNone: none,
+    a view shows its own. }
+  TTyRichDocSettings = record
+    PaperWidth, PaperHeight, MarginLeft, MarginRight: Integer;
+    CharFormat: TTyCharFormat;
+    ParaFormat: TTyParaFormat;
+    Color: TColor;
+  end;
+
   { How a plain text file is encoded (tyControls.RichEdit.TextIO reads and writes it).
     teAuto only asks the reader to find out; teAnsi's code page is a number beside it. }
   TTyTextEncoding = (teAuto, teUtf8, teUtf8Bom, teUtf16LE, teUtf16BE, teAnsi);
@@ -767,6 +792,11 @@ type
     { What else only it keeps alive, counted when it was made: the old values a table edit
       gave other cells and the table objects they are in. }
     FExtraBytes: Int64;
+    { The document's settings before a change of them (TTyRichDocument.ChangeSettings), and
+      whether that change made the shared plain value keep the look it had. }
+    FHasSettings: Boolean;
+    FSettings: TTyRichDocSettings;
+    FFroze: Boolean;
     procedure AddPart(APart: TTyRichUndoData);
     procedure SealParts;
     procedure AddOld(D: TTyRichParaData);
@@ -810,6 +840,10 @@ type
     class procedure SetDefaultCharFormat(ADoc: TTyRichDocument; const AFormat: TTyCharFormat);
     class procedure SetPage(ADoc: TTyRichDocument; APaperWidth, APaperHeight, AMarginLeft,
       AMarginRight: Integer);
+    { The format a paragraph with nothing of its own has (an RTF file's \defpap group), and the
+      document's ground (clNone: none). }
+    class procedure SetDefaultParaFormat(ADoc: TTyRichDocument; const AFormat: TTyParaFormat);
+    class procedure SetDocumentColor(ADoc: TTyRichDocument; AColor: TColor);
     { Puts AText in place of ADoc's whole content - a file opened into an existing document.
       ADoc takes AText over, also when this raises; AText must be one no document has used
       (its paragraph slots nil). The history goes, every paragraph value of the old content
@@ -1160,6 +1194,8 @@ type
       var ATables: TTyRichTables): TTyRichChange;
     function ReplaceObject(ADoc: TTyRichDocument; APos: TTyRichPos;
       AObject: TTyRichObject): TTyRichChange;
+    function ChangeSettings(ADoc: TTyRichDocument;
+      const ASettings: TTyRichDocSettings): TTyRichChange;
     { One more part of this command's work, as part of the step it is
       (TTyRichDocument.ExecutePart): it changes the document through the primitives as DoExecute
       does; its records join the step's. The default raises: a command goes on only when it
@@ -1325,6 +1361,10 @@ type
     FPaperHeight: Integer;
     FMarginLeft: Integer;
     FMarginRight: Integer;
+    FDocumentColor: TColor;
+    { The shared plain value (FPlainParsed) keeps the formats it had when the defaults changed
+      (its own runs and format id, not the defaults'): ChangeSettings. }
+    FPlainFrozen: Boolean;
     FOnChange: TTyRichChangeEvent;
     FOnUpdatingEnd: TNotifyEvent;
     FLoader: TTyRichParaLoader;
@@ -1353,7 +1393,9 @@ type
     procedure ResetContent(AText: TTyRichText; AEncoding: TTyTextEncoding; ACodePage: Integer;
       AHasBom: Boolean; ALineBreak: TTyRichSeparator);
     procedure SetDefaults(const AFormat: TTyCharFormat);
+    procedure SetDefaultPara(const AFormat: TTyParaFormat);
     procedure SetDefaultPage;
+    procedure PutSettings(const ASettings: TTyRichDocSettings);
     procedure TextParasChanged(Sender: TObject; AFirst, AOldCount, ANewCount: Integer);
     procedure TextDataDropped(Sender: TObject; AData: Pointer);
     // (MapParaData: an empty slot, its reference not counted - the caller's to put right)
@@ -1540,6 +1582,17 @@ type
       there: no change. Raises ETyRichModel, before anything changes, when there is no object
       at APos or the paragraph is one of a row that holds a nested table (CanChange). }
     function ReplaceObject(APos: TTyRichPos; AObject: TTyRichObject): TTyRichUndoData;
+    { The document's settings become ASettings (the page, the defaults, the ground), all at
+      once: one record of the settings before. Reported as a format change of the whole text
+      when anything differs (a page-wide layout wraps elsewhere, a plain paragraph looks
+      otherwise, the ground is another), nothing otherwise. A paragraph with nothing of its own
+      in a document that is not read on demand shows in the new defaults; in one that is (a
+      file's), what was read keeps its look - read already or not - and paragraphs made in
+      the new defaults later have them: the value parsed plain paragraphs share keeps the
+      formats it had (FPlainFrozen) until the record that froze it is reverted. Formats with
+      an Extra are taken as given. Raises ETyRichModel for a page whose margins leave no
+      text width. }
+    function ChangeSettings(const ASettings: TTyRichDocSettings): TTyRichUndoData;
     { Puts back what the primitive that returned AUndo changed, frees AUndo and sets it nil. }
     procedure Revert(var AUndo: TTyRichUndoData);
     { The paragraph's data value (an opaque identity, for tests and the history). }
@@ -1811,6 +1864,11 @@ type
     property PaperHeight: Integer read FPaperHeight;
     property MarginLeft: Integer read FMarginLeft;
     property MarginRight: Integer read FMarginRight;
+    { The document's own ground: clNone (none - a view shows its theme's) unless a file or a
+      change of the settings gave it one (RTF: Word's page colour, the \background group). }
+    property DocumentColor: TColor read FDocumentColor;
+    { All of them in one record (what ChangeSettings takes). }
+    function Settings: TTyRichDocSettings;
     property Loader: TTyRichParaLoader read FLoader;
     { The content differs from the one last loaded or saved. The history remembers the
       saved point: Modified is False exactly when the document is at that content again - an
@@ -1867,6 +1925,12 @@ function TyMergeCharFormat(const ABase: TTyCharFormat; AMask: TTyCharFormatMask;
   const AValue: TTyCharFormat): TTyCharFormat;
 function TyMergeParaFormat(const ABase: TTyParaFormat; AMask: TTyParaFormatMask;
   const AValue: TTyParaFormat): TTyParaFormat;
+{ The multiple of the line's own height a paragraph's lines are (1, 1.15, 1.5, 2, or any
+  other: lsMultiple); 0 for exactly and at least, which are heights. }
+function TyRichLineMultiple(const AFormat: TTyParaFormat): Double;
+{ AFormat's lines AMultiple times their own height, to a 240th (what RTF holds): one of the
+  four named rules where it is one of them, else lsMultiple. 0 or less: single. }
+procedure TyRichSetLineMultiple(var AFormat: TTyParaFormat; AMultiple: Double);
 { U+FFFC in UTF-8, the character an object occupies. }
 function TyRichObjectChar: UTF8String;
 { The platform's line break (sLineBreak) as a separator kind. }
@@ -2166,7 +2230,8 @@ begin
     (LineSpacing = B.LineSpacing) and (LineSpacingValue = B.LineSpacingValue) and
     (Length(Tabs) = Length(B.Tabs)) and (List.Kind = B.List.Kind) and
     (List.Level = B.List.Level) and (List.StartAt = B.List.StartAt) and
-    (RtlPar = B.RtlPar) and Extra.Equals(B.Extra);
+    (RtlPar = B.RtlPar) and (Shading = B.Shading) and (List.Bullet = B.List.Bullet) and
+    Extra.Equals(B.Extra);
   if not Result then Exit;
   for i := 0 to High(Tabs) do
     if (Tabs[i].Position <> B.Tabs[i].Position) or (Tabs[i].Align <> B.Tabs[i].Align) or
@@ -2187,6 +2252,9 @@ begin
   Result := HashMix(Result, Cardinal(LineSpacingValue));
   Result := HashMix(Result, Ord(List.Kind) or (Cardinal(List.Level) shl 4));
   Result := HashMix(Result, Cardinal(List.StartAt));
+  Result := HashMix(Result, Cardinal(Shading));
+  // a bullet's own text: its length is enough to spread the few there are
+  Result := HashMix(Result, Length(List.Bullet));
   Result := HashMix(Result, Length(Tabs));
   for i := 0 to High(Tabs) do
     Result := HashMix(Result, Cardinal(Tabs[i].Position) xor
@@ -2215,6 +2283,40 @@ begin
   Result.Align := paraLeft;
   Result.LineSpacing := lsSingle;
   Result.List.Kind := lkNone;
+  Result.Shading := clNone;
+end;
+
+function TyRichLineMultiple(const AFormat: TTyParaFormat): Double;
+begin
+  case AFormat.LineSpacing of
+    lsSingle: Result := 1;
+    ls115: Result := 1.15;
+    ls15: Result := 1.5;
+    lsDouble: Result := 2;
+    lsMultiple: Result := AFormat.LineSpacingValue / 240;
+  else
+    Result := 0;
+  end;
+end;
+
+procedure TyRichSetLineMultiple(var AFormat: TTyParaFormat; AMultiple: Double);
+var
+  n: Int64;
+begin
+  if AMultiple <= 0 then n := 240
+  else if AMultiple > 1000 then n := 240000
+  else n := Round(AMultiple * 240);
+  if n <= 0 then n := 1;
+  AFormat.LineSpacingValue := 0;
+  case n of
+    240: AFormat.LineSpacing := lsSingle;
+    276: AFormat.LineSpacing := ls115;
+    360: AFormat.LineSpacing := ls15;
+    480: AFormat.LineSpacing := lsDouble;
+  else
+    AFormat.LineSpacing := lsMultiple;
+    AFormat.LineSpacingValue := n;
+  end;
 end;
 
 function TakeStyle(AStyles: TFontStyles; AStyle: TFontStyle; AFrom: TFontStyles): TFontStyles;
@@ -2274,7 +2376,10 @@ begin
   if pffSpacingRule in AMask then
   begin
     Result.LineSpacing := AValue.LineSpacing;
-    if not (AValue.LineSpacing in [lsExact, lsAtLeast]) then
+    // (a multiple of its own is the rule's own number, as a named one is)
+    if AValue.LineSpacing = lsMultiple then
+      Result.LineSpacingValue := AValue.LineSpacingValue
+    else if not (AValue.LineSpacing in [lsExact, lsAtLeast]) then
       Result.LineSpacingValue := 0
     else if Result.LineSpacingValue <= 0 then
       Result.LineSpacingValue := AValue.LineSpacingValue;
@@ -2285,6 +2390,11 @@ begin
     Result.LineSpacingValue := AValue.LineSpacingValue;
   end;
   if pffRtlPar in AMask then Result.RtlPar := AValue.RtlPar;
+  if pffShading in AMask then Result.Shading := AValue.Shading;
+  if pffListLevel in AMask then
+    if AValue.List.Level > 0 then Result.List.Level := AValue.List.Level
+    else Result.List.Level := 0;
+  if pffListBullet in AMask then Result.List.Bullet := AValue.List.Bullet;
   if pffExtra in AMask then Result.Extra := AValue.Extra;
   // the relative indent fields (see TTyParaFormatField), each from this paragraph's values
   if pffStartIndent in AMask then
@@ -4057,6 +4167,17 @@ begin
   ADoc.FMarginRight := AMarginRight;
 end;
 
+class procedure TTyRichDocBuilder.SetDefaultParaFormat(ADoc: TTyRichDocument;
+  const AFormat: TTyParaFormat);
+begin
+  ADoc.SetDefaultPara(AFormat);
+end;
+
+class procedure TTyRichDocBuilder.SetDocumentColor(ADoc: TTyRichDocument; AColor: TColor);
+begin
+  ADoc.FDocumentColor := AColor;
+end;
+
 class procedure TTyRichDocBuilder.ReplaceText(ADoc: TTyRichDocument; AText: TTyRichText);
 begin
   if AText = nil then
@@ -4251,7 +4372,9 @@ begin
   FOwnsLoader := False;
   // the default font and the page were the old content's (an RTF file's): a text file
   // loaded next has neither, and would show in them
+  FPlainFrozen := False;
   SetDefaults(TyDefaultCharFormat);
+  SetDefaultPara(TyDefaultParaFormat);
   SetDefaultPage;
   FSourceEncoding := AEncoding;
   FSourceCodePage := ACodePage;
@@ -4308,6 +4431,81 @@ begin
   FPaperHeight := 16838;
   FMarginLeft := 1800;
   FMarginRight := 1800;
+  FDocumentColor := clNone;
+end;
+
+procedure TTyRichDocument.SetDefaultPara(const AFormat: TTyParaFormat);
+begin
+  FDefaultParaId := FFormats.InternPara(AFormat);
+  // the shared plain value follows the defaults, unless a change of them froze it
+  if (FPlainParsed <> nil) and not FPlainFrozen then FPlainParsed.FParaFormat := FDefaultParaId;
+end;
+
+function TTyRichDocument.Settings: TTyRichDocSettings;
+begin
+  Result.PaperWidth := FPaperWidth;
+  Result.PaperHeight := FPaperHeight;
+  Result.MarginLeft := FMarginLeft;
+  Result.MarginRight := FMarginRight;
+  Result.CharFormat := FDefaultCharFormat;
+  Result.ParaFormat := FFormats.ParaFormat(FDefaultParaId);
+  Result.Color := FDocumentColor;
+end;
+
+procedure TTyRichDocument.PutSettings(const ASettings: TTyRichDocSettings);
+begin
+  FPaperWidth := ASettings.PaperWidth;
+  FPaperHeight := ASettings.PaperHeight;
+  FMarginLeft := ASettings.MarginLeft;
+  FMarginRight := ASettings.MarginRight;
+  if not ASettings.CharFormat.Equals(FDefaultCharFormat) then SetDefaults(ASettings.CharFormat);
+  if not ASettings.ParaFormat.Equals(FFormats.ParaFormat(FDefaultParaId)) then
+    SetDefaultPara(ASettings.ParaFormat);
+  FDocumentColor := ASettings.Color;
+end;
+
+function TTyRichDocument.ChangeSettings(const ASettings: TTyRichDocSettings): TTyRichUndoData;
+var
+  c: TTyRichChange;
+  old: TTyRichDocSettings;
+  defaults: Boolean;
+begin
+  if (ASettings.PaperWidth <= 0) or (ASettings.MarginLeft < 0) or (ASettings.MarginRight < 0) or
+     (Int64(ASettings.PaperWidth) - ASettings.MarginLeft - ASettings.MarginRight <= 0) then
+    raise ETyRichModel.CreateFmt('A page %d twips wide with margins %d and %d has no room ' +
+      'for text', [ASettings.PaperWidth, ASettings.MarginLeft, ASettings.MarginRight]);
+  c := Default(TTyRichChange);
+  old := Settings;
+  defaults := not ASettings.CharFormat.Equals(old.CharFormat) or
+    not ASettings.ParaFormat.Equals(old.ParaFormat);
+  if not defaults and (ASettings.PaperWidth = old.PaperWidth) and
+     (ASettings.PaperHeight = old.PaperHeight) and (ASettings.MarginLeft = old.MarginLeft) and
+     (ASettings.MarginRight = old.MarginRight) and (ASettings.Color = old.Color) then
+    Exit(NewUndo(c));
+  Result := NewUndo(c);
+  Result.FHasSettings := True;
+  Result.FSettings := old;
+  { What was read of a file keeps its look: the shared plain value takes the formats it shows
+    as its own (the old defaults' runs - an array no one changes - and the format id it has),
+    so that a paragraph parsed later in them is that value too (MakeData) and one parsed
+    before stays as it was. }
+  if defaults and (FPlainParsed <> nil) and not FPlainFrozen then
+  begin
+    FPlainParsed.FRuns := FDefaultRuns;
+    FPlainParsed.FParaFormat := FDefaultParaId;
+    FPlainFrozen := True;
+    Result.FFroze := True;
+  end;
+  PutSettings(ASettings);
+  c.Kinds := [rckFormat];
+  c.Pos := 0;
+  c.OldLen := FText.Length;
+  c.NewLen := FText.Length;
+  c.FirstPara := 0;
+  c.OldParaCount := FText.ParaCount;
+  c.NewParaCount := FText.ParaCount;
+  Result.FChange := c;
+  Notify(c);
 end;
 
 procedure TTyRichDocument.SetDefaults(const AFormat: TTyCharFormat);
@@ -4441,7 +4639,17 @@ function TTyRichDocument.MakeData(AParaFormat: TTyParaFormatId; const ARuns: TTy
   ACell: TTyRichCell; AFieldDepth: Integer): TTyRichParaData;
 begin
   // (the plain value starts outside every field: a paragraph of a result has one of its own)
-  if (AParaFormat = FDefaultParaId) and (ACell = nil) and (Length(ARuns) = 1) and
+  if FPlainFrozen and (FLoader <> nil) and (FPlainParsed <> nil) then
+  begin
+    // the shared value keeps the formats it had (ChangeSettings): what it shows is plain
+    if (AParaFormat = FPlainParsed.FParaFormat) and (ACell = nil) and (Length(ARuns) = 1) and
+       (ARuns[0].Format = FPlainParsed.FRuns[0].Format) and (ARuns[0].Obj = nil) and
+       (AFieldDepth = 0) then
+      Result := FPlainParsed
+    else
+      Result := NewData(AParaFormat, ARuns, ACell, AFieldDepth);
+  end
+  else if (AParaFormat = FDefaultParaId) and (ACell = nil) and (Length(ARuns) = 1) and
      (ARuns[0].Format = FDefaultCharId) and (ARuns[0].Obj = nil) and (AFieldDepth = 0) then
     Result := PlainValue
   else
@@ -8841,6 +9049,20 @@ begin
   try
     Inc(FEditing);
     try
+      if u.FHasSettings then
+      begin
+        PutSettings(u.FSettings);
+        // the shared plain value follows the defaults again, as before the change froze it
+        if u.FFroze then
+        begin
+          FPlainFrozen := False;
+          if FPlainParsed <> nil then
+          begin
+            FPlainParsed.FRuns := nil;
+            FPlainParsed.FParaFormat := FDefaultParaId;
+          end;
+        end;
+      end;
       if u.FSwapCount > 0 then RevertSwaps(u);
       if u.FInserted > 0 then
         FText.Delete(u.FChange.Pos, u.FInserted);
@@ -9048,6 +9270,13 @@ function TTyRichCommand.ReplaceObject(ADoc: TTyRichDocument; APos: TTyRichPos;
 begin
   CheckRunning(ADoc);
   Result := Keep(ADoc.ReplaceObject(APos, AObject));
+end;
+
+function TTyRichCommand.ChangeSettings(ADoc: TTyRichDocument;
+  const ASettings: TTyRichDocSettings): TTyRichChange;
+begin
+  CheckRunning(ADoc);
+  Result := Keep(ADoc.ChangeSettings(ASettings));
 end;
 
 procedure TTyRichCommand.DoContinue(ADoc: TTyRichDocument);

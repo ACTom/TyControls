@@ -886,6 +886,10 @@ msgstr "插入图片"
 msgid "Resize object"
 msgstr "调整对象大小"
 
+#: tycontrols.strconsts.rsrichundosettings
+msgid "Document settings"
+msgstr "文档设置"
+
 #: tycontrols.strconsts.rsrichundomove
 msgid "Move"
 msgstr "移动"
@@ -978,6 +982,10 @@ msgstr "这不是能读取的图片。"
 #, object-pascal-format
 msgid "The picture file cannot be read: %s"
 msgstr "无法读取图片文件：%s"
+
+#: tycontrols.strconsts.rsricheditrefusedpage
+msgid "The page's margins leave no width for the text."
+msgstr "页边距没有给正文留下宽度。"
 
 #: tycontrols.strconsts.rsricheditrefusedplaintable
 msgid "A plain text document cannot hold a table."

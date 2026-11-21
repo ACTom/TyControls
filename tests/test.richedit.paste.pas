@@ -690,7 +690,8 @@ begin
   // none of the source's numbers in what the paste wrote; the field made again with its text
   ATest.AssertEquals(AWhat + ': no style ' + Shown(body), 0, PosRaw(BS + 's3', body));
   ATest.AssertEquals(AWhat + ': no character style', 0, PosRaw(BS + 'cs5', body));
-  ATest.AssertEquals(AWhat + ': no shading', 0, PosRaw(BS + 'cbpat', body));
+  // (the paragraph's shading is a colour of the model's, not a number: it goes along, its
+  // colour put in this file's table - read back below)
   ATest.AssertEquals(AWhat + ': no character shading', 0, PosRaw(BS + 'chcbpat', body));
   ATest.AssertEquals(AWhat + ': no underline colour', 0, PosRaw(BS + 'ulc', body));
   ATest.AssertEquals(AWhat + ': no border colour', 0, PosRaw(BS + 'brdrcf', body));
@@ -713,6 +714,8 @@ begin
     ATest.AssertTrue(AWhat + ': its result read back between its marks, Chinese', k < b.Text.ParaCount);
     ATest.AssertEquals(AWhat + ': its instruction read back', 'HYPERLINK "http://x"|',
       FieldInstructions(b));
+    ATest.AssertEquals(AWhat + ': the source''s blue shading, in this file''s colours', clBlue,
+      b.Formats.ParaFormat(b.ParaFormatOf(k)).Shading);
     ATest.AssertFalse(AWhat + ': ' + what, AnyTableNumber(b, what));
     k := 0;
     while (k < b.Text.ParaCount) and (b.CellAt(k) = nil) do Inc(k);

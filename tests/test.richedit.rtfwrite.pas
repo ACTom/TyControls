@@ -720,7 +720,7 @@ const
   AllChar = [cffFontName, cffCharset, cffSize, cffBold, cffItalic, cffUnderline, cffStrike,
     cffVertAlign, cffColor, cffHighlight, cffExtra];
   AllPara = [pffAlign, pffLeftIndent, pffRightIndent, pffFirstIndent, pffSpaceBefore,
-    pffSpaceAfter, pffLineSpacing, pffTabs, pffList, pffRtlPar, pffExtra];
+    pffSpaceAfter, pffLineSpacing, pffTabs, pffList, pffRtlPar, pffExtra, pffShading];
 
 procedure SetChars(ADoc: TTyRichDocument; APos, ALen: Int64; AMask: TTyCharFormatMask;
   const AValue: TTyCharFormat);
@@ -1982,8 +1982,10 @@ begin
   i := P; paras[i].RtlPar := True;
   i := P; paras[i].Extra.Add('\keepn');
   i := P; paras[i].Extra.Add('\s4 '); paras[i].Extra.Add('\widctlpar'); paras[i].Extra.Add('\brdrb'); paras[i].Extra.Add('{\*\oldpprops \qc}');
-  // a line spacing the model has no name for is kept as its words
-  i := P; paras[i].Extra.Add('\sl288'); paras[i].Extra.Add('\slmult1');
+  // any other multiple (\sl288\slmult1: 1.2), the paragraph's ground, a bullet of its own
+  i := P; paras[i].LineSpacing := lsMultiple; paras[i].LineSpacingValue := 288;
+  i := P; paras[i].Shading := clYellow;
+  i := P; paras[i].List.Kind := lkBullet; paras[i].List.Bullet := '>';
   // lists as a file has them: the words of {\*\pn} the model keeps as Extra, in Extra
   i := P; paras[i].List.Kind := lkBullet; paras[i].Extra.Add('\pnf7'); paras[i].Extra.Add('\pnindent0'); paras[i].Extra.Add('{\pntxtb\''B7}');
   i := P; paras[i].List.Kind := lkDecimal; paras[i].List.StartAt := 1; paras[i].Extra.Add('{\pntxta)}');

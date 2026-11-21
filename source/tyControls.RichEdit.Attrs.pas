@@ -55,6 +55,24 @@ const
   CTyMaxTabStops = 32;
 
 type
+  { A tab stop's alignment and leader for Paragraph.SetTab: the engine's own kinds under
+    names of this control's layer. }
+  TTyRichTabAlign = TTyTabAlign;
+  TTyRichTabLeader = TTyTabLeader;
+
+const
+  rtaLeft = ttaLeft;
+  rtaCenter = ttaCenter;
+  rtaRight = ttaRight;
+  rtaDecimal = ttaDecimal;
+  rtlNone = ttlNone;
+  rtlDot = ttlDot;
+  rtlHyphen = ttlHyphen;
+  rtlUnderline = ttlUnderline;
+  rtlThick = ttlThick;
+  rtlEqual = ttlEqual;
+
+type
   { Delphi's TNumberingStyle as the same type as Numbering's: Delphi's classic cast
     Paragraph.Numbering := TNumberingStyle(BulletsButton.Down) compiles and gives nsNone /
     nsBullet. }
@@ -92,6 +110,8 @@ type
     procedure SetName(const AValue: TFontName);
     function GetSize: Integer;
     procedure SetSize(AValue: Integer);
+    function GetSizeF: Double;
+    procedure SetSizeF(AValue: Double);
     function GetHeight: Integer;
     procedure SetHeight(AValue: Integer);
     function GetStyle: TFontStyles;
@@ -119,6 +139,10 @@ type
       size the text is shown in; written 0: none of its own; written the base's size, text
       without a size of its own keeps none (as Name). }
     property Size: Integer read GetSize write SetSize;
+    { Points to the half point, as the engine keeps them (10.5 reads 10.5; a write rounds to
+      the nearest half point) - Size's meanings otherwise: 0 none of its own, the base's
+      size leaves text without one of its own as it is. }
+    property SizeF: Double read GetSizeF write SetSizeF;
     { Pixels at the control's PPI: Size * PPI / 72, as Delphi's; a negative height (a
       TFont's character height) is taken as its absolute value. }
     property Height: Integer read GetHeight write SetHeight;
@@ -179,7 +203,7 @@ type
     function GetNumberingStart: Integer;
     procedure SetNumberingStart(AValue: Integer);
     function GetTab(AIndex: Byte): Integer;
-    procedure SetTab(AIndex: Byte; AValue: Integer);
+    procedure SetTab(AIndex: Byte; AValue: Integer); overload;
     function GetTabCount: Integer;
     procedure SetTabCount(AValue: Integer);
     function GetSpaceBefore: Integer;
@@ -191,8 +215,37 @@ type
     function GetLineSpacing: Integer;
     procedure SetLineSpacing(AValue: Integer);
     function GetConsistentAttributes: TTyRichConsistentParaAttributes;
+    function GetListLevel: Integer;
+    procedure SetListLevel(AValue: Integer);
+    function GetBulletText: string;
+    procedure SetBulletText(const AValue: string);
+    function GetShading: TColor;
+    procedure SetShading(AValue: TColor);
+    function GetLineSpacingMultiple: Double;
+    procedure SetLineSpacingMultiple(AValue: Double);
   public
     procedure Assign(Source: TPersistent); override;
+    { Tab stop AIndex (0-based) at APosPt points from the left indent's origin, aligned
+      AAlign, its leader ALeader - one write (Tab's rules for an index past the count, and
+      for one of CTyMaxTabStops or more: ignored). }
+    procedure SetTab(AIndex: Integer; APosPt: Double; AAlign: TTyRichTabAlign;
+      ALeader: TTyRichTabLeader); overload;
+    { The list item's level, 0 the outermost (the other parts of each paragraph's list as
+      they are; a paragraph that is no item keeps none). }
+    property ListLevel: Integer read GetListLevel write SetListLevel;
+    { The number the list starts at: NumberingStart. }
+    property ListStart: Integer read GetNumberingStart write SetNumberingStart;
+    { A bullet's own text in place of the round bullet - written, it makes each paragraph a
+      bullet item (the default hanging indent for one with none, as Numbering); '' the round
+      bullet again. }
+    property BulletText: string read GetBulletText write SetBulletText;
+    { The paragraph's ground, a colour of the document's (the theme does not change it):
+      clNone none (clDefault and clWindow written mean none too). }
+    property Shading: TColor read GetShading write SetShading;
+    { The lines' height as a multiple of their own (1, 1.15, 1.5, 2 or any other, to a 240th);
+      0 when the spacing is exactly or at least a height (LineSpacing). A write sets the rule
+      to that multiple; 0 or less is single. }
+    property LineSpacingMultiple: Double read GetLineSpacingMultiple write SetLineSpacingMultiple;
     { Delphi's TAlignment (taLeftJustify, taRightJustify, taCenter); a justified paragraph
       reads taLeftJustify here - ParaAlign has all four. }
     property Alignment: TAlignment read GetAlignment write SetAlignment;
@@ -232,8 +285,10 @@ type
     property TabCount: Integer read GetTabCount write SetTabCount;
     property SpaceBefore: Integer read GetSpaceBefore write SetSpaceBefore;
     property SpaceAfter: Integer read GetSpaceAfter write SetSpaceAfter;
-    { The rule (single, 1.15, 1.5, double, exactly, at least) and, for exactly and at least,
-      the line's height in points (LineSpacing; 0 for the other rules). }
+    { The rule (single, 1.15, 1.5, double, exactly, at least, another multiple - its number:
+      LineSpacingMultiple) and, for exactly and at least, the line's height in points
+      (LineSpacing; 0 for the other rules). The rule lsMultiple written keeps a paragraph's
+      own multiple (single's 1 for one with a height). }
     property LineSpacingRule: TTyLineSpacing read GetLineSpacingRule write SetLineSpacingRule;
     property LineSpacing: Integer read GetLineSpacing write SetLineSpacing;
     { Delphi's: the attributes every paragraph the selection touches shares (alignment as
@@ -279,7 +334,8 @@ type
     the other lines start (both from the left margin), TailIndent from the right margin;
     LineSpacing RichMemo's multiplier, on its scale: SingleLineSpacing (DefLineSpacing, 1.2)
     is single, OneHalfLineSpacing 1.8, DoubleLineSpacing 2.4 (the engine's 1.15 reads 1.38).
-    A write takes the nearest of the engine's four multiples; 0 or less leaves the
+    A write takes the nearest of the engine's four named multiples (any other multiple is
+    Paragraph.LineSpacingMultiple's); 0 or less leaves the
     paragraphs' spacing as it is. An exact or at-least spacing reads 0 - so that GetParaMetric,
     one field changed, SetParaMetric leaves it as it was. }
   TTyParaMetric = record
@@ -597,6 +653,24 @@ begin
     one it shows - run by run, over any selection; text whose own size differs takes
     it, and a selection where nothing is left to change is no step. }
   f.SizeHalfPt := AValue * 2;
+  SetFormat([cffSize], f);
+end;
+
+function TTyRichTextAttributes.GetSizeF: Double;
+begin
+  Result := GetFormat.SizeHalfPt / 2;
+end;
+
+procedure TTyRichTextAttributes.SetSizeF(AValue: Double);
+var
+  f: TTyCharFormat;
+begin
+  f := TyDefaultCharFormat;
+  if AValue < 0 then AValue := 0;
+  // Word's largest size (and the largest an Integer of half points cannot overflow from)
+  if AValue > 1638 then AValue := 1638;
+  // half points, as Size's whole ones (its KeepNone rule is the control's write)
+  f.SizeHalfPt := Round(AValue * 2);
   SetFormat([cffSize], f);
 end;
 
@@ -994,8 +1068,105 @@ begin
   { The rule only: a height (exactly, at least) stays each paragraph's own; one without a
     height takes the first paragraph's. }
   if AValue in [lsExact, lsAtLeast] then f.LineSpacingValue := cur.LineSpacingValue
+  else if AValue = lsMultiple then
+  begin
+    // the first paragraph's multiple (single for a height), named when it has a name
+    if TyRichLineMultiple(cur) > 0 then TyRichSetLineMultiple(f, TyRichLineMultiple(cur))
+    else TyRichSetLineMultiple(f, 1);
+  end
   else f.LineSpacingValue := 0;
   SetFormat([pffSpacingRule], f);
+end;
+
+function TTyRichParaAttributes.GetLineSpacingMultiple: Double;
+begin
+  Result := TyRichLineMultiple(GetFormat);
+end;
+
+procedure TTyRichParaAttributes.SetLineSpacingMultiple(AValue: Double);
+var
+  f: TTyParaFormat;
+begin
+  f := TyDefaultParaFormat;
+  TyRichSetLineMultiple(f, AValue);
+  SetFormat([pffSpacingRule], f);
+end;
+
+function TTyRichParaAttributes.GetListLevel: Integer;
+begin
+  Result := GetFormat.List.Level;
+end;
+
+procedure TTyRichParaAttributes.SetListLevel(AValue: Integer);
+var
+  f: TTyParaFormat;
+begin
+  f := TyDefaultParaFormat;
+  f.List.Level := AValue;
+  SetFormat([pffListLevel], f);
+end;
+
+function TTyRichParaAttributes.GetBulletText: string;
+begin
+  Result := GetFormat.List.Bullet;
+end;
+
+procedure TTyRichParaAttributes.SetBulletText(const AValue: string);
+var
+  l: TTyListFormat;
+begin
+  if AValue = '' then
+  begin
+    // the round bullet again: the kind and the rest as they are
+    l := TyDefaultParaFormat.List;
+    SetFormat([pffListBullet], TyRichListValue(l));
+    Exit;
+  end;
+  l := TyDefaultParaFormat.List;
+  l.Kind := lkBullet;
+  l.Bullet := AValue;
+  SetFormat([pffListKind, pffListBullet, pffListIndents], TyRichListValue(l));
+end;
+
+function TTyRichParaAttributes.GetShading: TColor;
+begin
+  Result := GetFormat.Shading;
+end;
+
+procedure TTyRichParaAttributes.SetShading(AValue: TColor);
+var
+  f: TTyParaFormat;
+begin
+  f := TyDefaultParaFormat;
+  f.Shading := TyRichBackColorIn(AValue);
+  SetFormat([pffShading], f);
+end;
+
+procedure TTyRichParaAttributes.SetTab(AIndex: Integer; APosPt: Double;
+  AAlign: TTyRichTabAlign; ALeader: TTyRichTabLeader);
+var
+  f: TTyParaFormat;
+  i, n: Integer;
+begin
+  // Tab's rules: at or past Delphi's MAX_TAB_STOPS (or below 0) ignored
+  if (AIndex < 0) or (AIndex >= CTyMaxTabStops) then Exit;
+  f := TyDefaultParaFormat;
+  f.Tabs := Copy(GetFormat.Tabs);
+  n := Length(f.Tabs);
+  if AIndex >= n then
+  begin
+    SetLength(f.Tabs, AIndex + 1);
+    for i := n to AIndex do
+    begin
+      f.Tabs[i].Position := 0;
+      f.Tabs[i].Align := ttaLeft;
+      f.Tabs[i].Leader := ttlNone;
+    end;
+  end;
+  f.Tabs[AIndex].Position := TyRichPtToTwips(APosPt);
+  f.Tabs[AIndex].Align := AAlign;
+  f.Tabs[AIndex].Leader := ALeader;
+  SetFormat([pffTabs], f);
 end;
 
 function TTyRichParaAttributes.GetLineSpacing: Integer;
@@ -1031,7 +1202,7 @@ begin
   begin
     f := TTyRichParaAttributes(Source).GetFormat;
     SetFormat([pffAlign, pffLeftIndent, pffRightIndent, pffFirstIndent, pffSpaceBefore,
-      pffSpaceAfter, pffLineSpacing, pffTabs, pffList], f);
+      pffSpaceAfter, pffLineSpacing, pffTabs, pffList, pffShading], f);
   end
   else
     inherited Assign(Source);
@@ -1101,6 +1272,8 @@ begin
   // exactly / at least: 0, which written back leaves the spacing as it is
   if AFormat.LineSpacing in [lsSingle..lsDouble] then
     Result.LineSpacing := CSpacingRules[AFormat.LineSpacing]
+  else if AFormat.LineSpacing = lsMultiple then
+    Result.LineSpacing := DefLineSpacing * TyRichLineMultiple(AFormat)
   else
     Result.LineSpacing := 0;
 end;

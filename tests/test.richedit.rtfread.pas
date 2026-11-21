@@ -1395,7 +1395,8 @@ begin
   d := LoadBytes(Fixture('hand-word-zh.rtf'));
   try
     AssertText('\deff0', 'Times New Roman', d.DefaultCharFormat.FontName);
-    AssertEquals('12 pt', 24, d.DefaultCharFormat.SizeHalfPt);
+    // the size of Word's {\*\defchp \fs21 ...}: its text without a size of its own is 10.5 pt
+    AssertEquals('10.5 pt', 21, d.DefaultCharFormat.SizeHalfPt);
     AssertEquals('paper width', 11906, d.PaperWidth);
     AssertEquals('paper height', 16838, d.PaperHeight);
     AssertEquals('left margin', 1800, d.MarginLeft);

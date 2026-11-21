@@ -253,6 +253,7 @@ type
     PnFont: Integer;                 // \pnfN among the fragments, -1 none
     PnBefore, PnAfter: RawByteString; // what {\pntxtb ...} and {\pntxta ...} hold
     PnUc: Boolean;                   // a fragment of {\*\pn} holds a \uN
+    Shade: Integer;                  // the shading's colour index, 0 none
   end;
   PParaInfo = ^TParaInfo;
 
@@ -448,6 +449,13 @@ type
     function ListNumber(AIndex: Integer; const AList: TTyListFormat): Integer;
     procedure WriteCharFormat(AId: Integer);
     procedure WriteChar(ACode: Cardinal);
+    procedure WriteText(const S: UTF8String);
+    // the document's settings in a header (the page, the defaults, the ground)
+    procedure WriteDefChp;
+    procedure WriteDefPap;
+    procedure WriteBackground;
+    function SettingsChanged: Boolean;
+    procedure NoteSettings;
     procedure WriteUnit(AUnit: Cardinal);
     procedure WriteObject(AObj: TTyRichObject);
     procedure WritePicture(APic: TTyRichPicture);
@@ -1482,6 +1490,12 @@ begin
   end;
   if (Result^.Mode = lmNone) and (Result^.Fmt.List.Kind <> lkNone) then
     if hasPn then Result^.Mode := lmPn else Result^.Mode := lmGen;
+  // a bullet of its own text is written as this writer writes one (the file's words go)
+  if (Result^.Fmt.List.Kind = lkBullet) and (Result^.Fmt.List.Bullet <> '') then
+    Result^.Mode := lmGen;
+  // the paragraph's ground, in the colour table (0: none)
+  EnsureTables;
+  Result^.Shade := ColorIndex(Result^.Fmt.Shading);
 end;
 
 function TRtfWriter.FontOf(AId: Integer): Integer;
@@ -1561,7 +1575,8 @@ begin
   end;
   pi := ParaInfo(AFormat);
   // a bullet made here is the Symbol font's
-  if (pi^.Mode = lmGen) and (pi^.Fmt.List.Kind = lkBullet) then FSymbolNeeded := True;
+  if (pi^.Mode = lmGen) and (pi^.Fmt.List.Kind = lkBullet) and (pi^.Fmt.List.Bullet = '') then
+    FSymbolNeeded := True;
 end;
 
 procedure TRtfWriter.NotePara(AIndex: Integer; AData: Pointer);
@@ -1815,19 +1830,214 @@ begin
   if AWhole then Sym('}');
 end;
 
+{ The header has the word \AName (anywhere before the body; the bytes looked at as they are). }
+function HeaderHasWord(const ABytes: TBytes; AStop: Int64; const AName: RawByteString): Boolean;
+var
+  i, n: Int64;
+begin
+  n := Length(AName);
+  i := 0;
+  while i + n < AStop do
+  begin
+    if (ABytes[i] = Ord('\')) and CompareMem(@ABytes[i + 1], @AName[1], n) then Exit(True);
+    Inc(i);
+  end;
+  Result := False;
+end;
+
+// The document's settings (TTyRichDocument.Settings) are not the ones its file's header gives:
+// a header written of the file says the new ones.
+function TRtfWriter.SettingsChanged: Boolean;
+var
+  scan: TTyRtfParser;
+begin
+  if FLoad = nil then Exit(False);
+  scan := FLoad.Scan;
+  Result := (FDoc.PaperWidth <> scan.PaperWidth) or (FDoc.MarginLeft <> scan.MarginLeft) or
+    (FDoc.MarginRight <> scan.MarginRight) or (FDoc.DocumentColor <> scan.DocumentColor) or
+    not FDoc.DefaultCharFormat.Equals(scan.DefaultCharFormat) or
+    not FDoc.Formats.ParaFormat(FDoc.DefaultParaFormatId).Equals(scan.DefaultParaFormat);
+end;
+
+// A header of the file that says new defaults names their font and colour: in the tables.
+procedure TRtfWriter.NoteSettings;
+begin
+  if SettingsChanged and not FDoc.DefaultCharFormat.Equals(FLoad.Scan.DefaultCharFormat) then
+    CharInfo(FDoc.DefaultCharFormatId);
+end;
+
+// {\*\defchp ...}: the words of the default character format the reader takes back.
+procedure TRtfWriter.WriteDefChp;
+var
+  ci: PCharInfo;
+  font: Integer;
+begin
+  ci := CharInfo(FDoc.DefaultCharFormatId);
+  font := FontOf(FDoc.DefaultCharFormatId);
+  Sym('{\*');
+  Word('defchp');
+  if font >= 0 then WordN('f', FFonts[font].Num);
+  if ci^.Fmt.SizeHalfPt > 0 then WordN('fs', ci^.Fmt.SizeHalfPt);
+  if fsBold in ci^.Fmt.Style then Word('b');
+  if fsItalic in ci^.Fmt.Style then Word('i');
+  if fsUnderline in ci^.Fmt.Style then Word('ul');
+  if ci^.Fmt.Strike or (fsStrikeOut in ci^.Fmt.Style) then Word('strike');
+  if ci^.Color > 0 then WordN('cf', ci^.Color);
+  Sym('}');
+end;
+
+// {\*\defpap ...}: the alignment, the indents, the spaces and the line spacing.
+procedure TRtfWriter.WriteDefPap;
+var
+  f: TTyParaFormat;
+begin
+  f := FDoc.Formats.ParaFormat(FDoc.DefaultParaFormatId);
+  Sym('{\*');
+  Word('defpap');
+  case f.Align of
+    paraCenter: Word('qc');
+    paraRight: Word('qr');
+    paraJustify: Word('qj');
+  else
+    Word('ql');
+  end;
+  if f.FirstIndent <> 0 then WordN('fi', f.FirstIndent);
+  if f.LeftIndent <> 0 then WordN('li', f.LeftIndent);
+  if f.RightIndent <> 0 then WordN('ri', f.RightIndent);
+  if f.SpaceBefore <> 0 then WordN('sb', f.SpaceBefore);
+  if f.SpaceAfter <> 0 then WordN('sa', f.SpaceAfter);
+  if TyRichLineMultiple(f) > 0 then
+  begin
+    if f.LineSpacing <> lsSingle then
+    begin
+      WordN('sl', Round(TyRichLineMultiple(f) * 240));
+      Word('slmult1');
+    end;
+  end
+  else if f.LineSpacingValue > 0 then
+  begin
+    if f.LineSpacing = lsExact then WordN('sl', -f.LineSpacingValue)
+    else WordN('sl', f.LineSpacingValue);
+    Word('slmult0');
+  end;
+  Sym('}');
+end;
+
+// Word's page colour: {\*\background} with a shape filled in it (Word writes \viewbksp1 in
+// the header too, which shows the shape).
+procedure TRtfWriter.WriteBackground;
+var
+  c: TColor;
+begin
+  c := PlainColor(FDoc.DocumentColor);
+  Sym('{\*');
+  Word('background');
+  Sym('{');
+  Word('shp');
+  Sym('{\*');
+  Word('shpinst');
+  Word('shpleft0');
+  Word('shptop0');
+  Word('shpright0');
+  Word('shpbottom0');
+  Word('shpfhdr0');
+  Word('shpbxmargin');
+  Word('shpbymargin');
+  Word('shpwr0');
+  Word('shpwrk0');
+  Word('shpfblwtxt1');
+  Word('shpz0');
+  Word('shplid1025');
+  Sym('{\sp{\sn shapeType}{\sv 1}}{\sp{\sn fFlipH}{\sv 0}}{\sp{\sn fFlipV}{\sv 0}}');
+  Sym('{\sp{\sn fillColor}{\sv ');
+  PutInt(Red(c) or (Green(c) shl 8) or (Blue(c) shl 16));
+  Sym('}}{\sp{\sn fFilled}{\sv 1}}{\sp{\sn lineWidth}{\sv 0}}{\sp{\sn fLine}{\sv 0}}');
+  Sym('{\sp{\sn bWMode}{\sv 9}}{\sp{\sn fBackground}{\sv 1}}}}}');
+end;
+
 // The file's header with the new fonts and colours at the end of their tables (a table the
 // file lacks is added: the colour table after the font table, the font table at the end of
-// the header). Every other byte is the file's.
+// the header). Every other byte is the file's - but for the document's settings, when they
+// are not the header's (SettingsChanged): a page word, a defaults' group or the background's
+// group the header has is written again in its place, one it lacks at the header's end.
 procedure TRtfWriter.WriteHeaderOfFile;
+type
+  TEdit = record
+    At, Stop: Int64;
+    Kind: Integer;       // 1 \paperw, 2 \margl, 3 \margr, 4 background, 5 defchp, 6 defpap, 7 \viewbksp1
+    Space: Boolean;      // the file's word ended with a space
+  end;
 var
   bytes: TBytes;
   p, fAt, cAt, fClose, cClose, q: Int64;
   ansi: Integer;
+  edits: array of TEdit;
+  ne, ei: Integer;
+  scan: TTyRtfParser;
+  none: TTyRtfRange;
+
+  procedure Add(const ARange: TTyRtfRange; AKind: Integer; AWanted: Boolean);
+  var
+    j: Integer;
+    e: TEdit;
+  begin
+    // (a group the document no longer wants goes; one it lacks and does not want stays out)
+    if (ARange.Start < 0) and not AWanted then Exit;
+    if ARange.Start >= 0 then
+    begin
+      e.At := ARange.Start;
+      e.Stop := ARange.Stop;
+      e.Space := (ARange.Stop > ARange.Start) and (bytes[ARange.Stop - 1] = Ord(' '));
+    end
+    else
+    begin
+      e.At := FHeaderStop;
+      e.Stop := FHeaderStop;
+      e.Space := True;
+    end;
+    if not AWanted then e.Kind := 0 else e.Kind := AKind;
+    // in the order of their places (one at the header's end after the others)
+    if ne = Length(edits) then SetLength(edits, ne + 8);
+    j := ne;
+    while (j > 0) and (edits[j - 1].At > e.At) do
+    begin
+      edits[j] := edits[j - 1];
+      Dec(j);
+    end;
+    edits[j] := e;
+    Inc(ne);
+  end;
+
+  procedure WriteEdit(const E: TEdit);
+  begin
+    case E.Kind of
+      1: WordN('paperw', FDoc.PaperWidth);
+      2: WordN('margl', FDoc.MarginLeft);
+      3: WordN('margr', FDoc.MarginRight);
+      4: WriteBackground;
+      5: WriteDefChp;
+      6: WriteDefPap;
+      7: Word('viewbksp1');
+    end;
+    if E.Space and (E.Kind in [1, 2, 3, 7]) then PutB(Ord(' '));
+    FNeedDelim := False;
+  end;
 
   procedure UpTo(APos: Int64);
   begin
-    if APos > p then Put(@bytes[p], APos - p);
-    p := APos;
+    // the settings' places before APos: the file's bytes up to each, then the new words
+    while (ei < ne) and (edits[ei].At < APos) do
+    begin
+      if edits[ei].At > p then Put(@bytes[p], edits[ei].At - p);
+      if edits[ei].Stop > p then p := edits[ei].Stop;
+      WriteEdit(edits[ei]);
+      Inc(ei);
+    end;
+    if APos > p then
+    begin
+      Put(@bytes[p], APos - p);
+      p := APos;
+    end;
   end;
 
   procedure Fonts;
@@ -1852,6 +2062,27 @@ var
 begin
   bytes := FLoad.Bytes;
   p := 0;
+  edits := nil;
+  ne := 0;
+  ei := 0;
+  none.Start := -1;
+  none.Stop := -1;
+  if SettingsChanged then
+  begin
+    scan := FLoad.Scan;
+    if FDoc.PaperWidth <> scan.PaperWidth then Add(scan.PaperWAt, 1, True);
+    if FDoc.MarginLeft <> scan.MarginLeft then Add(scan.MargLAt, 2, True);
+    if FDoc.MarginRight <> scan.MarginRight then Add(scan.MargRAt, 3, True);
+    if not FDoc.DefaultCharFormat.Equals(scan.DefaultCharFormat) then Add(scan.DefChpAt, 5, True);
+    if not FDoc.Formats.ParaFormat(FDoc.DefaultParaFormatId).Equals(scan.DefaultParaFormat) then
+      Add(scan.DefPapAt, 6, True);
+    if FDoc.DocumentColor <> scan.DocumentColor then
+    begin
+      if (FDoc.DocumentColor <> clNone) and not HeaderHasWord(bytes, FHeaderStop, 'viewbksp') then
+        Add(none, 7, True);
+      Add(scan.BackgroundAt, 4, FDoc.DocumentColor <> clNone);
+    end;
+  end;
   fAt := -1;
   cAt := -1;
   fClose := -1;
@@ -1880,6 +2111,12 @@ begin
     if fAt >= 0 then Fonts;
   end;
   UpTo(FHeaderStop);
+  // what the header lacks of the settings, at its end
+  while ei < ne do
+  begin
+    WriteEdit(edits[ei]);
+    Inc(ei);
+  end;
   FNeedDelim := False;
   FRawOpen := False;
 end;
@@ -1918,6 +2155,10 @@ begin
     WriteColors(0, True);
     NewLine;
   end;
+  // defaults the document was given (a new one has the engine's: nothing is written)
+  if not FDoc.DefaultCharFormat.Equals(TyDefaultCharFormat) then WriteDefChp;
+  if not FDoc.Formats.ParaFormat(FDoc.DefaultParaFormatId).Equals(TyDefaultParaFormat) then
+    WriteDefPap;
   { The page, always: a reader that finds none takes its own (Word its locale's paper and
     margins), and the wrap at the page's width (rwmPage) would differ. The model has no top
     and bottom margins (there is no page view): an inch each goes out. }
@@ -1927,6 +2168,12 @@ begin
   WordN('margr', FDoc.MarginRight);
   WordN('margt', 1440);
   WordN('margb', 1440);
+  // the document's ground, as Word writes its page colour
+  if FDoc.DocumentColor <> clNone then
+  begin
+    Word('viewbksp1');
+    WriteBackground;
+  end;
   Word('viewkind4');
   Word('uc1');
   PutB(Ord(' '));
@@ -2126,6 +2373,7 @@ begin
     if item.Stretch and item.Look and (item.Count > 0) then
       WalkStretch(item.First, item.First + item.Count - 1, True);
   end;
+  NoteSettings;
   FinishTables;
 end;
 
@@ -2543,7 +2791,10 @@ begin
   if (AInfo^.Mode <> lmGen) and AInfo^.PnUc and (FUc <> 1) then WordN('uc', FUc);
   if AInfo^.Fmt.List.Kind = lkBullet then
   begin
-    if AInfo^.Mode = lmGen then
+    if AInfo^.Fmt.List.Bullet <> '' then
+      // its own text, in the paragraph's font (the font the text after it is in)
+      WriteText(AInfo^.Fmt.List.Bullet)
+    else if AInfo^.Mode = lmGen then
     begin
       if FSymbol >= 0 then WordN('f', FFonts[FSymbol].Num);
       Sym('\''B7');
@@ -2602,7 +2853,17 @@ begin
     // {\*\pn\pnlvlbody\pnf0\pnindent0\pnstart1\pndec{\pntxta.}}
     Sym('{\*');
     Word('pn');
-    if list.Kind = lkBullet then
+    if (list.Kind = lkBullet) and (list.Bullet <> '') then
+    begin
+      // a bullet of its own text: in the paragraph's font, no Symbol font
+      Word('pnlvlblt');
+      Word('pnindent0');
+      if list.StartAt <> 0 then WordN('pnstart', list.StartAt);
+      Sym('{\pntxtb ');
+      WriteText(list.Bullet);
+      Sym('}');
+    end
+    else if list.Kind = lkBullet then
     begin
       Word('pnlvlblt');
       if FSymbol >= 0 then WordN('pnf', FFonts[FSymbol].Num);
@@ -2635,6 +2896,9 @@ begin
   begin
     // \ls and \ilvl name a list of the file's table: only while that is still the list
     if (AInfo^.Kinds[i] in [pekLs, pekIlvl]) and (AInfo^.Mode <> lmLs) then Continue;
+    // a bullet of its own text was written whole above: the file's {\*\pn} words go
+    if (AInfo^.Kinds[i] = pekPn) and (list.Kind = lkBullet) and (list.Bullet <> '') then
+      Continue;
     if AInfo^.Kinds[i] = pekPn then
     begin
       if not inPn then
@@ -2683,7 +2947,15 @@ begin
           WordN('sl', LineSpacingValue);
           Word('slmult0');
         end;
+      lsMultiple:
+        if LineSpacingValue > 0 then
+        begin
+          WordN('sl', LineSpacingValue);
+          Word('slmult1');
+        end;
     end;
+    // the paragraph's ground: the fill alone (no pattern)
+    if AInfo^.Shade > 0 then WordN('cbpat', AInfo^.Shade);
     { The stops as the layout takes them: in order of position, every one the format
       holds but a stop at exactly 0 - Delphi's TabCount's placeholder, "to be set next", no
       stop at all. A negative one is a file's stop left of the margin (a line that starts
@@ -2786,6 +3058,29 @@ begin
   Inc(FBufLen, k + 1);
   FNeedDelim := False;
   FRawOpen := False;
+end;
+
+// Text of the model's own (a bullet's), character by character: what is above ASCII as \uN.
+// Not in a Symbol font: its bytes are its characters.
+procedure TRtfWriter.WriteText(const S: UTF8String);
+var
+  p, n: PtrInt;
+  code: Cardinal;
+  wasSym: Boolean;
+begin
+  wasSym := FCurSymbol;
+  FCurSymbol := False;
+  try
+    p := 1;
+    while p <= Length(S) do
+    begin
+      n := TyRichNextChar(@S[p], Length(S) - p + 1, code);
+      Inc(p, n);
+      WriteChar(code);
+    end;
+  finally
+    FCurSymbol := wasSym;
+  end;
 end;
 
 procedure TRtfWriter.WriteChar(ACode: Cardinal);
@@ -3209,6 +3504,7 @@ begin
   if FStretchLook then
     for k := 0 to n - 1 do
       if model[k] then FDoc.Text.WalkParaTexts(first + k, first + k, @LookPara);
+  NoteSettings;
   FinishTables;
   WriteHeaderOfFile;
   FInfo.HeaderStop := OutPos;

@@ -417,6 +417,11 @@ type
       (PreparePicture) and repaint that box - so a paint while scrolling never waits for a
       decoder. False: every picture is decoded and drawn now (a preview, a test). }
     DeferPictures: Boolean;
+    { The document's own ground under the text (TTyRichDocument.DocumentColor), which the
+      owner fills: automatic text over it takes the contrasting colour (TextInk's rule).
+      HasGround False (the default): the theme's ground, the theme's text colour. }
+    HasGround: Boolean;
+    Ground: TColor;
   end;
 
   { A picture a paint passed over (TTyRichPaintStyle.DeferPictures): the box it was to be drawn
@@ -611,6 +616,10 @@ type
     FFragCount: Integer;
     FSpaceBefore: Integer;
     FSpaceAfter: Integer;
+    // the paragraph's own ground (FShaded: it has one), from its left indent to its right one
+    FShaded: Boolean;
+    FShading: TColor;
+    FShadeLeft, FShadeRight: Integer;
     FPaintFormats: array of TTyRichPaintFormat;
     { An input method's composition laid out in the paragraph (TTyRichLayouter.SetComposition):
       FCompLen characters at FCompAt that are not the document's, the input method's caret and
@@ -642,6 +651,7 @@ type
     function NearestInFragment(const F: TTyRichFragment; AX: Integer): Integer;
     function PointInLine(ALine, AX: Integer): Integer;
     function PaintFormat(AFormat: TTyCharFormatId): TTyRichPaintFormat;
+    function GroundUnder(AHighlight: TColor; const AStyle: TTyRichPaintStyle): TColor;
     procedure TakePaintFormats(ADoc: TTyRichDocument; ABaseStyle: TFontStyles);
     function LineSelection(ALine: Integer; AFrom, ATo: TTyRichPos; out AXa, AXb: Integer): Boolean;
     procedure PaintLine(ATarget: TBGRABitmap; ALine, AX, AY: Integer; const AClip: TRect;
@@ -692,6 +702,12 @@ type
     property NoticeBaseline: Integer read FNoticeBaseline;
     property SpaceBefore: Integer read FSpaceBefore;
     property SpaceAfter: Integer read FSpaceAfter;
+    { The paragraph's ground (its format's Shading; clNone: none), painted under its lines
+      from ShadeLeft to ShadeRight (block pixels: its left and right indents) and from its
+      first line's top to its last line's bottom - the space before and after stay clear. }
+    function Shading: TColor;
+    property ShadeLeft: Integer read FShadeLeft;
+    property ShadeRight: Integer read FShadeRight;
     property HasMarker: Boolean read FHasMarker;
     { Text, Font, Format, X, Width, Ascent, Descent; drawn on Lines[0].Baseline. }
     property Marker: TTyRichFragment read FMarker;
@@ -3257,10 +3273,11 @@ begin
 end;
 
 { The ink of a character in colour AColor: a colour of its own as it is; the automatic colour
-  the theme's text colour - but over a highlight of its own (AHighlight) whichever of the
-  theme's text colour and its opposite stands out more from that highlight, as Word draws
-  automatic text black on a light highlight and white on a dark one. Only what automatic
-  resolves to here, at paint time: the document's colours are not changed. }
+  the theme's text colour - but over a ground of the document's (AHighlight: the character's
+  highlight, else its paragraph's shading, else the document's ground - GroundUnder)
+  whichever of the theme's text colour and its opposite stands out more from that ground, as
+  Word draws automatic text black on a light highlight and white on a dark one. Only what
+  automatic resolves to here, at paint time: the document's colours are not changed. }
 function TextInk(AColor, AHighlight: TColor; const AStyle: TTyRichPaintStyle): TBGRAPixel;
 var
   back, opposite: TBGRAPixel;
@@ -3427,15 +3444,43 @@ begin
   end;
 end;
 
+function TTyParaLayout.Shading: TColor;
+begin
+  if FShaded then Result := FShading else Result := clNone;
+end;
+
+{ What lies under a character with highlight AHighlight here, for TextInk: its highlight, else
+  the paragraph's ground, else the document's (clNone: the theme's). }
+function TTyParaLayout.GroundUnder(AHighlight: TColor; const AStyle: TTyRichPaintStyle): TColor;
+begin
+  if AHighlight <> clNone then Exit(AHighlight);
+  if FShaded then Exit(FShading);
+  if AStyle.HasGround and (AStyle.Ground <> clNone) and (AStyle.Ground <> clDefault) then
+    Exit(AStyle.Ground);
+  Result := clNone;
+end;
+
 procedure TTyParaLayout.Paint(ATarget: TBGRABitmap; AX, AY: Integer; const AClip: TRect;
   const AStyle: TTyRichPaintStyle; ASelFrom, ASelTo: TTyRichPos);
 var
-  clip, old: TRect;
+  clip, old, shade: TRect;
   ln, top: Integer;
 begin
   if ATarget = nil then Exit;
   old := ATarget.ClipRect;
   if not Types.IntersectRect(clip, AClip, old) then Exit;
+  // the paragraph's own ground under its lines, the space before and after left clear
+  if FShaded and (FLineCount > 0) then
+  begin
+    shade.Left := Integer(Max(Int64(clip.Left), Int64(AX) + FShadeLeft));
+    shade.Right := Integer(Min(Int64(clip.Right), Int64(AX) + FShadeRight));
+    shade.Top := Max(clip.Top, AY + FLines[0].Top);
+    shade.Bottom := Min(clip.Bottom, AY + FLines[FLineCount - 1].Top +
+      FLines[FLineCount - 1].Height);
+    if (shade.Right > shade.Left) and (shade.Bottom > shade.Top) then
+      ATarget.FillRect(shade.Left, shade.Top, shade.Right, shade.Bottom,
+        ColorToBGRA(ColorToRGB(FShading)), dmSet);
+  end;
   // the selection in the layout's positions (a composition is never selected)
   if ASelTo > ASelFrom then
   begin
@@ -3598,7 +3643,7 @@ begin
     drawn := FragmentText(i);
     if drawn = '' then Continue;
     pf := PaintFormat(f^.Format);
-    ink := TextInk(pf.Color, pf.Highlight, AStyle);
+    ink := TextInk(pf.Color, GroundUnder(pf.Highlight, AStyle), AStyle);
     if hasSel then n := InkParts(AClip, x0, x1, AX + xa, AX + xb, parts)
     else n := InkParts(AClip, x0, x1, 0, 0, parts);
     for k := 0 to n - 1 do
@@ -3622,7 +3667,7 @@ begin
     px := FLayouter.Device.FontPixelHeight(f^.Font);
     th := Max(1, Round(px / 16));
     lineY := base + f^.Shift + Max(1, Round(px / 10));
-    ink := TextInk(pf.Color, pf.Highlight, AStyle);
+    ink := TextInk(pf.Color, GroundUnder(pf.Highlight, AStyle), AStyle);
     if (f^.Kind = rfkTab) and (f^.Leader <> ttlNone) then
     begin
       if hasSel and SelectedChars(f^) then Leader(f^, AStyle.SelectionText)
@@ -3655,7 +3700,8 @@ begin
       th := Max(1, Round(px / 16));
       lineY := base + f^.Shift + Max(1, Round(px / 10));
       if AStyle.CompositionLine.alpha = 0 then
-        col := TextInk(PaintFormat(f^.Format).Color, PaintFormat(f^.Format).Highlight, AStyle)
+        col := TextInk(PaintFormat(f^.Format).Color,
+          GroundUnder(PaintFormat(f^.Format).Highlight, AStyle), AStyle)
       else
         col := AStyle.CompositionLine;
       k := Max(f^.First, FCompAt);
@@ -4886,6 +4932,8 @@ begin
     ls115: hx := natural * 1.15;
     ls15: hx := natural * 1.5;
     lsDouble: hx := natural * 2;
+    // any other multiple, the same rule (a file's \slN\slmult1: N / 240)
+    lsMultiple: hx := natural * Max(1, Pf.LineSpacingValue) / 240;
     lsExact:
       begin
         hx := TyRichClampPx(Px(Pf.LineSpacingValue));
@@ -4989,6 +5037,7 @@ begin
   mk^.First := 0;
   mk^.Count := 0;
   if FileMarker <> '' then mk^.Text := FileMarker
+  else if (Pf.List.Kind = lkBullet) and (Pf.List.Bullet <> '') then mk^.Text := Pf.List.Bullet
   else mk^.Text := TyRichListMarkerText(Pf.List.Kind, Pf.List.Level, ListNumber);
   DecodeAt(mk^.Text, 1, code);
   if not L.GlyphIn(f, code) then f := L.FallbackFor(f, code);
@@ -5105,6 +5154,13 @@ begin
   emptyFmt := FirstFormat;
   Layout.FSpaceBefore := Max(0, Px(Pf.SpaceBefore));
   Layout.FSpaceAfter := Max(0, Px(Pf.SpaceAfter));
+  Layout.FShaded := (Pf.Shading <> clNone) and (Pf.Shading <> clDefault);
+  Layout.FShading := Pf.Shading;
+  // from the left indent to the right one (a first line further left is not the box's);
+  // unwrapped lines have no right indent: as far as the view shows (the clip)
+  Layout.FShadeLeft := LeftPx;
+  if RightPx = CUnlimited then Layout.FShadeRight := CUnlimited
+  else Layout.FShadeRight := RightPx;
   top := Layout.FSpaceBefore;
   s := 0;
   k := 0;
@@ -5396,6 +5452,8 @@ begin
   Result.TableBorder := BGRA(128, 128, 128, 255);
   Result.CompositionLine := BGRAPixelTransparent;
   Result.DeferPictures := False;
+  Result.HasGround := False;
+  Result.Ground := clNone;
 end;
 
 function TyRichShownPicture(AObj: TTyRichObject): TTyRichPicture;
