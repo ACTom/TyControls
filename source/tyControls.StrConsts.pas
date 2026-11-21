@@ -333,7 +333,7 @@ resourcestring
   rsRichEditRefusedSaving     = 'The document is being saved: it cannot be changed meanwhile.';
   rsRichEditRefusedFixedRow   = 'This table row holds a nested table and is kept as the file has it: its text cannot be changed.';
   rsRichEditRefusedRange      = 'This part of the document cannot be edited.';
-  rsRichEditRefusedCells      = 'A selection across table cells cannot be deleted or typed over (whole rows can).';
+  rsRichEditRefusedCells      = 'This selection across table cells cannot be cut or changed this way (cells selected alone can be cleared or typed over).';
   rsRichEditRefusedLongPara   = 'This paragraph is too long to edit here: what is typed past the part shown would not be seen.';
   rsRichEditRefusedPicture    = 'The picture is too large to go into the document.';
   rsRichEditRefusedPlainPaste = 'A plain text document takes only text: a picture or formatted text cannot be pasted into it.';

@@ -1105,7 +1105,7 @@ msgid "A bookmark's name begins with a letter and holds only letters, digits and
 msgstr ""
 
 #: tycontrols.strconsts.rsricheditrefusedcells
-msgid "A selection across table cells cannot be deleted or typed over (whole rows can)."
+msgid "This selection across table cells cannot be cut or changed this way (cells selected alone can be cleared or typed over)."
 msgstr ""
 
 #: tycontrols.strconsts.rsricheditrefuseddeletenotwhole

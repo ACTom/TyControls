@@ -979,8 +979,8 @@ msgid "This part of the document cannot be edited."
 msgstr "文档的这一部分不能编辑。"
 
 #: tycontrols.strconsts.rsricheditrefusedcells
-msgid "A selection across table cells cannot be deleted or typed over (whole rows can)."
-msgstr "跨越表格单元格的选区不能删除或改写（整行可以）。"
+msgid "This selection across table cells cannot be cut or changed this way (cells selected alone can be cleared or typed over)."
+msgstr "这个跨越表格单元格的选区不能这样剪切或修改（只选中单元格时可以清空或改写）。"
 
 #: tycontrols.strconsts.rsricheditrefusedpicture
 msgid "The picture is too large to go into the document."
