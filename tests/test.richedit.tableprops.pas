@@ -960,6 +960,27 @@ begin
     finally
       d.EndRead;
     end;
+    // a plain delete takes a row away: the next edit of rows puts the table's rows right
+    AssertTrue('a plain delete of row 1', Exec(d, TTyRichDelete.Create(d.Text.ParaStart(3),
+      d.Text.ParaStart(5) - d.Text.ParaStart(3))));
+    AssertEquals('the object keeps the row for now', 3, t.RowCount);
+    AssertTrue('a row', Exec(d, TTyRichInsertRow.Create(pos, 2)));
+    d.BeginRead;
+    try
+      AssertTrue('still the same table object', d.TableAt(1) = t);
+      AssertTrue('its rows: those with paragraphs, the new one last', (t.RowCount = 3) and
+        (t.Rows[0] = r0) and (t.Rows[1] = r2) and (t.Rows[2].Index = 2));
+    finally
+      d.EndRead;
+    end;
+    d.Undo;
+    d.BeginRead;
+    try
+      AssertTrue('undone: the rows as the delete left them', (t.RowCount = 3) and (t.Rows[1].Index = 1) and
+        (t.Rows[2] = r2) and (r2.Index = 2));
+    finally
+      d.EndRead;
+    end;
   finally
     d.Free;
   end;

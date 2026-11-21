@@ -230,6 +230,11 @@ end;
 var
   GBuckets: array of TTyRichRowFormat;
   GCount: Integer;
+  { The bytes read last without colours and what they gave (held by no one here: Release
+    forgets it) - the rows of one table usually share their bytes, often the very string. }
+  GLastRaw: RawByteString;
+  GLastCells: Integer;
+  GLastFormat: TTyRichRowFormat;
 
 procedure Mix(var H: Cardinal; V: Integer); inline;
 begin
@@ -390,6 +395,11 @@ begin
   Dec(FRefCount);
   if FRefCount > 0 then Exit;
   if FPooled then Unpool(Self);
+  if GLastFormat = Self then
+  begin
+    GLastFormat := nil;
+    GLastRaw := '';
+  end;
   Free;
 end;
 
@@ -564,6 +574,13 @@ var
 
 begin
   if ARaw = '' then Exit(TyRichInternRowFormat(DefaultFormat(ACellCount)));
+  if (Length(AColors) = 0) and (GLastFormat <> nil) and (ACellCount = GLastCells) and
+     (Length(ARaw) = Length(GLastRaw)) and
+     ((Pointer(ARaw) = Pointer(GLastRaw)) or CompareMem(@ARaw[1], @GLastRaw[1], Length(ARaw))) then
+  begin
+    GLastFormat.AddRef;
+    Exit(GLastFormat);
+  end;
   f := TTyRichRowFormat.Create;
   f.Row.Valid := [rrpHeight, rrpLeft, rrpAlign, rrpPad];
   NewRow;
@@ -599,7 +616,11 @@ begin
       Inc(i);
       Continue;
     end;
-    word := Copy(ARaw, start, i - start);
+    { (the word in a string of the default code page: one copied out of the bytes keeps
+      theirs, and every comparison with a constant would convert it first) }
+    word := '';
+    SetLength(word, i - start);
+    Move(ARaw[start], word[1], i - start);
     neg := (i <= n) and (ARaw[i] = '-');
     if neg then Inc(i);
     hasParam := (i <= n) and (ARaw[i] in ['0'..'9']);
@@ -680,10 +701,17 @@ begin
       if s in [rcsLeft, rcsRight] then f.Row.DefaultPad[s] := f.HalfGap
       else f.Row.DefaultPad[s] := 0;
   end;
+  i := ACellCount;
   if ACellCount < 0 then ACellCount := count;
   SetLength(f.Cells, ACellCount);
-  for i := count to ACellCount - 1 do f.Cells[i] := PlainCell;
+  for n := count to ACellCount - 1 do f.Cells[n] := PlainCell;
   Result := TyRichInternRowFormat(f);
+  if Length(AColors) = 0 then
+  begin
+    GLastRaw := ARaw;
+    GLastCells := i;
+    GLastFormat := Result;
+  end;
 end;
 
 function TyRichFormatDisplay(AFormat: TTyRichRowFormat; const AEdges: array of Integer): TTyRowDisplay;
