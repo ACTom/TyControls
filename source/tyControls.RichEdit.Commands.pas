@@ -151,7 +151,9 @@ type
     graphic or the list is not kept: a redo puts the same picture back). Raises ETyRichModel
     for an empty graphic, an index not in the list, or a size below 0. }
   TTyRichInsertPicture = class(TTyRichInsertObject)
-  private
+  public
+    { The picture this command would insert, made alone (not held: the caller's, with no
+      reference taken) - for whoever builds content of its own (TTyRichBuilder). }
     class function PictureOf(AGraphic: TGraphic; AWidthTwips,
       AHeightTwips: Integer): TTyRichPicture;
     class function PictureOfList(AImages: TCustomImageList; AIndex, AWidthTwips,

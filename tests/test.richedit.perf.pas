@@ -66,6 +66,7 @@ type
     procedure TestTheActionsOverAWhole100MBSelection;
     procedure TestARtfOf200PicturesAPlaceNeverShownAndAgain;
     procedure TestAutoHeightOfAThousandParagraphsAfterAWidthChange;
+    procedure TestABuilderOfTenThousandFormattedParagraphs;
     procedure TestABookmarkAmong200000In100MB;
   private
     procedure SaveBesideFields(ABytes: Int64; ANest: Integer);
@@ -77,7 +78,7 @@ uses
   Math, LCLType, Controls, BGRABitmap, BGRABitmapTypes, tyControls.RichEdit.Text,
   tyControls.RichEdit.RtfRead, tyControls.RichEdit.RtfWrite, tyControls.RichEdit.Model,
   tyControls.RichEdit.Commands, tyControls.RichEdit.Find, tyControls.RichEdit.Ruler,
-  tyControls.RichEdit.Actions
+  tyControls.RichEdit.Actions, tyControls.RichEdit.Builder
   {$IFDEF LCLWin32}, test.richedit.dropacross{$ENDIF};
 
 {$IFDEF MSWINDOWS}
@@ -2158,6 +2159,39 @@ begin
   finally
     bmp.Free;
   end;
+end;
+
+{ 10,000 paragraphs in formats - a bold word, plain text, every tenth a link - built and put in
+  with SetContent: the design's 200 ms, three times (the suite's line). }
+procedure TTyRichEditPerfTest.TestABuilderOfTenThousandFormattedParagraphs;
+var
+  B: TTyRichBuilder;
+  i, k: Integer;
+  t0, t, best: Double;
+begin
+  best := MaxDouble;
+  for k := 1 to 3 do
+  begin
+    t0 := Clock;
+    B := FRich.NewBuilder;
+    try
+      for i := 1 to 10000 do
+      begin
+        B.Bold.Text('Item ' + IntToStr(i)).Bold(False).Text(': some ordinary words of a line.');
+        if i mod 10 = 0 then B.Text(' ').Link('more', 'https://example.com/' + IntToStr(i));
+        if i mod 7 = 0 then B.Color(clNavy) else B.Color(clDefault);
+        B.Paragraph;
+      end;
+      FRich.SetContent(B);
+    finally
+      B.Free;
+    end;
+    t := Clock - t0;
+    if t < best then best := t;
+  end;
+  AssertEquals('the paragraphs', 10001, FRich.Document.Text.ParaCount);
+  Report('a builder: 10,000 formatted paragraphs built and set (best of 3)', best);
+  AssertTrue(Format('built and set in %.1f ms', [best]), best <= 600);
 end;
 
 initialization

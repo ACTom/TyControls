@@ -1294,6 +1294,10 @@ msgstr ""
 msgid "Insert column"
 msgstr ""
 
+#: tycontrols.strconsts.rsrichundoinsertcontent
+msgid "Insert content"
+msgstr ""
+
 #: tycontrols.strconsts.rsrichundoinsertlink
 msgid "Insert link"
 msgstr ""

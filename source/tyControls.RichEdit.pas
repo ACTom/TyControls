@@ -76,7 +76,7 @@ uses
   tyControls.RichEdit.Text, tyControls.RichEdit.Model, tyControls.RichEdit.Commands,
   tyControls.RichEdit.TextIO, tyControls.RichEdit.RtfRead, tyControls.RichEdit.RtfWrite,
   tyControls.RichEdit.Layout, tyControls.RichEdit.Attrs, tyControls.RichEdit.Find,
-  tyControls.RichEdit.Bookmarks;
+  tyControls.RichEdit.Bookmarks, tyControls.RichEdit.Builder;
 
 const
   CRichZoomMin = 10;
@@ -2977,6 +2977,35 @@ type
     { The user's action for the space before and after the paragraphs the selection touches,
       points (ApplyParagraphFormat's rules: refused by ReadOnly, told once). }
     function ApplyParagraphSpacing(ABeforePt, AAfterPt: Double): Boolean;
+
+    { ---- content built from code (tyControls.RichEdit.Builder) ----
+      All three are edits from code: ReadOnly is not asked; nothing is laid out or painted
+      until the next paint (one layout, one paint); the builder stays the caller's, as it was
+      (it can be put in again). A builder that holds nothing puts nothing in. A document that
+      is loading, incomplete or being saved raises ETyRichEdit and nothing changes.
+      NewBuilder: a builder (the caller frees it) whose defaults are this document's - its
+      default character and paragraph formats (what Reset and Paragraph go back to) and its
+      text width (what equal columns share). }
+    function NewBuilder: TTyRichBuilder;
+    { A new content, as a load: the history goes, the document not Modified; the document's
+      own values (the page, the default formats, the ground) are the builder's where it set
+      them (PageSetup, DocumentColor), else what Clear leaves. The paragraphs are the
+      builder's, and nothing after them (a document that ends with a table keeps the empty
+      paragraph after it). The caret goes to the start, nothing selected. }
+    procedure SetContent(ABuilder: TTyRichBuilder);
+    { The builder's paragraphs after the document's last (a last paragraph that holds
+      something stays as it is, and the content begins a paragraph of its own after it; an
+      empty last paragraph takes the content's first), as ONE undo step. The document's own
+      values are not touched; the fonts and colours come along. The selection stays where it
+      was (a caret at the very end goes along with the end). }
+    procedure AppendContent(ABuilder: TTyRichBuilder);
+    { The builder's content at APos, one undo step. At a paragraph's start its paragraphs go
+      in before that paragraph, whole; inside a paragraph they go in as a paste does - the
+      first joins the text before APos (the paragraph takes its format, unless the content is
+      one paragraph: then it goes in in line), the last the text after it. In a table cell,
+      every paragraph is the cell's (a table of the builder becomes its text: never a table in
+      a table). The selection is shifted by what went in before it. }
+    procedure InsertContent(APos: TTyRichPos; ABuilder: TTyRichBuilder);
 
     { ---- finding and replacing ----
       What a match is (tyControls.RichEdit.Find): the needle against the text as it is shown -
@@ -13563,6 +13592,123 @@ begin
   FReportedH := h;
   FReportedW := w;
   if Assigned(FOnContentSizeChange) then FOnContentSizeChange(Self);
+end;
+
+function TTyCustomRichEdit.NewBuilder: TTyRichBuilder;
+begin
+  Result := TTyRichBuilder.CreateFor(FDoc.DefaultCharFormat,
+    FDoc.Formats.ParaFormat(FDoc.DefaultParaFormatId), FDoc.TextWidthTwips);
+end;
+
+// (one of the content's commands: refused, nothing more is done)
+procedure RunContent(ADoc: TTyRichDocument; ACmd: TTyRichCommand; const AReason: string);
+begin
+  if not ADoc.Execute(ACmd) then
+    if AReason <> '' then raise ETyRichEdit.Create(AReason)
+    else raise ETyRichEdit.Create(rsRichEditRefusedRange);
+end;
+
+procedure TTyCustomRichEdit.SetContent(ABuilder: TTyRichBuilder);
+var
+  src: TTyRichDocument;
+  s: TTyRichDocSettings;
+  n: Integer;
+begin
+  if ABuilder = nil then raise ETyRichEdit.Create('SetContent: no builder');
+  if FDoc.Saving then raise ETyRichEdit.Create(rsRichEditRefusedSaving);
+  // (made first: a builder that raises changes nothing)
+  if ABuilder.IsEmpty then src := nil else src := ABuilder.MakeDocument;
+  try
+    // a new content: the history, the loader, the document's own values go (Clear's)
+    Clear;
+    FDoc.BeginUpdate;
+    try
+      if ABuilder.HasPageSetup or ABuilder.HasDocumentColor then
+      begin
+        s := FDoc.Settings;
+        if ABuilder.HasPageSetup then
+        begin
+          s.PaperWidth := ABuilder.PaperWidth;
+          s.MarginLeft := ABuilder.MarginLeft;
+          s.MarginRight := ABuilder.MarginRight;
+        end;
+        if ABuilder.HasDocumentColor then s.Color := ABuilder.DocumentColorValue;
+        RunContent(FDoc, TTyRichChangeSettings.Create(s), RefusalReason);
+      end;
+      if src <> nil then
+      begin
+        RunContent(FDoc, TTyRichInsertFragment.Create(0, src, True), RefusalReason);
+        src := nil;
+        // the empty paragraph Clear left goes, unless a table ends the content
+        n := FDoc.Text.ParaCount;
+        if (n > 1) and (FDoc.Text.ParaLength(n - 1) = 0) and (FDoc.CellAt(n - 2) = nil) then
+          RunContent(FDoc, TTyRichDelete.Create(FDoc.Text.Length - 1, 1), RefusalReason);
+      end;
+    finally
+      FDoc.EndUpdate;
+    end;
+    { as a load: no history, the saved point here (the caret stays at the start Clear put it
+      at: what goes in at a caret's place leaves it before it) }
+    FDoc.ClearUndo;
+    FDoc.Modified := False;
+  finally
+    src.Free;
+  end;
+end;
+
+procedure TTyCustomRichEdit.AppendContent(ABuilder: TTyRichBuilder);
+var
+  src: TTyRichDocument;
+  n: Integer;
+begin
+  if ABuilder = nil then raise ETyRichEdit.Create('AppendContent: no builder');
+  if ABuilder.IsEmpty then Exit;
+  if RefusalReason <> '' then raise ETyRichEdit.Create(RefusalReason);
+  src := ABuilder.MakeDocument;
+  try
+    FDoc.BeginUpdate(rsRichUndoInsertContent);
+    try
+      // a last paragraph that holds something stays: the content begins after it
+      n := FDoc.Text.ParaCount;
+      if FDoc.Text.ParaLength(n - 1) > 0 then
+        RunContent(FDoc, TTyRichInsertText.Create(FDoc.Text.Length, #10, TyRichInheritFormat,
+          False), RefusalReason);
+      n := FDoc.Text.ParaCount;
+      RunContent(FDoc, TTyRichInsertFragment.Create(FDoc.Text.ParaStart(n - 1), src, True),
+        RefusalReason);
+      src := nil;
+      // the empty paragraph after it goes (unless a table ends the content)
+      n := FDoc.Text.ParaCount;
+      if (n > 1) and (FDoc.Text.ParaLength(n - 1) = 0) and (FDoc.CellAt(n - 2) = nil) then
+        RunContent(FDoc, TTyRichDelete.Create(FDoc.Text.Length - 1, 1), RefusalReason);
+    finally
+      FDoc.EndUpdate;
+    end;
+  finally
+    src.Free;
+  end;
+end;
+
+procedure TTyCustomRichEdit.InsertContent(APos: TTyRichPos; ABuilder: TTyRichBuilder);
+var
+  src: TTyRichDocument;
+  atStart: Boolean;
+begin
+  if ABuilder = nil then raise ETyRichEdit.Create('InsertContent: no builder');
+  if (APos < 0) or (APos > FDoc.Text.Length) then
+    raise ETyRichEdit.CreateFmt('InsertContent: position %d is not in 0..%d',
+      [APos, FDoc.Text.Length]);
+  if ABuilder.IsEmpty then Exit;
+  if RefusalReason <> '' then raise ETyRichEdit.Create(RefusalReason);
+  atStart := FDoc.Text.ParaStart(FDoc.Text.ParaOfPos(APos)) = APos;
+  src := ABuilder.MakeDocument;
+  try
+    // whole paragraphs before the one at a paragraph's start; in line elsewhere
+    RunContent(FDoc, TTyRichInsertFragment.Create(APos, src, atStart), RefusalReason);
+    src := nil;
+  finally
+    src.Free;
+  end;
 end;
 
 function TTyCustomRichEdit.ApplyParagraphSpacing(ABeforePt, AAfterPt: Double): Boolean;

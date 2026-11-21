@@ -322,7 +322,8 @@ uses
   test.richedit.display,
   test.richedit.links,
   test.richedit.bookmarks,
-  test.richedit.objevents;
+  test.richedit.objevents,
+  test.richedit.builder;
 
 type
   TTyTestRunner = class(TTestRunner)

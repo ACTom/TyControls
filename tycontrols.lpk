@@ -953,6 +953,10 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <Filename Value="source/tyControls.RichEdit.Bookmarks.pas"/>
         <UnitName Value="tyControls.RichEdit.Bookmarks"/>
       </Item>
+      <Item>
+        <Filename Value="source/tyControls.RichEdit.Builder.pas"/>
+        <UnitName Value="tyControls.RichEdit.Builder"/>
+      </Item>
     </Files>
     <i18n>
       <EnableI18N Value="True"/>

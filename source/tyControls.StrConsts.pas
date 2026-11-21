@@ -305,6 +305,7 @@ resourcestring
   rsRichUndoInsertPicture = 'Insert picture';
   rsRichUndoResizeObject = 'Resize object';
   rsRichUndoSettings     = 'Document settings';
+  rsRichUndoInsertContent = 'Insert content';
   rsRichUndoMove         = 'Move';
   rsRichUndoCopy         = 'Copy';
   rsRichUndoInsertLink   = 'Insert link';
