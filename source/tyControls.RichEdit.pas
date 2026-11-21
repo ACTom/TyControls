@@ -70,7 +70,7 @@ interface
 
 uses
   Classes, SysUtils, Types, Math, Controls, Graphics, Forms, ExtCtrls, LCLType, LCLIntf,
-  LMessages, LCLPlatformDef, LazMethodList, BGRABitmap, BGRABitmapTypes,
+  LMessages, LCLPlatformDef, LazMethodList, StdCtrls, BGRABitmap, BGRABitmapTypes,
   tyControls.Types, tyControls.StyleModel, tyControls.Painter, tyControls.Base,
   tyControls.ScrollBar, tyControls.TextMenu, tyControls.Controller,
   tyControls.RichEdit.Text, tyControls.RichEdit.Model, tyControls.RichEdit.Commands,
@@ -82,6 +82,9 @@ const
   CRichZoomMax = 500;
   { Ctrl + one wheel notch. }
   CRichZoomStep = 10;
+  { ContentHeight measures a document of at most this many paragraphs whole (a page built
+    from code, a help page): its answer is then exact. A larger one answers the estimate. }
+  CRichContentExactParas = 10000;
   { The most a scroll bar is given as its range: a document taller than this (in pixels) is
     scrolled in steps of more than one pixel per bar unit (see TTyCustomRichEdit.ScrollBarLimit). }
   CRichScrollBarRange = 1 shl 30;
@@ -616,6 +619,18 @@ type
     FBarScale: Int64;
     FVBar, FHBar: TTyScrollBar;
     FScrollBarAutoHide: TTyScrollBarAutoHide;
+    // a display page's switches (ReadOnlyCaret, FocusOnClick, AllowSelection, ScrollBars,
+    // AutoHeight) and the content's size as last reported (OnContentSizeChange; -1: none yet)
+    FReadOnlyCaret: Boolean;
+    FFocusOnClick: Boolean;
+    FAllowSelection: Boolean;
+    FScrollBars: TScrollStyle;
+    FAutoHeight: Boolean;
+    FOnContentSizeChange: TNotifyEvent;
+    FSizeCall: TTyRichQueuedCall;
+    FReportedW, FReportedH: Integer;
+    FSizingSelf: Boolean;
+    FPressNoFocus: Boolean;
     FSyncingBars: Boolean;
     FWheelRest, FWheelHRest, FZoomWheelRest: Integer;
     // background work
@@ -1005,6 +1020,23 @@ type
     procedure RunApiEdit(ACmd: TTyRichCommand; AChars: TTyRichPos);
     // the document's settings (DocumentColor, SetPageSetup, SetDefaultFormats)
     function GetDocumentColor: TColor;
+    // the display page's switches
+    procedure SetReadOnlyCaret(AValue: Boolean);
+    procedure SetAllowSelection(AValue: Boolean);
+    procedure SetScrollBars(AValue: TScrollStyle);
+    procedure SetAutoHeight(AValue: Boolean);
+    function BarAllowed(AVertical: Boolean): Boolean;
+    function CaretHidden: Boolean;
+    { Every paragraph measured, where a document small enough is whole (ContentHeight's
+      exactness): CRichContentExactParas paragraphs at most, never a file still loading. }
+    procedure MeasureContent;
+    function ContentInsets(out AH, AV: Integer): Boolean;
+    { The content's size against what was last reported: OnContentSizeChange, and AutoHeight's
+      height. AQueue: from a place that must not run it now (a paint, a document's change,
+      a resize) - queued to the loop. Nothing at all while nobody listens. }
+    procedure CheckContentSize(AQueue: Boolean);
+    function ContentSizeWanted: Boolean;
+    function AutoHeightApplies: Boolean;
     procedure SetDocumentColor(AValue: TColor);
     procedure ApiSettings(const ASettings: TTyRichDocSettings);
     procedure ApiCharFormat(AStart, ALen: TTyRichPos; AMask: TTyCharFormatMask;
@@ -1899,6 +1931,11 @@ type
     procedure DrawCaret(ACanvas: TCanvas);
     { The caret is drawn (a test can stand in for a focus it cannot give). }
     function HasCaretFocus: Boolean; virtual;
+    { False inside a press's inherited handling when FocusOnClick is False: the package's
+      base control focuses a pressed control that can be focused (TTyCustomControl.MouseDown),
+      and that press must not. }
+    function CanFocus: Boolean; override;
+    property PressRefusesFocus: Boolean read FPressNoFocus;
     { The blink: the caret's half period passed - its rectangle is blitted again, nothing on
       the surface is drawn. }
     procedure BlinkTick(Sender: TObject);
@@ -3028,6 +3065,43 @@ type
     property TextCodePage: Integer read FTextCodePage write FTextCodePage default 0;
     property ScrollBarAutoHide: TTyScrollBarAutoHide read FScrollBarAutoHide
       write SetScrollBarAutoHide default sbahDefault;
+    { ---- a display page (a home page, a help page built from code) ----
+      ReadOnlyCaret: False hides the caret while ReadOnly (an editable control shows it
+      whatever this says); the caret still is where it was, the end a selection grows from
+      with Shift and the arrows, and the selection is drawn as ever. }
+    property ReadOnlyCaret: Boolean read FReadOnlyCaret write SetReadOnlyCaret default True;
+    { False: a mouse press never takes the focus (the wheel still scrolls under the pointer,
+      a link still clicks); with TabStop False the control is never focused at all - it still
+      paints, follows the theme and fires OnLinkClick. }
+    property FocusOnClick: Boolean read FFocusOnClick write FFocusOnClick default True;
+    { False: the user makes no selection - no drag, no double or triple click, no Shift+click,
+      no Shift+arrow, Ctrl+A does nothing; copying is unavailable (Copy, the menu's Copy and
+      Select All, CopyToClipboard); the pointer is the arrow over the text (the hand over a
+      link, which a plain left click fires, as under ReadOnly); a press places no caret. What
+      code selects (SelStart, SelLength, SelectAll, a find's match) is the application's
+      asking: it is drawn and scrolled into view as ever. }
+    property AllowSelection: Boolean read FAllowSelection write SetAllowSelection default True;
+    { The bars that may show, each only when the content needs it (as ScrollBarAutoHide
+      decides how it looks); ssNone: never - the wheel, the keys, ScrollX and the anchor still
+      scroll. ssAutoHorizontal, ssAutoVertical, ssAutoBoth are ssHorizontal, ssVertical,
+      ssBoth: every bar here is shown only when needed. }
+    property ScrollBars: TScrollStyle read FScrollBars write SetScrollBars default ssBoth;
+    { True: the control's Height is ContentHeight (within Constraints), set again whenever the
+      content, the width, the zoom, the PPI, the theme or the padding change; no vertical bar
+      then. Nothing is set while Align or the anchors (top and bottom) make the parent decide
+      the height. }
+    property AutoHeight: Boolean read FAutoHeight write SetAutoHeight default False;
+    { The client pixels the content needs at the current width, zoom, PPI and theme, the
+      padding included (and a horizontal bar that shows): exact once every paragraph is laid
+      out - a document built from code or loaded whole of up to CRichContentExactParas
+      paragraphs is measured whole when this is asked; else the estimate the scroll bar
+      works with, and ContentSizeIsEstimate says so. }
+    function ContentHeight: Integer;
+    function ContentWidth: Integer;
+    function ContentSizeIsEstimate: Boolean;
+    { ContentHeight or ContentWidth changed: once per change, never inside a paint (queued to
+      the loop from where it cannot run), after UpdateView. A handler may resize the control. }
+    property OnContentSizeChange: TNotifyEvent read FOnContentSizeChange write FOnContentSizeChange;
     property OnChange: TNotifyEvent read FOnChange write FOnChange;
     { The caret or the anchor moved: once per user action (a key, a press, a move of a drag),
       once for a document change that moved them, and not while loading a form file. }
@@ -3160,6 +3234,11 @@ type
     property TextEncoding;
     property TextCodePage;
     property ScrollBarAutoHide;
+    property ReadOnlyCaret;
+    property FocusOnClick;
+    property AllowSelection;
+    property ScrollBars;
+    property AutoHeight;
     property PlainText;
     property OnChange;
     property OnSelectionChange;
@@ -3175,6 +3254,7 @@ type
     property OnFindDone;
     property OnReplaceDone;
     property OnFallbackFont;
+    property OnContentSizeChange;
     property OnClick;
     property OnDblClick;
     property OnEnter;
@@ -3897,6 +3977,13 @@ begin
   FTextEncoding := teAuto;
   FTextCodePage := 0;
   FScrollBarAutoHide := sbahDefault;
+  FReadOnlyCaret := True;
+  FFocusOnClick := True;
+  FAllowSelection := True;
+  FScrollBars := ssBoth;
+  FAutoHeight := False;
+  FReportedW := -1;
+  FReportedH := -1;
   FSourceFormat := rfRtf;
   FFirstSliceBytes := CRtfFirstSliceBytes;
   FStepBytes := CRichLoadStepBytes;
@@ -3932,6 +4019,7 @@ begin
   FConsBudgetBytes := CRichConsistParseBytes;
   FFindSlice := CRichFindMinStepChars;
   FFindCall := TTyRichQueuedCall.Create(Self);
+  FSizeCall := TTyRichQueuedCall.Create(Self);
   {$IFDEF LCLCocoa}
   { Before the handle: LCL-Cocoa asks for it (LM_IM_COMPOSITION) inside CreateHandle. It holds
     the control as an ITyImeEditable whose _AddRef does nothing (the memo's way). }
@@ -3993,11 +4081,13 @@ begin
   EndFind(rfsCancelled, False);
   if FSelCall <> nil then CancelCall(FSelCall);
   if FFindCall <> nil then CancelCall(FFindCall);
+  if FSizeCall <> nil then CancelCall(FSizeCall);
   FreeAndNil(FTurnTimer);
   FreeAndNil(FBackstop);
   FreeAndNil(FStepCall);
   FreeAndNil(FSelCall);
   FreeAndNil(FFindCall);
+  FreeAndNil(FSizeCall);
   FreeAndNil(FBlinkTimer);
   FreeAndNil(FDragTimer);
   FreeAndNil(FTextMenu);
@@ -5496,6 +5586,12 @@ begin
   Result := Focused;
 end;
 
+function TTyCustomRichEdit.CanFocus: Boolean;
+begin
+  if FPressNoFocus then Exit(False);
+  Result := inherited CanFocus;
+end;
+
 procedure TTyCustomRichEdit.DrawCaret(ACanvas: TCanvas);
 var
   r: TRect;
@@ -5503,6 +5599,8 @@ begin
   FCaretDrawn := Rect(0, 0, 0, 0);
   // (inside the document's update the view knows nothing of the change yet: no query)
   if not HasCaretFocus or (csDesigning in ComponentState) or ViewBehind then Exit;
+  // a viewer asked to show none (ReadOnlyCaret): the caret is still there, undrawn
+  if CaretHidden then Exit;
   // the candidate window follows the caret: after a scroll, a zoom, a composition's change
   PlaceImeWindows;
   // a composition shows its caret over a selection it will replace
@@ -5522,7 +5620,7 @@ var
 begin
   { Inside the document's update (an application pumping messages between BeginUpdate and
     EndUpdate) the blocks may name paragraphs that are gone: the blink waits. }
-  if ViewBehind then Exit;
+  if ViewBehind or CaretHidden then Exit;
   Inc(FBlinkMs, CRichBlinkMs);
   vis := TyCaretVisible(FBlinkMs, CRichBlinkMs);
   if vis = FCaretShown then Exit;
@@ -5604,7 +5702,8 @@ begin
     if not FDragging and not ViewBehind and LinkClickFires(FPointerShift, mbLeft) and
       LinkAtPoint(X, Y, url) then
       Exit(crHandPoint);
-    Result := crIBeam;
+    // nothing to select: the arrow (the padding's, see GetCursor)
+    if FAllowSelection then Result := crIBeam else Result := crDefault;
   end
   else
     Result := crDefault;
@@ -5695,7 +5794,13 @@ begin
     // at the composition's place, before it: an owed result goes in behind the caret
     FCompBefore := FCompPending and (q = FCompPos) and not FPressAfter;
   end;
-  inherited MouseDown(Button, Shift, X, Y);
+  // (the base control's focus on a press: not when FocusOnClick says no - CanFocus)
+  FPressNoFocus := not FFocusOnClick;
+  try
+    inherited MouseDown(Button, Shift, X, Y);
+  finally
+    FPressNoFocus := False;
+  end;
   // a user action is an entry point of the loop (see SchedulingFailed)
   EndOwedLoad;
   // the middle button: a link's click, or nothing
@@ -5706,7 +5811,7 @@ begin
   end;
   if (Button <> mbLeft) and (Button <> mbRight) then Exit;
   try
-    if CanFocus and not Focused then SetFocus;
+    if FFocusOnClick and CanFocus and not Focused then SetFocus;
   except
     // no focus to be had (a form not shown): the caret is placed all the same
   end;
@@ -5721,6 +5826,8 @@ begin
   end;
   // a link's click (LinkClickFires): nothing else - no caret, no selection, no object
   if (Button = mbLeft) and LinkPress(Button, Shift, X, Y) then Exit;
+  // no selection of the user's (AllowSelection): a press places nothing, drags nothing
+  if not FAllowSelection then Exit;
   if not pre then
   begin
     q := HitClient(X, Y, atEnd);
@@ -5976,7 +6083,8 @@ begin
   if AShift * [ssDouble, ssTriple, ssQuad] <> [] then Exit;
   if (AButton <> mbLeft) and (AButton <> mbMiddle) then Exit;
   if AShift * [ssShift, ssAlt] <> [] then Exit;
-  Result := FReadOnly or (ssCtrl in AShift);
+  // (a page the user selects nothing on clicks its links as a viewer does)
+  Result := FReadOnly or not FAllowSelection or (ssCtrl in AShift);
 end;
 
 function TTyCustomRichEdit.CharBoxAt(X, Y: Integer): TTyRichPos;
@@ -9324,8 +9432,9 @@ end;
 
 procedure TTyCustomRichEdit.CopyToClipboard;
 begin
-  // nothing selected: nothing put there, the clipboard keeps what it had
-  if not HasSelection then Exit;
+  // nothing selected: nothing put there, the clipboard keeps what it had (and nothing on a
+  // page whose text is not to be taken: AllowSelection)
+  if not HasSelection or not FAllowSelection then Exit;
   CopyRange(GetSelStart, GetSelLength);
 end;
 
@@ -12490,6 +12599,216 @@ begin
   ApiSettings(s);
 end;
 
+{ ---- a display page ---- }
+
+function TTyCustomRichEdit.CaretHidden: Boolean;
+begin
+  Result := FReadOnly and not FReadOnlyCaret;
+end;
+
+procedure TTyCustomRichEdit.SetReadOnlyCaret(AValue: Boolean);
+begin
+  if FReadOnlyCaret = AValue then Exit;
+  FReadOnlyCaret := AValue;
+  // the caret's place is blitted again: drawn now, or gone
+  if not IsRectEmpty(FCaretDrawn) then InvalidateArea(FCaretDrawn);
+  if HasCaretFocus and not ViewBehind and not (csDestroying in ComponentState) then
+    InvalidateArea(CaretClientRect);
+end;
+
+procedure TTyCustomRichEdit.SetAllowSelection(AValue: Boolean);
+begin
+  if FAllowSelection = AValue then Exit;
+  FAllowSelection := AValue;
+  // a press waiting to drag the selection, a drag selecting: they end with nothing changed
+  if not AValue then
+  begin
+    CancelSelectionDrag;
+    FDragging := False;
+  end;
+  // the hand over a link comes for a plain click now (or goes)
+  PointerKeysChanged(FPointerShift);
+end;
+
+procedure TTyCustomRichEdit.SetScrollBars(AValue: TScrollStyle);
+begin
+  if FScrollBars = AValue then Exit;
+  FScrollBars := AValue;
+  FViewValid := False;
+  Invalidate;
+end;
+
+procedure TTyCustomRichEdit.SetAutoHeight(AValue: Boolean);
+begin
+  if FAutoHeight = AValue then Exit;
+  FAutoHeight := AValue;
+  // (no vertical bar while it is on: the text area changes)
+  FViewValid := False;
+  Invalidate;
+  if [csLoading, csDestroying] * ComponentState = [] then CheckContentSize(False);
+end;
+
+function TTyCustomRichEdit.BarAllowed(AVertical: Boolean): Boolean;
+begin
+  if AVertical then
+    Result := not FAutoHeight and (FScrollBars in [ssVertical, ssBoth, ssAutoVertical, ssAutoBoth])
+  else
+    Result := FScrollBars in [ssHorizontal, ssBoth, ssAutoHorizontal, ssAutoBoth];
+end;
+
+function TTyCustomRichEdit.ContentInsets(out AH, AV: Integer): Boolean;
+var
+  s: TTyStyleSet;
+  ppi: Integer;
+begin
+  s := CurrentStyle;
+  ppi := ViewPPI;
+  // a bar lies over the padding on its side, as TextArea has it: the larger of the two
+  if VBarShown then
+    AH := MulDiv(s.Padding.Left, ppi, 96) + Math.Max(MulDiv(s.Padding.Right, ppi, 96),
+      ScrollBarSize(ppi))
+  else
+    AH := MulDiv(s.Padding.Left, ppi, 96) + MulDiv(s.Padding.Right, ppi, 96);
+  if HBarShown then
+    AV := MulDiv(s.Padding.Top, ppi, 96) + Math.Max(MulDiv(s.Padding.Bottom, ppi, 96),
+      ScrollBarSize(ppi))
+  else
+    AV := MulDiv(s.Padding.Top, ppi, 96) + MulDiv(s.Padding.Bottom, ppi, 96);
+  Result := True;
+end;
+
+procedure TTyCustomRichEdit.MeasureContent;
+var
+  t: TTyRichText;
+  n, i, k: Integer;
+  b: TTyBlockLayout;
+  h: array of Int64;
+begin
+  t := FDoc.Text;
+  n := t.ParaCount;
+  if (n > CRichContentExactParas) or FDoc.Loading or (FLayoutPPI <= 0) or ViewBehind then Exit;
+  if t.MeasuredParaCount >= n then Exit;
+  FDoc.BeginRead;
+  try
+    i := 0;
+    while i < n do
+    begin
+      if t.ParaMeasured(i) then
+      begin
+        Inc(i);
+        Continue;
+      end;
+      b := LayoutBlockAt(i);
+      try
+        h := nil;
+        SetLength(h, b.LastPara - b.FirstPara + 1);
+        for k := 0 to High(h) do h[k] := 0;
+        h[0] := b.Height;
+        t.SetParaHeights(b.FirstPara, h);
+        NoteExtent(b);
+        i := Math.Max(i + 1, b.LastPara + 1);
+      finally
+        b.Release;
+      end;
+    end;
+  finally
+    FDoc.EndRead;
+  end;
+end;
+
+function TTyCustomRichEdit.ContentHeight: Integer;
+var
+  ih, iv: Integer;
+begin
+  if not ViewBehind and not (csDestroying in ComponentState) then
+  begin
+    EnsureView(ViewPPI);
+    MeasureContent;
+  end;
+  ContentInsets(ih, iv);
+  Result := Integer(Math.Min(FDoc.Text.TotalHeight div Math.Max(1, FScale), Int64(MaxInt div 2))) + iv;
+end;
+
+function TTyCustomRichEdit.ContentWidth: Integer;
+var
+  ih, iv: Integer;
+begin
+  if not ViewBehind and not (csDestroying in ComponentState) then
+  begin
+    EnsureView(ViewPPI);
+    MeasureContent;
+  end;
+  ContentInsets(ih, iv);
+  Result := FWidestSeen div Math.Max(1, FScale) + ih;
+end;
+
+function TTyCustomRichEdit.ContentSizeIsEstimate: Boolean;
+begin
+  Result := FDoc.Loading or (FDoc.Text.MeasuredParaCount < FDoc.Text.ParaCount);
+end;
+
+// Align and both vertical anchors give the height to the parent: AutoHeight sets nothing then.
+function TTyCustomRichEdit.AutoHeightApplies: Boolean;
+begin
+  Result := not (Align in [alClient, alLeft, alRight]) and
+    not ((akTop in Anchors) and (akBottom in Anchors));
+end;
+
+function TTyCustomRichEdit.ContentSizeWanted: Boolean;
+begin
+  Result := FAutoHeight or Assigned(FOnContentSizeChange);
+end;
+
+procedure TTyCustomRichEdit.CheckContentSize(AQueue: Boolean);
+var
+  h, w: Integer;
+  tries: Integer;
+begin
+  if not ContentSizeWanted or ([csDestroying, csLoading] * ComponentState <> []) then Exit;
+  if AQueue or ViewBehind or FSizingSelf then
+  begin
+    { Queued only when something may differ: the heights as they stand against what was
+      reported (an estimate in them, a size that moved) - a check that found it all the same
+      queues nothing, so no turn of the loop ever queues the next for nothing. }
+    if ViewBehind or FSizingSelf then
+    begin
+      ScheduleCall(FSizeCall);
+      Exit;
+    end;
+    ContentInsets(w, h);
+    h := Integer(Math.Min(FDoc.Text.TotalHeight div Math.Max(1, FScale), Int64(MaxInt div 2))) + h;
+    w := FWidestSeen div Math.Max(1, FScale) + w;
+    if (h <> FReportedH) or (w <> FReportedW) or (FAutoHeight and AutoHeightApplies and
+       (Constraints.MinMaxHeight(h) <> Height)) or (ContentSizeIsEstimate and not FDoc.Loading and
+       (FDoc.Text.ParaCount <= CRichContentExactParas)) then
+      ScheduleCall(FSizeCall);
+    Exit;
+  end;
+  h := ContentHeight;
+  { The height set, and the view made for it: a bar that comes or goes with it (the
+    horizontal one: the text no longer fits, or fits again) changes what the content needs -
+    the height follows it, a few times at most (the width never changes here, so the
+    heights of the text stay). }
+  tries := 0;
+  while FAutoHeight and AutoHeightApplies and (Constraints.MinMaxHeight(h) <> Height) and
+    (tries < 3) do
+  begin
+    Inc(tries);
+    FSizingSelf := True;
+    try
+      Height := Constraints.MinMaxHeight(h);
+    finally
+      FSizingSelf := False;
+    end;
+    h := ContentHeight;
+  end;
+  w := ContentWidth;
+  if (h = FReportedH) and (w = FReportedW) then Exit;
+  FReportedH := h;
+  FReportedW := w;
+  if Assigned(FOnContentSizeChange) then FOnContentSizeChange(Self);
+end;
+
 function TTyCustomRichEdit.ApplyParagraphSpacing(ABeforePt, AAfterPt: Double): Boolean;
 var
   f: TTyParaFormat;
@@ -13229,7 +13548,7 @@ end;
 procedure TTyCustomRichEdit.TeSelectAll;
 begin
   EndCompositionForUser;
-  SelectAll;
+  if FAllowSelection then SelectAll;
 end;
 
 function TTyCustomRichEdit.TeCanUndo: Boolean;
@@ -13244,7 +13563,7 @@ end;
 
 function TTyCustomRichEdit.TeHasSelection: Boolean;
 begin
-  Result := HasSelection;
+  Result := HasSelection and FAllowSelection;
 end;
 
 function TTyCustomRichEdit.TeCanPaste: Boolean;
@@ -13254,7 +13573,7 @@ end;
 
 function TTyCustomRichEdit.TeHasText: Boolean;
 begin
-  Result := FDoc.Text.Length > 0;
+  Result := (FDoc.Text.Length > 0) and FAllowSelection;
 end;
 
 function TTyCustomRichEdit.TeIsReadOnly: Boolean;
@@ -15310,6 +15629,8 @@ procedure TTyCustomRichEdit.UpdateView;
 begin
   if ViewBehind then Exit;
   EnsureView(Font.PixelsPerInch);
+  // the application's call: what the content needs is reported now (OnContentSizeChange)
+  CheckContentSize(False);
 end;
 
 procedure TTyCustomRichEdit.EnsureView(APPI: Integer);
@@ -15344,6 +15665,8 @@ begin
     FLatchH := 0;
   end;
   ParagraphViewChanged;
+  // (a paint's view among them: what the content now needs is looked at after it)
+  CheckContentSize(True);
 end;
 
 procedure TTyCustomRichEdit.ClampScrollX;
@@ -15459,7 +15782,7 @@ function TTyCustomRichEdit.UpdateBars(AMeasured: Boolean): Boolean;
 
 var
   total, topY, maxTop, scale: Int64;
-  wantV, wantH: Boolean;
+  wantV, wantH, showV, showH: Boolean;
   page, viewH: Integer;
 begin
   wantV := Decide((FDoc.Text.TotalHeight > FViewH) or (AnchorY > 0), FLatchV);
@@ -15468,7 +15791,10 @@ begin
   total := FDoc.Text.TotalHeight div FScale;
   topY := AnchorY div FScale;
   viewH := FViewH div FScale;
-  Result := (wantV <> VBarShown) or (wantH <> HBarShown);
+  // what may show (ScrollBars, AutoHeight); a hidden one's scrolling goes on all the same
+  showV := wantV and BarAllowed(True);
+  showH := wantH and BarAllowed(False);
+  Result := (showV <> VBarShown) or (showH <> HBarShown);
   { A load's own slice (FBarsLazy) that brings no bar and takes none away: the widgets get its
     range at the end of a turn, at most once per CRichLoadBarsMs of the turns' clock
     (BackgroundTurn); CatchUpBars gives them the rest when the load ends, and any call of this
@@ -15484,10 +15810,10 @@ begin
     Exit;
   end;
   FBarsBehind := False;
-  if wantV and (FVBar = nil) then FVBar := NewBar(Self, sbVertical, @VBarChange, FScrollBarAutoHide);
-  if wantH and (FHBar = nil) then FHBar := NewBar(Self, sbHorizontal, @HBarChange, FScrollBarAutoHide);
-  if FVBar <> nil then FVBar.Visible := wantV;
-  if FHBar <> nil then FHBar.Visible := wantH;
+  if showV and (FVBar = nil) then FVBar := NewBar(Self, sbVertical, @VBarChange, FScrollBarAutoHide);
+  if showH and (FHBar = nil) then FHBar := NewBar(Self, sbHorizontal, @HBarChange, FScrollBarAutoHide);
+  if FVBar <> nil then FVBar.Visible := showV;
+  if FHBar <> nil then FHBar.Visible := showH;
   if Result then
   begin
     // the text area changed: the frame (its bands) and the text are drawn again
@@ -15498,7 +15824,7 @@ begin
   PlaceBars;
   FSyncingBars := True;
   try
-    if wantV then
+    if showV then
     begin
       FVBar.Controller := Controller;
       maxTop := Math.Max(Int64(0), total - viewH);
@@ -15516,7 +15842,7 @@ begin
       if topY >= maxTop then FVBar.Position := FVBar.Max
       else FVBar.Position := topY div scale;
     end;
-    if wantH then
+    if showH then
     begin
       FHBar.Controller := Controller;
       ClampScrollX;
@@ -15526,6 +15852,9 @@ begin
       FHBar.SmallChange := Math.Max(1, FEstimate div FScale);
       FHBar.Position := FScrollX div FScale;
     end
+    else if wantH then
+      // no bar shown, something to scroll all the same (ScrollBars)
+      ClampScrollX
     else
       FScrollX := 0;
   finally
@@ -16183,6 +16512,8 @@ begin
   end
   else if ACall = FSelCall then
     DoSelectionChange
+  else if ACall = FSizeCall then
+    CheckContentSize(False)
   else if ACall = FFindCall then
     try
       PayFindOwed;
@@ -18931,7 +19262,8 @@ begin
       Key := 0;
     Exit;
   end;
-  ext := ssShift in Shift;
+  // (no selection of the user's: Shift moves as the plain key does)
+  ext := (ssShift in Shift) and FAllowSelection;
   // Ctrl a word (Option on a Mac, as its text views); Ctrl or Cmd the document's ends
   byWord := (ssCtrl in Shift) {$IFDEF DARWIN}or (ssAlt in Shift){$ENDIF};
   toDoc := (ssCtrl in Shift) or (ssMeta in Shift);
@@ -18941,7 +19273,7 @@ begin
   if TyIsShortcutShift(Shift) and (Key = VK_A) then
   begin
     EndCompositionForUser;
-    SelectAll;
+    if FAllowSelection then SelectAll;
     Key := 0;
     Exit;
   end;

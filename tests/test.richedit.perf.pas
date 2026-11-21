@@ -65,6 +65,7 @@ type
     procedure TestAKeyWithARulerLinked;
     procedure TestTheActionsOverAWhole100MBSelection;
     procedure TestARtfOf200PicturesAPlaceNeverShownAndAgain;
+    procedure TestAutoHeightOfAThousandParagraphsAfterAWidthChange;
   private
     procedure SaveBesideFields(ABytes: Int64; ANest: Integer);
   end;
@@ -2060,6 +2061,37 @@ begin
   finally
     bmp.Free;
   end;
+end;
+
+{ A page as tall as its content (AutoHeight) of 1,000 paragraphs made narrower: every
+  paragraph laid out again and the height set, in one UpdateView - within the keystroke's
+  line (the design's 30 ms, three times). }
+procedure TTyRichEditPerfTest.TestAutoHeightOfAThousandParagraphsAfterAWidthChange;
+var
+  s: string;
+  i, h0: Integer;
+  t0, t: Double;
+begin
+  s := '';
+  for i := 1 to 1000 do
+    s := s + 'Paragraph ' + IntToStr(i) + ': a sentence or two of ordinary words that wrap.' +
+      LineEnding;
+  FRich.Lines.Text := s;
+  FRich.AutoHeight := True;
+  FRich.UpdateView;
+  h0 := FRich.Height;
+  AssertEquals('as tall as its content', FRich.ContentHeight, h0);
+  t := MaxDouble;
+  for i := 1 to 3 do
+  begin
+    t0 := Clock;
+    if Odd(i) then FRich.Width := FRich.Width - 120 else FRich.Width := FRich.Width + 120;
+    FRich.UpdateView;
+    t := Min(t, Clock - t0);
+    AssertEquals('as tall as its content again', FRich.ContentHeight, FRich.Height);
+  end;
+  Report('AutoHeight: 1,000 paragraphs after a width change (best of 3)', t);
+  AssertTrue(Format('AutoHeight after a width change in %.1f ms', [t]), t <= CKeystrokeMs);
 end;
 
 initialization

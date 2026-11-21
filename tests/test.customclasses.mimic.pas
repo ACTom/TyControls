@@ -8585,6 +8585,11 @@ type
     property TextEncoding;
     property TextCodePage;
     property ScrollBarAutoHide;
+    property ReadOnlyCaret;
+    property FocusOnClick;
+    property AllowSelection;
+    property ScrollBars;
+    property AutoHeight;
     property PlainText;
     property OnChange;
     property OnSelectionChange;
@@ -8600,6 +8605,7 @@ type
     property OnFindDone;
     property OnReplaceDone;
     property OnFallbackFont;
+    property OnContentSizeChange;
     property OnClick;
     property OnDblClick;
     property OnEnter;
