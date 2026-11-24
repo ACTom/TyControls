@@ -195,7 +195,9 @@ type
     fragment's (TTyRichFragment): what of the source's kept bytes may go into this target -
     what means the same in the target's file (RtfRead's TyRichFragmentFilterFor says
     which). The command takes it over too, and frees it with
-    the source. }
+    the source. A bookmark of the source goes in as Word pastes one: left out (its text
+    goes in) when the document has a bookmark of its name already, or when only one of its
+    two ends is in the source. }
   TTyRichInsertFragment = class(TTyRichCommand)
   private
     FPos: TTyRichPos;
@@ -229,7 +231,9 @@ type
     go in as tables of their own (never the source's). The text is not copied - its pieces
     go in, the same bytes - unless a paragraph of the range is still a lazy load's (then its
     decoded text, once). A copy of an object is its clone (a picture's shares its bytes); a
-    move puts the very objects at the new place.
+    move puts the very objects at the new place. A bookmark goes as a paste takes one
+    (TTyRichInsertFragment): a copy's are left out, the document having them already (and a
+    bookmark of which the range holds one end only); a move's go with the text.
     Refused (CanExecute False, nothing changes): the range (not empty) or ATo out of the
     text; ATo where the content cannot go in (TTyRichDocument.CanChange: a row that holds a
     nested table); for a copy ATo strictly inside the range (its ends are places: the copy
@@ -527,7 +531,8 @@ function TyRichTableEdit(AKind: TTyRichTableEditKind; APos: TTyRichPos; AIndex: 
 implementation
 
 uses
-  tyControls.StrConsts, tyControls.RichEdit.Bookmarks;
+  Generics.Collections, LazUTF8, tyControls.StrConsts, tyControls.RichEdit.Bookmarks,
+  tyControls.RichEdit.RtfRead;
 
 function TyRichRange(APos, ALen: TTyRichPos): TTyRichRange;
 begin
@@ -953,6 +958,100 @@ begin
   Inc(ACount);
 end;
 
+type
+  // (the primitives, for the helpers of the commands below)
+  TTyRichCommandAccess = class(TTyRichCommand);
+
+{ A bookmark that came in with [APos, APos + ALen) - a paste's, a copy's - goes again (its
+  marks; its text stays) when the document has its name outside that range already, or when
+  only one of its ends came in: Word's way with a pasted bookmark, which leaves no name twice
+  and no lone end. A moved one (its name nowhere else now) stays. ACmd's records. How many
+  marks went. }
+function DropCopiedBookmarks(ACmd: TTyRichCommand; ADoc: TTyRichDocument;
+  APos, ALen: TTyRichPos): Integer;
+type
+  TFound = record
+    Pos: TTyRichPos;
+    Kind: TTyRichBookmarkKind;
+    Key, Name: UTF8String;
+  end;
+var
+  found: array of TFound;
+  n, i, j, k, last: Integer;
+  ps, p, q: TTyRichPos;
+  runs: TTyRunArray;
+  m: TTyRichBookmarkMark;
+  counts: specialize TDictionary<UTF8String, Int64>;
+  drop: specialize TDictionary<UTF8String, Boolean>;
+  v: Int64;
+  gone: Boolean;
+begin
+  Result := 0;
+  if (ALen <= 0) or (APos < 0) or (APos + ALen > ADoc.Text.Length) then Exit;
+  found := nil;
+  n := 0;
+  k := ADoc.Text.ParaOfPos(APos);
+  last := ADoc.Text.ParaOfPos(APos + ALen - 1);
+  for i := k to last do
+  begin
+    ps := ADoc.Text.ParaStart(i);
+    runs := ADoc.RunsOf(i);
+    for j := 0 to High(runs) do
+      if runs[j].Obj is TTyRichBookmarkMark then
+      begin
+        p := ps + runs[j].Start;
+        if (p < APos) or (p >= APos + ALen) then Continue;
+        m := TTyRichBookmarkMark(runs[j].Obj);
+        if n = Length(found) then SetLength(found, n * 2 + 4);
+        found[n].Pos := p;
+        found[n].Kind := m.Kind;
+        found[n].Name := m.Name;
+        found[n].Key := UTF8UpperCase(m.Name);
+        Inc(n);
+      end;
+  end;
+  if n = 0 then Exit;
+  counts := specialize TDictionary<UTF8String, Int64>.Create;
+  drop := specialize TDictionary<UTF8String, Boolean>.Create;
+  try
+    for i := 0 to n - 1 do
+    begin
+      if not counts.TryGetValue(found[i].Key, v) then v := 0;
+      if found[i].Kind = rbmStart then Inc(v, Int64(1) shl 32) else Inc(v);
+      counts.AddOrSetValue(found[i].Key, v);
+    end;
+    for i := 0 to n - 1 do
+    begin
+      if drop.ContainsKey(found[i].Key) then Continue;
+      v := counts[found[i].Key];
+      // one end alone came in
+      gone := (v shr 32) <> (v and $FFFFFFFF);
+      if not gone then
+      begin
+        // the name elsewhere in the document: an end of it before the range, or after it
+        p := TyRichFindBookmarkMark(ADoc, rbmStart, found[i].Name, 0);
+        if (p >= 0) and (p >= APos) and (p < APos + ALen) then
+          p := TyRichFindBookmarkMark(ADoc, rbmStart, found[i].Name, APos + ALen);
+        q := TyRichFindBookmarkMark(ADoc, rbmEnd, found[i].Name, 0);
+        if (q >= 0) and (q >= APos) and (q < APos + ALen) then
+          q := TyRichFindBookmarkMark(ADoc, rbmEnd, found[i].Name, APos + ALen);
+        gone := (p >= 0) or (q >= 0);
+      end;
+      if gone then drop.Add(found[i].Key, True);
+    end;
+    // the last first: the places before stay where they are
+    for i := n - 1 downto 0 do
+      if drop.ContainsKey(found[i].Key) then
+      begin
+        TTyRichCommandAccess(ACmd).DeleteObjectAt(ADoc, found[i].Pos);
+        Inc(Result);
+      end;
+  finally
+    drop.Free;
+    counts.Free;
+  end;
+end;
+
 { ---- TTyRichInsertFragment ---- }
 
 constructor TTyRichInsertFragment.Create(APos: TTyRichPos; ASource: TTyRichDocument;
@@ -995,6 +1094,7 @@ begin
     FreeAndNil(FFilter);
   end;
   InsertFragment(ADoc, FPos, FFragment);
+  DropCopiedBookmarks(Self, ADoc, FPos, FFragment.CharCount);
 end;
 
 function TTyRichInsertFragment.Description: string;
@@ -1104,7 +1204,9 @@ begin
     // again (a redo), on the same text: the same pieces, the fragment's array
     DeleteRange(ADoc, FFrom, FCut, FFragment.BodyPieces);
   InsertFragment(ADoc, FAt, FFragment);
-  FPlaced := TyRichRange(FAt, FFragment.CharCount);
+  // (a bookmark's marks left out: what is there of the content now)
+  FPlaced := TyRichRange(FAt, FFragment.CharCount -
+    DropCopiedBookmarks(Self, ADoc, FAt, FFragment.CharCount));
 end;
 
 function TTyRichRangeTransfer.MemSize: Int64;

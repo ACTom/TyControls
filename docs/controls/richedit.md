@@ -230,6 +230,8 @@ end;
 
 **书签。** `BookmarkCount`、`BookmarkName(下标)` 按书签位置的先后列出书签；隐藏书签(以"_"开头的名字，Word 给目录标题建的那种)要传 `AIncludeHidden` 才列出。`FindBookmark` 给出书签的起点和终点；`GoToBookmark` 把插入点放过去，并把那一行放到视图顶部(这是移动，不是修改，只读的页面也能用)。`AddBookmark(名字)` 标记选区或插入点所在的位置,`DeleteBookmark`、`RenameBookmark` 删除和改名；这三个和 `InsertLink` 一样是用户的操作，`CanEditBookmarks` 回答现在做不做得了。名字遵守 Word 的规则(`TyRichBookmarkNameValid`：字母开头，后面是字母、数字或"_"，最多 40 个)，比较时不分大小写。按需读入的大 RTF 文件里，找一个书签只读它两端所在的那几段。
 
+**在书签处输入和粘贴。** 和 Word 一样，紧挨书签起点输入的文字进到书签里，紧挨书签终点输入的文字在书签后面；书签只是一个点时，文字在这个点后面。粘贴和输入法上屏的文字也是这样。粘贴、拖放或用 `InsertContent`、`AppendContent` 放进来的书签，如果文档里已经有同名的书签，就不放进来：文字照样进来，原来的书签不动。只带进来一端的书签也不放进来。剪切再粘贴，或者拖动移动文字，书签会跟着一起移过去。
+
 **跟随链接。** 点击链接触发 `OnLinkClick(Sender, URL, Button)`，和 Delphi 一样。`'#名字'` 的链接接着会被跟过去：先触发 `OnFollowLink(Sender, Name, var Allow)`,`Allow := False` 就不跳；然后 `GoToBookmark`。书签不存在就什么都不做。`'目标#名字'` 和其他地址，控件从不自己跟过去。
 
 **对象。** 点击或双击图片、或者显示图片的块(公式、嵌入对象)时，触发 `OnObjectClick`、`OnObjectDblClick`:`procedure(Sender: TObject; const AClick: TTyRichObjectClick; var AHandled: Boolean)`。这个记录里有对象(`RichObject`)、它的位置(`Pos`)、鼠标键、按键(`Shift`)、客户区像素的点(`Point`)和对象在客户区里的框(`Bounds`)；`PointInPicture(宽, 高)` 把这个点换算到那个大小的图片里——首页上的图片热区就这样做。用记录是为了以后加成员不会让已有的处理程序编译不过。`AHandled := True` 就不再做点击原本接着要做的事。`ObjectAtPoint(X, Y, Pos)` 找出某个点下面的对象。图片可以按它自己的大小交给 `TPicture` 或 `TBitmap`(`Picture.Assign(TheObject)`),`TTyRichPicture.SaveImageToStream` 写出它的文件字节。示例里看大图的窗体(`uviewerform.pas`)就是这样处理双击的。

@@ -465,8 +465,9 @@ begin
 end;
 
 { The rule: a run of objects with no width is one place; the caret's position there is the
-  leftmost one right of every close mark and left of every open mark in the run, else the
-  run's first. }
+  leftmost one right of every close mark and every bookmark's end (start or end: typed at a
+  bookmark's start, text is in it; at its end, outside it - Word's way) and left of every open
+  mark in the run, else the run's first. }
 function TTyRichFieldControlTest.RestOf(APos: TTyRichPos): TTyRichPos;
 var
   rs, re, lo, hi, c: TTyRichPos;
@@ -480,7 +481,7 @@ begin
   hi := re;
   for c := rs to re - 1 do
   begin
-    if IsClose(c) then lo := c + 1;
+    if IsClose(c) or (Doc.ObjectAt(c) is TTyRichBookmarkMark) then lo := c + 1;
     if IsOpen(c) and (c < hi) then hi := c;
   end;
   if lo <= hi then Result := lo else Result := rs;
@@ -875,13 +876,13 @@ begin
   AssertTrue('the bookmark''s start has no width', Unseen(bs));
   be := 5;
   AssertTrue('its end neither', Unseen(be));
-  FRich.SelStart := 3;
-  AssertEquals('after the start: before it (the run''s first place)', Int64(2), FRich.CaretIndex);
+  FRich.SelStart := 2;
+  AssertEquals('at the start: after it (in the bookmark)', Int64(3), FRich.CaretIndex);
   Press(VK_DELETE);
   AssertEquals('Delete: the c, the bookmark''s start stays', Hex(Raw('ab') + OC + Raw('d') + OC + Raw('ef')),
     Hex(AllText));
-  FRich.SelStart := 5;
-  AssertEquals('after the end: before it', Int64(4), FRich.CaretIndex);
+  FRich.SelStart := 4;
+  AssertEquals('at the end: after it (out of the bookmark)', Int64(5), FRich.CaretIndex);
   Press(VK_BACK);
   AssertEquals('Backspace: the d, the bookmark''s end stays', Hex(Raw('ab') + OC + OC + Raw('ef')),
     Hex(AllText));

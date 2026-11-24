@@ -825,10 +825,8 @@ type
     FObjPressAt: TTyRichPos;
     FObjPressButton: TMouseButton;
     FObjPressPoint: TPoint;
-    // BookmarkCount / BookmarkName's list, for the content FBkmState, with hidden ones or not
-    FBkmList: TStringArray;
-    FBkmState: Int64;
-    FBkmHidden, FBkmValid: Boolean;
+    // BookmarkCount / BookmarkName's list (kept across a change that touches no bookmark)
+    FBkmIndex: TTyRichBookmarkList;
     FBkmArgName, FBkmArgNew: string;
     { A press on a link that becomes its click when the same button comes up on the same link
       (LinkPress): the button, where, the keys, the link's open mark. Moved past the drag
@@ -1610,7 +1608,6 @@ type
       their depths). -1: none found there. }
     function FieldOpenNear(APos: TTyRichPos; ADepth: Integer): TTyRichPos;
     // bookmarks
-    function BookmarkList(AIncludeHidden: Boolean): TStringArray;
     { A jump's view (GoToBookmark): the caret's line at the view's top - unless it is in view
       already, whole, in the view's top third (then nothing moves); near the document's end
       the view ends at its end, as any scroll. Across: only when the caret is out of view. }
@@ -1905,6 +1902,9 @@ type
     function CreateDocument: TTyRichDocument; virtual;
     function CreateDevice: TTyRichTextDevice; virtual;
     function CreateLayouter: TTyRichLayouter; virtual;
+    { What BookmarkCount and BookmarkName read: the document's bookmarks, kept across the
+      edits that leave them as they were. }
+    property BookmarkList: TTyRichBookmarkList read FBkmIndex;
     { The block paragraph AIndex is in, laid out for the view (with a reference for the
       caller). Every layout the view makes goes through here. }
     function LayoutBlockAt(AIndex: Integer): TTyBlockLayout; virtual;
@@ -4233,6 +4233,7 @@ begin
   FStepCall := TTyRichQueuedCall.Create(Self);
   FSelCall := TTyRichQueuedCall.Create(Self);
   FDoc := CreateDocument;
+  FBkmIndex := TTyRichBookmarkList.Create(FDoc);
   FText := FDoc.Text;
   FDoc.OnChange := @DocChanged;
   FDoc.OnUpdatingEnd := @DocUpdatingEnded;
@@ -4346,6 +4347,7 @@ begin
   FreeAndNil(FParagraph);
   if FLayouter <> nil then FLayouter.FallbackFonts.OnChange := FFallbackListChange;
   FreeAndNil(FLayouter);
+  FreeAndNil(FBkmIndex);
   FreeAndNil(FDoc);
   FreeAndNil(FLines);
   FreeAndNil(FParaViewHandlers);
@@ -6911,31 +6913,17 @@ end;
 
 { ---- bookmarks ---- }
 
-function TTyCustomRichEdit.BookmarkList(AIncludeHidden: Boolean): TStringArray;
-begin
-  if not FBkmValid or (FBkmState <> FDoc.ContentState) or (FBkmHidden <> AIncludeHidden) then
-  begin
-    FBkmList := TyRichBookmarkNames(FDoc, AIncludeHidden);
-    FBkmState := FDoc.ContentState;
-    FBkmHidden := AIncludeHidden;
-    FBkmValid := True;
-  end;
-  Result := FBkmList;
-end;
-
 function TTyCustomRichEdit.BookmarkCount(AIncludeHidden: Boolean): Integer;
 begin
-  Result := Length(BookmarkList(AIncludeHidden));
+  Result := FBkmIndex.Count(AIncludeHidden);
 end;
 
 function TTyCustomRichEdit.BookmarkName(AIndex: Integer; AIncludeHidden: Boolean): string;
-var
-  l: TStringArray;
 begin
-  l := BookmarkList(AIncludeHidden);
-  if (AIndex < 0) or (AIndex > High(l)) then
-    raise ETyRichEdit.CreateFmt('Bookmark index %d out of 0..%d', [AIndex, High(l)]);
-  Result := l[AIndex];
+  if (AIndex < 0) or (AIndex >= FBkmIndex.Count(AIncludeHidden)) then
+    raise ETyRichEdit.CreateFmt('Bookmark index %d out of 0..%d', [AIndex,
+      FBkmIndex.Count(AIncludeHidden) - 1]);
+  Result := FBkmIndex.Name(AIndex, AIncludeHidden);
 end;
 
 function TTyCustomRichEdit.FindBookmark(const AName: string; out AStart,
@@ -15925,6 +15913,8 @@ begin
     notice a cancelled load gives that it stopped comes after the load state ended, and is
     the load's own all the same: it changes no text of the file. }
   loadOwn := (FInStep and FDoc.Loading) or FInCancel;
+  // the bookmarks the view lists: kept, or built again when next asked
+  if FBkmIndex <> nil then FBkmIndex.Changed(AChange);
   // a drag of a handle measured the object as it was: any change ends it, nothing done
   CancelResize;
   // so does a drag of the selection: its range and its place were of the text as it was

@@ -5217,7 +5217,8 @@ begin
     end;
     FBkmGroup[FBkmN] := AStart;
     FBkmHash[FBkmN] := TyRichBookmarkHash(name);
-    FBkmKind[FBkmN] := Ord(AKind);
+    // (bit 1: the name is a hidden one's, "_" first)
+    FBkmKind[FBkmN] := Ord(AKind) or (Ord((name <> '') and (name[1] = '_')) shl 1);
     Inc(FBkmN);
     EmitObject(nil);
     Exit;
@@ -6472,6 +6473,7 @@ type
     procedure BookmarkIndexEntry(AIndex: Integer; out AKind: TTyRichBookmarkKind;
       out AHash: Cardinal; out AParaSrc, AGroupSrc: Int64); override;
     function BookmarkIndexName(AIndex: Integer): UTF8String; override;
+    function BookmarkIndexHidden(AIndex: Integer): Boolean; override;
   end;
 
 
@@ -6547,10 +6549,15 @@ end;
 procedure TRtfLoader.BookmarkIndexEntry(AIndex: Integer; out AKind: TTyRichBookmarkKind;
   out AHash: Cardinal; out AParaSrc, AGroupSrc: Int64);
 begin
-  AKind := TTyRichBookmarkKind(Load.FScan.FBkmKind[AIndex]);
+  AKind := TTyRichBookmarkKind(Load.FScan.FBkmKind[AIndex] and 1);
   AHash := Load.FScan.FBkmHash[AIndex];
   AParaSrc := Load.FBkmPara[AIndex];
   AGroupSrc := Load.FScan.FBkmGroup[AIndex];
+end;
+
+function TRtfLoader.BookmarkIndexHidden(AIndex: Integer): Boolean;
+begin
+  Result := Load.FScan.FBkmKind[AIndex] and 2 <> 0;
 end;
 
 function TRtfLoader.BookmarkIndexName(AIndex: Integer): UTF8String;

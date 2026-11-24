@@ -19,7 +19,7 @@ unit tyControls.RichEdit.Bookmarks;
 interface
 
 uses
-  Classes, SysUtils, tyControls.RichEdit.Text, tyControls.RichEdit.Model;
+  Classes, SysUtils, Generics.Collections, tyControls.RichEdit.Text, tyControls.RichEdit.Model;
 
 const
   // the longest name Word takes for a bookmark
@@ -40,11 +40,68 @@ function TyRichFindBookmark(ADoc: TTyRichDocument; const AName: UTF8String;
 { The names of the document's bookmarks, in the order of their start marks; the hidden ones
   (TyRichBookmarkHidden) only with AIncludeHidden. A name met twice is listed once. }
 function TyRichBookmarkNames(ADoc: TTyRichDocument; AIncludeHidden: Boolean): TStringArray;
+{ The mark of AKind named AName at or after AFrom (-1: none): what TyRichFindBookmark asks. }
+function TyRichFindBookmarkMark(ADoc: TTyRichDocument; AKind: TTyRichBookmarkKind;
+  const AName: UTF8String; AFrom: TTyRichPos): TTyRichPos;
+
+type
+  { One bookmark the list knows: from a paragraph's value (Name known) or from the load's index
+    (Entry; its name decoded the first time it is asked for). }
+  TTyRichBookmarkItem = record
+    Entry: Integer;
+    Para: Integer;
+    Sub: Int64;
+    Hash: Cardinal;
+    Hidden: Boolean;
+    Named: Boolean;
+    Name: UTF8String;
+  end;
+
+  { The document's bookmarks for a view that asks for them often (BookmarkCount and
+    BookmarkName in an idle handler, a list in a form): counted from the load's index and the
+    paragraphs' values without decoding a name (a name of the index is decoded when it is
+    asked for, once), in the order of their starts, one per name (names compare without
+    regard to case). Kept across a change of the document that leaves the paragraphs as many
+    as they were and touches no paragraph a bookmark is in, before or after it (one typed
+    character); any other change (Changed) has it built again when next asked. }
+  TTyRichBookmarkList = class
+  private
+    FDoc: TTyRichDocument;
+    FValid: Boolean;
+    FItems: array of TTyRichBookmarkItem;
+    FItemN: Integer;
+    FAll, FShown: array of Integer;
+    FBuilds: Integer;
+    // the walk's unparsed paragraphs of the file: their offsets and indexes
+    FLazySrc: array of Int64;
+    FLazyPara: array of Integer;
+    FLazyN: Integer;
+    procedure Build;
+    procedure Visit(AIndex: Integer; AData: Pointer; ASrcOffset, ASrcBytes: Int64;
+      var AContinue: Boolean);
+    procedure Add(const AItem: TTyRichBookmarkItem);
+    function ItemName(AItem: Integer): UTF8String;
+    function SameItem(A, B: Integer): Boolean;
+    // the first item of paragraph APara or after it (FItems is in order)
+    function FirstOf(APara: Integer): Integer;
+  public
+    constructor Create(ADoc: TTyRichDocument);
+    destructor Destroy; override;
+    { The document's change (its OnChange's): the list is kept or let go. }
+    procedure Changed(const AChange: TTyRichChange);
+    // the document is another or has another content: built again when next asked
+    procedure Reset;
+    function Count(AIncludeHidden: Boolean): Integer;
+    function Name(AIndex: Integer; AIncludeHidden: Boolean): UTF8String;
+    // how many times it was built (for the tests that hold it to one)
+    property Builds: Integer read FBuilds;
+  end;
 
 implementation
 
 uses
   LazUTF8;
+
 
 function CodeAt(const S: UTF8String; var I: Integer): Cardinal;
 var
@@ -364,6 +421,301 @@ begin
     seen.Free;
     w.Free;
   end;
+end;
+
+function TyRichFindBookmarkMark(ADoc: TTyRichDocument; AKind: TTyRichBookmarkKind;
+  const AName: UTF8String; AFrom: TTyRichPos): TTyRichPos;
+begin
+  Result := FindMark(ADoc, AKind, AName, AFrom);
+end;
+
+{ ---- TTyRichBookmarkList ---- }
+
+constructor TTyRichBookmarkList.Create(ADoc: TTyRichDocument);
+begin
+  inherited Create;
+  FDoc := ADoc;
+end;
+
+destructor TTyRichBookmarkList.Destroy;
+begin
+  inherited Destroy;
+end;
+
+function TTyRichBookmarkList.FirstOf(APara: Integer): Integer;
+var
+  lo, hi, mid: Integer;
+begin
+  lo := 0;
+  hi := FItemN;
+  while lo < hi do
+  begin
+    mid := (lo + hi) shr 1;
+    if FItems[mid].Para < APara then lo := mid + 1 else hi := mid;
+  end;
+  Result := lo;
+end;
+
+procedure TTyRichBookmarkList.Reset;
+begin
+  FValid := False;
+end;
+
+procedure TTyRichBookmarkList.Add(const AItem: TTyRichBookmarkItem);
+begin
+  if FItemN = Length(FItems) then SetLength(FItems, FItemN * 2 + 64);
+  FItems[FItemN] := AItem;
+  Inc(FItemN);
+end;
+
+procedure TTyRichBookmarkList.Visit(AIndex: Integer; AData: Pointer; ASrcOffset,
+  ASrcBytes: Int64; var AContinue: Boolean);
+var
+  fmt: TTyParaFormatId;
+  runs: TTyRunArray;
+  cell: TTyRichCell;
+  i: Integer;
+  m: TTyRichBookmarkMark;
+  it: TTyRichBookmarkItem;
+begin
+  if AData = nil then
+  begin
+    // the file's own, unparsed: the index speaks for it
+    if ASrcOffset < 0 then Exit;
+    if FLazyN = Length(FLazySrc) then
+    begin
+      SetLength(FLazySrc, FLazyN * 2 + 256);
+      SetLength(FLazyPara, FLazyN * 2 + 256);
+    end;
+    FLazySrc[FLazyN] := ASrcOffset;
+    FLazyPara[FLazyN] := AIndex;
+    Inc(FLazyN);
+    Exit;
+  end;
+  if not FDoc.ReadValue(AData, fmt, runs, cell) then Exit;
+  for i := 0 to High(runs) do
+    if runs[i].Obj is TTyRichBookmarkMark then
+    begin
+      m := TTyRichBookmarkMark(runs[i].Obj);
+      if m.Kind <> rbmStart then Continue;
+      it.Entry := -1;
+      it.Para := AIndex;
+      it.Sub := runs[i].Start;
+      it.Hash := TyRichBookmarkHash(m.Name);
+      it.Hidden := TyRichBookmarkHidden(m.Name);
+      it.Named := True;
+      it.Name := m.Name;
+      Add(it);
+    end;
+end;
+
+procedure TTyRichBookmarkList.Build;
+var
+  ld: TTyRichParaLoader;
+  vals: array of TTyRichBookmarkItem;
+  valN, i, j, n, t: Integer;
+  k: TTyRichBookmarkKind;
+  h: Cardinal;
+  psrc, gsrc: Int64;
+  it: TTyRichBookmarkItem;
+  seen: TTyRichHashCounts;
+  merged: array of TTyRichBookmarkItem;
+  first: Integer;
+  v: Int64;
+  dup: Boolean;
+begin
+  Inc(FBuilds);
+  FItemN := 0;
+  FItems := nil;
+  FLazyN := 0;
+  ld := FDoc.Loader;
+  if (ld <> nil) and (ld.BookmarkIndexCount < 0) then ld := nil;
+  FDoc.BeginRead;
+  try
+    FDoc.Text.WalkParas(0, @Visit);
+  finally
+    FDoc.EndRead;
+  end;
+  // the values' items (in order), then the index's for the unparsed paragraphs (in order)
+  valN := FItemN;
+  vals := Copy(FItems, 0, valN);
+  FItemN := 0;
+  if (ld <> nil) and (FLazyN > 0) then
+  begin
+    n := ld.BookmarkIndexCount;
+    j := 0;
+    for i := 0 to n - 1 do
+    begin
+      ld.BookmarkIndexEntry(i, k, h, psrc, gsrc);
+      if k <> rbmStart then Continue;
+      while (j < FLazyN) and (FLazySrc[j] < psrc) do Inc(j);
+      if j >= FLazyN then Break;
+      if FLazySrc[j] <> psrc then Continue;
+      it.Entry := i;
+      it.Para := FLazyPara[j];
+      it.Sub := gsrc - psrc;
+      it.Hash := h;
+      it.Hidden := ld.BookmarkIndexHidden(i);
+      it.Named := False;
+      it.Name := '';
+      Add(it);
+    end;
+  end;
+  // merged by paragraph (no paragraph is in both)
+  merged := nil;
+  SetLength(merged, valN + FItemN);
+  i := 0;
+  j := 0;
+  t := 0;
+  while (i < valN) or (j < FItemN) do
+  begin
+    if (j >= FItemN) or ((i < valN) and ((vals[i].Para < FItems[j].Para) or
+      ((vals[i].Para = FItems[j].Para) and (vals[i].Sub < FItems[j].Sub)))) then
+    begin
+      merged[t] := vals[i];
+      Inc(i);
+    end
+    else
+    begin
+      merged[t] := FItems[j];
+      Inc(j);
+    end;
+    Inc(t);
+  end;
+  FItems := merged;
+  FItemN := t;
+  { one per name, the first. Told apart by the names' hashes (the first item of each); a hash
+    met again has the two names decoded and compared (a hash is no name: two names may have
+    one) }
+  seen := TTyRichHashCounts.Create(FItemN);
+  try
+    FAll := nil;
+    FShown := nil;
+    SetLength(FAll, FItemN);
+    SetLength(FShown, FItemN);
+    n := 0;
+    t := 0;
+    for i := 0 to FItemN - 1 do
+    begin
+      if seen.TryGet(FItems[i].Hash, v) then
+      begin
+        first := Integer(v);
+        dup := SameItem(i, first);
+        // (another name of that hash: the ones taken so far of it, each)
+        for j := 0 to n - 1 do
+          if dup then Break
+          else if (FAll[j] <> first) and (FItems[FAll[j]].Hash = FItems[i].Hash) then
+            dup := SameItem(i, FAll[j]);
+        if dup then Continue;
+      end
+      else
+        seen.Add(FItems[i].Hash, i);
+      FAll[n] := i;
+      Inc(n);
+      if not FItems[i].Hidden then
+      begin
+        FShown[t] := i;
+        Inc(t);
+      end;
+    end;
+    SetLength(FAll, n);
+    SetLength(FShown, t);
+  finally
+    seen.Free;
+  end;
+  FValid := True;
+end;
+
+procedure TTyRichBookmarkList.Changed(const AChange: TTyRichChange);
+const
+  // (more changed paragraphs than a key's: built again, none of them read)
+  CFew = 8;
+var
+  p, i, j: Integer;
+  runs: TTyRunArray;
+  m: TTyRichBookmarkMark;
+  has: Boolean;
+begin
+  if not FValid then Exit;
+  // paragraphs came or went: every paragraph after them is another index
+  if (AChange.OldParaCount <> AChange.NewParaCount) or (rckStructure in AChange.Kinds) or
+    (AChange.NewParaCount > CFew) then
+  begin
+    FValid := False;
+    Exit;
+  end;
+  { Each changed paragraph's starts against the list's: the same names in the same order (a
+    character typed beside them) keep the list; their places follow. }
+  for p := AChange.FirstPara to AChange.FirstPara + AChange.NewParaCount - 1 do
+  begin
+    if (p < 0) or (p >= FDoc.Text.ParaCount) then Continue;
+    j := FirstOf(p);
+    has := (j < FItemN) and (FItems[j].Para = p);
+    runs := FDoc.RunsOf(p);
+    for i := 0 to High(runs) do
+    begin
+      if not (runs[i].Obj is TTyRichBookmarkMark) then Continue;
+      m := TTyRichBookmarkMark(runs[i].Obj);
+      if m.Kind <> rbmStart then Continue;
+      if not has or (j >= FItemN) or (FItems[j].Para <> p) or
+        (FItems[j].Hash <> TyRichBookmarkHash(m.Name)) or (ItemName(j) <> m.Name) then
+      begin
+        FValid := False;
+        Exit;
+      end;
+      FItems[j].Sub := runs[i].Start;
+      Inc(j);
+    end;
+    // a start that went
+    if has and (j < FItemN) and (FItems[j].Para = p) then
+    begin
+      FValid := False;
+      Exit;
+    end;
+  end;
+end;
+
+function TTyRichBookmarkList.ItemName(AItem: Integer): UTF8String;
+var
+  ld: TTyRichParaLoader;
+begin
+  if not FItems[AItem].Named then
+  begin
+    ld := FDoc.Loader;
+    if ld <> nil then FItems[AItem].Name := ld.BookmarkIndexName(FItems[AItem].Entry);
+    FItems[AItem].Named := True;
+  end;
+  Result := FItems[AItem].Name;
+end;
+
+function TTyRichBookmarkList.SameItem(A, B: Integer): Boolean;
+begin
+  Result := TyRichSameBookmarkName(ItemName(A), ItemName(B));
+end;
+
+function TTyRichBookmarkList.Count(AIncludeHidden: Boolean): Integer;
+begin
+  if not FValid then Build;
+  if AIncludeHidden then Result := Length(FAll) else Result := Length(FShown);
+end;
+
+function TTyRichBookmarkList.Name(AIndex: Integer; AIncludeHidden: Boolean): UTF8String;
+var
+  i: Integer;
+  ld: TTyRichParaLoader;
+begin
+  if not FValid then Build;
+  if AIncludeHidden then
+  begin
+    if (AIndex < 0) or (AIndex > High(FAll)) then raise EListError.CreateFmt('Bookmark %d', [AIndex]);
+    i := FAll[AIndex];
+  end
+  else
+  begin
+    if (AIndex < 0) or (AIndex > High(FShown)) then raise EListError.CreateFmt('Bookmark %d', [AIndex]);
+    i := FShown[AIndex];
+  end;
+  Result := ItemName(i);
 end;
 
 end.

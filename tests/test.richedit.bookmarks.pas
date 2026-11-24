@@ -15,8 +15,8 @@ uses
   Classes, SysUtils, Types, fpcunit, testregistry, Controls, Graphics, LCLType, Forms,
   tyControls.Controller, tyControls.StrConsts,
   tyControls.RichEdit.Text, tyControls.RichEdit.Model, tyControls.RichEdit.Commands,
-  tyControls.RichEdit.RtfRead, tyControls.RichEdit.Bookmarks, tyControls.RichEdit,
-  test.richedit.fieldctl;
+  tyControls.RichEdit.RtfRead, tyControls.RichEdit.Bookmarks, tyControls.RichEdit.Builder,
+  tyControls.RichEdit, test.richedit.fieldctl;
 
 type
   { The probe with the pointer and the caret's ink to look at. }
@@ -24,6 +24,8 @@ type
   public
     function PointerAt(X, Y: Integer): TCursor;
     function CaretInk: Integer;
+    // how many times the list BookmarkCount reads was built
+    function ListBuilds: Integer;
   end;
 
   TTyRichBookmarksTest = class(TTestCase)
@@ -45,6 +47,8 @@ type
     function MarkAt(APos: TTyRichPos): TTyRichBookmarkMark;
     function ParaText(AIndex: Integer): RawByteString;
     procedure ClickChar(AChar: TTyRichPos);
+    procedure CheckAgree(const AWhat: string; ARich: TFieldProbe = nil);
+    function LazySource(ACount: Integer): RawByteString;
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -62,6 +66,13 @@ type
     procedure TestANameIsWrittenInTheFilesCodePage;
     procedure TestAJumpShowsItsTargetAtTheTop;
     procedure TestALinkToNoBookmarkAsksNothing;
+    procedure TestTypingAtABookmarksEdgesAsWord;
+    procedure TestAPasteTakesABookmarkAsWordDoes;
+    procedure TestDeletingATableLeavesNoLoneMark;
+    procedure TestALazyDeletionParsesOnlyItsEdges;
+    procedure TestTheListIsKeptAcrossAKey;
+    procedure TestNamesAreListedWithoutRegardToCase;
+    procedure TestAddingANameOverItsOwnStart;
   end;
 
 implementation
@@ -100,11 +111,36 @@ begin
   if S <> '' then Move(S[1], Result[0], Length(S));
 end;
 
+// how many times ASub is in S
+function Occ(const S, ASub: RawByteString): Integer;
+var
+  p: Integer;
+begin
+  Result := 0;
+  p := Pos(ASub, S);
+  while p > 0 do
+  begin
+    Inc(Result);
+    p := Pos(ASub, S, p + Length(ASub));
+  end;
+end;
+
+{ ab[cd]ef / gh: a0 b1 start2 c3 d4 end5 e6 f7, the separator 8, g9 h10. }
+function BaseDoc: RawByteString;
+begin
+  Result := Rtf(Head + 'ab{|*|bkmkstart m}cd{|*|bkmkend m}ef|par gh|par}');
+end;
+
 { ---- the probe ---- }
 
 function TBkmProbe.PointerAt(X, Y: Integer): TCursor;
 begin
   Result := CursorAt(X, Y);
+end;
+
+function TBkmProbe.ListBuilds: Integer;
+begin
+  Result := BookmarkList.Builds;
 end;
 
 function TBkmProbe.CaretInk: Integer;
@@ -259,6 +295,42 @@ begin
   if FRich <> nil then FRich.MUp(mbLeft, [], x, y);
 end;
 
+{ The file and the control agree: as many bookmarks counted as the saved file starts, and as
+  many ends as starts (no lone mark). }
+procedure TTyRichBookmarksTest.CheckAgree(const AWhat: string; ARich: TFieldProbe);
+var
+  st: TBytesStream;
+  s: RawByteString;
+begin
+  if ARich = nil then ARich := FRich;
+  st := TBytesStream.Create;
+  try
+    ARich.SaveToStream(st, rfRtf);
+    s := '';
+    SetLength(s, st.Size);
+    if st.Size > 0 then Move(st.Bytes[0], s[1], st.Size);
+    SetCodePage(s, CP_NONE, False);
+  finally
+    st.Free;
+  end;
+  AssertEquals(AWhat + ': the file''s starts are the count', ARich.BookmarkCount(True),
+    Occ(s, Raw('bkmkstart')));
+  AssertEquals(AWhat + ': as many ends', Occ(s, Raw('bkmkstart')), Occ(s, Raw('bkmkend')));
+end;
+
+{ ACount paragraphs, each with a bookmark bmN around "text of N": a file the control reads on
+  demand. }
+function TTyRichBookmarksTest.LazySource(ACount: Integer): RawByteString;
+var
+  i: Integer;
+begin
+  Result := Head;
+  for i := 1 to ACount do
+    Result := Result + 'paragraph number ' + IntToStr(i) + ' {|*|bkmkstart bm' + IntToStr(i) +
+      '}text of ' + IntToStr(i) + '{|*|bkmkend bm' + IntToStr(i) + '} and some more words|par ';
+  Result := Rtf(Result + '}');
+end;
+
 { Word's file: its one visible bookmark (mark1) is listed; its 42 hidden ones for the table
   of contents' headings (_Toc...) only with the hidden ones - 43, as Word counts them; each is
   found by its name, in any case, and the text between its marks is the heading's. }
@@ -305,11 +377,12 @@ begin
   r := FRich.PositionRect(s);
   AssertTrue('not in view yet', r.Bottom <= r.Top);
   AssertTrue('gone to', FRich.GoToBookmark('far'));
-  AssertEquals('the caret at its start, where it rests', s, FRich.SelStart);
+  AssertEquals('the caret at its start, where it rests (after the start mark: in it)', s + 1,
+    FRich.SelStart);
   AssertEquals('no selection', 0, FRich.SelLength);
   r := FRich.PositionRect(FRich.SelStart);
   AssertTrue('in view', (r.Bottom > r.Top) and (r.Top >= 0) and (r.Bottom <= FRich.Height));
-  AssertTrue('the text after it', TextOf(FRich.SelStart + 1, 6) = 'target');
+  AssertTrue('the text after it', TextOf(FRich.SelStart, 6) = 'target');
   FRich.SelStart := 0;
   AssertFalse('a name that is not there', FRich.GoToBookmark('near'));
   AssertEquals('the caret stays', 0, FRich.SelStart);
@@ -360,7 +433,7 @@ begin
   ClickChar(q + 1);
   AssertEquals('followed', 1, FFollows);
   AssertTrue('mark1', FRich.FindBookmark('mark1', s, e));
-  AssertTrue('the caret at mark1', (FRich.SelStart <= s) and
+  AssertTrue('the caret at mark1', (FRich.SelStart <= s + 1) and
     (Doc.Text.ParaOfPos(FRich.SelStart) = Doc.Text.ParaOfPos(s)));
   // a target with a place: the application's
   q := FRich.FindText('page#sec2', 0, -1, []);
@@ -739,7 +812,7 @@ begin
   AssertTrue('to b', FRich.GoToBookmark('b'));
   AssertEquals('b in the top third already: no scroll', y0, FRich.ScrollY);
   FRich.FindBookmark('b', s, e);
-  AssertEquals('the caret at b', s, FRich.SelStart);
+  AssertEquals('the caret at b (after its start mark)', s + 1, FRich.SelStart);
   // the last line: the view ends at the document's end
   AssertTrue('to the last', FRich.GoToBookmark('last'));
   y0 := FRich.ScrollY;
@@ -768,6 +841,403 @@ begin
   ClickChar(3);
   AssertEquals('the click is told', 1, FClicks);
   AssertEquals('no such bookmark: not asked', 0, FFollows);
+end;
+
+{ As Word has it: typed right at a bookmark's start (after its opening mark), text is in the
+  bookmark; right at its end (after its closing mark), outside it; at a bookmark that is a
+  place, the place stays before the text. So for a paste and an input method's text. A link's
+  marks are as they were: typed at a link's edges, text is outside the link - also where a
+  bookmark's start is right before the link, or right inside it. }
+procedure TTyRichBookmarksTest.TestTypingAtABookmarksEdgesAsWord;
+var
+  s, e: TTyRichPos;
+  before: RawByteString;
+begin
+  Load(BaseDoc);
+  before := SaveRtf;
+  FRich.SelStart := 2;
+  AssertEquals('the caret at the start rests after its mark', 3, FRich.SelStart);
+  FRich.Key8('X');
+  AssertTrue('found', FRich.FindBookmark('m', s, e));
+  AssertTrue('typed at the start: in the bookmark', TextOf(s + 1, e - s - 1) = 'Xcd');
+  FRich.Undo;
+  AssertTrue('undone', SaveRtf = before);
+  FRich.SelStart := 5;
+  AssertEquals('the caret at the end rests after its mark', 6, FRich.SelStart);
+  FRich.Key8('Y');
+  AssertTrue('found', FRich.FindBookmark('m', s, e));
+  AssertTrue('typed at the end: outside it', TextOf(s + 1, e - s - 1) = 'cd');
+  AssertTrue('right after its end', TextOf(e + 1, 1) = 'Y');
+  FRich.Undo;
+  // a paste and an input method's text go where typing goes
+  FRich.SelStart := 2;
+  FRich.ClipRtf := '';
+  FRich.ClipText := 'P';
+  FRich.PasteFromClipboard;
+  FRich.FindBookmark('m', s, e);
+  AssertTrue('pasted at the start: in it', TextOf(s + 1, e - s - 1) = 'Pcd');
+  FRich.Undo;
+  FRich.SelStart := 5;
+  FRich.PasteFromClipboard;
+  FRich.FindBookmark('m', s, e);
+  AssertTrue('pasted at the end: outside', (TextOf(s + 1, e - s - 1) = 'cd') and (TextOf(e + 1, 1) = 'P'));
+  FRich.Undo;
+  FRich.SelStart := 2;
+  AssertTrue('a composition', FRich.BeginComposition);
+  FRich.UpdateComposition('zz');
+  FRich.CommitComposition('zz');
+  FRich.FindBookmark('m', s, e);
+  AssertTrue('committed at the start: in it', TextOf(s + 1, e - s - 1) = 'zzcd');
+  FRich.Undo;
+  FRich.SelStart := 5;
+  AssertTrue('a composition', FRich.BeginComposition);
+  FRich.UpdateComposition('zz');
+  FRich.CommitComposition('zz');
+  FRich.FindBookmark('m', s, e);
+  AssertTrue('committed at the end: outside', TextOf(s + 1, e - s - 1) = 'cd');
+  FRich.Undo;
+  AssertTrue('undone at last', SaveRtf = before);
+  // a place: it stays before what is typed there
+  Load(Rtf(Head + 'ab{|*|bkmkstart p}{|*|bkmkend p}cd|par}'));
+  FRich.SelStart := 2;
+  FRich.Key8('Z');
+  AssertTrue('found', FRich.FindBookmark('p', s, e));
+  AssertEquals('still a place', s + 1, e);
+  AssertTrue('the text after it', TextOf(e + 1, 1) = 'Z');
+  // a bookmark's start right before a link: typed there, in the bookmark, outside the link
+  Load(Rtf(Head + 'ab {|*|bkmkstart k}{|field{|*|fldinst HYPERLINK "http://x"}{|fldrslt link}}' +
+    '{|*|bkmkend k} cd|par}'));
+  FRich.SelStart := 3;
+  AssertEquals('between the bookmark''s start and the link', 4, FRich.SelStart);
+  FRich.Key8('Q');
+  AssertTrue('typed: in the bookmark', FRich.FindBookmark('k', s, e) and (TextOf(s + 1, 1) = 'Q'));
+  AssertTrue('the link''s open mark after it', Doc.ObjectAt(5) is TTyRichFieldMark);
+  AssertEquals('nothing refused', 0, FRich.Refused);
+  // a bookmark right inside a link's result: typed at the link's start, outside the link
+  Load(Rtf(Head + 'ab {|field{|*|fldinst HYPERLINK "http://x"}{|fldrslt {|*|bkmkstart i}link' +
+    '{|*|bkmkend i}}} cd|par}'));
+  FRich.SelStart := 4;
+  AssertEquals('before the link''s open mark', 3, FRich.SelStart);
+  FRich.Key8('W');
+  AssertTrue('typed before the link', TextOf(3, 1) = 'W');
+  AssertTrue('the link''s open mark after it', Doc.ObjectAt(4) is TTyRichFieldMark);
+  AssertEquals('nothing refused', 0, FRich.Refused);
+end;
+
+{ A copy of a bookmark pasted - or dropped, or put in by InsertContent / AppendContent - into a
+  document that has its name: its text comes in, the bookmark does not (the original stays);
+  one of its ends alone: left out too. A cut and a paste, and a drag that moves, move it. Into
+  a control that has no such name, it comes along. One step each, undone to the bytes; the
+  count and the file agree every time. }
+procedure TTyRichBookmarksTest.TestAPasteTakesABookmarkAsWordDoes;
+var
+  before, clip, part: RawByteString;
+  s, e: TTyRichPos;
+  depth: Integer;
+  other: TFieldProbe;
+  st: TBytesStream;
+  B: TTyRichBuilder;
+begin
+  Load(BaseDoc);
+  before := SaveRtf;
+  FRich.SelStart := 1;
+  FRich.SelLength := 6;
+  FRich.ClipRtf := '';
+  FRich.CopyToClipboard;
+  clip := FRich.ClipRtf;
+  AssertTrue('copied with its bookmark', Pos(Raw('bkmkstart m'), clip) > 0);
+  depth := Doc.UndoDepth;
+  FRich.SelStart := 10;
+  FRich.PasteFromClipboard;
+  AssertEquals('one step', depth + 1, Doc.UndoDepth);
+  AssertTrue('the text came in', ParaText(1) = 'gbcdeh');
+  AssertEquals('the caret after it', 14, FRich.SelStart);
+  AssertEquals('one bookmark', 1, FRich.BookmarkCount);
+  AssertTrue('the original stays', FRich.FindBookmark('m', s, e) and (s = 2) and (e = 5));
+  CheckAgree('a copy pasted');
+  FRich.Undo;
+  AssertTrue('undone: the bytes', SaveRtf = before);
+  FRich.Redo;
+  AssertTrue('redone: the text', ParaText(1) = 'gbcdeh');
+  CheckAgree('redone');
+  FRich.Undo;
+  // one end of it only
+  FRich.SelStart := 1;
+  FRich.SelLength := 3;
+  FRich.ClipRtf := '';
+  FRich.CopyToClipboard;
+  part := FRich.ClipRtf;
+  AssertTrue('copied with the start alone', Pos(Raw('bkmkstart m'), part) > 0);
+  FRich.SelStart := 10;
+  FRich.PasteFromClipboard;
+  AssertTrue('its text', ParaText(1) = 'gbch');
+  AssertEquals('one bookmark', 1, FRich.BookmarkCount);
+  AssertTrue('the original stays', FRich.FindBookmark('m', s, e) and (s = 2) and (e = 5));
+  CheckAgree('one end pasted');
+  FRich.Undo;
+  AssertTrue('undone: the bytes', SaveRtf = before);
+  // cut and pasted: moved
+  FRich.SelStart := 1;
+  FRich.SelLength := 6;
+  FRich.CutToClipboard;
+  AssertEquals('cut: gone', 0, FRich.BookmarkCount);
+  FRich.SelStart := Doc.Text.ParaStart(1) + 1;
+  FRich.PasteFromClipboard;
+  AssertEquals('moved', 1, FRich.BookmarkCount);
+  AssertTrue('in the second paragraph', FRich.FindBookmark('m', s, e) and
+    (Doc.Text.ParaOfPos(s) = 1));
+  AssertTrue('around its text', TextOf(s + 1, e - s - 1) = 'cd');
+  CheckAgree('cut and pasted');
+  FRich.Undo;
+  FRich.Undo;
+  AssertTrue('undone: the bytes', SaveRtf = before);
+  // a drag inside the control: a move moves it, a copy leaves it out
+  AssertTrue('moved by a drag', Doc.Execute(TTyRichMove.Create(1, 6, 10)));
+  AssertTrue('moved', FRich.FindBookmark('m', s, e) and (Doc.Text.ParaOfPos(s) = 1));
+  AssertTrue('around its text', TextOf(s + 1, e - s - 1) = 'cd');
+  CheckAgree('a drag that moves');
+  FRich.Undo;
+  AssertTrue('undone: the bytes', SaveRtf = before);
+  AssertTrue('copied by a drag', Doc.Execute(TTyRichCopy.Create(1, 6, 10)));
+  AssertTrue('the text came in', ParaText(1) = 'gbcdeh');
+  AssertTrue('the original stays', FRich.FindBookmark('m', s, e) and (s = 2) and (e = 5));
+  CheckAgree('a drag that copies');
+  FRich.Undo;
+  AssertTrue('undone: the bytes', SaveRtf = before);
+  // the content's doors: a name the document has (in another case) left out, a new one kept
+  B := TTyRichBuilder.Create;
+  try
+    B.Text('new ').Bookmark('M').Text('place');
+    depth := Doc.UndoDepth;
+    FRich.AppendContent(B);
+    AssertEquals('appended: one step', depth + 1, Doc.UndoDepth);
+    AssertEquals('appended: one bookmark', 1, FRich.BookmarkCount);
+    AssertTrue('the original stays', FRich.FindBookmark('m', s, e) and (s = 2) and (e = 5));
+    AssertTrue('its text came in', ParaText(Doc.Text.ParaCount - 1) = 'new place');
+    CheckAgree('appended');
+    FRich.Undo;
+    AssertTrue('undone: the bytes', SaveRtf = before);
+    FRich.InsertContent(10, B);
+    AssertEquals('inserted: one bookmark', 1, FRich.BookmarkCount);
+    AssertTrue('the original stays', FRich.FindBookmark('m', s, e) and (s = 2) and (e = 5));
+    CheckAgree('inserted');
+    FRich.Undo;
+    AssertTrue('undone: the bytes', SaveRtf = before);
+    B.Text(' and ').Bookmark('fresh');
+    FRich.AppendContent(B);
+    AssertEquals('a new name comes in', 2, FRich.BookmarkCount);
+    AssertTrue('found', FRich.FindBookmark('fresh', s, e));
+    CheckAgree('a new name');
+  finally
+    B.Free;
+  end;
+  // into another control that has no such name: it comes along
+  other := TFieldProbe.Create(nil);
+  try
+    other.Controller := FCtl;
+    other.SetBounds(0, 0, 400, 200);
+    st := TBytesStream.Create(BytesOf(Rtf(Head + 'xy|par}')));
+    try
+      other.LoadFromStream(st);
+    finally
+      st.Free;
+    end;
+    other.FinishLoading;
+    other.ClipRtf := clip;
+    other.ClipText := '';
+    other.SelStart := 1;
+    other.PasteFromClipboard;
+    AssertEquals('another control: it comes along', 1, other.BookmarkCount);
+    AssertTrue('there', other.FindBookmark('m', s, e));
+    AssertTrue('around its text', RawByteString(other.Document.Text.GetText(s + 1, e - s - 1)) = 'cd');
+    CheckAgree('into another control', other);
+    // its one end alone: left out there too
+    other.Undo;
+    other.ClipRtf := part;
+    other.PasteFromClipboard;
+    AssertEquals('one end alone: left out', 0, other.BookmarkCount(True));
+    CheckAgree('one end into another control', other);
+  finally
+    other.Free;
+  end;
+end;
+
+{ A table deleted whose cell holds one end of a bookmark, its other end outside: no lone mark
+  is left - the end in the cell comes back at the deletion's place, as the others there keep
+  theirs. Both ways round: the start in the cell, the end in it. Undone to the bytes. }
+procedure TTyRichBookmarksTest.TestDeletingATableLeavesNoLoneMark;
+var
+  before: RawByteString;
+  s, e: TTyRichPos;
+  i: Integer;
+begin
+  for i := 0 to 1 do
+  begin
+    if i = 0 then
+      Load(Rtf(Head + 'x|par|trowd|cellx2000|cellx4000 |pard|intbl {|*|bkmkstart m}A|cell B|cell|row' +
+        '|pard af{|*|bkmkend m}ter|par}'))
+    else
+      Load(Rtf(Head + 'x{|*|bkmkstart m}y|par|trowd|cellx2000|cellx4000 |pard|intbl A{|*|bkmkend m}' +
+        '|cell B|cell|row|pard after|par}'));
+    before := SaveRtf;
+    AssertTrue(Format('%d: a table', [i]), Doc.CellAt(1) <> nil);
+    // its rows, whole (the model's deletion)
+    AssertTrue(Format('%d: deleted', [i]), Doc.Execute(TTyRichDelete.Create(Doc.Text.ParaStart(1),
+      Doc.Text.ParaStart(Doc.Text.ParaCount - 1) - Doc.Text.ParaStart(1))));
+    AssertTrue(Format('%d: the table gone', [i]), Doc.CellAt(1) = nil);
+    AssertTrue(Format('%d: the bookmark stays', [i]), FRich.FindBookmark('m', s, e));
+    AssertEquals(Format('%d: one', [i]), 1, FRich.BookmarkCount);
+    CheckAgree(Format('%d: the table deleted', [i]));
+    FRich.Undo;
+    AssertTrue(Format('%d: undone: the bytes', [i]), SaveRtf = before);
+  end;
+end;
+
+{ A file read on demand with a bookmark a paragraph: a deletion decides the bookmarks from the
+  load's index - everything selected and a key typed parses nothing; a half deleted parses its
+  two edges at most; one of a bookmark's ends in the range, it stays (collapsed). }
+procedure TTyRichBookmarksTest.TestALazyDeletionParsesOnlyItsEdges;
+var
+  src: RawByteString;
+  ld: TTyRtfLoad;
+  parses: Integer;
+  s, e, a, z: TTyRichPos;
+begin
+  src := LazySource(6000);
+  Load(src);
+  ld := TyRichRtfLoadOf(Doc);
+  AssertTrue('read on demand', ld <> nil);
+  // (the selection's end shown: the last paragraph read for it)
+  FRich.SelectAll;
+  parses := ld.ParseCount;
+  FRich.Key8('x');
+  AssertEquals('everything replaced: nothing parsed', parses, ld.ParseCount);
+  AssertEquals('no bookmark left', 0, FRich.BookmarkCount(True));
+  FRich.Undo;
+  AssertEquals('undone: every one', 6000, FRich.BookmarkCount(True));
+  // a half, from the middle of one paragraph to the middle of another
+  Load(src);
+  ld := TyRichRtfLoadOf(Doc);
+  a := Doc.Text.ParaStart(1000) + 3;
+  z := Doc.Text.ParaStart(4000) + 3;
+  parses := ld.ParseCount;
+  // (the model's deletion: a selection shown would read its ends' paragraphs for the view)
+  AssertTrue('deleted', Doc.Execute(TTyRichDelete.Create(a, z - a)));
+  AssertTrue(Format('the two edges parsed at most (%d)', [ld.ParseCount - parses]),
+    ld.ParseCount - parses <= 2);
+  AssertEquals('the ones in it gone', 3000, FRich.BookmarkCount(True));
+  AssertTrue('the one before', FRich.FindBookmark('bm1000', s, e));
+  AssertTrue('the one after', FRich.FindBookmark('bm4001', s, e));
+  AssertFalse('one in it', FRich.FindBookmark('bm2000', s, e));
+  // a range that holds one end of a bookmark: it stays, collapsed to the range's place
+  Load(src);
+  ld := TyRichRtfLoadOf(Doc);
+  AssertTrue('bm2000', FRich.FindBookmark('bm2000', s, e));
+  a := s + 3;
+  // (into bm3001's text: "paragraph number 3001 " its start, then "te")
+  z := Doc.Text.ParaStart(3000) + 25;
+  parses := ld.ParseCount;
+  AssertTrue('deleted', Doc.Execute(TTyRichDelete.Create(a, z - a)));
+  AssertTrue(Format('the edges parsed at most (%d)', [ld.ParseCount - parses]),
+    ld.ParseCount - parses <= 2);
+  AssertTrue('its end held: it stays', FRich.FindBookmark('bm2000', s, e));
+  AssertTrue('its text up to the place', TextOf(s + 1, e - s - 1) = 'te');
+  AssertTrue('its start held: the next stays', FRich.FindBookmark('bm3001', s, e));
+  AssertTrue('its text from the place', TextOf(s + 1, e - s - 1) = 'xt of 3001');
+  AssertEquals('the others in it gone', 6000 - 1000, FRich.BookmarkCount(True));
+  CheckAgree('a lazy deletion');
+end;
+
+{ BookmarkCount and BookmarkName read a list that is kept: asked again, with CanEditBookmarks
+  between (an idle handler), it is not built again and nothing is parsed; a character typed
+  in a bookmark's paragraph keeps it; a paragraph more, a bookmark added, build it again. }
+procedure TTyRichBookmarksTest.TestTheListIsKeptAcrossAKey;
+var
+  ld: TTyRtfLoad;
+  b, parses, i: Integer;
+  s, e: TTyRichPos;
+begin
+  Load(LazySource(6000));
+  ld := TyRichRtfLoadOf(Doc);
+  AssertTrue('read on demand', ld <> nil);
+  parses := ld.ParseCount;
+  AssertEquals('every one', 6000, FRich.BookmarkCount);
+  b := TBkmProbe(FRich).ListBuilds;
+  AssertEquals('counted with nothing parsed', parses, ld.ParseCount);
+  for i := 1 to 10 do
+  begin
+    AssertTrue('Can...', FRich.CanEditBookmarks);
+    AssertEquals('again', 6000, FRich.BookmarkCount);
+    AssertEquals('again, the hidden ones too', 6000, FRich.BookmarkCount(True));
+  end;
+  AssertEquals('asked again: not built again', b, TBkmProbe(FRich).ListBuilds);
+  AssertEquals('asked again: nothing parsed', parses, ld.ParseCount);
+  AssertEquals('a name of the index', 'bm101', FRich.BookmarkName(100));
+  // a character typed in a bookmark's paragraph
+  AssertTrue('bm101', FRich.FindBookmark('bm101', s, e));
+  FRich.SelStart := s + 3;
+  FRich.Key8('x');
+  AssertEquals('typed: the same', 6000, FRich.BookmarkCount);
+  AssertEquals('typed: kept', b, TBkmProbe(FRich).ListBuilds);
+  AssertEquals('its name', 'bm101', FRich.BookmarkName(100));
+  // a paragraph more: built again
+  FRich.Press(VK_RETURN, []);
+  AssertEquals('a paragraph more: the same', 6000, FRich.BookmarkCount);
+  AssertEquals('built again', b + 1, TBkmProbe(FRich).ListBuilds);
+  // a bookmark added in a paragraph that had none
+  FRich.SelStart := Doc.Text.ParaStart(101);
+  AssertTrue('added', FRich.AddBookmark('added'));
+  AssertEquals('one more', 6001, FRich.BookmarkCount);
+  AssertEquals('in its place', 'added', FRich.BookmarkName(101));
+  FRich.Undo;
+  AssertEquals('undone', 6000, FRich.BookmarkCount);
+  // the start of one deleted: gone from the list
+  AssertTrue('bm7', FRich.FindBookmark('bm7', s, e));
+  FRich.SelStart := s - 1;
+  FRich.SelLength := 3;
+  FRich.Press(VK_DELETE, []);
+  AssertTrue('still found: collapsed', FRich.FindBookmark('bm7', s, e));
+  AssertEquals('listed still', 6000, FRich.BookmarkCount);
+  AssertTrue('deleted', FRich.DeleteBookmark('bm7'));
+  AssertFalse('gone', FRich.FindBookmark('bm7', s, e));
+  AssertEquals('one fewer', 5999, FRich.BookmarkCount);
+  AssertEquals('the next in its place', 'bm8', FRich.BookmarkName(6));
+end;
+
+{ Names are one name whatever their case, as Word has them: a file that has dup and DUP lists
+  one, the first; found by either. }
+procedure TTyRichBookmarksTest.TestNamesAreListedWithoutRegardToCase;
+var
+  s, e: TTyRichPos;
+begin
+  Load(Rtf(Head + '{|*|bkmkstart dup}a{|*|bkmkend dup} {|*|bkmkstart DUP}b{|*|bkmkend DUP} ' +
+    '{|*|bkmkstart other}c{|*|bkmkend other}|par}'));
+  AssertEquals('two names', 2, FRich.BookmarkCount);
+  AssertEquals('the first of dup and DUP', 'dup', FRich.BookmarkName(0));
+  AssertEquals('then other', 'other', FRich.BookmarkName(1));
+  AssertTrue('found as DUP', FRich.FindBookmark('DUP', s, e));
+  AssertEquals('the first', 0, s);
+end;
+
+{ AddBookmark over a selection that holds the same name's old start: the old one goes and the
+  new one is over the selection's text - the old start was in it, one character fewer. }
+procedure TTyRichBookmarksTest.TestAddingANameOverItsOwnStart;
+var
+  s, e: TTyRichPos;
+  before: RawByteString;
+begin
+  Load(BaseDoc);
+  before := SaveRtf;
+  FRich.SelStart := 1;
+  FRich.SelLength := 3;     // b, the start, c
+  AssertTrue('added', FRich.AddBookmark('m'));
+  AssertEquals('one', 1, FRich.BookmarkCount);
+  AssertTrue('found', FRich.FindBookmark('m', s, e));
+  AssertEquals('its start before b', 1, s);
+  AssertTrue('over the selection''s text', TextOf(s + 1, e - s - 1) = 'bc');
+  CheckAgree('added over its own start');
+  FRich.Undo;
+  AssertTrue('undone: the bytes', SaveRtf = before);
 end;
 
 initialization

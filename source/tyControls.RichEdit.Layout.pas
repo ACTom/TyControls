@@ -2900,7 +2900,8 @@ begin
 end;
 
 { Character AChar (the layout's position) for the caret: 0 something seen (or not laid out),
-  1 an object of no width, 2 a field's open mark, 3 its close mark (neither has a width). }
+  1 an object of no width, 2 a field's open mark, 3 its close mark (neither has a width), 4 a
+  bookmark's start or end. }
 function TTyParaLayout.UnseenKind(AChar: TTyRichPos): Integer;
 var
   i: Integer;
@@ -2917,6 +2918,7 @@ begin
           if TTyRichFieldMark(FFrags[i].Obj).Kind = rfmOpen then Exit(2);
           Exit(3);
         end;
+        if FFrags[i].Obj is TTyRichBookmarkMark then Exit(4);
         Exit(1);
       end;
 end;
@@ -2938,13 +2940,15 @@ begin
   rs := InnerUnseenEnd(APos, False);
   re := InnerUnseenEnd(APos, True);
   if rs = re then Exit;
-  // right of every close mark, left of every open mark
+  { right of every close mark and every bookmark's end, left of every open mark: text typed at
+    a link's edge is outside it, at a bookmark's start inside it and at its end outside it, as
+    Word has it (a collapsed bookmark stays before what is typed) }
   lo := rs;
   hi := re;
   for c := rs to re - 1 do
     case UnseenKind(c) of
       2: if c < hi then hi := c;
-      3: lo := c + 1;
+      3, 4: lo := c + 1;
     end;
   if lo <= hi then Result := lo else Result := rs;
 end;

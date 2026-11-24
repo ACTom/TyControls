@@ -108,6 +108,9 @@ type
 
 implementation
 
+uses
+  tyControls.RichEdit.Bookmarks;
+
 const
   BS = '\';
   BigLines = 2000000;
@@ -396,13 +399,26 @@ end;
   pasted with its mark, and the cells of rows pasted as rows. }
 { The character at APos goes out with a range [ARangeStart, ARangeStop) of ADoc: any but a
   field's mark, and a mark only with its partner (a copy writes a field whose two marks are in
-  it, and of one that is not the text alone). }
+  it, and of one that is not the text alone); a bookmark's end only with its other end (a
+  paste leaves a bookmark one end of which came alone out, as Word does). }
 function RangeKeeps(ADoc: TTyRichDocument; APos, ARangeStart, ARangeStop: TTyRichPos): Boolean;
 var
   o: TTyRichObject;
   q: TTyRichPos;
+  b: TTyRichBookmarkMark;
 begin
   o := ADoc.ObjectAt(APos);
+  if o is TTyRichBookmarkMark then
+  begin
+    b := TTyRichBookmarkMark(o);
+    if b.Kind = rbmStart then
+    begin
+      q := TyRichFindBookmarkMark(ADoc, rbmEnd, b.Name, APos);
+      Exit((q > APos) and (q < ARangeStop));
+    end;
+    q := TyRichFindBookmarkMark(ADoc, rbmStart, b.Name, ARangeStart);
+    Exit((q >= ARangeStart) and (q < APos));
+  end;
   if not (o is TTyRichFieldMark) then Exit(True);
   q := ADoc.FieldPartner(APos);
   if TTyRichFieldMark(o).Kind = rfmOpen then Result := (q > APos) and (q < ARangeStop)

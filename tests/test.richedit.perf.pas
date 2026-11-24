@@ -2097,10 +2097,6 @@ begin
   AssertTrue(Format('AutoHeight after a width change in %.1f ms', [t]), t <= CKeystrokeMs);
 end;
 
-{ 100 MB of paragraphs, each with a bookmark of its own around a few words (200,000): the jump
-  to one far into the file and its paint within the line of any place (100 ms); what the
-  load's index of them holds, and a name that is not there (every entry and every changed
-  paragraph looked at), reported. }
 { Three paragraphs in the middle of a 100 MB RTF made a list of two levels: the save writes
   their list table and their numbers from the paragraph before them on - it costs what a key
   typed there costs (within 1.5 times and 100 ms, and two parses more at most), not a walk of
@@ -2172,6 +2168,14 @@ begin
     parses[1] <= parses[0] + 2);
 end;
 
+{ 100 MB of paragraphs, each with a bookmark of its own around a few words (200,000): the jump
+  to one far into the file and its paint within the line of any place (100 ms); what the
+  load's index of them holds, and a name that is not there (every entry and every changed
+  paragraph looked at), reported. BookmarkCount: the first call counts the index (no name
+  read), the one after a character typed in a bookmark's paragraph keeps what it counted - a
+  small part of the first; asked again with CanEditBookmarks, as an idle handler does, it
+  walks nothing (no parse). A key over a selection of everything, to its paint, within the
+  key's line: the deletion decides the bookmarks from the index (nothing parsed). }
 procedure TTyRichEditPerfTest.TestABookmarkAmong200000In100MB;
 const
   CMarks = 200000;
@@ -2181,9 +2185,11 @@ var
   line, pad: RawByteString;
   i: Integer;
   bmp: TBitmap;
-  t0, go, miss: Double;
+  t0, go, miss, count1, count2, idle, all: Double;
   s, e: TTyRichPos;
   ld: TTyRichParaLoader;
+  n, parses, k: Integer;
+  rl: TTyRtfLoad;
 begin
   CheckRoom;
   path := NewFile('.rtf');
@@ -2218,7 +2224,7 @@ begin
     Report(Format('bookmarks: a jump to one of %d in %d MB and its paint', [CMarks,
       SizeOfFile(path) div (1024 * 1024)]), go);
     AssertTrue('its place', FRich.FindBookmark('bm150000', s, e));
-    AssertEquals('the caret there', s, FRich.SelStart);
+    AssertEquals('the caret there (after the start mark: in the bookmark)', s + 1, FRich.SelStart);
     AssertTrue(Format('within the line of any place (%.1f ms)', [go]), go <= 100);
     t0 := Clock;
     AssertFalse('a name that is not there', FRich.FindBookmark('nothere', s, e));
@@ -2228,6 +2234,50 @@ begin
     AssertTrue('an index', (ld <> nil) and (ld.BookmarkIndexCount = 2 * CMarks));
     WriteLn(Format('TTyRichEditPerfTest: bookmarks: the index holds %d ends, %d bytes ' +
       '(%d a bookmark)', [ld.BookmarkIndexCount, ld.BookmarkIndexCount * 21, 42]));
+    // the count: the first call, then after a character typed in a bookmark's paragraph
+    rl := TyRichRtfLoadOf(FRich.Document);
+    AssertTrue('read on demand', rl <> nil);
+    parses := rl.ParseCount;
+    t0 := Clock;
+    n := FRich.BookmarkCount;
+    count1 := Clock - t0;
+    Report(Format('bookmarks: BookmarkCount of %d, the first call', [n]), count1);
+    AssertEquals('every one counted', CMarks, n);
+    AssertEquals('counted with nothing parsed', parses, rl.ParseCount);
+    FRich.SelStart := e + 1;
+    TPerfRich(FRich).TypeChar('x');
+    t0 := Clock;
+    n := FRich.BookmarkCount;
+    count2 := Clock - t0;
+    Report('bookmarks: BookmarkCount after a character typed in a bookmark''s paragraph', count2);
+    AssertEquals('still every one', CMarks, n);
+    AssertTrue(Format('kept: %.3f ms against %.3f ms', [count2, count1]), count2 <= count1 / 20);
+    // as an idle handler asks, a thousand times
+    parses := rl.ParseCount;
+    t0 := Clock;
+    for k := 1 to 1000 do
+      if FRich.CanEditBookmarks and (FRich.BookmarkCount < 0) then Break;
+    idle := Clock - t0;
+    Report('bookmarks: CanEditBookmarks and BookmarkCount asked 1,000 times (an idle handler)', idle);
+    AssertEquals('asked with nothing parsed', parses, rl.ParseCount);
+    AssertTrue(Format('the idle asks walk nothing (%.3f ms)', [idle]), idle <= count1 / 20);
+    AssertEquals('a name read when asked for', 'bm150000', FRich.BookmarkName(149999));
+    // a key over a selection of everything
+    FRich.SelectAll;
+    TPerfRich(FRich).PaintInto(bmp);
+    parses := rl.ParseCount;
+    t0 := Clock;
+    TPerfRich(FRich).TypeChar('x');
+    TPerfRich(FRich).PaintInto(bmp);
+    all := Clock - t0;
+    Report('bookmarks: a character typed over a selection of everything, to its paint', all);
+    AssertEquals('the whole text replaced', 1, FRich.Document.Text.ParaCount);
+    AssertEquals('no bookmark left', 0, FRich.BookmarkCount(True));
+    // (the load stays while the history holds its paragraphs)
+    AssertTrue('the load still there', TyRichRtfLoadOf(FRich.Document) = rl);
+    AssertTrue(Format('nothing parsed by the deletion (%d intervals)', [rl.ParseCount - parses]),
+      rl.ParseCount - parses <= 1);
+    AssertTrue(Format('within the key''s line (%.1f ms)', [all]), all <= CKeystrokeMs);
   finally
     bmp.Free;
   end;
