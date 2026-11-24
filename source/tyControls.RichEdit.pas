@@ -1783,6 +1783,13 @@ type
       paragraph that ends a selection (whole rows selected down to the next row's start)
       stands for the paragraph before it, the last one selected. }
     function CaretTablePara: Integer;
+    // the merge the selection asks for (False: it is not cells of one table)
+    function MergeEditOf(out AArea: TTyRichCellArea; out AEdit: TTyRichTableEdit): Boolean;
+    { The cell a split takes - the caret's, or the one cell selected -: its row, index, the
+      rows it covers, its extent (twips) and the first paragraph of its row. False: none. }
+    function SplitTarget(out ARow, ACell, ASpan, ALeft, ARight, ARowPara: Integer): Boolean;
+    { (AGrid: the grid read for a cell over as many columns as ACols - an answer reads none) }
+    function SplitEditOf(ACols, ARows: Integer; AGrid: Boolean; out AEdit: TTyRichTableEdit): Boolean;
     { Tab (AForward) or Shift+Tab with the caret in a table: to the next (previous) cell shown,
       its content selected; at the last cell of the table a person sees, a new row (through
       the door). False when the caret is in no table: the key is not the table's. }
@@ -2913,6 +2920,28 @@ type
       demand by one walk of the table's rows - linear in them: what keys, the caret and a
       paint need never makes it. The caller frees it. }
     function TableGrid(ATablePos: TTyRichPos): TTyRichGrid;
+    { The selected cells merged into one (Word's Merge Cells): the selection is cells of one
+      table - a rectangle, grown to hold every merged cell it touches -, at least two of them,
+      in a table with no nested table. The top-left cell becomes the merged one: the others'
+      paragraphs follow its own in reading order (an empty cell adds nothing; a bookmark goes
+      with its text), it has the top-left cell's shading, padding and alignment and the lines
+      that were on the rectangle's outline; across it is one wide cell, down a vertical merge
+      (Word's own forms). One undo step; the caret at the merged cell's start. False: nothing
+      done (CanMergeCells says no; a refusal is told). }
+    function MergeCells: Boolean;
+    function CanMergeCells: Boolean;
+    { The caret's cell (or the one cell selected) split into ACols cells across and ARows
+      down (Word's Split Cells). A cell over C columns of the grid split into C gets the
+      grid's own edges back; any other ACols divides its width equally. Over R rows, ARows
+      must divide R (each part over R div ARows rows); in one row, ARows - 1 rows go in below
+      it and the row's other cells reach down over them. The content stays in the first
+      cell; the new cells look as it did. ACols 1 .. 63 (a row's cells as well), ARows as
+      the table's rows allow. One undo step. False: nothing done (refused: told). Finding C
+      reads the table's grid (TableGrid): one walk of its rows. }
+    function SplitCell(ACols, ARows: Integer): Boolean;
+    { A split of the caret's cell (or the one cell selected) may run now: into two cells
+      across or two down. }
+    function CanSplitCell: Boolean;
     function CaretCell(out ATablePos: TTyRichPos; out ARow, ACol: Integer): Boolean;
     function SelectCell: Boolean;
     function SelectRow: Boolean;
@@ -21625,6 +21654,254 @@ begin
   finally
     st.Free;
   end;
+end;
+
+{ The merge the selection asks for (False: the selection is not cells of one table). }
+function TTyCustomRichEdit.MergeEditOf(out AArea: TTyRichCellArea; out AEdit: TTyRichTableEdit): Boolean;
+begin
+  AArea := CellArea;
+  AEdit := Default(TTyRichTableEdit);
+  Result := TyRichCellsEditable(AArea);
+  if not Result then Exit;
+  AEdit := TyRichTableEdit(rtkMergeCells, FDoc.Text.ParaStart(AArea.FirstPara), AArea.Range.Row0);
+  AEdit.Row0 := AArea.Range.Row0;
+  AEdit.Row1 := AArea.Range.Row1;
+  AEdit.X0 := Integer(AArea.X0);
+  AEdit.X1 := Integer(AArea.X1);
+end;
+
+function TTyCustomRichEdit.CanMergeCells: Boolean;
+var
+  area: TTyRichCellArea;
+  ed: TTyRichTableEdit;
+  r: TTyRichTableRefusal;
+begin
+  Result := False;
+  if not TableActionsOpen then Exit;
+  if not MergeEditOf(area, ed) then Exit;
+  // (the cells' content: the door moves it first)
+  r := FDoc.TableEditRefusal(ed);
+  Result := r in [rtrNone, rtrNotEmpty];
+end;
+
+function TTyCustomRichEdit.MergeCells: Boolean;
+var
+  area: TTyRichCellArea;
+  ed: TTyRichTableEdit;
+  r: TTyRichTableRefusal;
+  g: TTyCellGather;
+  i, filled: Integer;
+  joined, part: TTyRichDocument;
+  edit: TTyRichCellsEdit;
+  comp: TTyRichCompositeCommand;
+  place: TTyRichEditPlace;
+  at: TTyRichPos;
+begin
+  Result := False;
+  EndCompositionForUser;
+  if not TableActionsOpen then Exit;
+  if not MergeEditOf(area, ed) then Exit;
+  r := FDoc.TableEditRefusal(ed);
+  if not (r in [rtrNone, rtrNotEmpty]) then
+  begin
+    Refuse(TableRefusalText(r, ed), True);
+    Exit;
+  end;
+  NameDocBase;
+  joined := nil;
+  edit := nil;
+  comp := TTyRichCompositeCommand.Create(rsRichUndoMergeCells);
+  g := TTyCellGather.Create;
+  try
+    g.Doc := FDoc;
+    VisitArea(FDoc, area, @g.Take);
+    if Length(g.Cells) < 2 then Exit;
+    { The content in reading order: the top-left cell's, then each other cell's that has
+      any, as paragraphs after it (an empty cell adds nothing). }
+    filled := 0;
+    for i := 0 to High(g.Cells) do
+      if g.Cells[i].E > g.Cells[i].S then
+      begin
+        part := DocOfRange(FDoc, g.Cells[i].S, g.Cells[i].E - g.Cells[i].S);
+        if joined = nil then
+          joined := part
+        else
+        begin
+          joined.Execute(TTyRichInsertText.Create(joined.Text.Length, #13#10));
+          joined.Execute(TTyRichInsertFragment.Create(joined.Text.Length, part, False));
+        end;
+        Inc(filled);
+      end;
+    // (only the top-left cell's own: nothing moves)
+    if (filled > 1) or ((filled = 1) and (g.Cells[0].E <= g.Cells[0].S)) then
+    begin
+      edit := TTyRichCellsEdit.Create(FDoc.Text.ParaStart(area.FirstPara), rsRichUndoMergeCells);
+      edit.AddContent(g.Cells[0].Row, g.Cells[0].Col, joined);
+      joined := nil;
+      for i := 1 to High(g.Cells) do
+        if g.Cells[i].E > g.Cells[i].S then edit.AddClear(g.Cells[i].Row, g.Cells[i].Col);
+      comp.Add(edit);
+      edit := nil;
+    end;
+    at := g.Cells[0].S;
+    comp.Add(TTyRichMergeCells.Create(FDoc.Text.ParaStart(area.FirstPara), ed.Row0, ed.Row1,
+      ed.X0, ed.X1));
+    place := Default(TTyRichEditPlace);
+    place.Anchor := at;
+    place.Caret := at;
+    Result := RunMade(comp, place, True);
+    comp := nil;
+  finally
+    g.Free;
+    joined.Free;
+    edit.Free;
+    comp.Free;
+  end;
+end;
+
+function TTyCustomRichEdit.SplitTarget(out ARow, ACell, ASpan, ALeft, ARight,
+  ARowPara: Integer): Boolean;
+var
+  t: TTyRichText;
+  area: TTyRichCellArea;
+  k, f, l, n, o: Integer;
+  c, nc: TTyRichCell;
+  e: TTyRichEdges;
+begin
+  Result := False;
+  ARow := -1;
+  ACell := -1;
+  ASpan := 1;
+  t := FDoc.Text;
+  // the caret's cell, or one cell selected whole
+  if HasSelection then
+  begin
+    area := CellArea;
+    if not TyRichCellsEditable(area) then Exit;
+    k := t.ParaOfPos(GetSelStart);
+  end
+  else
+    k := t.ParaOfPos(FCaret);
+  FDoc.BeginRead;
+  try
+    c := FDoc.CellAt(k);
+    if (c = nil) or CoveredPara(k) then Exit;
+    if HasSelection then
+    begin
+      // (exactly that cell: the area's rows are its span's, every other cell outside it)
+      if not TyRichCellParasOf(FDoc, k, f, l) then Exit;
+      if (GetSelStart <> t.ParaStart(f)) or
+         (GetSelStart + GetSelLength <> t.ParaStart(l) + t.ParaLength(l) + 1) then
+        Exit;
+    end;
+    if not FDoc.TableRowIndex(k, ARow, n) then Exit;
+    ACell := c.Index;
+    e := c.Row.CellEdges;
+    if ACell = 0 then ALeft := c.Row.Format.Row.LeftTwips else ALeft := e[ACell - 1];
+    ARight := e[ACell];
+    if not TyRichRowParas(FDoc, k, f, l) then Exit;
+    ARowPara := f;
+    // the rows it covers: down while the cell below continues it
+    if TyRichCellVMerge(c.Row, ACell) = Ord(rcmFirst) then
+      while l + 1 < t.ParaCount do
+      begin
+        nc := FDoc.CellAt(l + 1);
+        if (nc = nil) or (nc.Table <> c.Table) then Break;
+        o := TyRichFacingCell(e, c.Row.Format.Row.LeftTwips, ACell, nc.Row.CellEdges,
+          nc.Row.Format.Row.LeftTwips);
+        if (o < 0) or (TyRichCellVMerge(nc.Row, o) <> Ord(rcmContinue)) then Break;
+        Inc(ASpan);
+        if not TyRichRowParas(FDoc, l + 1, f, l) then Break;
+      end;
+    Result := True;
+  finally
+    FDoc.EndRead;
+  end;
+end;
+
+function TTyCustomRichEdit.SplitEditOf(ACols, ARows: Integer; AGrid: Boolean;
+  out AEdit: TTyRichTableEdit): Boolean;
+var
+  r, ci, span, xl, xr, rp, i, c0, cn: Integer;
+  g: TTyRichGrid;
+  gc: TTyRichGridCell;
+  edges: TTyRichEdges;
+begin
+  AEdit := Default(TTyRichTableEdit);
+  Result := SplitTarget(r, ci, span, xl, xr, rp);
+  if not Result then Exit;
+  edges := nil;
+  if (ACols > 1) and AGrid then
+  begin
+    // over as many of the grid's columns as it splits into: their own edges back
+    cn := 0;
+    c0 := 0;
+    g := TableGrid(FDoc.Text.ParaStart(rp));
+    try
+      if g <> nil then
+      begin
+        gc := g.CellOf(r, ci);
+        cn := gc.ColSpan;
+        c0 := gc.Col;
+        if cn = ACols then
+        begin
+          SetLength(edges, ACols - 1);
+          for i := 1 to ACols - 1 do edges[i - 1] := g.Edge(c0 + i);
+        end;
+      end;
+    finally
+      g.Free;
+    end;
+  end;
+  // any other number of columns: the width in equal parts
+  if (ACols > 1) and (Length(edges) = 0) then
+  begin
+    SetLength(edges, ACols - 1);
+    for i := 1 to ACols - 1 do edges[i - 1] := xl + Int64(xr - xl) * i div ACols;
+  end;
+  AEdit := TyRichTableEdit(rtkSplitCell, FDoc.Text.ParaStart(rp), ci, ARows, ACols);
+  AEdit.Row0 := r;
+  AEdit.Row1 := r + span - 1;
+  AEdit.SpanRows := span;
+  AEdit.SplitEdges := edges;
+end;
+
+function TTyCustomRichEdit.CanSplitCell: Boolean;
+var
+  ed: TTyRichTableEdit;
+begin
+  Result := False;
+  if not TableActionsOpen then Exit;
+  if SplitEditOf(2, 1, False, ed) and (FDoc.TableEditRefusal(ed) = rtrNone) then Exit(True);
+  if SplitEditOf(1, 2, False, ed) and (FDoc.TableEditRefusal(ed) = rtrNone) then Exit(True);
+end;
+
+function TTyCustomRichEdit.SplitCell(ACols, ARows: Integer): Boolean;
+var
+  ed: TTyRichTableEdit;
+  r: TTyRichTableRefusal;
+  place: TTyRichEditPlace;
+  at: TTyRichPos;
+begin
+  Result := False;
+  EndCompositionForUser;
+  if not TableActionsOpen then Exit;
+  if (ACols < 1) or (ARows < 1) or ((ACols = 1) and (ARows = 1)) then Exit;
+  if not SplitEditOf(ACols, ARows, True, ed) then Exit;
+  r := FDoc.TableEditRefusal(ed);
+  if r <> rtrNone then
+  begin
+    Refuse(TableRefusalText(r, ed), True);
+    Exit;
+  end;
+  // the caret at the split cell's start: where its content stays
+  if HasSelection then at := GetSelStart else at := FCaret;
+  at := FDoc.Text.ParaStart(FDoc.Text.ParaOfPos(at));
+  place := Default(TTyRichEditPlace);
+  place.Anchor := at;
+  place.Caret := at;
+  Result := RunMade(TTyRichSplitCell.Create(ed.Pos, ed.Row0, ed.Index, ed.SpanRows, ed.Cols,
+    ed.Rows, ed.SplitEdges), place, True);
 end;
 
 procedure TTyCustomRichEdit.CopyCells(const AArea: TTyRichCellArea);

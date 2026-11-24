@@ -316,6 +316,8 @@ resourcestring
   rsRichUndoDeleteRow    = 'Delete row';
   rsRichUndoInsertColumn = 'Insert column';
   rsRichUndoDeleteColumn = 'Delete column';
+  rsRichUndoMergeCells   = 'Merge cells';
+  rsRichUndoSplitCell    = 'Split cell';
   rsRichUndoDeleteTable  = 'Delete table';
   rsRichUndoCellProps    = 'Cell properties';
   rsRichUndoRowProps     = 'Row properties';
@@ -520,6 +522,10 @@ resourcestring
   rsRichActSelectTableHint   = 'Select the whole table';
   rsRichActClearCells        = 'Clear Cell &Contents';
   rsRichActClearCellsHint    = 'Clear the contents of the selected cells';
+  rsRichActMergeCells        = '&Merge Cells';
+  rsRichActMergeCellsHint    = 'Merge the selected cells into one';
+  rsRichActSplitCell         = 'S&plit Cells...';
+  rsRichActSplitCellHint     = 'Split the cell into columns and rows';
   rsRichActCellShading = '&Shading';
   rsRichActCellShadingHint = 'Give the selected cells a shading';
   rsRichActCellBorders = '&Borders';

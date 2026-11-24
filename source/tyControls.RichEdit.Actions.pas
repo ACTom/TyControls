@@ -117,7 +117,7 @@ type
     FCanRowIns, FCanColIns, FCanRowDel, FCanColDel, FCanTableDel: Boolean;
     FCanLink, FCanEditLink: Boolean;
     FCanCells, FCanColSize, FCanRowSize: Boolean;
-    FCanSelectCells, FCanClearCells: Boolean;
+    FCanSelectCells, FCanClearCells, FCanMerge, FCanSplit: Boolean;
     FHasTableProps: Boolean;
     FTableProps: TTyRichTableProperties;
     procedure ViewChanged(Sender: TObject);
@@ -180,6 +180,9 @@ type
     property CanSelectCells: Boolean read FCanSelectCells;
     // the control's CanClearCells
     property CanClearCells: Boolean read FCanClearCells;
+    // the control's CanMergeCells and CanSplitCell
+    property CanMergeCells: Boolean read FCanMerge;
+    property CanSplitCell: Boolean read FCanSplit;
     { GetTableProperties of the selection (HasTableProperties: there were cells to read;
       read only while CanFormatCells): what the alignment actions show checked. }
     property HasTableProperties: Boolean read FHasTableProps;
@@ -881,6 +884,34 @@ type
     constructor Create(AOwner: TComponent); override;
   end;
 
+  { The selected cells merged into one (the control's MergeCells), Enabled by its
+    CanMergeCells. }
+  TTyRichEditMergeCells = class(TTyRichEditAction)
+  protected
+    procedure UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+    procedure ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+  public
+    constructor Create(AOwner: TComponent); override;
+  end;
+
+  { The caret's cell split into Columns x Rows (the control's SplitCell); OnChooseSize first,
+    where an application asks the user the numbers (AInsert False: nothing done). Enabled by
+    the control's CanSplitCell. }
+  TTyRichEditSplitCell = class(TTyRichEditAction)
+  private
+    FRows, FColumns: Integer;
+    FOnChooseSize: TTyRichTableSizeEvent;
+  protected
+    procedure UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+    procedure ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+  public
+    constructor Create(AOwner: TComponent); override;
+  published
+    property Rows: Integer read FRows write FRows default 1;
+    property Columns: Integer read FColumns write FColumns default 2;
+    property OnChooseSize: TTyRichTableSizeEvent read FOnChooseSize write FOnChooseSize;
+  end;
+
   { The selected cells' contents cleared, the cells kept (the control's ClearCells, what Delete
     does to them), Enabled by its CanClearCells. No shortcut of its own: the Delete key is the
     focused control's. }
@@ -1041,7 +1072,7 @@ type
 
 const
   { Every action of this unit, in the order the IDE lists them. }
-  CTyRichEditActions: array[0..60] of TTyRichEditActionClass = (
+  CTyRichEditActions: array[0..62] of TTyRichEditActionClass = (
     TTyRichEditBold, TTyRichEditItalic, TTyRichEditUnderline, TTyRichEditStrikeOut,
     TTyRichEditSuperscript, TTyRichEditSubscript,
     TTyRichEditAlignLeft, TTyRichEditAlignCenter, TTyRichEditAlignRight,
@@ -1061,7 +1092,7 @@ const
     TTyRichEditTableProperties, TTyRichEditAutoFitColumn, TTyRichEditDistributeColumns,
     TTyRichEditDistributeRows, TTyRichEditFitTableToWindow, TTyRichEditSelectCell,
     TTyRichEditSelectRow, TTyRichEditSelectColumn, TTyRichEditSelectTable,
-    TTyRichEditClearCells);
+    TTyRichEditClearCells, TTyRichEditMergeCells, TTyRichEditSplitCell);
 
   { The font sizes the grow and shrink actions step through (points). }
   CTyRichFontSizes: array[0..15] of Integer = (8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28,
@@ -1213,9 +1244,11 @@ begin
   FCanRowSize := FRich.CanResizeRows;
   FCanSelectCells := FRich.CanSelectCells;
   FCanClearCells := FRich.CanClearCells;
+  FCanMerge := FRich.CanMergeCells;
+  FCanSplit := FRich.CanSplitCell;
   FHasTableProps := FCanCells and FRich.GetTableProperties(FTableProps);
   if not FHasTableProps then FTableProps := Default(TTyRichTableProperties);
-  Inc(FQueries, 15);
+  Inc(FQueries, 17);
 end;
 
 { TTyRichEditAction }
@@ -2847,6 +2880,55 @@ begin
   inherited Create(AOwner);
   Caption := rsRichActSelectTable;
   Hint := rsRichActSelectTableHint;
+end;
+
+{ ---- merging and splitting cells ---- }
+
+constructor TTyRichEditMergeCells.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  Caption := rsRichActMergeCells;
+  Hint := rsRichActMergeCellsHint;
+end;
+
+procedure TTyRichEditMergeCells.UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState);
+begin
+  Enabled := AState.CanMergeCells;
+  Checked := False;
+end;
+
+procedure TTyRichEditMergeCells.ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState);
+begin
+  ARich.MergeCells;
+end;
+
+constructor TTyRichEditSplitCell.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  Caption := rsRichActSplitCell;
+  Hint := rsRichActSplitCellHint;
+  FRows := 1;
+  FColumns := 2;
+end;
+
+procedure TTyRichEditSplitCell.UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState);
+begin
+  Enabled := AState.CanSplitCell;
+  Checked := False;
+end;
+
+procedure TTyRichEditSplitCell.ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState);
+var
+  nRows, nCols: Integer;
+  go: Boolean;
+begin
+  if not AState.CanSplitCell then Exit;
+  nRows := FRows;
+  nCols := FColumns;
+  go := True;
+  if Assigned(FOnChooseSize) then FOnChooseSize(Self, nRows, nCols, go);
+  if not go or (csDestroying in ARich.ComponentState) then Exit;
+  ARich.SplitCell(nCols, nRows);
 end;
 
 { ---- clearing cells ---- }

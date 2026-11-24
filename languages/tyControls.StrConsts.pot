@@ -1022,6 +1022,14 @@ msgstr ""
 msgid "Line spacing"
 msgstr ""
 
+#: tycontrols.strconsts.rsrichactmergecells
+msgid "&Merge Cells"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactmergecellshint
+msgid "Merge the selected cells into one"
+msgstr ""
+
 #: tycontrols.strconsts.rsrichactnotfound
 #, object-pascal-format
 msgid "Cannot find \"%s\"."
@@ -1137,6 +1145,14 @@ msgstr ""
 
 #: tycontrols.strconsts.rsrichactselecttablehint
 msgid "Select the whole table"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactsplitcell
+msgid "S&plit Cells..."
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactsplitcellhint
+msgid "Split the cell into columns and rows"
 msgstr ""
 
 #: tycontrols.strconsts.rsrichactstrikeout
@@ -1530,6 +1546,10 @@ msgstr ""
 msgid "Insert text"
 msgstr ""
 
+#: tycontrols.strconsts.rsrichundomergecells
+msgid "Merge cells"
+msgstr ""
+
 #: tycontrols.strconsts.rsrichundomove
 msgid "Move"
 msgstr ""
@@ -1570,6 +1590,10 @@ msgstr ""
 
 #: tycontrols.strconsts.rsrichundosettings
 msgid "Document settings"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichundosplitcell
+msgid "Split cell"
 msgstr ""
 
 #: tycontrols.strconsts.rsrichundotableprops

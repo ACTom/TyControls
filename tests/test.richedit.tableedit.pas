@@ -1469,8 +1469,11 @@ var
   t: TTyRichText;
   f: Integer;
 
-  procedure Check(const AWhat: string; AIn, ATable, ARows, AColIns, AColDel, ADelTable: Boolean);
+  procedure Check(const AWhat: string; AIn, ATable, ARows, AColIns, AColDel, ADelTable: Boolean;
+    AMerge: Boolean = False; ASplit: Boolean = False);
   begin
+    AssertEquals(AWhat + ': merge cells', AMerge, FRich.CanMergeCells);
+    AssertEquals(AWhat + ': split a cell', ASplit, FRich.CanSplitCell);
     AssertEquals(AWhat + ': in a table', AIn, FRich.InTable);
     AssertEquals(AWhat + ': insert a table', ATable, FRich.CanInsertTable);
     AssertEquals(AWhat + ': insert a row', ARows, FRich.CanInsertRow);
@@ -1489,7 +1492,7 @@ begin
   FRich.SelStart := 0;
   Check('outside', False, True, False, False, False, False);
   FRich.SelStart := t.ParaStart(f + 2);
-  Check('in a cell', True, False, True, True, True, True);
+  Check('in a cell', True, False, True, True, True, True, False, True);
   // a selection from outside into the table: InsertTable goes at its start
   FRich.SelStart := 1;
   FRich.SelLength := t.ParaStart(f + 2) - 1;
@@ -1497,7 +1500,7 @@ begin
   // whole rows selected down to the next paragraph: the caret stands for the last selected
   FRich.SelStart := t.ParaStart(f + 2);
   FRich.SelLength := t.ParaStart(f + 4) - t.ParaStart(f + 2);
-  Check('the last row, whole', True, False, True, True, True, True);
+  Check('the last row, whole', True, False, True, True, True, True, True, False);
   FRich.SelStart := t.ParaStart(f + 2);
   FRich.ReadOnly := True;
   Check('read-only', True, False, False, False, False, False);
@@ -1514,21 +1517,21 @@ begin
   finally
     FRich.EndEdit;
   end;
-  Check('after it', True, False, True, True, True, True);
+  Check('after it', True, False, True, True, True, True, False, True);
   // what a table forbids
   LoadRtf(MergedRtf);
   t := d.Text;
   FRich.SelStart := t.ParaStart(FirstTablePara(d) + 4);
-  Check('merged', True, False, False, False, False, True);
+  Check('merged', True, False, False, False, False, True, False, True);
   LoadRtf(IrregularRtf);
   t := d.Text;
   FRich.SelStart := t.ParaStart(FirstTablePara(d));
-  Check('irregular', True, False, True, False, False, True);
+  Check('irregular', True, False, True, False, False, True, False, True);
   FRich.Lines.Text := 'x';
   t := d.Text;
   FRich.SelStart := 0;
   AssertTrue('63 columns', FRich.InsertTable(1, CRichMaxTableCols));
-  Check('63 columns', True, False, True, False, True, True);
+  Check('63 columns', True, False, True, False, True, True, False, True);
   // loading
   // (slices small enough that the load is still going on)
   FRich.Slices(4096, 4096);
@@ -1540,7 +1543,7 @@ begin
   Check('loading', True, False, False, False, False, False);
   FRich.FinishLoading;
   FRich.Slices(CRtfFirstSliceBytes, CRichLoadStepBytes);
-  Check('loaded', True, False, True, True, True, True);
+  Check('loaded', True, False, True, True, True, True, False, True);
 end;
 
 procedure TTyRichTableEditTest.TestTheCanFunctionsAnswerFromWhatTheyFound;

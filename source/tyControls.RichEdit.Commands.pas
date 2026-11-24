@@ -395,6 +395,31 @@ type
     function Description: string; override;
   end;
 
+  { Cells merged: in rows ARow0 .. ARow1 of the table ATablePos is in (counted as the table
+    edits count them), the cells that meet AX0 .. AX1 (twips) become one - the first of them
+    in each row, as wide as they were; over more than one row the first row's begins a
+    vertical merge and the others' continue it. The cell has the top-left cell's look and the
+    lines that were on the rectangle's outline. The cells that go, and those the merge
+    covers, must be empty (rtrNotEmpty otherwise): the control's MergeCells moves their
+    content into the top-left cell first, in the same step. Refused on a table with a nested
+    table. }
+  TTyRichMergeCells = class(TTyRichTableCommand)
+  public
+    constructor Create(ATablePos: TTyRichPos; ARow0, ARow1, AX0, AX1: Integer);
+    function Description: string; override;
+  end;
+
+  { Cell ACell of row ARow (which covers ASpanRows rows, 1: none below it) split into ACols
+    cells across, at AEdges (twips inside the cell, rising: ACols - 1 of them), and ARows
+    down (TTyRichTableEdit.SplitEdges says what it does). The content stays in the first
+    cell. }
+  TTyRichSplitCell = class(TTyRichTableCommand)
+  public
+    constructor Create(ATablePos: TTyRichPos; ARow, ACell, ASpanRows, ACols, ARows: Integer;
+      const AEdges: array of Integer);
+    function Description: string; override;
+  end;
+
   { A change of table properties (TTyRichDocument.EditTableProps says what it does): only
     the fields the properties' Valid names change. The table is named by a position inside
     it, rows by their index as the table edits count them. CanExecute is False - Execute
@@ -1563,6 +1588,7 @@ end;
 function TyRichTableEdit(AKind: TTyRichTableEditKind; APos: TTyRichPos; AIndex: Integer;
   ARows: Integer; ACols: Integer; AWidth: Integer): TTyRichTableEdit;
 begin
+  Result := Default(TTyRichTableEdit);
   Result.Kind := AKind;
   Result.Pos := APos;
   Result.Index := AIndex;
@@ -1658,6 +1684,40 @@ end;
 function TTyRichDeleteColumn.Description: string;
 begin
   Result := rsRichUndoDeleteColumn;
+end;
+
+constructor TTyRichMergeCells.Create(ATablePos: TTyRichPos; ARow0, ARow1, AX0, AX1: Integer);
+begin
+  inherited Create;
+  FEdit := TyRichTableEdit(rtkMergeCells, ATablePos, ARow0);
+  FEdit.Row0 := ARow0;
+  FEdit.Row1 := ARow1;
+  FEdit.X0 := AX0;
+  FEdit.X1 := AX1;
+end;
+
+function TTyRichMergeCells.Description: string;
+begin
+  Result := rsRichUndoMergeCells;
+end;
+
+constructor TTyRichSplitCell.Create(ATablePos: TTyRichPos; ARow, ACell, ASpanRows, ACols,
+  ARows: Integer; const AEdges: array of Integer);
+var
+  i: Integer;
+begin
+  inherited Create;
+  FEdit := TyRichTableEdit(rtkSplitCell, ATablePos, ACell, ARows, ACols);
+  FEdit.Row0 := ARow;
+  FEdit.Row1 := ARow + ASpanRows - 1;
+  FEdit.SpanRows := ASpanRows;
+  SetLength(FEdit.SplitEdges, Length(AEdges));
+  for i := 0 to High(AEdges) do FEdit.SplitEdges[i] := AEdges[i];
+end;
+
+function TTyRichSplitCell.Description: string;
+begin
+  Result := rsRichUndoSplitCell;
 end;
 
 { ---- links ---- }

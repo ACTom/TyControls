@@ -918,6 +918,14 @@ msgstr "插入列"
 msgid "Delete column"
 msgstr "删除列"
 
+#: tycontrols.strconsts.rsrichundomergecells
+msgid "Merge cells"
+msgstr "合并单元格"
+
+#: tycontrols.strconsts.rsrichundosplitcell
+msgid "Split cell"
+msgstr "拆分单元格"
+
 #: tycontrols.strconsts.rsrichundodeletetable
 msgid "Delete table"
 msgstr "删除表格"
@@ -1627,6 +1635,22 @@ msgstr "清除单元格内容(&C)"
 #: tycontrols.strconsts.rsrichactclearcellshint
 msgid "Clear the contents of the selected cells"
 msgstr "清除所选单元格的内容"
+
+#: tycontrols.strconsts.rsrichactmergecells
+msgid "&Merge Cells"
+msgstr "合并单元格(&M)"
+
+#: tycontrols.strconsts.rsrichactmergecellshint
+msgid "Merge the selected cells into one"
+msgstr "把选中的单元格合并成一个"
+
+#: tycontrols.strconsts.rsrichactsplitcell
+msgid "S&plit Cells..."
+msgstr "拆分单元格(&P)..."
+
+#: tycontrols.strconsts.rsrichactsplitcellhint
+msgid "Split the cell into columns and rows"
+msgstr "把单元格拆成几列几行"
 
 #: tycontrols.strconsts.rsrichactcellshading
 msgid "&Shading"

@@ -263,7 +263,7 @@ begin
      TTyRichEditTableProperties, TTyRichEditAutoFitColumn, TTyRichEditDistributeColumns,
      TTyRichEditDistributeRows, TTyRichEditFitTableToWindow,
      TTyRichEditSelectCell, TTyRichEditSelectRow, TTyRichEditSelectColumn, TTyRichEditSelectTable,
-     TTyRichEditClearCells], nil);
+     TTyRichEditClearCells, TTyRichEditMergeCells, TTyRichEditSplitCell], nil);
   { The three sibling units own everything else. }
   RegisterPropertyEditors;
   RegisterComponentEditors;

@@ -96,6 +96,7 @@ Ready-made actions for a `TActionList` (the IDE's action list editor shows them 
 | `TTyRichEditDeleteRow` / `DeleteColumn` / `DeleteTable` | Delete Row / Column / Table | — | `CanDeleteRow` / `CanDeleteColumn` / `CanDeleteTable` | — |
 | `TTyRichEditSelectCell` / `SelectRow` / `SelectColumn` / `SelectTable` | Select Cell / Row / Column / Table | — | `CanSelectCells` | — |
 | `TTyRichEditClearCells` | Clear Cell Contents | — | `CanClearCells` | — |
+| `TTyRichEditMergeCells` / `SplitCell` | Merge Cells / Split Cells... (`Columns` x `Rows`, `OnChooseSize` first) | — | `CanMergeCells` / `CanSplitCell` | — |
 | `TTyRichEditCellShading` | Shading | — | `CanFormatCells` | — |
 | `TTyRichEditCellBorders` | Borders | — | `CanFormatCells` | — |
 | `TTyRichEditCellPadding` | Cell Padding | — | `CanFormatCells` | — |
@@ -329,9 +330,13 @@ begin
 end;
 ```
 
+**Merged cells.** A table is a grid: its columns are the union of every cell's edges, and a cell covers one or more of those columns and one or more rows. Word writes cells merged across as one wide cell and cells merged down with merge marks; both, and the older marks for cells merged across, read as that one grid, and `TableGrid(TablePos)` gives it (made on demand by one walk of the table's rows; the caller frees it). An empty cell that continues a merge down is covered: it shows nothing, Tab and Shift+Tab pass it, Left and Right step over it, Up and Down go through the span by position (from the span, Down goes to the row below it), and a click anywhere in the span lands in its cell. A cell selection that touches a merged cell grows to hold it whole, so the formats, a copy and Delete take merged cells whole.
+
+`MergeCells` merges the selected cells (at least two, of one table): the top-left cell takes the others' paragraphs in reading order - an empty cell adds nothing -, keeps its shading, padding and alignment, and keeps the lines that were on the rectangle's outline; across it becomes one wide cell, down a merge (Word's own forms). `SplitCell(Columns, Rows)` splits the caret's cell: a merged cell split into as many columns as it covers gets the grid's own columns back, any other number divides its width equally; over several rows, `Rows` must divide them; a cell of one row split into rows adds rows below it, and the row's other cells reach down over them. The content stays in the first cell. Each is one undo step; `CanMergeCells` and `CanSplitCell` say whether they may run, and the actions `TTyRichEditMergeCells` and `TTyRichEditSplitCell` (`Columns` x `Rows`, `OnChooseSize` first) run them. Rows the edit does not touch keep their bytes when saved.
+
 **What is refused, and why.** Each refusal is told once through `OnEditRefused`, nothing raised, nothing changed.
 
-- A table with merged cells: rows and columns cannot be inserted or deleted, and the columns cannot be distributed (that would pull a merged cell away from its neighbours) - until merged cells are edited as a grid, the next step. Its edges can be dragged, and every cell format works.
+- A table with merged cells (a file's, or merged here): rows and columns cannot be inserted or deleted yet, and the columns cannot be distributed (that would pull a merged cell away from its neighbours). Cells can be merged further and split, its edges can be dragged, and every cell format works.
 - A row that holds a nested table: the nested table is kept as the file's bytes, so that row's look, widths and height cannot change. A format, a size or the rows' distribution over several rows changes the others and leaves that one, saying so; distributing the columns, and inserting or deleting rows and columns, refuse the whole table.
 - A table in a large RTF file read on demand that is too big to read whole (about a megabyte of the file): what needs the whole table - a column's width, a column inserted or deleted, the table's alignment, a column or the whole table selected - is refused; cells and rows of the part read can be selected and formatted.
 - A plain text document has no tables to edit; a read-only control or one disabled does nothing and says nothing.

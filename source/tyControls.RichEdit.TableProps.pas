@@ -1107,7 +1107,16 @@ begin
   ADrop := nil;
   n := 0;
   for s := Low(TTyRichCellSide) to High(TTyRichCellSide) do ASides[Ord(s)] := False;
-  if AAll then Result := Result + MergeWords(AFormat);
+  if AAll then Result := Result + MergeWords(AFormat)
+  else if (AFormat.HMerge <> ABase.HMerge) or (AFormat.VMerge <> ABase.VMerge) then
+  begin
+    // (a merge an edit made or undid: the marks again, a merge across as no mark)
+    Drop('clmgf');
+    Drop('clmrg');
+    Drop('clvmgf');
+    Drop('clvmrg');
+    Result := Result + MergeWords(AFormat);
+  end;
   if AAll or (AFormat.Props.VAlign <> ABase.Props.VAlign) then
   begin
     Drop('clvertalt');

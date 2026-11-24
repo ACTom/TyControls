@@ -333,6 +333,7 @@ uses
   test.richedit.tablepaint,
   test.richedit.tablesel,
   test.richedit.grid,
+  test.richedit.merge,
   test.richedit.tableresize,
   test.richedit.tableformat;
 

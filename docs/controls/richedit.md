@@ -96,6 +96,7 @@ RichEdit1.SaveToFile('说明.rtf');
 | `TTyRichEditDeleteRow` / `DeleteColumn` / `DeleteTable` | 删除行 / 列 / 表格 | — | `CanDeleteRow` / `CanDeleteColumn` / `CanDeleteTable` | — |
 | `TTyRichEditSelectCell` / `SelectRow` / `SelectColumn` / `SelectTable` | 选择单元格 / 行 / 列 / 表格 | — | `CanSelectCells` | — |
 | `TTyRichEditClearCells` | 清除单元格内容 | — | `CanClearCells` | — |
+| `TTyRichEditMergeCells` / `SplitCell` | 合并单元格 / 拆分单元格...(`Columns` × `Rows`，先触发 `OnChooseSize`) | — | `CanMergeCells` / `CanSplitCell` | — |
 | `TTyRichEditCellShading` | 底色 | — | `CanFormatCells` | — |
 | `TTyRichEditCellBorders` | 边框 | — | `CanFormatCells` | — |
 | `TTyRichEditCellPadding` | 单元格内边距 | — | `CanFormatCells` | — |
@@ -329,9 +330,13 @@ begin
 end;
 ```
 
+**合并单元格。** 表格是一张网格：它的列是所有格子边线的并集，一个格子占一列或几列、一行或几行。Word 把横向合并的格子写成一个宽格子，纵向合并的写成合并标记；这两种，加上横向合并的老标记，都读成同一张网格，`TableGrid(TablePos)` 给出它(用到时把表的各行走一遍现做；调用方负责释放)。纵向合并里接续的空格子是被盖住的：它不显示内容，Tab 和 Shift+Tab 跳过它，左右方向键越过它，上下方向键按位置穿过合并区(从合并区往下到它下面那一行)，在合并区里任何地方点击都落到它的格子里。单元格选区碰到合并格时会扩到把它整个包进来，所以格式、复制和 Delete 都按整个合并格来。
+
+`MergeCells` 合并选中的单元格(同一张表里至少两格)：左上格按阅读顺序接上其他格子的段落——空格子不添东西——保留自己的底色、内边距和对齐，保留矩形外沿原来的边线；横向合并成一个宽格子，纵向用合并标记(Word 自己的写法)。`SplitCell(Columns, Rows)` 拆分光标所在的格子：合并过的格子拆成它占的那么多列时还原网格本来的列，其他列数按宽度平分；跨几行的格子，`Rows` 必须能整除行数；一行里的格子拆成几行会在它下面加行，这一行的其他格子向下盖过新行。内容留在第一个格子里。每次都是一步撤销；`CanMergeCells`、`CanSplitCell` 回答现在能不能做，动作 `TTyRichEditMergeCells`、`TTyRichEditSplitCell`(`Columns` × `Rows`，先触发 `OnChooseSize`)执行它们。保存时没被改动的行照旧是原来的字节。
+
 **什么会被拒绝，为什么。** 每次拒绝都通过 `OnEditRefused` 说一次，不抛异常，什么都不改。
 
-- 含合并单元格的表：不能增删行列，也不能平均分布各列(那会把合并的格子和邻居拉开)——要等下一步把合并单元格当网格来编辑。它的边线可以拖，单元格格式都能用。
+- 含合并单元格的表(文件里来的，或者在这里合并的)：暂时还不能增删行列，也不能平均分布各列(那会把合并的格子和邻居拉开)。可以继续合并和拆分单元格。它的边线可以拖，单元格格式都能用。
 - 含嵌套表格的那一行：嵌套表只以文件里的字节保存，所以这一行的外观、宽度、高度不能改。作用在多行上的格式、尺寸、平均分布行高会改其余的行、留下这一行，并说一声；平均分布各列和增删行列整张表都拒绝。
 - 按需读入的大 RTF 文件里大到没法整张读进来的表(文件里约 1 MB 以上)：要看整张表的操作——改列宽、增删列、表格对齐、选中整列或整张表——被拒绝；已读入部分的格子和行可以选、可以改格式。
 - 纯文本文档没有可编辑的表格；只读或禁用的控件什么都不做，也什么都不说。
