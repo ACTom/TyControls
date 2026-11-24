@@ -34,6 +34,7 @@ the person at the machine and outlive the script.
        pwsh scripts/richedit-wordcheck/check-content.ps1 -Dir <out>
        pwsh scripts/richedit-wordcheck/check-tables.ps1 -Dir <out> -Names t0-nothing,t1-shading,t2-width
        pwsh scripts/richedit-wordcheck/check-lists.ps1 -Dir <folder> -Names <name>
+       pwsh scripts/richedit-wordcheck/check-grid.ps1 -Dir <folder> -Names <name> [-Table 2]
 
    `check-content` writes `<name>.dump.txt` (what Word reads: page set-up, background, links,
    bookmarks, each paragraph's formats, lists, tab stops, tables) and prints every expectation
@@ -41,7 +42,11 @@ the person at the machine and outlive the script.
    (`<name>.word.txt`: widths, shading, the four borders, padding, vertical alignment, row
    heights, table alignment) and, where a `<name>.txt` in the same form stands beside the
    file, the lines that differ. `check-lists` compares the marker Word shows for each list
-   item with a `<name>.markers.txt` (text, a tab, the marker the control draws).
+   item with a `<name>.markers.txt` (text, a tab, the marker the control draws). `check-grid`
+   writes each table's grid as Word's own XML has it (`<name>.wordgrid.txt`: the grid's
+   column widths, then per row every cell's column span, vertical merge, width and text) and
+   compares it with a `<name>.grid.txt` in the same form — how merged and split cells are
+   checked.
 
    Two things in Word's answers are Word's own and not a difference: a table's indent is
    measured to the text (the left padding more than `\trleft`), and a `%20` in an address is
