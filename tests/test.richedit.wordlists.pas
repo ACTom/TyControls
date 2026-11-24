@@ -26,6 +26,7 @@ uses
   tyControls.Controller, tyControls.RichEdit.Text, tyControls.RichEdit.Model,
   tyControls.RichEdit.Commands, tyControls.RichEdit.RtfRead, tyControls.RichEdit.RtfWrite,
   tyControls.RichEdit.Layout, tyControls.RichEdit.Builder, tyControls.RichEdit.Attrs,
+  tyControls.RichEdit.Actions,
   tyControls.RichEdit,
   test.richedit.control, test.richedit.display, test.richedit.msftedit;
 
@@ -47,6 +48,8 @@ type
     procedure AppendParagraphs(const ATexts: array of string);
     procedure SelectParagraph(AIndex: Integer);
     procedure Build(AWhich: Integer);
+    procedure BuildItems(ACount: Integer);
+    function Level(AIndex: Integer): Integer;
     // every list item of FRich (and of the file B read back): Word's marker, the file's own
     // marker text for readers that do not number themselves, and what the control draws
     procedure CheckWordShowsWhatIsDrawn(const B: TBytes; const AWhat: string;
@@ -75,6 +78,8 @@ type
     procedure TestListLevelsAreZeroToEight;
     procedure TestEveryCaseInOneFile;
     procedure TestThePageSamplesStepsAreOneOneTwoThree;
+    procedure TestTheIndentButtonsMoveListItemsALevel;
+    procedure TestTabAtAListItemsStartChangesItsLevel;
   end;
 
   // Word's reading of the list items of an RTF file. ATexts: the text of every paragraph of
@@ -1529,6 +1534,176 @@ begin
   AssertEquals('2', '2.', string(Drawn(FRich, 4)));
   AssertEquals('3', '3.', string(Drawn(FRich, 5)));
   CheckWordShowsWhatIsDrawn(Saved, 'page-sample-steps');
+end;
+
+procedure TTyRichWordListTest.BuildItems(ACount: Integer);
+var
+  B: TTyRichBuilder;
+  i: Integer;
+begin
+  B := FRich.NewBuilder;
+  try
+    for i := 1 to ACount do
+    begin
+      if i > 1 then B.Paragraph;
+      B.Numbered(0).Text('item ' + IntToStr(i));
+    end;
+    B.Paragraph.Text('plain');
+    FRich.SetContent(B);
+  finally
+    B.Free;
+  end;
+end;
+
+function TTyRichWordListTest.Level(AIndex: Integer): Integer;
+begin
+  Result := PF(FRich.Document, AIndex).List.Level;
+end;
+
+{ Increase / Decrease Indent on list items: a level deeper or shallower (its indent a half
+  inch with it), the numbers by the one rule; at level 0 Decrease leaves an item where it is
+  (Word's), at 8 Increase too - no step; a selection with a paragraph that is no item: the
+  indent as for any paragraph; several items: one step. }
+procedure TTyRichWordListTest.TestTheIndentButtonsMoveListItemsALevel;
+var
+  inc_, dec_: TTyRichEditIndentAction;
+  depth, li: Integer;
+begin
+  BuildItems(3);
+  inc_ := TTyRichEditIndentIncrease.Create(nil);
+  dec_ := TTyRichEditIndentDecrease.Create(nil);
+  try
+    inc_.RichEdit := FRich;
+    dec_.RichEdit := FRich;
+    SelectParagraph(1);
+    li := PF(FRich.Document, 1).LeftIndent;
+    depth := FRich.Document.UndoDepth;
+    inc_.Execute;
+    AssertEquals('a level deeper', 1, Level(1));
+    AssertEquals('its indent with it', li + 360, PF(FRich.Document, 1).LeftIndent);
+    AssertEquals('one step', depth + 1, FRich.Document.UndoDepth);
+    AssertEquals('an inner item starts at 1', '1.', string(Drawn(FRich, 1)));
+    AssertEquals('the outer list goes on after it', '2.', string(Drawn(FRich, 2)));
+    dec_.Execute;
+    AssertEquals('back to level 0', 0, Level(1));
+    AssertEquals('its indent back', li, PF(FRich.Document, 1).LeftIndent);
+    AssertEquals('2 again', '2.', string(Drawn(FRich, 1)));
+    depth := FRich.Document.UndoDepth;
+    dec_.Execute;
+    AssertEquals('at level 0 Decrease leaves it where it is', 0, Level(1));
+    AssertEquals('and its indent', li, PF(FRich.Document, 1).LeftIndent);
+    AssertEquals('no step', depth, FRich.Document.UndoDepth);
+    FRich.Paragraph.ListLevel := 8;
+    depth := FRich.Document.UndoDepth;
+    li := PF(FRich.Document, 1).LeftIndent;
+    inc_.Execute;
+    AssertEquals('at level 8 Increase leaves it', 8, Level(1));
+    AssertEquals('no step at 8', depth, FRich.Document.UndoDepth);
+    dec_.Execute;
+    AssertEquals('from 8 to 7', 7, Level(1));
+    // several items: one step, undone at once
+    FRich.Paragraph.ListLevel := 0;
+    FRich.SelStart := 0;
+    FRich.SelLength := FRich.Document.Text.ParaStart(2) + 2;
+    depth := FRich.Document.UndoDepth;
+    inc_.Execute;
+    AssertEquals('all three deeper', 3, Level(0) + Level(1) + Level(2));
+    AssertEquals('one step for them', depth + 1, FRich.Document.UndoDepth);
+    FRich.Undo;
+    AssertEquals('undone at once', 0, Level(0) + Level(1) + Level(2));
+    // a selection with a plain paragraph: the indent as today, no level changes
+    FRich.SelStart := FRich.Document.Text.ParaStart(2);
+    FRich.SelLength := FRich.Document.Text.Length - FRich.SelStart;
+    inc_.Execute;
+    AssertEquals('mixed: no level', 0, Level(2));
+    AssertEquals('mixed: the plain paragraph indented', 720, PF(FRich.Document, 3).LeftIndent);
+    CheckWordShowsWhatIsDrawn(Saved, 'indent-levels');
+  finally
+    inc_.Free;
+    dec_.Free;
+  end;
+end;
+
+{ Tab at the very start of a list item's text (or over whole items) demotes it, Shift+Tab
+  promotes it - with WantTabs only, not in a table cell (Tab goes to the next cell), not when
+  read-only; Tab elsewhere in an item types a tab. }
+procedure TTyRichWordListTest.TestTabAtAListItemsStartChangesItsLevel;
+var
+  B: TTyRichBuilder;
+  t: string;
+  depth: Integer;
+begin
+  BuildItems(3);
+  FRich.WantTabs := True;
+  SelectParagraph(1);
+  depth := FRich.Document.UndoDepth;
+  FRich.KeyOf(VK_TAB, []);
+  AssertEquals('Tab at its start: a level deeper', 1, Level(1));
+  AssertEquals('no tab typed', 'item 2', ParaText(FRich.Document, 1));
+  AssertEquals('one step', depth + 1, FRich.Document.UndoDepth);
+  AssertEquals('numbered as an inner item', '1.', string(Drawn(FRich, 1)));
+  AssertEquals('the caret stays at its start', FRich.Document.Text.ParaStart(1), FRich.SelStart);
+  FRich.KeyOf(VK_TAB, [ssShift]);
+  AssertEquals('Shift+Tab: a level shallower', 0, Level(1));
+  depth := FRich.Document.UndoDepth;
+  FRich.KeyOf(VK_TAB, [ssShift]);
+  AssertEquals('Shift+Tab at level 0: where it is', 0, Level(1));
+  AssertEquals('no step, no tab', depth, FRich.Document.UndoDepth);
+  // over whole items
+  FRich.SelStart := FRich.Document.Text.ParaStart(1);
+  FRich.SelLength := FRich.Document.Text.ParaStart(3) - FRich.SelStart;
+  FRich.KeyOf(VK_TAB, []);
+  AssertEquals('two whole items: both deeper', 2, Level(1) + Level(2));
+  FRich.Undo;
+  // a selection from an item's start that does not cover it: typed over as today
+  FRich.SelStart := FRich.Document.Text.ParaStart(1);
+  FRich.SelLength := 3;
+  FRich.KeyOf(VK_TAB, []);
+  AssertEquals('part of an item selected: a tab typed over it', #9'm 2', ParaText(FRich.Document, 1));
+  AssertEquals('part of an item: its level as it was', 0, Level(1));
+  FRich.Undo;
+  // inside an item's text: a tab
+  FRich.SelStart := FRich.Document.Text.ParaStart(1) + 2;
+  FRich.SelLength := 0;
+  FRich.KeyOf(VK_TAB, []);
+  AssertEquals('inside the text: a tab typed', 'it'#9'em 2', ParaText(FRich.Document, 1));
+  AssertEquals('the level as it was', 0, Level(1));
+  FRich.Undo;
+  // without WantTabs: the form's
+  FRich.WantTabs := False;
+  SelectParagraph(1);
+  FRich.KeyOf(VK_TAB, []);
+  AssertEquals('no WantTabs: nothing', 0, Level(1));
+  FRich.WantTabs := True;
+  // read-only: nothing
+  FRich.ReadOnly := True;
+  FRich.KeyOf(VK_TAB, []);
+  AssertEquals('read-only: nothing', 0, Level(1));
+  FRich.ReadOnly := False;
+  // a list item in a table cell: Tab goes to the next cell
+  B := FRich.NewBuilder;
+  try
+    B.Table([2000, 2000]).Cell.Numbered(0).Text('in a cell').Cell.Text('next');
+    B.EndTable;
+    FRich.SetContent(B);
+  finally
+    B.Free;
+  end;
+  AssertEquals('a list item in the cell', Ord(lkDecimal), Ord(PF(FRich.Document, 0).List.Kind));
+  AssertTrue('in a cell', FRich.Document.CellAt(0) <> nil);
+  SelectParagraph(0);
+  t := ParaText(FRich.Document, 0);
+  FRich.KeyOf(VK_TAB, []);
+  AssertEquals('in a cell: the level stays', 0, Level(0));
+  AssertEquals('its text too', t, ParaText(FRich.Document, 0));
+  AssertTrue('the caret in the next cell', FRich.SelStart >= FRich.Document.Text.ParaStart(1));
+  // Shift+Tab in the first cell (where it goes nowhere): an inner item there stays inner
+  FRich.Paragraph.ListLevel := 0;
+  SelectParagraph(0);
+  FRich.Paragraph.ListLevel := 1;
+  SelectParagraph(0);
+  FRich.KeyOf(VK_TAB, [ssShift]);
+  AssertEquals('Shift+Tab in the first cell: the level stays', 1, Level(0));
 end;
 
 initialization

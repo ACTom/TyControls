@@ -125,6 +125,7 @@ type
     procedure TestReplaceStopsWhereTheUserMayNotEdit;
     procedure TestThePictureActionAsksForAFileOfAReadableFormat;
     procedure TestTheIndentActionsStepByHalfAnInch;
+    procedure TestTheIndentActionsMoveListItemsALevel;
     procedure TestUndoRedoAndZoom;
     procedure TestAShortcutIsHandledByOneOfTheTwo;
     procedure TestTheCaptionsAndHintsAreInTheCatalogue;
@@ -1214,6 +1215,36 @@ begin
   incr.Execute;
   AssertEquals('the first at the caret paragraph''s place', 720, Place(0));
   AssertEquals('the second', 720, Place(1));
+end;
+
+{ On list items the indent actions move the level (Word's buttons on a list): Increase a
+  level deeper, Decrease back, Decrease at level 0 nothing - and enabled as for any
+  paragraph. }
+procedure TTyRichEditActionsTest.TestTheIndentActionsMoveListItemsALevel;
+var
+  incr, decr: TTyRichEditAction;
+  depth: Integer;
+
+  function Lvl(APara: Integer): Integer;
+  begin
+    Result := FRich.Document.Formats.ParaFormat(FRich.Document.ParaFormatOf(APara)).List.Level;
+  end;
+
+begin
+  incr := Make(TTyRichEditIndentIncrease);
+  decr := Make(TTyRichEditIndentDecrease);
+  Select(1, 0);
+  FRich.Paragraph.Numbering := lkDecimal;
+  AssertTrue('enabled on an item', UpdatedOn(incr).Enabled);
+  incr.Execute;
+  AssertEquals('a level deeper', 1, Lvl(0));
+  decr.Execute;
+  AssertEquals('back', 0, Lvl(0));
+  depth := FRich.Document.UndoDepth;
+  decr.Execute;
+  AssertEquals('at level 0: where it is', 0, Lvl(0));
+  AssertEquals('no step', depth, FRich.Document.UndoDepth);
+  AssertTrue('still enabled', UpdatedOn(decr).Enabled);
 end;
 
 { Undo and Redo: the control's CanUndo / CanRedo, its Undo / Redo. Zoom: by the wheel's step

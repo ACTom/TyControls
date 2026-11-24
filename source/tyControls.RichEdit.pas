@@ -3394,7 +3394,20 @@ type
       the format API formats it (a text save leaves the formats out). True: the formats
       changed. A handler the action runs may free the control: False then. }
     function ApplyParagraphFormat(AMask: TTyParaFormatMask; const AValue: TTyParaFormat): Boolean;
+    { The user's list level change (Word's Tab and Shift+Tab at an item, the indent buttons on
+      list items): when every paragraph the selection touches (the caret's when nothing is
+      selected) is a list item, each goes ADelta levels deeper (1) or shallower (-1), within
+      0 .. 8 - an item at level 0 stays where it is on -1, as in Word - its indent with it
+      (TTyRichChangeListLevel), in one undo step; the numbers follow (an inner item after an
+      outer one starts at 1, the outer list goes on after it). ApplyParagraphFormat's rules
+      otherwise: read-only, disabled or the designer do nothing and tell nothing, a refusal is
+      told once. True: the paragraphs were all list items (the change was the list level's,
+      also when no item could move or it was refused); False: they were not, nothing done -
+      the caller does what it does for other paragraphs. }
+    function ChangeListLevel(ADelta: Integer): Boolean;
   private
+    // Tab (ADeeper) or Shift+Tab at a list item's start or over whole items: its level moved
+    function ListTab(ADeeper: Boolean): Boolean;
     { The place's half of CanFormatCharacters / CanFormatParagraphs (AParagraphs) and of their
       doors: '' when the change would be taken at the selection, else the reason it would be
       told (rsRichEditRefusedField, rsRichEditRefusedFixedRow). See CanFormatCharacters for
@@ -20362,6 +20375,12 @@ begin
         Key := 0;
         Exit;
       end;
+      // at a list item's start (or over whole items): a level deeper, Shift+Tab shallower
+      if ListTab(not (ssShift in Shift)) then
+      begin
+        Key := 0;
+        Exit;
+      end;
     end;
   end;
   if IsEditKey(Key, Shift) then
@@ -20802,6 +20821,83 @@ begin
   r := False;
   Guard(life, @Work);
   Result := r and not life.Gone;
+end;
+
+function TTyCustomRichEdit.ChangeListLevel(ADelta: Integer): Boolean;
+var
+  life: TTyRichLife;
+  first, last, k: Integer;
+  place: TTyRichEditPlace;
+  reason: string;
+
+  procedure Work;
+  begin
+    Inc(FApiWrite);
+    try
+      RunMade(TTyRichChangeListLevel.Create(first, last, ADelta), place, True);
+    finally
+      if not life.Gone then Dec(FApiWrite);
+    end;
+  end;
+
+begin
+  Result := False;
+  if (ADelta = 0) or (csDesigning in ComponentState) then Exit;
+  if FReadOnly or not IsEnabled or ViewBehind then Exit;
+  EndCompositionForUser;
+  if FReadOnly or not IsEnabled or ViewBehind then Exit;
+  // every paragraph of the selection a list item (what the selection reads, as a format does)
+  ParasOfRange(GetSelStart, GetSelLength, first, last);
+  FDoc.BeginRead;
+  try
+    for k := first to last do
+      if FDoc.Formats.ParaFormat(FDoc.ParaFormatOf(k)).List.Kind = lkNone then Exit;
+  finally
+    FDoc.EndRead;
+  end;
+  Result := True;
+  if RefusalReason = '' then
+  begin
+    reason := FormatPlaceRefusal(True);
+    if reason <> '' then
+    begin
+      EditRefused(reason);
+      Exit;
+    end;
+  end;
+  place := Default(TTyRichEditPlace);
+  place.Anchor := CRichPlaceStays;
+  place.Caret := CRichPlaceStays;
+  place.AtLineEnd := FCaretAtEnd;
+  Guard(life, @Work);
+end;
+
+function TTyCustomRichEdit.ListTab(ADeeper: Boolean): Boolean;
+var
+  s, e: TTyRichPos;
+  first, last: Integer;
+  t: TTyRichText;
+begin
+  // (read-only: ChangeListLevel does nothing, and the key does nothing either)
+  Result := False;
+  t := FDoc.Text;
+  s := GetSelStart;
+  e := s + GetSelLength;
+  first := t.ParaOfPos(s);
+  // at the very start of an item's text, or a selection from an item's start over whole items
+  if s <> t.ParaStart(first) then Exit;
+  if e > s then
+  begin
+    last := t.ParaOfPos(e);
+    // (a selection that ends at the next paragraph's start ends with the one before it)
+    if (last > first) and (e = t.ParaStart(last)) then Dec(last)
+    else if e < t.ParaStart(last) + t.ParaLength(last) then Exit;
+  end
+  else
+    last := first;
+  // in a table, Tab goes from cell to cell (TableTab): not here
+  if (FDoc.CellAt(first) <> nil) or (FDoc.CellAt(last) <> nil) then Exit;
+  if ADeeper then Result := ChangeListLevel(1) else Result := ChangeListLevel(-1);
 end;
 
 function TTyCustomRichEdit.FormatPlaceRefusal(AParagraphs: Boolean): string;

@@ -91,6 +91,22 @@ type
     function Description: string; override;
   end;
 
+  { The list items among paragraphs AFirstPara .. ALastPara a level deeper (ADelta 1) or
+    shallower (-1), Word's Tab and Shift+Tab at an item: each item's level moved by ADelta
+    within 0 .. 8 (an item already at the end stays where it is) and its left indent by
+    CTyRichListLevelIndent a level, its hanging offset kept; paragraphs that are no item, and
+    those ending inside a field's result, are passed over. One step; none when no item moved. }
+  TTyRichChangeListLevel = class(TTyRichCommand)
+  private
+    FFirst, FLast, FDelta: Integer;
+  protected
+    procedure DoExecute(ADoc: TTyRichDocument); override;
+  public
+    constructor Create(AFirstPara, ALastPara, ADelta: Integer);
+    function CanExecute(ADoc: TTyRichDocument): Boolean; override;
+    function Description: string; override;
+  end;
+
   { Inserts AObject's character at APos. The command holds a reference to the object (so
     redo puts the same object back); one that is never executed takes it along when it is
     freed. }
@@ -505,6 +521,8 @@ type
   end;
 
 const
+  // how much deeper a list level's indent is than the one above it (a half inch, Word's)
+  CTyRichListLevelIndent = 360;
   { Word's link blue (RGB 05 63 C1), the colour rllWordBlue gives a link's text. }
   CTyRichLinkWordBlue = TColor($C16305);
   { The other colours a link's text has in files: the classic link blue (RGB 00 00 FF) and the
@@ -740,6 +758,63 @@ begin
 end;
 
 function TTyRichSetParaFormat.Description: string;
+begin
+  Result := rsRichUndoParaFormat;
+end;
+
+{ ---- TTyRichChangeListLevel ---- }
+
+constructor TTyRichChangeListLevel.Create(AFirstPara, ALastPara, ADelta: Integer);
+begin
+  inherited Create;
+  FFirst := AFirstPara;
+  FLast := ALastPara;
+  FDelta := ADelta;
+end;
+
+procedure TTyRichChangeListLevel.DoExecute(ADoc: TTyRichDocument);
+var
+  k, e, lvl: Integer;
+  id: TTyParaFormatId;
+  f: TTyParaFormat;
+begin
+  k := FFirst;
+  while k <= FLast do
+  begin
+    // a run of paragraphs of one format: one value for them all
+    id := ADoc.ParaFormatOf(k);
+    e := k;
+    while (e < FLast) and (ADoc.ParaFormatOf(e + 1) = id) do Inc(e);
+    f := ADoc.Formats.ParaFormat(id);
+    if f.List.Kind <> lkNone then
+    begin
+      lvl := f.List.Level + FDelta;
+      if lvl < 0 then lvl := 0;
+      if lvl > 8 then lvl := 8;
+      if lvl <> f.List.Level then
+      begin
+        f.LeftIndent := f.LeftIndent + (lvl - f.List.Level) * CTyRichListLevelIndent;
+        if f.LeftIndent < 0 then f.LeftIndent := 0;
+        f.List.Level := lvl;
+        ApplyParaFormat(ADoc, k, e, [pffListLevel, pffLeftIndent], f);
+      end;
+    end;
+    k := e + 1;
+  end;
+end;
+
+function TTyRichChangeListLevel.CanExecute(ADoc: TTyRichDocument): Boolean;
+var
+  i: Integer;
+begin
+  Result := True;
+  if (FFirst < 0) or (FLast >= ADoc.Text.ParaCount) or (FFirst > FLast) then Exit;
+  for i := FFirst to FLast do
+    if not ADoc.ParaEndsInField(i) then Exit;
+  Result := False;
+end;
+
+function TTyRichChangeListLevel.Description: string;
 begin
   Result := rsRichUndoParaFormat;
 end;

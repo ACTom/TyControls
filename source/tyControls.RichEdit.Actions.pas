@@ -344,7 +344,9 @@ type
   { The paragraphs moved right or left: the caret paragraph's first line to the next (the
     previous) multiple of CTyRichIndentStep, not left of the margin, and every paragraph the
     selection touches to that place, each keeping its own hanging offset (Delphi's
-    FirstIndent; the ruler's rule for several paragraphs). }
+    FirstIndent; the ruler's rule for several paragraphs). When every paragraph the selection
+    touches is a list item: each a list level deeper (shallower) instead, within 0 .. 8 - at
+    level 0 Decrease leaves an item where it is, as Word does (ChangeListLevel). }
   TTyRichEditIndentAction = class(TTyRichEditAction)
   protected
     function Direction: Integer; virtual; abstract;
@@ -1387,6 +1389,8 @@ var
   place, q: Integer;
 begin
   if not AState.Readable then Exit;
+  // list items all: a level deeper or shallower (Word's indent buttons on a list)
+  if ARich.ChangeListLevel(Direction) then Exit;
   // where the caret paragraph's first line starts, and the step's place beyond it
   place := AState.CaretParagraph.LeftIndent + AState.CaretParagraph.FirstIndent;
   if Direction > 0 then
