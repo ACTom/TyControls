@@ -47,7 +47,20 @@ type
     // has to contain it. Not constants -- see the implementation for why a literal cannot work.
     function ButtonHeight: Integer;
     function ButtonBarHeight: Integer;
+    { #243: the button strip to the end of the Tab order. See InsertControl. }
+    procedure ButtonsLastInTabOrder;
   protected
+    { #243. The button strip is created in CreateNew, before a builder adds anything, and
+      siblings are tabbed in the order they got their parent: the strip came BEFORE all the
+      content. So Tab walked OK and Cancel first, and -- the LCL gives the focus of a form
+      that names no ActiveControl to its first tab stop -- every dialog opened with the focus
+      on its OK button instead of in its first field. Each control the dialog is given moves
+      the strip back to the end, whenever it is added; a dialog an application builds on
+      TTyDialog gets the same without doing anything. }
+    procedure InsertControl(AControl: TControl; Index: Integer); override;
+    { A dialog designed as a form: the TabOrder values of its .lfm are applied at the end of
+      loading, and the strip, which is not in the file, is put after them. }
+    procedure Loaded; override;
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     procedure Paint; override;
     procedure LayoutContent; virtual;
@@ -530,6 +543,26 @@ begin
   FButtonBar.Align := alBottom;
   FButtonBar.Height := ButtonBarHeight;   // re-derived on every layout; see ButtonHeight
   FButtonBar.StyleClass := 'ghost';   // transparent-ish; refine in theming
+end;
+
+procedure TTyDialog.ButtonsLastInTabOrder;
+begin
+  { High(TTabOrder) is "past the last": the LCL clamps it to the last place there is. }
+  if (FButtonBar <> nil) and (FButtonBar.Parent = Self) then
+    FButtonBar.TabOrder := High(TTabOrder);
+end;
+
+procedure TTyDialog.InsertControl(AControl: TControl; Index: Integer);
+begin
+  inherited InsertControl(AControl, Index);
+  if (AControl <> FButtonBar) and (AControl is TWinControl) then
+    ButtonsLastInTabOrder;
+end;
+
+procedure TTyDialog.Loaded;
+begin
+  inherited Loaded;
+  ButtonsLastInTabOrder;
 end;
 
 procedure TTyDialog.TextChanged;

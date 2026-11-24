@@ -58,6 +58,11 @@ type
     procedure DoFindNext;
     procedure DoReplace;
     procedure DoReplaceAll;
+    { #243: the focus into the search text, all of it selected. The window is built once and
+      shown again by each Execute, so this is said each time the dialog is asked for, not
+      once at construction: wherever the focus was left, asking for the dialog again is
+      asking to search for something. }
+    procedure FocusSearchText;
     // test seams:
     function FindEdit: TTyEdit;
     function ReplaceEdit: TTyEdit;
@@ -362,6 +367,16 @@ begin
   CloseAction := caHide;
 end;
 
+procedure TTyFindForm.FocusSearchText;
+begin
+  if FFindEdit = nil then Exit;
+  { A hidden form only notes its active control; a shown one moves the focus, which a control
+    that cannot take it would refuse with an exception. }
+  if (not Visible) or FFindEdit.CanFocus then
+    ActiveControl := FFindEdit;
+  FFindEdit.SelectAll;
+end;
+
 function TTyFindForm.FindEdit: TTyEdit;         begin Result := FFindEdit; end;
 function TTyFindForm.ReplaceEdit: TTyEdit;      begin Result := FReplaceEdit; end;
 function TTyFindForm.MatchCaseCheck: TTyCheckBox; begin Result := FMatchCase; end;
@@ -408,6 +423,7 @@ begin
     FForm.Build(WantReplace);
   end;
   FForm.SyncFrom(FFindText, FReplaceText, FOptions);
+  FForm.FocusSearchText;   // #243
   // Relay the LCL-parity events onto the modeless form (idempotent — safe each call).
   TyForwardDialogEvents(Self, FForm, FOnShow, FOnClose, FOnCanClose);
   Result := FForm;

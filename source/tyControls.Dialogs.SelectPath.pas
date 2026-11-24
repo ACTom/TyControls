@@ -263,6 +263,10 @@ begin
   FPathEdit.Parent   := Self;
   FPathEdit.TextHint := rsDlgFolderPath;
   FPathEdit.OnChange := @PathEditChanged;
+  { #243: the path box lies above the tree and is tabbed before it (it was created after it,
+    so it came after). The dialog opens in the tree, where a folder is picked. }
+  FPathEdit.TabOrder := FTree.TabOrder;
+  ActiveControl := FTree;
 end;
 
 { Build a single 16x16 manila-folder glyph (amber body + darker back-tab lip,
