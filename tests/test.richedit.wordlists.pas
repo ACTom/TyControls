@@ -72,6 +72,7 @@ type
     procedure TestEnterOnAnItemGivenAStartGoesOn;
     procedure TestRichMemosForceNewNum;
     procedure TestAnOlderPnRunGoesOnAsBefore;
+    procedure TestListLevelsAreZeroToEight;
     procedure TestEveryCaseInOneFile;
   end;
 
@@ -1387,6 +1388,62 @@ begin
   AssertEquals('drawn: 4', '4.', string(Drawn(FBack, 1)));
   AssertEquals('drawn: 5', '5.', string(Drawn(FBack, 2)));
   AssertEquals('drawn: 1', '1.', string(Drawn(FBack, 3)));
+end;
+
+{ RTF's and Word's levels are 0 .. 8: the door takes a level to the nearest, the builder
+  raises its misuse error, a file's deeper level reads as 8. }
+procedure TTyRichWordListTest.TestListLevelsAreZeroToEight;
+var
+  B: TTyRichBuilder;
+  raised: Boolean;
+  d: TTyRichDocument;
+  S: RawByteString;
+begin
+  FRich.Text := 'one';
+  FRich.Paragraph.Numbering := lkDecimal;
+  FRich.Paragraph.ListLevel := 20;
+  AssertEquals('the door: at most 8', 8, PF(FRich.Document, 0).List.Level);
+  FRich.Paragraph.ListLevel := -3;
+  AssertEquals('the door: at least 0', 0, PF(FRich.Document, 0).List.Level);
+  B := TTyRichBuilder.Create;
+  try
+    B.Bullet(8).Text('the deepest');
+    raised := False;
+    try
+      B.Bullet(20);
+    except
+      on E: ETyRichEdit do raised := Pos('Bullet', E.Message) > 0;
+    end;
+    AssertTrue('the builder: Bullet(20) raises naming the call', raised);
+    raised := False;
+    try
+      B.Numbered(9);
+    except
+      on E: ETyRichEdit do raised := Pos('Numbered', E.Message) > 0;
+    end;
+    AssertTrue('the builder: Numbered(9) raises naming the call', raised);
+    raised := False;
+    try
+      B.Numbered(-1);
+    except
+      on E: ETyRichEdit do raised := True;
+    end;
+    AssertTrue('the builder: Numbered(-1) raises', raised);
+  finally
+    B.Free;
+  end;
+  S := '{' + BS + 'rtf1' + BS + 'ansi' + BS + 'deff0{' + BS + 'fonttbl{' + BS + 'f0' + BS +
+    'fnil Arial;}}'#13#10 + '{' + BS + '*' + BS + 'listtable{' + BS + 'list' + BS +
+    'listtemplateid5{' + BS + 'listlevel' + BS + 'levelnfc0' + BS + 'levelstartat1{' + BS +
+    'leveltext' + BS + '''02' + BS + '''00.;}{' + BS + 'levelnumbers' + BS + '''01;}}' + BS +
+    'listid5}}'#13#10 + '{' + BS + '*' + BS + 'listoverridetable{' + BS + 'listoverride' + BS +
+    'listid5' + BS + 'listoverridecount0' + BS + 'ls1}}'#13#10 + BS + 'viewkind4' + BS + 'uc1 '#13#10 +
+    BS + 'pard' + BS + 'ls1' + BS + 'ilvl12 deep\par'#13#10 +
+    BS + 'pard{' + BS + '*' + BS + 'pn' + BS + 'pnlvl12' + BS + 'pndec' + BS + 'pnstart1}' +
+    ' pn deep\par'#13#10 + '}';
+  d := ReadBack(AsBytes(S));
+  AssertEquals('a file''s \ilvl12: 8', 8, PF(d, 0).List.Level);
+  AssertEquals('a file''s \pnlvl12: 8', 8, PF(d, 1).List.Level);
 end;
 
 { Every case at once, in one file of the builder's (the file the Word check opens): numbers on

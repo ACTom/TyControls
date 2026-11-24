@@ -48,6 +48,8 @@ const
     (WordPad's \fi-360\li720, as Windows' rich edit writes it), twips. }
   CTyListLeftIndent = 720;
   CTyListFirstIndent = -360;
+  { The deepest list level (RTF's and Word's levels are 0 .. 8). }
+  CTyMaxListLevel = 8;
   { A list written as the user's list button writes it: the list record and the indents that
     go with it (pffListIndents) - one rule with leaving a list by Enter or Backspace. }
   CTyListMask = [pffList, pffListIndents];
@@ -230,7 +232,8 @@ type
       for one of CTyMaxTabStops or more: ignored). }
     procedure SetTab(AIndex: Integer; APosPt: Double; AAlign: TTyRichTabAlign;
       ALeader: TTyRichTabLeader); overload;
-    { The list item's level, 0 the outermost (the other parts of each paragraph's list as
+    { The list item's level, 0 the outermost, at most 8 (RTF's and Word's nine levels: a
+      value outside 0..8 is taken to the nearest; the other parts of each paragraph's list as
       they are; a paragraph that is no item keeps none). }
     property ListLevel: Integer read GetListLevel write SetListLevel;
     { The number a new list begins at: NumberingStart. }
@@ -1107,7 +1110,10 @@ procedure TTyRichParaAttributes.SetListLevel(AValue: Integer);
 var
   f: TTyParaFormat;
 begin
+  // RTF's and Word's levels: 0 .. 8
   f := TyDefaultParaFormat;
+  if AValue < 0 then AValue := 0;
+  if AValue > CTyMaxListLevel then AValue := CTyMaxListLevel;
   f.List.Level := AValue;
   SetFormat([pffListLevel], f);
 end;

@@ -105,6 +105,7 @@ type
     FColor: TColor;
     FTouched: Boolean;
     procedure Misuse(const ACall, AWhat: string);
+    procedure CheckLevel(const ACall: string; ALevel: Integer);
     function CharId: Integer;
     procedure CharChanged;
     procedure AddBytes(const S: RawByteString);
@@ -174,10 +175,10 @@ type
     { A tab stop added at APosPt points from the left indent's origin. }
     function Tab(APosPt: Double; AAlign: TTyRichTabAlign = rtaLeft;
       ALeader: TTyRichTabLeader = rtlNone): TTyRichBuilder;
-    { A bullet item at ALevel (0 the outermost), its bullet AText ('' the round one); the
-      default hanging indent of its level. }
+    { A bullet item at ALevel (0 the outermost, 8 the deepest: another level raises), its
+      bullet AText ('' the round one); the default hanging indent of its level. }
     function Bullet(ALevel: Integer = 0; const AText: string = ''): TTyRichBuilder;
-    { A numbered item (1, 2, 3 ...) at ALevel. AStart given (1 or more):
+    { A numbered item (1, 2, 3 ...) at ALevel (0 .. 8, as Bullet). AStart given (1 or more):
       the item begins a new list at that number, whatever stands before it; 0: it goes on
       from the item before it on its level - Numbered(0, 5), Numbered, Numbered are 5, 6, 7,
       and a Numbered(0, 1) after them is 1 again. A list's first item with no start is 1; an
@@ -649,10 +650,17 @@ begin
   FTouched := True;
 end;
 
+// RTF's and Word's list levels: 0 .. 8
+procedure TTyRichBuilder.CheckLevel(const ACall: string; ALevel: Integer);
+begin
+  if (ALevel < 0) or (ALevel > CTyMaxListLevel) then
+    Misuse(ACall, Format('level %d is no list level (0 to %d)', [ALevel, CTyMaxListLevel]));
+end;
+
 function TTyRichBuilder.Bullet(ALevel: Integer; const AText: string): TTyRichBuilder;
 begin
   Result := Self;
-  if ALevel < 0 then ALevel := 0;
+  CheckLevel('Bullet', ALevel);
   FCurPara.List.Kind := lkBullet;
   FCurPara.List.Level := ALevel;
   FCurPara.List.StartAt := 0;
@@ -666,7 +674,7 @@ end;
 function TTyRichBuilder.Numbered(ALevel: Integer; AStart: Integer): TTyRichBuilder;
 begin
   Result := Self;
-  if ALevel < 0 then ALevel := 0;
+  CheckLevel('Numbered', ALevel);
   // 0: the item goes on from the item before it
   if AStart < 0 then AStart := 0;
   FCurPara.List.Kind := lkDecimal;

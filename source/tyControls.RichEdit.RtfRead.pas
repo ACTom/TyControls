@@ -6148,6 +6148,9 @@ begin
          (FS.PrevListStart = ListStart) then
         Result.List.StartAt := 0;
     end;
+    // RTF's and Word's levels are 0 .. 8: a deeper one is the deepest
+    if Result.List.Level > 8 then Result.List.Level := 8;
+    if Result.List.Level < 0 then Result.List.Level := 0;
     nodes := ListNodes(ParaExtra);
     plain := PlainListWords(nodes);
     // a bullet of its own text, as a writer here writes one: the list format says it all
