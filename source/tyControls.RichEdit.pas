@@ -2720,8 +2720,8 @@ type
       innermost link whose text holds the whole selection (or the caret); else, with nothing
       selected, the link the caret stands right before or right after. AStart: its open mark's
       position, ALength: its characters with both marks, AURL: its target as OnLinkClick gives
-      it. False: none (the variables left alone). }
-    function LinkAtSelection(var AStart, ALength: TTyRichPos; var AURL: string): Boolean;
+      it. False: none (0, 0 and ''). }
+    function LinkAtSelection(out AStart, ALength: TTyRichPos; out AURL: string): Boolean;
     { Bookmarks. Names as Word has them: compared without regard to case; one that begins
       with "_" is hidden (Word's own, for a table of contents' headings) and counted and named
       only with AIncludeHidden. BookmarkCount / BookmarkName: in the order of the bookmarks'
@@ -6694,8 +6694,8 @@ begin
   Result := (o >= 0) and IsLinkField(o, url);
 end;
 
-function TTyCustomRichEdit.LinkAtSelection(var AStart, ALength: TTyRichPos;
-  var AURL: string): Boolean;
+function TTyCustomRichEdit.LinkAtSelection(out AStart, ALength: TTyRichPos;
+  out AURL: string): Boolean;
 var
   s, e, p, o, c, len: TTyRichPos;
   m: TTyRichObject;
@@ -6719,6 +6719,9 @@ var
 
 begin
   Result := False;
+  AStart := 0;
+  ALength := 0;
+  AURL := '';
   if ViewBehind then Exit;
   len := FDoc.Text.Length;
   s := GetSelStart;
