@@ -143,7 +143,7 @@ type
       end, before a Row or an EndTable). }
     procedure FlushPlaces(ATrailing: Boolean);
     function TableColumns: Integer;
-    function MergeSpansOf(AT: Integer; APos: TTyRichPos): Boolean;
+    function MergeSpansOf(AT, AFirst: Integer): Boolean;
     function OpenCell(const ACall: string): Pointer;
     procedure TableProperties(ADoc: TTyRichDocument);
     function ColumnEdges(ATable: Integer; ACells: Integer): TTyRichEdges;
@@ -1080,8 +1080,11 @@ begin
       end;
       Run(TTyRichSetRowProps.Create(pos, 0, FTables[t].RowCount - 1, rp));
     end;
-    if MergeSpansOf(t, pos) then any := True;
   end;
+  { The spans last, from the last table to the first: a merge changes the paragraphs of its
+    own rows only, so the first paragraph of each table and row before it is where it was. }
+  for t := FTableCount - 1 downto 0 do
+    if (first[t] >= 0) and MergeSpansOf(t, first[t]) then any := True;
   if any then
   begin
     ADoc.ClearUndo;
@@ -1089,31 +1092,47 @@ begin
   end;
 end;
 
-{ The spans of table AT (its first position APos) merged as MergeCells merges them: every
+{ The spans of table AT (its first paragraph AFirst) merged as MergeCells merges them: every
   row of the table as the builder made it (all rows alike), each span's rectangle by the
-  first row's edges. True: one was. }
-function TTyRichBuilder.MergeSpansOf(AT: Integer; APos: TTyRichPos): Boolean;
+  first row's edges. From the last row to the first and in a row from its last cell, each
+  merge named at its own row's first paragraph: it reads its own rows only (a merge named at
+  the table's start would read the rows before it - every span the whole table over). True:
+  one was. }
+function TTyRichBuilder.MergeSpansOf(AT, AFirst: Integer): Boolean;
 var
   rows: TTyRichRowList;
-  first, count, r, c, cs, rs: Integer;
+  first, count, r, c, cs, rs, i, k: Integer;
   e: TTyRichEdges;
   edges: array of Integer;
-  i: Integer;
+  rowPara: array of Integer;
 begin
   Result := False;
-  if not FDocFor.TableRowsAt(APos, 0, 0, rows, first, count) or (Length(rows) = 0) then Exit;
+  if not FDocFor.TableRowsAt(FDocFor.Text.ParaStart(AFirst), 0, 0, rows, first, count) or
+     (Length(rows) = 0) then
+    Exit;
   e := rows[0].CellEdges;
   SetLength(edges, Length(e) + 1);
   edges[0] := rows[0].Format.Row.LeftTwips;
   for i := 0 to High(e) do edges[i + 1] := e[i];
-  for r := 0 to FTables[AT].RowCount - 1 do
-    for c := 0 to FTables[AT].Rows[r].CellCount - 1 do
+  // each row's first paragraph (the builder's paragraphs are the document's, as made)
+  rowPara := nil;
+  SetLength(rowPara, FTables[AT].RowCount);
+  for r := 0 to High(rowPara) do rowPara[r] := -1;
+  k := AFirst;
+  while (k < FParaCount) and (FParas[k].Table = AT) do
+  begin
+    if rowPara[FParas[k].Row] < 0 then rowPara[FParas[k].Row] := k;
+    Inc(k);
+  end;
+  for r := FTables[AT].RowCount - 1 downto 0 do
+    for c := FTables[AT].Rows[r].CellCount - 1 downto 0 do
     begin
       cs := FTables[AT].Rows[r].Cells[c].ColSpan;
       rs := FTables[AT].Rows[r].Cells[c].RowSpan;
       if FTables[AT].Rows[r].Cells[c].Place or ((cs <= 1) and (rs <= 1)) then Continue;
       if c + cs > High(edges) then Continue;
-      if not FDocFor.Execute(TTyRichMergeCells.Create(APos, r, r + rs - 1, edges[c], edges[c + cs])) then
+      if not FDocFor.Execute(TTyRichMergeCells.Create(FDocFor.Text.ParaStart(rowPara[r]), r,
+        r + rs - 1, edges[c], edges[c + cs])) then
         raise ETyRichEdit.Create('TTyRichBuilder: a span could not be merged');
       Result := True;
     end;

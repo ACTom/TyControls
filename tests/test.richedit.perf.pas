@@ -76,6 +76,7 @@ type
     procedure TestMergeAndSplitInALongTable;
     procedure TestKeysThroughALongTableWithSpans;
     procedure TestRowsThroughASpanInALongTable;
+    procedure TestABuiltLongTableWithSpansCostsWhatOneWithoutDoes;
     procedure TestColumnsOfALongTableWithAndWithoutSpans;
   private
     procedure SaveBesideFields(ABytes: Int64; ANest: Integer);
@@ -88,7 +89,7 @@ uses
   tyControls.RichEdit.RtfRead, tyControls.RichEdit.RtfWrite, tyControls.RichEdit.Model,
   tyControls.RichEdit.Commands, tyControls.RichEdit.Find, tyControls.RichEdit.Ruler,
   tyControls.RichEdit.Actions, tyControls.RichEdit.Builder, tyControls.RichEdit.TableProps,
-  tyControls.RichEdit.Grid
+  tyControls.RichEdit.Grid, tyControls.RichEdit.RowFormat
   {$IFDEF LCLWin32}, test.richedit.dropacross{$ENDIF};
 
 {$IFDEF MSWINDOWS}
@@ -2761,6 +2762,105 @@ begin
   finally
     bmp.Free;
   end;
+end;
+
+{ A table of 10,000 rows of three cells made by the builder, with a cell over two rows every
+  tenth row and without: SetContent, AppendContent, InsertContent and a paste of its RTF each
+  cost with the spans what they cost without, within a small factor (the spans are set in the
+  rows as they are made: no merge per span, no grid). }
+procedure TTyRichEditPerfTest.TestABuiltLongTableWithSpansCostsWhatOneWithoutDoes;
+const
+  Rows = 10000;
+  Factor = 2.0;
+  Slack = 150.0;
+var
+  ms: array[Boolean, 0..3] of Double;
+  spans: Boolean;
+  k: Integer;
+  t0: Double;
+  n: Int64;
+  rtf: RawByteString;
+  ss: TBytesStream;
+  d: TTyRichDocument;
+  c: TTyRichCell;
+  B: TTyRichBuilder;
+const
+  CWhat: array[0..3] of string = ('SetContent', 'AppendContent', 'InsertContent', 'a paste of its RTF');
+
+  function Make(ASpans: Boolean): TTyRichBuilder;
+  var
+    i: Integer;
+  begin
+    Result := TTyRichBuilder.Create;
+    Result.Table([2000, 2000, 2000]);
+    for i := 0 to Rows - 1 do
+    begin
+      if i > 0 then Result.Row;
+      if ASpans and (i mod 10 = 0) then Result.Cell(1, 2).Text('span' + IntToStr(i))
+      else if not ASpans or (i mod 10 <> 1) then Result.Cell.Text('a' + IntToStr(i));
+      Result.Cell.Text('b' + IntToStr(i)).Cell.Text('c');
+    end;
+    Result.EndTable;
+  end;
+
+begin
+  n := TyRichGridBuildCount;
+  for spans := False to True do
+  begin
+    B := Make(spans);
+    try
+      t0 := Clock;
+      FRich.SetContent(B);
+      ms[spans, 0] := Clock - t0;
+      d := FRich.Document;
+      if spans then
+      begin
+        // the span is there: the row below covered by the cell above
+        c := d.CellAt(d.Text.ParaOfPos(d.Text.ParaStart(3)));
+        AssertTrue('a cell', c <> nil);
+        AssertEquals('row 1''s first cell covered', Ord(rcmContinue), TyRichCellVMerge(c.Row, 0));
+        AssertEquals('row 0''s first cell begins it', Ord(rcmFirst),
+          TyRichCellVMerge(d.CellAt(0).Row, 0));
+      end;
+      ss := TBytesStream.Create;
+      try
+        TyRichSaveRtfRange(d, ss, 0, d.Text.Length);
+        rtf := '';
+        SetLength(rtf, ss.Size);
+        Move(ss.Bytes[0], rtf[1], ss.Size);
+        SetCodePage(rtf, CP_NONE, False);
+      finally
+        ss.Free;
+      end;
+      FRich.Lines.Text := 'before';
+      t0 := Clock;
+      FRich.AppendContent(B);
+      ms[spans, 1] := Clock - t0;
+      FRich.Lines.Text := 'before' + LineEnding + 'after';
+      t0 := Clock;
+      FRich.InsertContent(FRich.Document.Text.ParaStart(1), B);
+      ms[spans, 2] := Clock - t0;
+    finally
+      B.Free;
+    end;
+    FRich.Lines.Text := 'another document';
+    FRich.SelStart := 0;
+    TPerfRich(FRich).ClipRtf := rtf;
+    t0 := Clock;
+    FRich.PasteFromClipboard;
+    ms[spans, 3] := Clock - t0;
+    TPerfRich(FRich).ClipRtf := '';
+    AssertTrue('pasted', FRich.Document.Text.ParaCount >= 3 * Rows);
+  end;
+  AssertEquals('no grid made', n, TyRichGridBuildCount);
+  for k := 0 to 3 do
+  begin
+    Report(Format('table of %d rows made by the builder: %s, no span', [Rows, CWhat[k]]), ms[False, k]);
+    Report(Format('... a cell over two rows every tenth row: %s', [CWhat[k]]), ms[True, k]);
+  end;
+  for k := 0 to 3 do
+    AssertTrue(Format('%s with spans in %.0f ms (without: %.0f ms)', [CWhat[k], ms[True, k], ms[False, k]]),
+      ms[True, k] <= Factor * ms[False, k] + Slack);
 end;
 
 { A column put in and one deleted on a table of 10,000 rows of three cells: plain (by index),
