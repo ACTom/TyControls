@@ -2437,7 +2437,7 @@ var
   d: TTyRichDocument;
   t: TTyRichText;
   k: Integer;
-  t0, col, again, row: Double;
+  t0, col, again, row, dist: Double;
   e: TTyRichColumnEdges;
 begin
   bmp := TBitmap.Create;
@@ -2470,6 +2470,12 @@ begin
     TPerfRich(FRich).PaintInto(bmp);
     row := Clock - t0;
     Report('table: one row''s height, to the end of its paint', row);
+    // every row as high as their average (each row laid out to read its height): reported
+    t0 := Clock;
+    AssertTrue('rows alike', FRich.DistributeRows);
+    TPerfRich(FRich).PaintInto(bmp);
+    dist := Clock - t0;
+    Report('table: the rows made alike (DistributeRows), to the end of its paint', dist);
     AssertTrue(Format('a column in %.1f ms', [col]), col <= CColumnMs);
     AssertTrue(Format('again in %.1f ms', [again]), again <= CColumnMs);
     AssertTrue(Format('a row in %.1f ms', [row]), row <= CKeystrokeMs);

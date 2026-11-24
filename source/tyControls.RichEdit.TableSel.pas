@@ -97,6 +97,7 @@ type
     FItems: array of TTyRichCellFillItem;
     FDescription: string;
     FDropped: Integer;
+    procedure DeleteKeepingMarks(ADoc: TTyRichDocument; AFrom, ATo: TTyRichPos);
   protected
     procedure DoExecute(ADoc: TTyRichDocument); override;
   public
@@ -114,14 +115,158 @@ type
     property Dropped: Integer read FDropped;
   end;
 
+type
+  { After rows (or a table) that held one mark of a bookmark went in the same step: the
+    bookmark's other mark, outside them, goes too - no lone mark is left. Each mark is given
+    by where it was before the rows went (APos) and its name; at its run the place is found
+    again from how much text went (the rows lay from ACut on: a mark after them moved back by
+    that much). }
+  TTyRichDropLoneMarks = class(TTyRichCommand)
+  private
+    FPos: array of TTyRichPos;
+    FNames: array of UTF8String;
+    FLen0, FCut: TTyRichPos;
+  protected
+    procedure DoExecute(ADoc: TTyRichDocument); override;
+  public
+    constructor Create(ADoc: TTyRichDocument; ACut: TTyRichPos);
+    procedure Add(APos: TTyRichPos; const AName: UTF8String);
+    function Count: Integer;
+  end;
+
+{ The bookmarks one of whose marks lies in paragraphs AFirst .. ALast and the other outside
+  them: a command dropping those outside marks (nil: none). }
+function TyRichLoneMarksOutside(ADoc: TTyRichDocument; AFirst, ALast: Integer): TTyRichDropLoneMarks;
+
 implementation
 
 uses
-  Math, tyControls.RichEdit.TableProps, tyControls.RichEdit.RtfRead;
+  Math, tyControls.RichEdit.TableProps, tyControls.RichEdit.RtfRead, tyControls.RichEdit.Bookmarks;
 
 function TyRichCellsEditable(const AArea: TTyRichCellArea): Boolean;
 begin
   Result := AArea.Range.InTable and not AArea.Outside;
+end;
+
+constructor TTyRichDropLoneMarks.Create(ADoc: TTyRichDocument; ACut: TTyRichPos);
+begin
+  inherited Create;
+  FLen0 := ADoc.Text.Length;
+  FCut := ACut;
+end;
+
+procedure TTyRichDropLoneMarks.Add(APos: TTyRichPos; const AName: UTF8String);
+begin
+  SetLength(FPos, Length(FPos) + 1);
+  SetLength(FNames, Length(FNames) + 1);
+  FPos[High(FPos)] := APos;
+  FNames[High(FNames)] := AName;
+end;
+
+function TTyRichDropLoneMarks.Count: Integer;
+begin
+  Result := Length(FPos);
+end;
+
+procedure TTyRichDropLoneMarks.DoExecute(ADoc: TTyRichDocument);
+var
+  i, j: Integer;
+  p, d: TTyRichPos;
+  o: TTyRichObject;
+  order: array of Integer;
+begin
+  d := FLen0 - ADoc.Text.Length;
+  // the last first: the places before stay where they are
+  order := nil;
+  SetLength(order, Length(FPos));
+  for i := 0 to High(order) do order[i] := i;
+  for i := 1 to High(order) do
+  begin
+    j := i;
+    while (j > 0) and (FPos[order[j - 1]] < FPos[order[j]]) do
+    begin
+      p := order[j];
+      order[j] := order[j - 1];
+      order[j - 1] := p;
+      Dec(j);
+    end;
+  end;
+  for i := 0 to High(order) do
+  begin
+    p := FPos[order[i]];
+    if p >= FCut then Dec(p, d);
+    ADoc.BeginRead;
+    try
+      o := ADoc.ObjectAt(p);
+    finally
+      ADoc.EndRead;
+    end;
+    if (o is TTyRichBookmarkMark) and TyRichSameBookmarkName(TTyRichBookmarkMark(o).Name,
+       FNames[order[i]]) then
+      DeleteObjectAt(ADoc, p);
+  end;
+end;
+
+function TyRichLoneMarksOutside(ADoc: TTyRichDocument; AFirst, ALast: Integer): TTyRichDropLoneMarks;
+var
+  t: TTyRichText;
+  k, j, i, n: Integer;
+  runs: TTyRunArray;
+  ps, lo, hi, s, e: TTyRichPos;
+  names: array of UTF8String;
+  kinds: array of TTyRichBookmarkKind;
+  paired: array of Boolean;
+begin
+  Result := nil;
+  t := ADoc.Text;
+  lo := t.ParaStart(AFirst);
+  hi := t.ParaStart(ALast) + t.ParaLength(ALast);
+  n := 0;
+  names := nil;
+  kinds := nil;
+  ADoc.BeginRead;
+  try
+    for k := AFirst to ALast do
+    begin
+      runs := ADoc.RunsOf(k);
+      ps := t.ParaStart(k);
+      for j := 0 to High(runs) do
+        if runs[j].Obj is TTyRichBookmarkMark then
+        begin
+          SetLength(names, n + 1);
+          SetLength(kinds, n + 1);
+          names[n] := TTyRichBookmarkMark(runs[j].Obj).Name;
+          kinds[n] := TTyRichBookmarkMark(runs[j].Obj).Kind;
+          Inc(n);
+        end;
+    end;
+  finally
+    ADoc.EndRead;
+  end;
+  if n = 0 then Exit;
+  paired := nil;
+  SetLength(paired, n);
+  for i := 0 to n - 1 do
+    if (kinds[i] = rbmStart) and not paired[i] then
+      for j := i + 1 to n - 1 do
+        if (kinds[j] = rbmEnd) and not paired[j] and TyRichSameBookmarkName(names[i], names[j]) then
+        begin
+          paired[i] := True;
+          paired[j] := True;
+          Break;
+        end;
+  for i := 0 to n - 1 do
+  begin
+    if paired[i] then Continue;
+    // its other mark: where the bookmark's marks are
+    if not TyRichFindBookmark(ADoc, names[i], s, e) then Continue;
+    if kinds[i] = rbmStart then s := e;
+    if (s < lo) or (s > hi) then
+    begin
+      if Result = nil then Result := TTyRichDropLoneMarks.Create(ADoc, hi);
+      Result.Add(s, names[i]);
+    end;
+  end;
 end;
 
 function TyRichAreaWholeRows(ADoc: TTyRichDocument; const AArea: TTyRichCellArea): Boolean;
@@ -208,6 +353,73 @@ begin
   Result := FDescription;
 end;
 
+{ [AFrom, ATo) of a cell goes - but a bookmark's mark whose other mark lies outside it stays
+  (the bookmark collapses where the content was, as in Word; the engine's own deletion leaves
+  such marks to go inside a cell): no lone mark is left behind. }
+procedure TTyRichCellsEdit.DeleteKeepingMarks(ADoc: TTyRichDocument; AFrom, ATo: TTyRichPos);
+var
+  t: TTyRichText;
+  k, j, i, n: Integer;
+  runs: TTyRunArray;
+  ps, p, e: TTyRichPos;
+  pos: array of TTyRichPos;
+  bms: array of TTyRichBookmarkMark;
+  paired: array of Boolean;
+  kept: array of TTyRichPos;
+begin
+  t := ADoc.Text;
+  n := 0;
+  pos := nil;
+  bms := nil;
+  ADoc.BeginRead;
+  try
+    for k := t.ParaOfPos(AFrom) to t.ParaOfPos(ATo - 1) do
+    begin
+      runs := ADoc.RunsOf(k);
+      ps := t.ParaStart(k);
+      for j := 0 to High(runs) do
+      begin
+        p := ps + runs[j].Start;
+        if (p < AFrom) or (p >= ATo) or not (runs[j].Obj is TTyRichBookmarkMark) then Continue;
+        SetLength(pos, n + 1);
+        SetLength(bms, n + 1);
+        pos[n] := p;
+        bms[n] := TTyRichBookmarkMark(runs[j].Obj);
+        Inc(n);
+      end;
+    end;
+  finally
+    ADoc.EndRead;
+  end;
+  paired := nil;
+  SetLength(paired, n);
+  for i := 0 to n - 1 do
+    if (bms[i].Kind = rbmStart) and not paired[i] then
+      for j := i + 1 to n - 1 do
+        if (bms[j].Kind = rbmEnd) and not paired[j] and
+          TyRichSameBookmarkName(bms[i].Name, bms[j].Name) then
+        begin
+          paired[i] := True;
+          paired[j] := True;
+          Break;
+        end;
+  kept := nil;
+  for i := 0 to n - 1 do
+    if not paired[i] then
+    begin
+      SetLength(kept, Length(kept) + 1);
+      kept[High(kept)] := pos[i];
+    end;
+  // the stretches between the bms kept, the last first (the places before stay)
+  e := ATo;
+  for i := High(kept) downto 0 do
+  begin
+    if e > kept[i] + 1 then DeleteRange(ADoc, kept[i] + 1, e - kept[i] - 1);
+    e := kept[i];
+  end;
+  if e > AFrom then DeleteRange(ADoc, AFrom, e - AFrom);
+end;
+
 procedure TTyRichCellsEdit.DoExecute(ADoc: TTyRichDocument);
 var
   t: TTyRichText;
@@ -289,7 +501,7 @@ begin
       end;
       s := t.ParaStart(f);
       e := t.ParaStart(l) + t.ParaLength(l);
-      if e > s then DeleteRange(ADoc, s, e - s);
+      if e > s then DeleteKeepingMarks(ADoc, s, e);
       case FItems[i].Kind of
         rcfText:
           if FItems[i].Text <> '' then InsertText(ADoc, s, FItems[i].Text);

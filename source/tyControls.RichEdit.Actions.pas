@@ -51,6 +51,7 @@ interface
 uses
   Classes, SysUtils, Math, Graphics, Controls, ActnList, Dialogs, LCLType, LCLProc,
   tyControls.StrConsts, tyControls.RichEdit.Text, tyControls.RichEdit.Model, tyControls.RichEdit.Attrs,
+  tyControls.RichEdit.RowFormat, tyControls.RichEdit.TableProps,
   tyControls.RichEdit.Find, tyControls.RichEdit, tyControls.Dialogs, tyControls.Dialogs.Find,
   tyControls.Dialogs.FileDialog;
 
@@ -115,6 +116,7 @@ type
     FSpaceBefore, FSpaceAfter: Double;
     FCanRowIns, FCanColIns, FCanRowDel, FCanColDel, FCanTableDel: Boolean;
     FCanLink, FCanEditLink: Boolean;
+    FCanCells, FCanColSize, FCanRowSize: Boolean;
     procedure ViewChanged(Sender: TObject);
     procedure Refresh;
   public
@@ -168,6 +170,10 @@ type
     // the link queries CanInsertLink and CanEditLink
     property CanInsertLink: Boolean read FCanLink;
     property CanEditLink: Boolean read FCanEditLink;
+    // the table format and size queries CanFormatCells, CanResizeColumns, CanResizeRows
+    property CanFormatCells: Boolean read FCanCells;
+    property CanResizeColumns: Boolean read FCanColSize;
+    property CanResizeRows: Boolean read FCanRowSize;
   end;
 
   { The base of the rich edit's actions: the target (RichEdit, else the focused rich edit) and
@@ -824,11 +830,156 @@ type
     constructor Create(AOwner: TComponent); override;
   end;
 
+
+  { ---- a table's formats and sizes: Enabled by the control's CanFormatCells / CanResize... ---- }
+
+  { The selected cells' (else the caret cell's) shading: Color (clNone: none). }
+  TTyRichEditCellShading = class(TTyRichEditAction)
+  private
+    FColor: TColor;
+  protected
+    procedure UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+    procedure ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+  public
+    constructor Create(AOwner: TComponent); override;
+  published
+    property Color: TColor read FColor write FColor default clYellow;
+  end;
+
+  { Before the borders go on: the preset and the line, which a handler may change (its own
+    form), AAllow False: nothing happens. }
+  TTyRichCellBordersEvent = procedure(Sender: TObject; var APreset: TTyRichBorderPreset;
+    var ABorder: TTyRichBorder; var AAllow: Boolean) of object;
+
+  { A border preset on the selected cells (SetCellBorders): Preset, the line's LineStyle,
+    LineWidth (twips; Word's ½ pt is 10) and LineColor (clDefault: automatic);
+    OnBeforeExecute first. }
+  TTyRichEditCellBorders = class(TTyRichEditAction)
+  private
+    FPreset: TTyRichBorderPreset;
+    FLineStyle: TTyRichBorderStyle;
+    FLineWidth: Integer;
+    FLineColor: TColor;
+    FOnBeforeExecute: TTyRichCellBordersEvent;
+  protected
+    procedure UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+    procedure ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+  public
+    constructor Create(AOwner: TComponent); override;
+  published
+    property Preset: TTyRichBorderPreset read FPreset write FPreset default rbpAll;
+    property LineStyle: TTyRichBorderStyle read FLineStyle write FLineStyle default rbsSingle;
+    property LineWidth: Integer read FLineWidth write FLineWidth default 10;
+    property LineColor: TColor read FLineColor write FLineColor default clDefault;
+    property OnBeforeExecute: TTyRichCellBordersEvent read FOnBeforeExecute write FOnBeforeExecute;
+  end;
+
+  { The selected cells' padding (SetCellPadding), twips; -1 a side as it is. }
+  TTyRichEditCellPadding = class(TTyRichEditAction)
+  private
+    FPadLeft, FPadTop, FPadRight, FPadBottom: Integer;
+  protected
+    procedure UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+    procedure ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+  public
+    constructor Create(AOwner: TComponent); override;
+  published
+    property PadLeft: Integer read FPadLeft write FPadLeft default 108;
+    property PadTop: Integer read FPadTop write FPadTop default 0;
+    property PadRight: Integer read FPadRight write FPadRight default 108;
+    property PadBottom: Integer read FPadBottom write FPadBottom default 0;
+  end;
+
+  { Where the selected cells' content sits (SetCellVAlign). }
+  TTyRichEditCellVAlign = class(TTyRichEditAction)
+  private
+    FAlign: TTyRowCellVAlign;
+  protected
+    procedure UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+    procedure ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+  public
+    constructor Create(AOwner: TComponent); override;
+  published
+    property Align: TTyRowCellVAlign read FAlign write FAlign default rcvTop;
+  end;
+
+  { The caret's table aligned (SetTableAlign): Align, Indent (twips from the margin). }
+  TTyRichEditTableAlign = class(TTyRichEditAction)
+  private
+    FAlign: TTyRowAlign;
+    FIndent: Integer;
+  protected
+    procedure UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+    procedure ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+  public
+    constructor Create(AOwner: TComponent); override;
+  published
+    property Align: TTyRowAlign read FAlign write FAlign default rraCenter;
+    property Indent: Integer read FIndent write FIndent default 0;
+  end;
+
+  { Before the table properties go on: AProps holds what the caret's cell, row and table have
+    now (Valid: every field); a handler shows its own form, changes them and says which to set
+    (Valid), or AAllow False: nothing. }
+  TTyRichTablePropertiesEvent = procedure(Sender: TObject; var AProps: TTyRichTableProperties;
+    var AAllow: Boolean) of object;
+
+  { Table properties: OnBeforeExecute (no handler: nothing to ask, nothing happens), then each
+    field Valid names through its door - the whole as one undo step. }
+  TTyRichEditTableProperties = class(TTyRichEditAction)
+  private
+    FOnBeforeExecute: TTyRichTablePropertiesEvent;
+  protected
+    procedure UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+    procedure ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+  public
+    constructor Create(AOwner: TComponent); override;
+  published
+    property OnBeforeExecute: TTyRichTablePropertiesEvent read FOnBeforeExecute write FOnBeforeExecute;
+  end;
+
+  TTyRichEditSizeKind = (rskAutoFit, rskDistributeColumns, rskDistributeRows, rskFitWindow);
+
+  TTyRichEditTableSizeAction = class(TTyRichEditAction)
+  protected
+    function KindOf: TTyRichEditSizeKind; virtual; abstract;
+    procedure UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+    procedure ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+  end;
+
+  TTyRichEditAutoFitColumn = class(TTyRichEditTableSizeAction)
+  protected
+    function KindOf: TTyRichEditSizeKind; override;
+  public
+    constructor Create(AOwner: TComponent); override;
+  end;
+
+  TTyRichEditDistributeColumns = class(TTyRichEditTableSizeAction)
+  protected
+    function KindOf: TTyRichEditSizeKind; override;
+  public
+    constructor Create(AOwner: TComponent); override;
+  end;
+
+  TTyRichEditDistributeRows = class(TTyRichEditTableSizeAction)
+  protected
+    function KindOf: TTyRichEditSizeKind; override;
+  public
+    constructor Create(AOwner: TComponent); override;
+  end;
+
+  TTyRichEditFitTableToWindow = class(TTyRichEditTableSizeAction)
+  protected
+    function KindOf: TTyRichEditSizeKind; override;
+  public
+    constructor Create(AOwner: TComponent); override;
+  end;
+
   TTyRichEditActionClass = class of TTyRichEditAction;
 
 const
   { Every action of this unit, in the order the IDE lists them. }
-  CTyRichEditActions: array[0..45] of TTyRichEditActionClass = (
+  CTyRichEditActions: array[0..55] of TTyRichEditActionClass = (
     TTyRichEditBold, TTyRichEditItalic, TTyRichEditUnderline, TTyRichEditStrikeOut,
     TTyRichEditSuperscript, TTyRichEditSubscript,
     TTyRichEditAlignLeft, TTyRichEditAlignCenter, TTyRichEditAlignRight,
@@ -843,7 +994,10 @@ const
     TTyRichEditInsertRowAbove, TTyRichEditInsertRowBelow, TTyRichEditInsertColumnLeft,
     TTyRichEditInsertColumnRight, TTyRichEditDeleteRow, TTyRichEditDeleteColumn,
     TTyRichEditDeleteTable, TTyRichEditInsertLink, TTyRichEditRemoveLink,
-    TTyRichEditParagraphSpacing);
+    TTyRichEditParagraphSpacing, TTyRichEditCellShading, TTyRichEditCellBorders,
+    TTyRichEditCellPadding, TTyRichEditCellVAlign, TTyRichEditTableAlign,
+    TTyRichEditTableProperties, TTyRichEditAutoFitColumn, TTyRichEditDistributeColumns,
+    TTyRichEditDistributeRows, TTyRichEditFitTableToWindow);
 
   { The font sizes the grow and shrink actions step through (points). }
   CTyRichFontSizes: array[0..15] of Integer = (8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28,
@@ -990,7 +1144,10 @@ begin
   FCanTableDel := FRich.CanDeleteTable;
   FCanLink := FRich.CanInsertLink;
   FCanEditLink := FRich.CanEditLink;
-  Inc(FQueries, 9);
+  FCanCells := FRich.CanFormatCells;
+  FCanColSize := FRich.CanResizeColumns;
+  FCanRowSize := FRich.CanResizeRows;
+  Inc(FQueries, 12);
 end;
 
 { TTyRichEditAction }
@@ -1504,6 +1661,230 @@ begin
   if Assigned(FOnChooseSize) then FOnChooseSize(Self, nRows, nCols, go);
   if not go or (csDestroying in ARich.ComponentState) then Exit;
   ARich.InsertTable(nRows, nCols);
+end;
+
+{ ---- a table's formats and sizes ---- }
+
+constructor TTyRichEditCellShading.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  FColor := clYellow;
+  Caption := rsRichActCellShading;
+  Hint := rsRichActCellShadingHint;
+end;
+
+procedure TTyRichEditCellShading.UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState);
+begin
+  Enabled := AState.CanFormatCells;
+  Checked := False;
+end;
+
+procedure TTyRichEditCellShading.ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState);
+begin
+  if AState.CanFormatCells then ARich.SetCellShading(FColor);
+end;
+
+constructor TTyRichEditCellBorders.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  FPreset := rbpAll;
+  FLineStyle := rbsSingle;
+  FLineWidth := 10;
+  FLineColor := clDefault;
+  Caption := rsRichActCellBorders;
+  Hint := rsRichActCellBordersHint;
+end;
+
+procedure TTyRichEditCellBorders.UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState);
+begin
+  Enabled := AState.CanFormatCells;
+  Checked := False;
+end;
+
+procedure TTyRichEditCellBorders.ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState);
+var
+  pr: TTyRichBorderPreset;
+  b: TTyRichBorder;
+  go: Boolean;
+begin
+  if not AState.CanFormatCells then Exit;
+  pr := FPreset;
+  b := TyRichBorder(FLineStyle, FLineWidth, FLineColor);
+  go := True;
+  if Assigned(FOnBeforeExecute) then FOnBeforeExecute(Self, pr, b, go);
+  if not go or (csDestroying in ARich.ComponentState) then Exit;
+  ARich.SetCellBorders(pr, b);
+end;
+
+constructor TTyRichEditCellPadding.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  FPadLeft := 108;
+  FPadTop := 0;
+  FPadRight := 108;
+  FPadBottom := 0;
+  Caption := rsRichActCellPadding;
+  Hint := rsRichActCellPaddingHint;
+end;
+
+procedure TTyRichEditCellPadding.UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState);
+begin
+  Enabled := AState.CanFormatCells;
+  Checked := False;
+end;
+
+procedure TTyRichEditCellPadding.ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState);
+begin
+  if AState.CanFormatCells then ARich.SetCellPadding(FPadLeft, FPadTop, FPadRight, FPadBottom);
+end;
+
+constructor TTyRichEditCellVAlign.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  FAlign := rcvTop;
+  Caption := rsRichActCellVAlign;
+  Hint := rsRichActCellVAlignHint;
+end;
+
+procedure TTyRichEditCellVAlign.UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState);
+begin
+  Enabled := AState.CanFormatCells;
+  Checked := False;
+end;
+
+procedure TTyRichEditCellVAlign.ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState);
+begin
+  if AState.CanFormatCells then ARich.SetCellVAlign(FAlign);
+end;
+
+constructor TTyRichEditTableAlign.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  FAlign := rraCenter;
+  Caption := rsRichActTableAlign;
+  Hint := rsRichActTableAlignHint;
+end;
+
+procedure TTyRichEditTableAlign.UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState);
+begin
+  Enabled := AState.CanFormatCells;
+  Checked := False;
+end;
+
+procedure TTyRichEditTableAlign.ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState);
+begin
+  if AState.CanFormatCells then ARich.SetTableAlign(FAlign, FIndent);
+end;
+
+constructor TTyRichEditTableProperties.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  Caption := rsRichActTableProperties;
+  Hint := rsRichActTablePropertiesHint;
+end;
+
+procedure TTyRichEditTableProperties.UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState);
+begin
+  Enabled := AState.CanFormatCells;
+  Checked := False;
+end;
+
+procedure TTyRichEditTableProperties.ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState);
+var
+  v: TTyRichTableProperties;
+  go: Boolean;
+  pos: TTyRichPos;
+  r, c: Integer;
+  cp: TTyRichCellProps;
+  rp: TTyRichRowProps;
+  sd: TTyRowCellSide;
+begin
+  if not AState.CanFormatCells or not Assigned(FOnBeforeExecute) then Exit;
+  if not ARich.CaretCell(pos, r, c) then Exit;
+  // what the caret's cell, row and table have now
+  cp := ARich.Document.CellProps(pos, r, c);
+  rp := ARich.Document.RowProps(pos, r);
+  v := Default(TTyRichTableProperties);
+  v.Valid := [tpfRowHeight, tpfColumnWidth, tpfAlign, tpfPadding, tpfVAlign, tpfShading];
+  v.RowHeight := Abs(rp.HeightTwips);
+  v.RowExact := rp.HeightTwips < 0;
+  v.ColumnWidth := cp.WidthTwips;
+  v.Align := rp.Align;
+  v.Indent := rp.LeftTwips;
+  for sd := Low(TTyRowCellSide) to High(TTyRowCellSide) do v.Pad[sd] := cp.Pad[sd];
+  v.VAlign := cp.VAlign;
+  v.Shading := cp.Shading;
+  go := True;
+  FOnBeforeExecute(Self, v, go);
+  if not go or (csDestroying in ARich.ComponentState) or (v.Valid = []) then Exit;
+  // one undo step
+  ARich.ApplyTableProperties(v);
+end;
+
+procedure TTyRichEditTableSizeAction.UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState);
+begin
+  if KindOf = rskDistributeRows then Enabled := AState.CanResizeRows
+  else Enabled := AState.CanResizeColumns;
+  Checked := False;
+end;
+
+procedure TTyRichEditTableSizeAction.ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState);
+begin
+  case KindOf of
+    rskAutoFit: ARich.AutoFitColumn;
+    rskDistributeColumns: ARich.DistributeColumns;
+    rskDistributeRows: ARich.DistributeRows;
+  else
+    ARich.FitTableToWindow;
+  end;
+end;
+
+function TTyRichEditAutoFitColumn.KindOf: TTyRichEditSizeKind;
+begin
+  Result := rskAutoFit;
+end;
+
+constructor TTyRichEditAutoFitColumn.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  Caption := rsRichActAutoFitColumn;
+  Hint := rsRichActAutoFitColumnHint;
+end;
+
+function TTyRichEditDistributeColumns.KindOf: TTyRichEditSizeKind;
+begin
+  Result := rskDistributeColumns;
+end;
+
+constructor TTyRichEditDistributeColumns.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  Caption := rsRichActDistributeColumns;
+  Hint := rsRichActDistributeColumnsHint;
+end;
+
+function TTyRichEditDistributeRows.KindOf: TTyRichEditSizeKind;
+begin
+  Result := rskDistributeRows;
+end;
+
+constructor TTyRichEditDistributeRows.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  Caption := rsRichActDistributeRows;
+  Hint := rsRichActDistributeRowsHint;
+end;
+
+function TTyRichEditFitTableToWindow.KindOf: TTyRichEditSizeKind;
+begin
+  Result := rskFitWindow;
+end;
+
+constructor TTyRichEditFitTableToWindow.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  Caption := rsRichActFitTableToWindow;
+  Hint := rsRichActFitTableToWindowHint;
 end;
 
 { TTyRichEditInsertLink }

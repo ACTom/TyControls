@@ -17,7 +17,8 @@ uses
   BGRABitmapTypes, tyControls.Controller,
   tyControls.RichEdit.Text, tyControls.RichEdit.Model, tyControls.RichEdit.Commands,
   tyControls.RichEdit.TableProps, tyControls.RichEdit.TableSel, tyControls.RichEdit.RtfRead,
-  tyControls.RichEdit.Layout, tyControls.RichEdit, test.richedit.layoutdevice;
+  tyControls.RichEdit.Layout, tyControls.RichEdit, tyControls.RichEdit.Builder,
+  tyControls.RichEdit.Bookmarks, test.richedit.layoutdevice;
 
 type
   TSelRich = class(TTyRichEdit)
@@ -73,6 +74,7 @@ type
     procedure TestTheHandleCoversNoLetter;
     procedure TestDeleteClearsBackspaceRemovesRows;
     procedure TestTypingReplacesTheFirstCell;
+    procedure TestNoMarkOfAPairIsLeftAlone;
     procedure TestFormatsReachEveryCell;
     procedure TestCopyIsASmallTableAndTabbedText;
     procedure TestPasteFillsCellByCell;
@@ -867,6 +869,72 @@ begin
   end;
   AssertEquals('dropped: 1,0', 'd1', CellText(1, 0));
   AssertEquals('dropped: 1,1', 'd2', CellText(1, 1));
+end;
+
+{ A bookmark from one cell to another: cells cleared, or rows deleted, that take one of its
+  marks leave no lone mark - the bookmark goes whole or stays whole. }
+procedure TTyRichTableSelTest.TestNoMarkOfAPairIsLeftAlone;
+var
+  B: TTyRichBuilder;
+  s0, e0: TTyRichPos;
+  t: TTyRichText;
+  LastCount: string;
+
+  procedure Build;
+  begin
+    B := TTyRichBuilder.Create;
+    try
+      B.Text('before').Paragraph;
+      B.Table([1440, 1440]).Cell.Text('a').BookmarkStart('bm').Text('b').Cell.Text('c');
+      B.Row.Cell.Text('d').Cell.Text('e').BookmarkEnd('bm').Text('f').EndTable;
+      B.Text('after');
+      FRich.SetContent(B);
+    finally
+      B.Free;
+    end;
+    FRich.Document.ClearUndo;
+  end;
+
+  // the bookmark marks in the text: as many starts as ends
+  function Lone: Boolean;
+  var
+    k, st, en: Integer;
+    runs: TTyRunArray;
+    j: Integer;
+  begin
+    st := 0;
+    en := 0;
+    t := FRich.Document.Text;
+    for k := 0 to t.ParaCount - 1 do
+    begin
+      runs := FRich.Document.RunsOf(k);
+      for j := 0 to High(runs) do
+        if runs[j].Obj is TTyRichBookmarkMark then
+          if TTyRichBookmarkMark(runs[j].Obj).Kind = rbmStart then Inc(st) else Inc(en);
+    end;
+    Result := st <> en;
+    LastCount := Format('%d starts, %d ends', [st, en]);
+  end;
+
+begin
+  Build;
+  AssertTrue('the bookmark', FRich.FindBookmark('bm', s0, e0));
+  AssertFalse('no lone mark to begin with', Lone);
+  // the first cell alone, cleared: it holds the start
+  Sel(CellStart(0, 0), CellEnd(0, 0));
+  FRich.Key(VK_DELETE);
+  AssertFalse('a cell cleared: no lone mark ' + LastCount, Lone);
+  FRich.Undo;
+  AssertTrue('back', FRich.FindBookmark('bm', s0, e0));
+  // the first row deleted (it holds the start)
+  Sel(CellStart(0, 0), CellEnd(0, 1));
+  FRich.Key(VK_BACK);
+  AssertFalse('a row deleted: no lone mark', Lone);
+  FRich.Undo;
+  // both cells cleared
+  Sel(CellStart(0, 0), CellEnd(1, 1));
+  FRich.Key(VK_DELETE);
+  AssertFalse('all of it cleared: no lone mark', Lone);
 end;
 
 { ---- painting ---- }

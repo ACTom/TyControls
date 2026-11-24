@@ -700,6 +700,14 @@ msgstr ""
 msgid "All files"
 msgstr ""
 
+#: tycontrols.strconsts.rsrichactautofitcolumn
+msgid "Fit Column to &Contents"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactautofitcolumnhint
+msgid "Make the column as wide as its contents"
+msgstr ""
+
 #: tycontrols.strconsts.rsrichactbold
 msgid "&Bold"
 msgstr ""
@@ -715,6 +723,38 @@ msgstr ""
 
 #: tycontrols.strconsts.rsrichactbulletshint
 msgid "Bulleted list"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactcellborders
+msgid "&Borders"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactcellbordershint
+msgid "Set the selected cells' borders"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactcellpadding
+msgid "Cell &Padding"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactcellpaddinghint
+msgid "Set the selected cells' padding"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactcellshading
+msgid "&Shading"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactcellshadinghint
+msgid "Give the selected cells a shading"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactcellvalign
+msgid "Cell &Alignment"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactcellvalignhint
+msgid "Set where the selected cells' content sits"
 msgstr ""
 
 #: tycontrols.strconsts.rsrichactclearformat
@@ -791,6 +831,22 @@ msgstr ""
 msgid "Delete the table"
 msgstr ""
 
+#: tycontrols.strconsts.rsrichactdistributecolumns
+msgid "Distribute &Columns"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactdistributecolumnshint
+msgid "Make the columns equally wide"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactdistributerows
+msgid "Distribute &Rows"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactdistributerowshint
+msgid "Make the rows equally high"
+msgstr ""
+
 #: tycontrols.strconsts.rsrichactfind
 msgid "&Find..."
 msgstr ""
@@ -798,6 +854,14 @@ msgstr ""
 #: tycontrols.strconsts.rsrichactfindhint
 msgctxt "tycontrols.strconsts.rsrichactfindhint"
 msgid "Find"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactfittabletowindow
+msgid "Fit Table to &Window"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactfittabletowindowhint
+msgid "Make the table as wide as the text"
 msgstr ""
 
 #: tycontrols.strconsts.rsrichactfontgrow
@@ -1015,6 +1079,22 @@ msgstr ""
 msgid "Superscript"
 msgstr ""
 
+#: tycontrols.strconsts.rsrichacttablealign
+msgid "Table A&lignment"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichacttablealignhint
+msgid "Align the table"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichacttableproperties
+msgid "Table P&roperties..."
+msgstr ""
+
+#: tycontrols.strconsts.rsrichacttablepropertieshint
+msgid "Change the table's properties"
+msgstr ""
+
 #: tycontrols.strconsts.rsrichacttextcolor
 msgid "Text &Color"
 msgstr ""
@@ -1124,6 +1204,10 @@ msgstr ""
 msgid "This table row holds a nested table and is kept as the file has it: its text cannot be changed."
 msgstr ""
 
+#: tycontrols.strconsts.rsricheditrefusedformatnotwhole
+msgid "This table is too large, or not complete in its file, for all of its rows to be changed."
+msgstr ""
+
 #: tycontrols.strconsts.rsricheditrefusedincomplete
 msgid "The document holds only a part of its file (the load was cancelled): it cannot be changed."
 msgstr ""
@@ -1226,7 +1310,7 @@ msgid "This part of the document cannot be edited."
 msgstr ""
 
 #: tycontrols.strconsts.rsricheditrefusedresizenested
-msgid "This row holds a table inside one of its cells: its columns and its height cannot be changed."
+msgid "This row holds a table inside one of its cells: its cells' widths, its height and its look cannot be changed."
 msgstr ""
 
 #: tycontrols.strconsts.rsricheditrefusedresizenotwhole
@@ -1278,6 +1362,10 @@ msgstr ""
 
 #: tycontrols.strconsts.rsrichundoaddbookmark
 msgid "Add bookmark"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichundocellborders
+msgid "Cell borders"
 msgstr ""
 
 #: tycontrols.strconsts.rsrichundocellprops
@@ -1398,6 +1486,10 @@ msgstr ""
 
 #: tycontrols.strconsts.rsrichundosettings
 msgid "Document settings"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichundotableprops
+msgid "Table properties"
 msgstr ""
 
 #: tycontrols.strconsts.rsrichundotyping

@@ -258,7 +258,10 @@ begin
      TTyRichEditInsertRowAbove, TTyRichEditInsertRowBelow, TTyRichEditInsertColumnLeft,
      TTyRichEditInsertColumnRight, TTyRichEditDeleteRow, TTyRichEditDeleteColumn,
      TTyRichEditDeleteTable, TTyRichEditInsertLink, TTyRichEditRemoveLink,
-     TTyRichEditParagraphSpacing], nil);
+     TTyRichEditParagraphSpacing, TTyRichEditCellShading, TTyRichEditCellBorders,
+     TTyRichEditCellPadding, TTyRichEditCellVAlign, TTyRichEditTableAlign,
+     TTyRichEditTableProperties, TTyRichEditAutoFitColumn, TTyRichEditDistributeColumns,
+     TTyRichEditDistributeRows, TTyRichEditFitTableToWindow], nil);
   { The three sibling units own everything else. }
   RegisterPropertyEditors;
   RegisterComponentEditors;

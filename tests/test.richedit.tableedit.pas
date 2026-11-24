@@ -1039,18 +1039,20 @@ begin
   CheckSel('its cell of the caret''s row', t.ParaStart(f + 4 + 1), 0);
   FRich.Undo;
   AssertEquals('all undone', shape0, Shape(d, f));
-  // a selection inside the table: beside the row and the cell of its caret end
+  { a selection inside the table selects cells (tyControls.RichEdit.TableSel): as many rows as
+    it spans, below its last }
   FRich.SelStart := t.ParaStart(f) + 1;
   FRich.SelLength := t.ParaStart(f + 8) + 2 - FRich.SelStart;
-  AssertTrue('a row below the caret end''s', FRich.InsertRow);
-  AssertEquals('below the last', shape0 + '/||', Shape(d, f));
+  AssertTrue('rows below the selected cells', FRich.InsertRow);
+  AssertEquals('below the last, as many as selected', shape0 + '/||/||/||', Shape(d, f));
   CheckSel('its first cell', t.ParaStart(f + 9), 0);
   FRich.Undo;
   FRich.SelStart := t.ParaStart(f + 8) + 2;
   FRich.SelLength := t.ParaStart(f) + 1 - FRich.SelStart;
   AssertEquals('the caret end at the first cell', t.ParaStart(f) + 1, FRich.CaretIndex);
-  AssertTrue('a column left of the caret end''s cell', FRich.InsertColumn(False));
-  AssertEquals('left of the first', '|r0c0|r0c1|r0c2/|r1c0|r1c1|r1c2/|r2c0|r2c1|r2c2', Shape(d, f));
+  AssertTrue('columns left of the selected cells', FRich.InsertColumn(False));
+  AssertEquals('left of the first, as many as selected', '|||r0c0|r0c1|r0c2/|||r1c0|r1c1|r1c2/|||r2c0|r2c1|r2c2',
+    Shape(d, f));
   CheckSel('the new cell of its row', t.ParaStart(f), 0);
 end;
 
@@ -2214,20 +2216,20 @@ begin
   FRich.SelLength := t.ParaStart(f) - 2;
   Press(VK_TAB);
   CheckSel('Tab from the same cell', t.ParaStart(f + 1), 4);
-  // inside the table, not whole rows: the caret's own cell
+  { inside the table from a cell's inside to the next row's start: the cells of rows 0 and 1
+    (tyControls.RichEdit.TableSel) - as many columns and rows as they span }
   LoadRtf(TableRtf(3, 2, []));
   t := d.Text;
   f := FirstTablePara(d);
   FRich.SelStart := t.ParaStart(f) + 2;
   FRich.SelLength := t.ParaStart(f + 4) - FRich.SelStart;
-  AssertTrue('a column', FRich.InsertColumn);
-  AssertEquals('right of the caret''s cell', 'r0c0||r0c1/r1c0||r1c1/r2c0||r2c1', Shape(d, f));
-  CheckSel('its cell in the caret''s row', t.ParaStart(f + 7), 0);
+  AssertTrue('columns', FRich.InsertColumn);
+  AssertEquals('right of the selected cells', 'r0c0|r0c1||/r1c0|r1c1||/r2c0|r2c1||', Shape(d, f));
   FRich.Undo;
   FRich.SelStart := t.ParaStart(f) + 2;
   FRich.SelLength := t.ParaStart(f + 4) - FRich.SelStart;
-  AssertTrue('a row', FRich.InsertRow);
-  AssertEquals('below the caret''s row', 'r0c0|r0c1/r1c0|r1c1/r2c0|r2c1/|', Shape(d, f));
+  AssertTrue('rows', FRich.InsertRow);
+  AssertEquals('below the selected rows', 'r0c0|r0c1/r1c0|r1c1/|/|/r2c0|r2c1', Shape(d, f));
   FRich.Undo;
   // whole rows down to the next row's start: the caret stands for the last of them
   FRich.SelStart := t.ParaStart(f + 2);

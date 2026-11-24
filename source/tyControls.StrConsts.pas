@@ -306,6 +306,8 @@ resourcestring
   rsRichUndoRowProps     = 'Row properties';
   rsRichUndoColumnWidth  = 'Column width';
   rsRichUndoRowHeight    = 'Row height';
+  rsRichUndoCellBorders  = 'Cell borders';
+  rsRichUndoTableProps   = 'Table properties';
   rsRichUndoInsertPicture = 'Insert picture';
   rsRichUndoResizeObject = 'Resize object';
   rsRichUndoSettings     = 'Document settings';
@@ -379,8 +381,9 @@ resourcestring
   rsRichEditRefusedDeleteNotWhole = 'This table is too large, or not complete in its file, to be deleted as a whole.';
   rsRichEditRefusedSelectNotWhole = 'This table is too large, or not complete in its file, for a whole column or the whole table to be selected.';
   rsRichEditRefusedResizeNotWhole = 'This table is too large, or not complete in its file, for a whole column to be resized.';
-  rsRichEditRefusedResizeNested = 'This row holds a table inside one of its cells: its columns and its height cannot be changed.';
+  rsRichEditRefusedResizeNested = 'This row holds a table inside one of its cells: its cells'' widths, its height and its look cannot be changed.';
   rsRichEditRefusedDistributeMerged = 'This table has merged cells: its columns cannot be made equally wide.';
+  rsRichEditRefusedFormatNotWhole = 'This table is too large, or not complete in its file, for all of its rows to be changed.';
   rsRichEditPasteCellsDropped = 'Some of the pasted cells did not fit in the table''s columns and were left out.';
   rsRichEditRefusedIrregularRows = 'The rows of this table do not all have the same number of cells: its columns cannot be inserted or deleted.';
   rsRichEditRefusedTableSize     = 'A table can have 1 to %d rows and 1 to %d columns.';
@@ -492,6 +495,26 @@ resourcestring
   rsRichActDeleteColumnHint  = 'Delete the column';
   rsRichActDeleteTable       = 'Delete &Table';
   rsRichActDeleteTableHint   = 'Delete the table';
+  rsRichActCellShading = '&Shading';
+  rsRichActCellShadingHint = 'Give the selected cells a shading';
+  rsRichActCellBorders = '&Borders';
+  rsRichActCellBordersHint = 'Set the selected cells'' borders';
+  rsRichActCellPadding = 'Cell &Padding';
+  rsRichActCellPaddingHint = 'Set the selected cells'' padding';
+  rsRichActCellVAlign = 'Cell &Alignment';
+  rsRichActCellVAlignHint = 'Set where the selected cells'' content sits';
+  rsRichActTableAlign = 'Table A&lignment';
+  rsRichActTableAlignHint = 'Align the table';
+  rsRichActTableProperties = 'Table P&roperties...';
+  rsRichActTablePropertiesHint = 'Change the table''s properties';
+  rsRichActAutoFitColumn = 'Fit Column to &Contents';
+  rsRichActAutoFitColumnHint = 'Make the column as wide as its contents';
+  rsRichActDistributeColumns = 'Distribute &Columns';
+  rsRichActDistributeColumnsHint = 'Make the columns equally wide';
+  rsRichActDistributeRows = 'Distribute &Rows';
+  rsRichActDistributeRowsHint = 'Make the rows equally high';
+  rsRichActFitTableToWindow = 'Fit Table to &Window';
+  rsRichActFitTableToWindowHint = 'Make the table as wide as the text';
 
   { --- TTyTerminalView context menu ------------------------------------------
     The terminal's own four-item menu reuses Copy / Paste / Select All above; this is

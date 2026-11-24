@@ -35,7 +35,7 @@ interface
 
 uses
   Classes, SysUtils, Graphics, ImgList, tyControls.RichEdit.Text, tyControls.RichEdit.Model,
-  tyControls.RichEdit.Attrs;
+  tyControls.RichEdit.Attrs, tyControls.RichEdit.RowFormat, tyControls.RichEdit.TableProps;
 
 type
   TTyRichBuilder = class
@@ -56,10 +56,13 @@ type
         Table, Row, Cell: Integer;     // -1: in no table
       end;
       TBCell = record
-        Shading: TColor;               // clNone: none (recorded for the table properties)
+        Shading: TColor;               // clNone: none
+        // the borders, the padding and the alignment given (Props.Valid says which)
+        Props: TTyRichCellProps;
       end;
       TBRow = record
-        HeightPt: Double;              // 0: automatic (recorded for the table properties)
+        HeightPt: Double;              // 0: automatic
+        Exact: Boolean;                // exactly HeightPt, else at least
         Cells: array of TBCell;
         CellCount: Integer;
       end;
@@ -67,6 +70,9 @@ type
         Widths: array of Integer;      // twips; empty: equal columns
         Rows: array of TBRow;
         RowCount: Integer;
+        HasAlign: Boolean;
+        Align: TTyRowAlign;
+        IndentTwips: Integer;
       end;
       TBStyle = record
         Name: string;
@@ -120,6 +126,8 @@ type
     function PictureOfStream(const ACall: string; AStream: TStream;
       AWidthPt, AHeightPt: Double): TTyRichPicture;
     procedure CloseRow(const ACall: string);
+    function OpenCell(const ACall: string): Pointer;
+    procedure TableProperties(ADoc: TTyRichDocument);
     function ColumnEdges(ATable: Integer; ACells: Integer): TTyRichEdges;
   public
     { A builder of its own: the engine's defaults (the theme's font and size, no paragraph
@@ -225,8 +233,20 @@ type
       equal columns over the text width). Its first row is open; Cell opens each cell, Row
       the next row, EndTable ends it. A table inside a cell is not made (raises). }
     function Table(const AColWidthsTwips: array of Integer): TTyRichBuilder;
-    { The next row; AHeightPt (0 automatic) is recorded for the row properties to come. }
-    function Row(AHeightPt: Double = 0): TTyRichBuilder;
+    { The next row: as high as its content (AHeightPt 0), at least AHeightPt points, or exactly
+      (AExact). }
+    function Row(AHeightPt: Double = 0; AExact: Boolean = False): TTyRichBuilder;
+    { The open cell's lines on ASides: AStyle (rbsNone: none), AWidthTwips wide (Word's ½ pt
+      is 10), AColor (clDefault: automatic). }
+    function CellBorders(ASides: TTyRowCellSides; AStyle: TTyRichBorderStyle;
+      AWidthTwips: Integer; AColor: TColor = clDefault): TTyRichBuilder;
+    { The open cell's own padding, twips; -1 leaves a side to the row's (108 left and right, 0
+      above and below: Word's). }
+    function CellPadding(ALeft, ATop, ARight, ABottom: Integer): TTyRichBuilder;
+    { Where the open cell's content sits: at its top, in its middle, at its bottom. }
+    function CellVAlign(AAlign: TTyRowCellVAlign): TTyRichBuilder;
+    { The table's alignment (all its rows) and its start from the margin, twips. }
+    function TableAlign(AAlign: TTyRowAlign; AIndentTwips: Integer = 0): TTyRichBuilder;
     { The next cell of the row: what follows is its content (paragraphs, links, pictures). }
     function Cell: TTyRichBuilder;
     { The table ends; what follows is a paragraph after it (a Paragraph right after EndTable
@@ -268,7 +288,7 @@ type
 implementation
 
 uses
-  Math, LCLType, LCLIntf, Types, tyControls.RichEdit.Commands, tyControls.RichEdit.RowFormat,
+  Math, LCLType, LCLIntf, Types, tyControls.RichEdit.Commands,
   tyControls.RichEdit.Bookmarks, tyControls.RichEdit;
 
 type
@@ -920,7 +940,7 @@ begin
     Misuse(ACall, Format('row %d has no cell', [t^.RowCount - 1]));
 end;
 
-function TTyRichBuilder.Row(AHeightPt: Double): TTyRichBuilder;
+function TTyRichBuilder.Row(AHeightPt: Double; AExact: Boolean): TTyRichBuilder;
 var
   t: ^TBTable;
 begin
@@ -931,8 +951,156 @@ begin
   if t^.RowCount = Length(t^.Rows) then SetLength(t^.Rows, t^.RowCount * 2);
   t^.Rows[t^.RowCount] := Default(TBRow);
   t^.Rows[t^.RowCount].HeightPt := Max(0, AHeightPt);
+  t^.Rows[t^.RowCount].Exact := AExact and (AHeightPt > 0);
   Inc(t^.RowCount);
   FCellOpen := -1;
+end;
+
+{ The open cell's record (a misuse outside a cell names ACall). }
+{ The table properties given put into ADoc's tables through the property commands (what a
+  user's edit makes, the file written as Word writes it), then no undo step kept: the
+  document is as built. }
+procedure TTyRichBuilder.TableProperties(ADoc: TTyRichDocument);
+var
+  first: array of Integer;
+  i, t, r, c: Integer;
+  pos: TTyRichPos;
+  cp: TTyRichCellProps;
+  rp: TTyRichRowProps;
+  any: Boolean;
+
+  procedure Run(ACmd: TTyRichCommand);
+  begin
+    if not ADoc.Execute(ACmd) then
+      raise ETyRichEdit.Create('TTyRichBuilder: a table property could not be set');
+    any := True;
+  end;
+
+begin
+  if FTableCount = 0 then Exit;
+  any := False;
+  first := nil;
+  SetLength(first, FTableCount);
+  for t := 0 to FTableCount - 1 do first[t] := -1;
+  for i := 0 to FParaCount - 1 do
+    if (FParas[i].Table >= 0) and (first[FParas[i].Table] < 0) then first[FParas[i].Table] := i;
+  for t := 0 to FTableCount - 1 do
+  begin
+    if first[t] < 0 then Continue;
+    pos := ADoc.Text.ParaStart(first[t]);
+    for r := 0 to FTables[t].RowCount - 1 do
+    begin
+      if FTables[t].Rows[r].HeightPt > 0 then
+      begin
+        rp := Default(TTyRichRowProps);
+        rp.Valid := [rrpHeight];
+        rp.HeightTwips := Max(1, Round(FTables[t].Rows[r].HeightPt * 20));
+        if FTables[t].Rows[r].Exact then rp.HeightTwips := -rp.HeightTwips;
+        Run(TTyRichSetRowProps.Create(pos, r, r, rp));
+      end;
+      for c := 0 to FTables[t].Rows[r].CellCount - 1 do
+      begin
+        cp := FTables[t].Rows[r].Cells[c].Props;
+        if FTables[t].Rows[r].Cells[c].Shading <> clNone then
+        begin
+          Include(cp.Valid, rcpShading);
+          cp.Shading := FTables[t].Rows[r].Cells[c].Shading;
+        end;
+        if cp.Valid <> [] then Run(TTyRichSetCellProps.Create(pos, r, c, r, c, cp));
+      end;
+    end;
+    if FTables[t].HasAlign then
+    begin
+      rp := Default(TTyRichRowProps);
+      rp.Valid := [rrpAlign];
+      rp.Align := FTables[t].Align;
+      if FTables[t].IndentTwips <> 0 then
+      begin
+        Include(rp.Valid, rrpLeft);
+        rp.LeftTwips := FTables[t].IndentTwips;
+      end;
+      Run(TTyRichSetRowProps.Create(pos, 0, FTables[t].RowCount - 1, rp));
+    end;
+  end;
+  if any then
+  begin
+    ADoc.ClearUndo;
+    ADoc.Modified := False;
+  end;
+end;
+
+function TTyRichBuilder.OpenCell(const ACall: string): Pointer;
+var
+  p: ^TBPara;
+begin
+  p := @FParas[FParaCount - 1];
+  if (FTable < 0) or (FCellOpen < 0) or (p^.Table < 0) then
+    Misuse(ACall, 'no cell: call it after Cell, inside Table .. EndTable');
+  Result := @FTables[p^.Table].Rows[p^.Row].Cells[p^.Cell];
+end;
+
+function TTyRichBuilder.CellBorders(ASides: TTyRowCellSides; AStyle: TTyRichBorderStyle;
+  AWidthTwips: Integer; AColor: TColor): TTyRichBuilder;
+const
+  CProp: array[TTyRowCellSide] of TTyRichCellProp = (rcpBorderLeft, rcpBorderTop,
+    rcpBorderRight, rcpBorderBottom);
+var
+  c: ^TBCell;
+  sd: TTyRowCellSide;
+begin
+  Result := Self;
+  c := OpenCell('CellBorders');
+  if AWidthTwips < 0 then Misuse('CellBorders', 'a width is 0 or more');
+  for sd := Low(TTyRowCellSide) to High(TTyRowCellSide) do
+    if sd in ASides then
+    begin
+      Include(c^.Props.Valid, CProp[sd]);
+      if AStyle = rbsNone then c^.Props.Borders[sd] := TyRichBorder(rbsNone, 0)
+      else c^.Props.Borders[sd] := TyRichBorder(AStyle, AWidthTwips, AColor);
+    end;
+  FTouched := True;
+end;
+
+function TTyRichBuilder.CellPadding(ALeft, ATop, ARight, ABottom: Integer): TTyRichBuilder;
+var
+  c: ^TBCell;
+
+  procedure One(ASide: TTyRowCellSide; AProp: TTyRichCellProp; AValue: Integer);
+  begin
+    if AValue < 0 then Exit;
+    Include(c^.Props.Valid, AProp);
+    c^.Props.Pad[ASide] := AValue;
+  end;
+
+begin
+  Result := Self;
+  c := OpenCell('CellPadding');
+  One(rcsLeft, rcpPadLeft, ALeft);
+  One(rcsTop, rcpPadTop, ATop);
+  One(rcsRight, rcpPadRight, ARight);
+  One(rcsBottom, rcpPadBottom, ABottom);
+  FTouched := True;
+end;
+
+function TTyRichBuilder.CellVAlign(AAlign: TTyRowCellVAlign): TTyRichBuilder;
+var
+  c: ^TBCell;
+begin
+  Result := Self;
+  c := OpenCell('CellVAlign');
+  Include(c^.Props.Valid, rcpVAlign);
+  c^.Props.VAlign := AAlign;
+  FTouched := True;
+end;
+
+function TTyRichBuilder.TableAlign(AAlign: TTyRowAlign; AIndentTwips: Integer): TTyRichBuilder;
+begin
+  Result := Self;
+  if FTable < 0 then Misuse('TableAlign', 'no table: call it inside Table .. EndTable');
+  FTables[FTable].HasAlign := True;
+  FTables[FTable].Align := AAlign;
+  FTables[FTable].IndentTwips := AIndentTwips;
+  FTouched := True;
 end;
 
 function TTyRichBuilder.Cell: TTyRichBuilder;
@@ -959,6 +1127,7 @@ begin
     FCurPara := FDefaultPara;
   end;
   if r^.CellCount = Length(r^.Cells) then SetLength(r^.Cells, r^.CellCount * 2 + 2);
+  r^.Cells[r^.CellCount] := Default(TBCell);
   r^.Cells[r^.CellCount].Shading := clNone;
   p := @FParas[FParaCount - 1];
   p^.Table := FTable;
@@ -1124,13 +1293,10 @@ begin
     SetLength(paraMap, FPool.ParaCount);
     for i := 0 to High(paraMap) do paraMap[i] := -1;
     { The tables: rows of the cells built, the columns as given (or equal over the text
-      width), each row in the engine's grid format (single lines, Word's half gap).
-      >>> THE TABLE PROPERTIES' PLACE: once the table property commands are there
-      (TTyRichSetCellProps, TTyRichSetRowProps of tyControls.RichEdit.TableProps), what the
-      builder recorded and does not show yet goes into the table here - a cell's shading
-      (FTables[t].Rows[r].Cells[c].Shading), a row's height (Rows[r].HeightPt); borders,
-      padding and vertical alignment when the builder takes them. Until then the widths
-      are the one property applied (they are the rows' own cell edges). <<< }
+      width), each row in the engine's grid format (single ½-point lines, automatic colour,
+      Word's half gap: 108 twips left and right, none above and below - Word's new table).
+      What was given of their cells and rows - shading, borders, padding, alignment, heights,
+      the table's alignment - goes in once the paragraphs are set (TableProperties). }
     tables := nil;
     SetLength(tables, FTableCount);
     for i := 0 to FTableCount - 1 do
@@ -1177,6 +1343,7 @@ begin
       if p^.Table >= 0 then bcell := tables[p^.Table].Rows[p^.Row].Cells[p^.Cell] else bcell := nil;
       TBuilderAccess.SetParagraph(Result, i, paraMap[last], runs, bcell);
     end;
+    TableProperties(Result);
   except
     Result.Free;
     raise;

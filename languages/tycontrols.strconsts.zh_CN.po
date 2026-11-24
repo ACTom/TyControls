@@ -894,6 +894,14 @@ msgstr "列宽"
 msgid "Row height"
 msgstr "行高"
 
+#: tycontrols.strconsts.rsrichundocellborders
+msgid "Cell borders"
+msgstr "单元格边框"
+
+#: tycontrols.strconsts.rsrichundotableprops
+msgid "Table properties"
+msgstr "表格属性"
+
 #: tycontrols.strconsts.rsrichundoinsertpicture
 msgid "Insert picture"
 msgstr "插入图片"
@@ -1108,12 +1116,16 @@ msgid "This table is too large, or not complete in its file, for a whole column 
 msgstr "这个表格太大，或者在文件里不完整，不能调整整列的宽度。"
 
 #: tycontrols.strconsts.rsricheditrefusedresizenested
-msgid "This row holds a table inside one of its cells: its columns and its height cannot be changed."
-msgstr "这一行的单元格里有表格：不能改它的列宽和行高。"
+msgid "This row holds a table inside one of its cells: its cells' widths, its height and its look cannot be changed."
+msgstr "这一行的单元格里有表格：不能改它的列宽、行高和格式。"
 
 #: tycontrols.strconsts.rsricheditrefuseddistributemerged
 msgid "This table has merged cells: its columns cannot be made equally wide."
 msgstr "这个表格有合并的单元格：不能把各列调成一样宽。"
+
+#: tycontrols.strconsts.rsricheditrefusedformatnotwhole
+msgid "This table is too large, or not complete in its file, for all of its rows to be changed."
+msgstr "这个表格太大，或者在文件里不完整，不能修改它的所有行。"
 
 #: tycontrols.strconsts.rsricheditpastecellsdropped
 msgid "Some of the pasted cells did not fit in the table's columns and were left out."
@@ -1531,6 +1543,86 @@ msgstr "删除表格(&T)"
 #: tycontrols.strconsts.rsrichactdeletetablehint
 msgid "Delete the table"
 msgstr "删除整个表格"
+
+#: tycontrols.strconsts.rsrichactcellshading
+msgid "&Shading"
+msgstr "底色(&S)"
+
+#: tycontrols.strconsts.rsrichactcellshadinghint
+msgid "Give the selected cells a shading"
+msgstr "给选中的单元格设底色"
+
+#: tycontrols.strconsts.rsrichactcellborders
+msgid "&Borders"
+msgstr "边框(&B)"
+
+#: tycontrols.strconsts.rsrichactcellbordershint
+msgid "Set the selected cells' borders"
+msgstr "设置选中单元格的边框"
+
+#: tycontrols.strconsts.rsrichactcellpadding
+msgid "Cell &Padding"
+msgstr "单元格内边距(&P)"
+
+#: tycontrols.strconsts.rsrichactcellpaddinghint
+msgid "Set the selected cells' padding"
+msgstr "设置选中单元格的内边距"
+
+#: tycontrols.strconsts.rsrichactcellvalign
+msgid "Cell &Alignment"
+msgstr "单元格对齐(&A)"
+
+#: tycontrols.strconsts.rsrichactcellvalignhint
+msgid "Set where the selected cells' content sits"
+msgstr "设置选中单元格内容的垂直位置"
+
+#: tycontrols.strconsts.rsrichacttablealign
+msgid "Table A&lignment"
+msgstr "表格对齐(&L)"
+
+#: tycontrols.strconsts.rsrichacttablealignhint
+msgid "Align the table"
+msgstr "设置表格的对齐方式"
+
+#: tycontrols.strconsts.rsrichacttableproperties
+msgid "Table P&roperties..."
+msgstr "表格属性(&R)..."
+
+#: tycontrols.strconsts.rsrichacttablepropertieshint
+msgid "Change the table's properties"
+msgstr "修改表格属性"
+
+#: tycontrols.strconsts.rsrichactautofitcolumn
+msgid "Fit Column to &Contents"
+msgstr "列宽适应内容(&C)"
+
+#: tycontrols.strconsts.rsrichactautofitcolumnhint
+msgid "Make the column as wide as its contents"
+msgstr "让这一列和内容一样宽"
+
+#: tycontrols.strconsts.rsrichactdistributecolumns
+msgid "Distribute &Columns"
+msgstr "平均分布各列(&C)"
+
+#: tycontrols.strconsts.rsrichactdistributecolumnshint
+msgid "Make the columns equally wide"
+msgstr "让各列一样宽"
+
+#: tycontrols.strconsts.rsrichactdistributerows
+msgid "Distribute &Rows"
+msgstr "平均分布各行(&R)"
+
+#: tycontrols.strconsts.rsrichactdistributerowshint
+msgid "Make the rows equally high"
+msgstr "让各行一样高"
+
+#: tycontrols.strconsts.rsrichactfittabletowindow
+msgid "Fit Table to &Window"
+msgstr "表格适应窗口(&W)"
+
+#: tycontrols.strconsts.rsrichactfittabletowindowhint
+msgid "Make the table as wide as the text"
+msgstr "让表格和正文一样宽"
 
 #: tycontrols.strconsts.rstoolbarmorecommands
 msgid "More commands"

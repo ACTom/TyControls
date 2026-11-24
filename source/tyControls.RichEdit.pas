@@ -77,7 +77,8 @@ uses
   tyControls.RichEdit.Text, tyControls.RichEdit.Model, tyControls.RichEdit.Commands,
   tyControls.RichEdit.TextIO, tyControls.RichEdit.RtfRead, tyControls.RichEdit.RtfWrite,
   tyControls.RichEdit.Layout, tyControls.RichEdit.Attrs, tyControls.RichEdit.Find,
-  tyControls.RichEdit.Bookmarks, tyControls.RichEdit.Builder, tyControls.RichEdit.TableSel;
+  tyControls.RichEdit.Bookmarks, tyControls.RichEdit.Builder, tyControls.RichEdit.TableSel,
+  tyControls.RichEdit.RowFormat, tyControls.RichEdit.TableProps;
 
 const
   CRichZoomMin = 10;
@@ -604,6 +605,31 @@ type
     Hidden: Boolean;
   end;
   TTyRichColumnEdges = array of TTyRichColumnEdge;
+
+  { What the table properties set (TTyCustomRichEdit.ApplyTableProperties; the table
+    properties action asks an application's form for it): the fields Valid names. RowHeight
+    twips (0: as high as its content), RowExact; ColumnWidth twips; Align and Indent (twips
+    from the margin) the table's; Pad twips (-1: a side as it is); VAlign; Shading (clNone:
+    none). }
+  TTyRichTablePropField = (tpfRowHeight, tpfColumnWidth, tpfAlign, tpfPadding, tpfVAlign,
+    tpfShading);
+  TTyRichTableProperties = record
+    Valid: set of TTyRichTablePropField;
+    RowHeight: Integer;
+    RowExact: Boolean;
+    ColumnWidth: Integer;
+    Align: TTyRowAlign;
+    Indent: Integer;
+    Pad: array[TTyRowCellSide] of Integer;
+    VAlign: TTyRowCellVAlign;
+    Shading: TColor;
+  end;
+
+  { Which lines of the selected cells a border preset sets (SetCellBorders): every side, the
+    rectangle's outline, its inside lines, none, one outer side, the inside horizontal or
+    vertical lines. }
+  TTyRichBorderPreset = (rbpAll, rbpOutside, rbpInside, rbpNone, rbpTop, rbpBottom, rbpLeft,
+    rbpRight, rbpInsideH, rbpInsideV);
 
   { The editor. ITyTextEditActions: the package's text menu (the editing items answer "not
     available" while ReadOnly). ITyImeEditable: Cocoa's input method bridge (a composition
@@ -1659,6 +1685,7 @@ type
       as it is now, FAim... set for TableEditCaret; nil and told when the table or the place
       refuses it. }
     function MakeTableEdit(var APlace: TTyRichEditPlace): TTyRichCommand;
+    function MakeTableEditThen(var APlace: TTyRichEditPlace): TTyRichCommand;
     { Where the table action that just ran leaves the caret (FAim...), in the text as it is
       now. }
     function TableEditCaret: TTyRichPos;
@@ -1873,6 +1900,8 @@ type
     FEdgePara, FEdgeIndex, FEdgeTwips: Integer;
     FEdgeRaster, FEdgeLo, FEdgeHi, FEdgeShiftLo, FEdgeShiftHi, FEdgeNow, FEdgeTop: Int64;
     FEdgeShift: Boolean;
+    // a command to run after the table edit, in its step (CellsKey: a deleted row's lone marks)
+    FTableThen: TTyRichDropLoneMarks;
     FGuideRowOn: Boolean;
     FGuideY: Integer;
     function EdgeBand: Integer;
@@ -1898,7 +1927,13 @@ type
     function WidestRun(APara: Integer): Integer;
     function FitColumnAt(APara, ACell: Integer): Boolean;
     function CaretEdgePara(out APara, ACell: Integer; ATell: Boolean): Boolean;
+    function CellTarget(out ATablePos: TTyRichPos; out ARow0, ACol0, ARow1, ACol1: Integer;
+      ATell: Boolean): Boolean;
+    function RunCellProps(ACmd: TTyRichCommand): Boolean;
+    function EdgeRowsWhole(APara: Integer; out ATablePos: TTyRichPos;
+      out ARow0, ARow1: Integer): Boolean;
     function UserTableDoorOpen: Boolean;
+    function CaretParaRead: Boolean;
   private
     { Cell selection (tyControls.RichEdit.TableSel): the cells the selection covers, kept
       for the anchor, the caret and the document's state they were read for; the rows a
@@ -2811,6 +2846,23 @@ type
     function MoveCaretRowEdge(AIndex, AOffsetTwips: Integer; AShiftRest: Boolean): Boolean;
     // a drag of a table's edge is under way
     function EdgeDragging: Boolean;
+    { Cell formats - the selected cells (both ends of the selection in one table), else the
+      caret's cell: the shading (clNone: none); borders by a preset, each line set to ABorder
+      (rbpNone: none); the padding of each side, twips (-1: as it is); where the content sits.
+      The table's alignment and its start (AIndentTwips, Word's indent from the margin) for all
+      its rows. One undo step each; ReadOnly does nothing; a refusal is told once (a row that
+      holds a nested table, a table a reader gives in parts for the alignment). CanFormatCells:
+      may run now. }
+    function SetCellShading(AColor: TColor): Boolean;
+    function SetCellBorders(APreset: TTyRichBorderPreset; const ABorder: TTyRichBorder): Boolean;
+    function SetCellPadding(ALeft, ATop, ARight, ABottom: Integer): Boolean;
+    function SetCellVAlign(AAlign: TTyRowCellVAlign): Boolean;
+    function SetTableAlign(AAlign: TTyRowAlign; AIndentTwips: Integer = 0): Boolean;
+    function CanFormatCells: Boolean;
+    { The table properties AProps names (Valid) as one undo step - the selected cells' (else the
+      caret cell's) padding, alignment and shading, their rows' height, the caret cell's column
+      width (the columns right of it shift), the table's alignment and indent. }
+    function ApplyTableProperties(const AProps: TTyRichTableProperties): Boolean;
     // the row guide's client y, -1 none (what a test reads)
     property GuideRow: Integer read FGuideY;
     { Pictures: the user's actions for a toolbar, a menu or an action, as the table actions
@@ -3757,7 +3809,6 @@ uses
   {$IFDEF UNIX}BaseUnix,{$ENDIF}
   RTLConsts, Clipbrd, InterfaceBase, LazUTF8, FPImage, BGRAReadPng, BGRAReadBMP, BGRAReadTiff,
   BGRAReadJpeg, BGRAWritePNG, tyControls.StrConsts, tyControls.FontUnits,
-  tyControls.RichEdit.RowFormat, tyControls.RichEdit.TableProps,
   tyControls.PlatformWS, tyControls.Animation
   {$IFDEF LCLCocoa}, tyControls.CocoaWS{$ENDIF}
   {$IFDEF LCLWin32}, tyControls.RichEdit.OleDrop{$ENDIF};
@@ -11649,7 +11700,22 @@ begin
     Exit;
   end;
   FTableKind := AKind;
-  Result := RunUserEdit(@MakeTableEdit);
+  Result := RunUserEdit(@MakeTableEditThen);
+end;
+
+{ MakeTableEdit's command, and after it in the same step what FTableThen holds (taken over:
+  the lone marks of the rows it deletes). }
+function TTyCustomRichEdit.MakeTableEditThen(var APlace: TTyRichEditPlace): TTyRichCommand;
+var
+  comp: TTyRichCompositeCommand;
+begin
+  Result := MakeTableEdit(APlace);
+  if (Result = nil) or (FTableThen = nil) or (FTableThen.Count = 0) then Exit;
+  comp := TTyRichCompositeCommand.Create(Result.Description);
+  comp.Add(Result);
+  comp.Add(FTableThen);
+  FTableThen := nil;
+  Result := comp;
 end;
 
 function TTyCustomRichEdit.MakeTableEdit(var APlace: TTyRichEditPlace): TTyRichCommand;
@@ -11663,6 +11729,7 @@ var
   reason: string;
   comp: TTyRichCompositeCommand;
   row: TTyRichRow;
+  area: TTyRichCellArea;
 
   // the row of table paragraph AP, counted from the caret's row (rows never cross objects)
   function RowOf(AP: Integer): Integer;
@@ -11771,16 +11838,51 @@ begin
         while (p2 < t.ParaCount - 1) and (FDoc.CellAt(p2 + 1) <> nil) and
           (FDoc.CellAt(p2 + 1).Row = row) do
           Inc(p2);
+        { Cells selected in this table: as many rows as they span, above the first or below
+          the last (Word's way) }
+        n := 1;
+        if FTableKind = CTableInsertRow then
+        begin
+          area := CellArea;
+          if TyRichCellsEditable(area) and (area.Table = row.Table) then
+          begin
+            n := area.Range.Row1 - area.Range.Row0 + 1;
+            if FTableAfter then k := area.LastPara else k := area.FirstPara;
+            pos := t.ParaStart(k);
+            row := FDoc.CellAt(k).Row;
+            p1 := k;
+            while (p1 > 0) and (FDoc.CellAt(p1 - 1) <> nil) and (FDoc.CellAt(p1 - 1).Row = row) do
+              Dec(p1);
+            p2 := k;
+            while (p2 < t.ParaCount - 1) and (FDoc.CellAt(p2 + 1) <> nil) and
+              (FDoc.CellAt(p2 + 1).Row = row) do
+              Inc(p2);
+          end;
+        end;
         // (Tab's row: below the caret's row, the last of the table a person sees)
         if (FTableKind = CTableTabRow) or FTableAfter then
         begin
           FAimPara := p2 + 1;
           Result := TTyRichInsertRow.Create(pos, CRichRowBelow);
+          if n > 1 then
+          begin
+            comp := TTyRichCompositeCommand.Create(rsRichUndoInsertRow);
+            comp.Add(Result);
+            for m := 2 to n do comp.Add(TTyRichInsertRow.Create(pos, CRichRowBelow));
+            Result := comp;
+          end;
         end
         else
         begin
           FAimPara := p1;
           Result := TTyRichInsertRow.Create(pos, CRichRowAbove);
+          if n > 1 then
+          begin
+            comp := TTyRichCompositeCommand.Create(rsRichUndoInsertRow);
+            comp.Add(Result);
+            for m := 2 to n do comp.Add(TTyRichInsertRow.Create(pos, CRichRowAbove));
+            Result := comp;
+          end;
         end;
       end;
     finally
@@ -11802,7 +11904,23 @@ begin
           FAimPara := info.First;
           FAimRow := info.Row;
           FAimCell := info.Cell + Ord(FTableAfter);
+          // cells selected in this table: as many columns as they span, left of the first or
+          // right of the last
+          n := 1;
+          area := CellArea;
+          if TyRichCellsEditable(area) and (area.Table = FDoc.CellAt(k).Table) then
+          begin
+            n := area.Range.Col1 - area.Range.Col0 + 1;
+            if FTableAfter then FAimCell := area.Range.Col1 + 1 else FAimCell := area.Range.Col0;
+          end;
           Result := TTyRichInsertColumn.Create(pos, FAimCell);
+          if n > 1 then
+          begin
+            comp := TTyRichCompositeCommand.Create(rsRichUndoInsertColumn);
+            comp.Add(Result);
+            for m := 2 to n do comp.Add(TTyRichInsertColumn.Create(pos, FAimCell));
+            Result := comp;
+          end;
         end;
       CTableDeleteTable:
         begin
@@ -21006,14 +21124,16 @@ begin
   if FReadOnly or not IsEnabled then Exit;
   if not AForward then
   begin
-    if area.Range.WholeTable then
+    { The rows go - and a bookmark one of whose marks goes with them loses its other mark too,
+      in the same step: no lone mark is left. }
+    if area.Range.WholeTable or TyRichAreaWholeRows(FDoc, area) then
     begin
-      DeleteTable;
-      Exit;
-    end;
-    if TyRichAreaWholeRows(FDoc, area) then
-    begin
-      DeleteRow;
+      FTableThen := TyRichLoneMarksOutside(FDoc, area.FirstPara, area.LastPara);
+      try
+        if area.Range.WholeTable then DeleteTable else DeleteRow;
+      finally
+        FreeAndNil(FTableThen);
+      end;
       Exit;
     end;
   end;
@@ -22170,18 +22290,30 @@ begin
   Result := True;
 end;
 
+{ The caret's paragraph is read already (a file read on demand gives its paragraphs only when
+  asked): what the Can... queries of the table formats go by - nothing is read just to
+  answer them (an action's update after Select All in 100 MB). }
+function TTyCustomRichEdit.CaretParaRead: Boolean;
+var
+  k: Integer;
+begin
+  k := CaretCellPara;
+  Result := (FDoc.Loader = nil) or (k < 0) or (k >= FDoc.Text.ParaCount) or
+    (FDoc.Text.ParaData[k] <> nil);
+end;
+
 function TTyCustomRichEdit.CanResizeColumns: Boolean;
 var
   p, c: Integer;
 begin
-  Result := TableActionsOpen and CaretEdgePara(p, c, False);
+  Result := TableActionsOpen and CaretParaRead and CaretEdgePara(p, c, False);
 end;
 
 function TTyCustomRichEdit.CanResizeRows: Boolean;
 var
   p, c: Integer;
 begin
-  Result := TableActionsOpen and CaretEdgePara(p, c, False);
+  Result := TableActionsOpen and CaretParaRead and CaretEdgePara(p, c, False);
 end;
 
 function TTyCustomRichEdit.UserTableDoorOpen: Boolean;
@@ -22420,6 +22552,379 @@ begin
         e[i].Twips + (v - e[i].Offset), r0, r1, AShiftRest));
       Exit;
     end;
+end;
+
+{ ---- cell formats: shading, borders, padding, alignment ---- }
+
+{ The cells a format door changes: the selected cells (both ends of the selection in one
+  table), else the caret's cell. False (told once, ATell) in no table or in a row that holds a
+  nested table. }
+function TTyCustomRichEdit.CellTarget(out ATablePos: TTyRichPos; out ARow0, ACol0, ARow1,
+  ACol1: Integer; ATell: Boolean): Boolean;
+var
+  area: TTyRichCellArea;
+  p, c: Integer;
+begin
+  Result := False;
+  ATablePos := -1;
+  ARow0 := 0;
+  ACol0 := 0;
+  ARow1 := -1;
+  ACol1 := -1;
+  area := CellArea;
+  if TyRichCellsEditable(area) then
+  begin
+    ATablePos := area.Range.TablePos;
+    ARow0 := area.Range.Row0;
+    ARow1 := area.Range.Row1;
+    ACol0 := area.Range.Col0;
+    ACol1 := area.Range.Col1;
+    Exit(True);
+  end;
+  if not CaretEdgePara(p, c, ATell) then Exit;
+  if not CaretCell(ATablePos, ARow0, ACol0) then Exit;
+  ARow1 := ARow0;
+  ACol1 := ACol0;
+  Result := True;
+end;
+
+function TTyCustomRichEdit.CanFormatCells: Boolean;
+var
+  pos: TTyRichPos;
+  r0, c0, r1, c1: Integer;
+begin
+  Result := TableActionsOpen and CaretParaRead and CellTarget(pos, r0, c0, r1, c1, False);
+end;
+
+function TTyCustomRichEdit.RunCellProps(ACmd: TTyRichCommand): Boolean;
+var
+  place: TTyRichEditPlace;
+  keep: Boolean;
+begin
+  Result := False;
+  if FReadOnly or not IsEnabled or ViewBehind then
+  begin
+    ACmd.Free;
+    Exit;
+  end;
+  place := Default(TTyRichEditPlace);
+  place.Anchor := CRichPlaceStays;
+  place.Caret := CRichPlaceStays;
+  keep := FNoEditScroll;
+  FNoEditScroll := True;
+  try
+    Result := RunMade(ACmd, place, True);
+  finally
+    FNoEditScroll := keep;
+  end;
+end;
+
+function TTyCustomRichEdit.SetCellShading(AColor: TColor): Boolean;
+var
+  pos: TTyRichPos;
+  r0, c0, r1, c1: Integer;
+  p: TTyRichCellProps;
+begin
+  Result := False;
+  if not UserTableDoorOpen then Exit;
+  if not CellTarget(pos, r0, c0, r1, c1, True) then Exit;
+  p := Default(TTyRichCellProps);
+  p.Valid := [rcpShading];
+  p.Shading := AColor;
+  Result := RunCellProps(TTyRichSetCellProps.Create(pos, r0, c0, r1, c1, p));
+end;
+
+function TTyCustomRichEdit.SetCellBorders(APreset: TTyRichBorderPreset;
+  const ABorder: TTyRichBorder): Boolean;
+const
+  CProp: array[TTyRichCellSide] of TTyRichCellProp = (rcpBorderLeft, rcpBorderTop,
+    rcpBorderRight, rcpBorderBottom);
+var
+  pos: TTyRichPos;
+  r0, c0, r1, c1: Integer;
+  comp: TTyRichCompositeCommand;
+  b: TTyRichBorder;
+
+  // ASides of rows AR0..AR1, cells AC0..AC1 get the border
+  procedure Part(AR0, AC0, AR1, AC1: Integer; ASides: TTyRowCellSides);
+  var
+    p: TTyRichCellProps;
+    sd: TTyRichCellSide;
+  begin
+    if (AR1 < AR0) or (AC1 < AC0) or (ASides = []) then Exit;
+    p := Default(TTyRichCellProps);
+    for sd := Low(TTyRichCellSide) to High(TTyRichCellSide) do
+      if sd in ASides then
+      begin
+        Include(p.Valid, CProp[sd]);
+        p.Borders[sd] := b;
+      end;
+    comp.Add(TTyRichSetCellProps.Create(pos, AR0, AC0, AR1, AC1, p));
+  end;
+
+  procedure InsideH;
+  begin
+    Part(r0, c0, r1 - 1, c1, [rcsBottom]);
+    Part(r0 + 1, c0, r1, c1, [rcsTop]);
+  end;
+
+  procedure InsideV;
+  begin
+    Part(r0, c0, r1, c1 - 1, [rcsRight]);
+    Part(r0, c0 + 1, r1, c1, [rcsLeft]);
+  end;
+
+begin
+  Result := False;
+  if not UserTableDoorOpen then Exit;
+  if not CellTarget(pos, r0, c0, r1, c1, True) then Exit;
+  b := ABorder;
+  if APreset = rbpNone then b := TyRichBorder(rbsNone, 0);
+  if b.Style = rbsNone then
+  begin
+    b.WidthTwips := 0;
+    b.Color := clDefault;
+  end;
+  comp := TTyRichCompositeCommand.Create(rsRichUndoCellBorders);
+  try
+    case APreset of
+      rbpAll, rbpNone: Part(r0, c0, r1, c1, [rcsLeft, rcsTop, rcsRight, rcsBottom]);
+      rbpOutside:
+        begin
+          Part(r0, c0, r0, c1, [rcsTop]);
+          Part(r1, c0, r1, c1, [rcsBottom]);
+          Part(r0, c0, r1, c0, [rcsLeft]);
+          Part(r0, c1, r1, c1, [rcsRight]);
+        end;
+      rbpInside:
+        begin
+          InsideH;
+          InsideV;
+        end;
+      rbpTop: Part(r0, c0, r0, c1, [rcsTop]);
+      rbpBottom: Part(r1, c0, r1, c1, [rcsBottom]);
+      rbpLeft: Part(r0, c0, r1, c0, [rcsLeft]);
+      rbpRight: Part(r0, c1, r1, c1, [rcsRight]);
+      rbpInsideH: InsideH;
+      rbpInsideV: InsideV;
+    end;
+  except
+    comp.Free;
+    raise;
+  end;
+  // (inside lines of one cell: there are none - nothing to do)
+  if comp.Count = 0 then
+  begin
+    comp.Free;
+    Exit(True);
+  end;
+  Result := RunCellProps(comp);
+end;
+
+function TTyCustomRichEdit.SetCellPadding(ALeft, ATop, ARight, ABottom: Integer): Boolean;
+var
+  pos: TTyRichPos;
+  r0, c0, r1, c1: Integer;
+  p: TTyRichCellProps;
+begin
+  Result := False;
+  if not UserTableDoorOpen then Exit;
+  if not CellTarget(pos, r0, c0, r1, c1, True) then Exit;
+  p := Default(TTyRichCellProps);
+  if ALeft >= 0 then
+  begin
+    Include(p.Valid, rcpPadLeft);
+    p.Pad[rcsLeft] := ALeft;
+  end;
+  if ATop >= 0 then
+  begin
+    Include(p.Valid, rcpPadTop);
+    p.Pad[rcsTop] := ATop;
+  end;
+  if ARight >= 0 then
+  begin
+    Include(p.Valid, rcpPadRight);
+    p.Pad[rcsRight] := ARight;
+  end;
+  if ABottom >= 0 then
+  begin
+    Include(p.Valid, rcpPadBottom);
+    p.Pad[rcsBottom] := ABottom;
+  end;
+  if p.Valid = [] then Exit(True);
+  Result := RunCellProps(TTyRichSetCellProps.Create(pos, r0, c0, r1, c1, p));
+end;
+
+function TTyCustomRichEdit.SetCellVAlign(AAlign: TTyRowCellVAlign): Boolean;
+var
+  pos: TTyRichPos;
+  r0, c0, r1, c1: Integer;
+  p: TTyRichCellProps;
+begin
+  Result := False;
+  if not UserTableDoorOpen then Exit;
+  if not CellTarget(pos, r0, c0, r1, c1, True) then Exit;
+  p := Default(TTyRichCellProps);
+  p.Valid := [rcpVAlign];
+  p.VAlign := AAlign;
+  Result := RunCellProps(TTyRichSetCellProps.Create(pos, r0, c0, r1, c1, p));
+end;
+
+{ Every row of the caret's table: aligned left, centred or right, AIndentTwips its start
+  (Word's indent from the margin; only when it is another than the first row's: a table with
+  merged cells keeps its start). }
+function TTyCustomRichEdit.SetTableAlign(AAlign: TTyRowAlign; AIndentTwips: Integer): Boolean;
+var
+  p, c, r0, r1: Integer;
+  pos: TTyRichPos;
+  rp: TTyRichRowProps;
+  lft: Integer;
+begin
+  Result := False;
+  if not UserTableDoorOpen then Exit;
+  if not CaretEdgePara(p, c, True) then Exit;
+  // the whole table: never only the selected rows
+  FDoc.BeginRead;
+  try
+    lft := FDoc.CellAt(p).Row.Format.Row.LeftTwips;
+  finally
+    FDoc.EndRead;
+  end;
+  if not EdgeRowsWhole(p, pos, r0, r1) then Exit;
+  rp := Default(TTyRichRowProps);
+  rp.Valid := [rrpAlign];
+  rp.Align := AAlign;
+  if AIndentTwips <> lft then
+  begin
+    Include(rp.Valid, rrpLeft);
+    rp.LeftTwips := AIndentTwips;
+  end;
+  Result := RunCellProps(TTyRichSetRowProps.Create(pos, r0, r1, rp));
+end;
+
+{ Every row of the table paragraph APara is in (refused and told for a table a reader gives in
+  parts). }
+function TTyCustomRichEdit.EdgeRowsWhole(APara: Integer; out ATablePos: TTyRichPos;
+  out ARow0, ARow1: Integer): Boolean;
+var
+  c: TTyRichCell;
+  cut: Boolean;
+  ri, n: Integer;
+begin
+  Result := False;
+  ATablePos := FDoc.Text.ParaStart(APara);
+  ARow0 := 0;
+  ARow1 := -1;
+  FDoc.BeginRead;
+  try
+    c := FDoc.CellAt(APara);
+    if c = nil then Exit;
+    cut := c.Table.Cut;
+  finally
+    FDoc.EndRead;
+  end;
+  if cut then
+  begin
+    EditRefused(rsRichEditRefusedFormatNotWhole);
+    Exit;
+  end;
+  if not FDoc.TableRowIndex(APara, ri, n) then Exit;
+  ARow1 := n - 1;
+  Result := True;
+end;
+
+{ The table properties as one step: the row height of the selected rows (else the caret's), the
+  caret cell's column width (the columns right of it shifting), the table's alignment, the
+  selected cells' padding, alignment and shading. }
+function TTyCustomRichEdit.ApplyTableProperties(const AProps: TTyRichTableProperties): Boolean;
+var
+  comp: TTyRichCompositeCommand;
+  p, c, r0, c0, r1, c1, wr0, wr1, lft: Integer;
+  pos, wpos: TTyRichPos;
+  rp: TTyRichRowProps;
+  cp: TTyRichCellProps;
+  row: TTyRichRow;
+  edges: TTyRichEdges;
+  w: Integer;
+begin
+  Result := False;
+  if not UserTableDoorOpen then Exit;
+  if not CellTarget(pos, r0, c0, r1, c1, True) then Exit;
+  if not CaretEdgePara(p, c, True) then Exit;
+  comp := TTyRichCompositeCommand.Create(rsRichUndoTableProps);
+  try
+    if tpfRowHeight in AProps.Valid then
+    begin
+      rp := Default(TTyRichRowProps);
+      rp.Valid := [rrpHeight];
+      if AProps.RowExact and (AProps.RowHeight > 0) then rp.HeightTwips := -AProps.RowHeight
+      else rp.HeightTwips := Math.Max(0, AProps.RowHeight);
+      comp.Add(TTyRichSetRowHeight.Create(pos, r0, r1, rp));
+    end;
+    if (tpfColumnWidth in AProps.Valid) and (AProps.ColumnWidth > 0) then
+    begin
+      if not EdgeRows(p, True, wpos, wr0, wr1) then Exit;
+      FDoc.BeginRead;
+      try
+        row := FDoc.CellAt(p).Row;
+        edges := row.CellEdges;
+        if c = 0 then lft := row.Format.Row.LeftTwips else lft := edges[c - 1];
+        w := Math.Max(AProps.ColumnWidth, MinCellTwips(row, c));
+      finally
+        FDoc.EndRead;
+      end;
+      if lft + w <> edges[c] then
+        comp.Add(TTyRichSetColumnEdge.Create(wpos, edges[c], lft + w, wr0, wr1, True));
+    end;
+    if tpfAlign in AProps.Valid then
+    begin
+      if not EdgeRowsWhole(p, wpos, wr0, wr1) then Exit;
+      rp := Default(TTyRichRowProps);
+      rp.Valid := [rrpAlign];
+      rp.Align := AProps.Align;
+      FDoc.BeginRead;
+      try
+        lft := FDoc.CellAt(p).Row.Format.Row.LeftTwips;
+      finally
+        FDoc.EndRead;
+      end;
+      if AProps.Indent <> lft then
+      begin
+        Include(rp.Valid, rrpLeft);
+        rp.LeftTwips := AProps.Indent;
+      end;
+      comp.Add(TTyRichSetRowProps.Create(wpos, wr0, wr1, rp));
+    end;
+    cp := Default(TTyRichCellProps);
+    if tpfPadding in AProps.Valid then
+    begin
+      if AProps.Pad[rcsLeft] >= 0 then Include(cp.Valid, rcpPadLeft);
+      if AProps.Pad[rcsTop] >= 0 then Include(cp.Valid, rcpPadTop);
+      if AProps.Pad[rcsRight] >= 0 then Include(cp.Valid, rcpPadRight);
+      if AProps.Pad[rcsBottom] >= 0 then Include(cp.Valid, rcpPadBottom);
+      cp.Pad := AProps.Pad;
+    end;
+    if tpfVAlign in AProps.Valid then
+    begin
+      Include(cp.Valid, rcpVAlign);
+      cp.VAlign := AProps.VAlign;
+    end;
+    if tpfShading in AProps.Valid then
+    begin
+      Include(cp.Valid, rcpShading);
+      cp.Shading := AProps.Shading;
+    end;
+    if cp.Valid <> [] then comp.Add(TTyRichSetCellProps.Create(pos, r0, c0, r1, c1, cp));
+  except
+    comp.Free;
+    raise;
+  end;
+  if comp.Count = 0 then
+  begin
+    comp.Free;
+    Exit(True);
+  end;
+  Result := RunCellProps(comp);
 end;
 
 { ---- keyboard and wheel ---- }

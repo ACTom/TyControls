@@ -21,6 +21,8 @@ uses
 
 type
   TTyRichBuilderTest = class(TTestCase)
+  published
+    procedure TestTheTablePropertiesGoInAndAreDrawn;
   private
     FCtl: TTyStyleController;
     FRich: TDisplayProbe;
@@ -61,6 +63,7 @@ type
 implementation
 
 uses
+  tyControls.RichEdit.RowFormat, tyControls.RichEdit.TableProps, tyControls.RichEdit.Layout,
   BGRABitmap, BGRABitmapTypes, tyControls.RichEdit.Bookmarks;
 
 const
@@ -920,6 +923,74 @@ begin
   finally
     B.Free;
   end;
+end;
+
+{ A cell's shading, borders, padding and alignment, a row's height and the table's alignment
+  given to the builder are the document's - read back from the model, laid out (the row's
+  boxes), and written in the file as Word writes them. }
+procedure TTyRichBuilderTest.TestTheTablePropertiesGoInAndAreDrawn;
+var
+  B: TTyRichBuilder;
+  d: TTyRichDocument;
+  tp: TTyRichPos;
+  p: TTyRichCellProps;
+  L: TTyBlockLayout;
+  r: TTyRowLayout;
+  s: RawByteString;
+  bytes: TBytes;
+begin
+  B := TTyRichBuilder.Create;
+  try
+    B.Text('before');
+    B.Table([1440, 2880]).TableAlign(rraCenter);
+    B.Cell.Text('a').Shading(clYellow).CellBorders([rcsLeft, rcsTop, rcsRight, rcsBottom], rbsDouble, 30, clRed);
+    B.Cell.Text('b').CellPadding(200, 60, 150, 90).CellVAlign(rcvBottom);
+    B.Row(40, True).Cell.Text('c').CellVAlign(rcvCenter).Cell.Text('d');
+    B.EndTable.Text('after');
+    FRich.SetContent(B);
+  finally
+    B.Free;
+  end;
+  d := FRich.Document;
+  AssertEquals('no undo step', 0, d.UndoDepth);
+  tp := d.Text.ParaStart(1);
+  p := d.CellProps(tp, 0, 0);
+  AssertEquals('shaded', clYellow, p.Shading);
+  AssertTrue('a double red top', TyRichSameBorder(p.Borders[rcsTop], TyRichBorder(rbsDouble, 30, clRed)));
+  p := d.CellProps(tp, 0, 1);
+  AssertEquals('left padding', 200, p.Pad[rcsLeft]);
+  AssertEquals('top padding', 60, p.Pad[rcsTop]);
+  AssertEquals('right padding', 150, p.Pad[rcsRight]);
+  AssertEquals('bottom padding', 90, p.Pad[rcsBottom]);
+  AssertTrue('at the bottom', p.VAlign = rcvBottom);
+  AssertTrue('in the middle', d.CellProps(tp, 1, 0).VAlign = rcvCenter);
+  AssertEquals('exactly 40 pt', -800, d.RowProps(tp, 1).HeightTwips);
+  AssertTrue('centred', d.RowProps(tp, 0).Align = rraCenter);
+  // laid out: the boxes the paint draws
+  L := FRich.Layouter.LayoutBlock(d, 1, 600, 96, 1);
+  try
+    AssertTrue('a row', L is TTyRowLayout);
+    r := TTyRowLayout(L);
+    AssertEquals('drawn shaded', clYellow, r.Cells[0].Shading);
+    AssertTrue('drawn double', r.Cells[0].LineStyle[rcsTop] = rbsDouble);
+    AssertEquals('drawn red', clRed, r.Cells[0].LineColor[rcsTop]);
+  finally
+    L.Release;
+  end;
+  L := FRich.Layouter.LayoutBlock(d, 3, 600, 96, 1);
+  try
+    AssertEquals('drawn 40 pt high', 53, L.Height);
+  finally
+    L.Release;
+  end;
+  // written as Word writes them
+  bytes := Saved;
+  SetString(s, PAnsiChar(@bytes[0]), Length(bytes));
+  AssertTrue('\clcbpat', Pos('\clcbpat', s) > 0);
+  AssertTrue('\clbrdrt\brdrdb\brdrw30', Pos('\clbrdrt\brdrdb\brdrw30', s) > 0);
+  AssertTrue('\clvertalb', Pos('\clvertalb', s) > 0);
+  AssertTrue('\trrh-800', Pos('\trrh-800', s) > 0);
+  AssertTrue('\trqc', Pos('\trqc', s) > 0);
 end;
 
 initialization

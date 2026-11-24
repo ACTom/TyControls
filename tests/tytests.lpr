@@ -328,7 +328,8 @@ uses
   test.richedit.tableprops,
   test.richedit.tablepaint,
   test.richedit.tablesel,
-  test.richedit.tableresize;
+  test.richedit.tableresize,
+  test.richedit.tableformat;
 
 type
   TTyTestRunner = class(TTestRunner)
