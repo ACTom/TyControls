@@ -492,7 +492,16 @@ type
     FNumbered: Boolean;
     { The layouter's change count when the cache last vouched for it (see Stale). }
     FGen: Int64;
+    { The paragraphs what it shows depends on, when they are more than its own (FDep): a row
+      of a cell merged over rows - its height and its content's place come from every row
+      the merged cells tie it to (TTyRichLayouter.BuildSpanGroup), so a change of any of
+      them makes it go. }
+    FDep: Boolean;
+    FDepFirst, FDepLast: Integer;
     function GetStale: Boolean;
+    // the first and the last paragraph a change of which makes it go
+    function DepFirst: Integer;
+    function DepLast: Integer;
   public
     constructor Create(ALayouter: TTyRichLayouter);
     procedure AddRef;
@@ -767,6 +776,34 @@ type
     Shading: TColor;
     // the sides that are the table's outline (the page's ground lies beyond them)
     Outer: TTyRowCellSides;
+    { What stands off the content above and below (padding and the line drawn there), and
+      what the cell needs: those and its content. }
+    PadTop, PadBottom, Need: Integer;
+    { A cell merged over rows (the first of them): the height of all its rows - its content
+      is placed in that height, by its vertical alignment, and reaches below this row; the
+      rows under it show the rest (their covered cells' slices). 0: no such cell. }
+    SpanHeight: Integer;
+    { A cell a merged cell above covers: it shows the part of that cell's content that falls
+      in this row (TTyRowLayout's slice), never its own empty paragraph. }
+    Covered: Boolean;
+    { The parts of its top and bottom sides it draws, when not the whole side (X: from, Y: to,
+      row pixels): along an edge two rows share, each part two cells really share has one
+      line - the one the rule gives for that pair - whatever the cells' spans across. }
+    TopParts, BottomParts: array of TPoint;
+  end;
+
+  TTyRowLayout = class;
+
+  { The part of a merged cell's content that a row it covers shows: the row the merged cell
+    starts in (its layout, held), the cell there, how far this row's top is below that row's
+    (pixels) and how many characters that row and the ones between come before this one's
+    first. }
+  TTyRichSpanSlice = record
+    Cell: Integer;
+    Origin: TTyRowLayout;
+    OriginCell: Integer;
+    YOff: Integer;
+    CharBack: Integer;
   end;
 
   { One paragraph of a row: its layout (the row holds the reference; it follows the row to
@@ -812,7 +849,16 @@ type
     // the cells a cell selection has (SetCellHighlight; for the next paints)
     FHighlight: array of Boolean;
     FNatural: Integer;
+    // the merged cells' parts it shows (covered cells)
+    FSlices: array of TTyRichSpanSlice;
     function GetCell(AIndex: Integer): TTyRichCellBox;
+    // the slice cell AIndex shows (-1: none)
+    function SliceOf(AIndex: Integer): Integer;
+    { The cell's items placed in AHeight (the row's, or a merged cell's rows' together) by its
+      vertical alignment. }
+    procedure PlaceCell(AIndex, AHeight: Integer);
+    // the bottom of cell AIndex's box (its rows' height for a merged cell)
+    function BoxBottom(AIndex: Integer): Integer;
     function GetItem(AIndex: Integer): TTyRichRowItem;
     function CellAtX(AX: Integer): Integer;
     procedure PaintRow(ATarget: TBGRABitmap; AX, AY: Integer; const AClip, AOld: TRect;
@@ -855,6 +901,14 @@ type
     { What the row's format says (TyRtfRowDisplay of its RawFormat; TyDefaultRowDisplay for a
       row with none). }
     property Display: TTyRowDisplay read FDisplay;
+    { It shows a part of a merged cell that starts in a row above (a covered cell): its paint
+      takes the selection unclamped (positions before its own are the merged cell's, in the
+      row above) and a point in such a cell answers a position before the row's first. }
+    function HasSpanSlices: Boolean;
+    { The bottom of the box of the cell position APos is in (row pixels): the row's height, or
+      for a cell merged over rows the bottom of its last row - where a step down from its last
+      line goes on. }
+    function CellBottomAt(APos: TTyRichPos): Integer;
   end;
 
   { A character the font in effect has no glyph for: name a font for it in AFontName (left
@@ -984,6 +1038,15 @@ type
       AZoom: Single): TTyParaLayout;
     function BuildRow(ADoc: TTyRichDocument; AFirst, ALast: Integer; ARow: TTyRichRow;
       AWidth, APPI: Integer; AZoom: Single): TTyRowLayout;
+    { The rows AFirsts[g] .. ALasts[g] (ARows[g]), which cells merged over rows tie together,
+      laid out as one: each row's height from its own cells (the ones that start and end in
+      it) and its format, a merged cell's content placed in its rows' joint height - the last
+      of them grown by what that content needs more (an exact row is not: the content is cut
+      off) - and every row cached (a change of any of them makes them all go). Row AWanted's
+      layout, with a reference for the caller. }
+    function BuildSpanGroup(ADoc: TTyRichDocument; const AFirsts, ALasts: array of Integer;
+      const ARows: array of TTyRichRow; AWanted, AWidth, APPI: Integer;
+      AZoom: Single): TTyRowLayout;
     procedure Prepare(ADoc: TTyRichDocument; AIndex: Integer; var AWidth, APPI: Integer;
       var AZoom: Single);
     function CacheHit(AIndex, AWidth, APPI: Integer; AZoom: Single;
@@ -2314,6 +2377,16 @@ begin
     (FGen <> FLayouter.FChangeGen));
 end;
 
+function TTyBlockLayout.DepFirst: Integer;
+begin
+  if FDep then Result := FDepFirst else Result := FFirstPara;
+end;
+
+function TTyBlockLayout.DepLast: Integer;
+begin
+  if FDep then Result := FDepLast else Result := FLastPara;
+end;
+
 procedure TTyBlockLayout.AddRef;
 begin
   Inc(FRefCount);
@@ -3016,7 +3089,64 @@ var
   i: Integer;
 begin
   for i := 0 to High(FItems) do FItems[i].Layout.Release;
+  for i := 0 to High(FSlices) do FSlices[i].Origin.Release;
   inherited Destroy;
+end;
+
+function TTyRowLayout.SliceOf(AIndex: Integer): Integer;
+var
+  i: Integer;
+begin
+  for i := 0 to High(FSlices) do
+    if FSlices[i].Cell = AIndex then Exit(i);
+  Result := -1;
+end;
+
+function TTyRowLayout.HasSpanSlices: Boolean;
+begin
+  Result := System.Length(FSlices) > 0;
+end;
+
+function TTyRowLayout.CellBottomAt(APos: TTyRichPos): Integer;
+begin
+  Result := FHeight;
+  if System.Length(FItems) = 0 then Exit;
+  if APos < 0 then APos := 0;
+  Result := BoxBottom(FItems[ItemAt(APos)].Cell);
+end;
+
+function TTyRowLayout.BoxBottom(AIndex: Integer): Integer;
+var
+  o: Integer;
+begin
+  Result := FHeight;
+  if (AIndex < 0) or (AIndex > High(FCells)) then Exit;
+  o := FCells[AIndex].Owner;
+  if FCells[o].SpanHeight > 0 then Result := FCells[o].SpanHeight;
+end;
+
+procedure TTyRowLayout.PlaceCell(AIndex, AHeight: Integer);
+var
+  bx: ^TTyRichCellBox;
+  off, y, j: Integer;
+begin
+  bx := @FCells[AIndex];
+  off := Max(0, AHeight - bx^.PadTop - bx^.PadBottom - bx^.ContentHeight);
+  case bx^.VAlign of
+    rcvCenter: off := off div 2;
+    rcvBottom: ;
+  else
+    off := 0;
+  end;
+  y := bx^.PadTop + off;
+  for j := bx^.FirstItem to bx^.FirstItem + bx^.ItemCount - 1 do
+    if FItems[j].Cell = AIndex then
+    begin
+      FItems[j].Y := y;
+      // (a cell with no room for text: its paragraphs take no height)
+      if FItems[j].Layout.LayoutWidth <> CRichNoWrap then
+        y := SatAdd(y, FItems[j].Layout.Height);
+    end;
 end;
 
 function TTyRowLayout.GetCell(AIndex: Integer): TTyRichCellBox;
@@ -3110,11 +3240,26 @@ end;
 
 function TTyRowLayout.PosAtPoint(AX, AY: Integer; out AAtLineEnd: Boolean): TTyRichPos;
 var
-  c, k, last: Integer;
+  c, k, last, s: Integer;
 begin
   AAtLineEnd := False;
   c := CellAtX(AX);
   if c < 0 then Exit(0);
+  { a cell a merged cell covers: a place in that cell's content (in the row it starts in,
+    before this row's first position) }
+  s := SliceOf(FCells[c].Owner);
+  if s >= 0 then
+    with FSlices[s] do
+    begin
+      c := OriginCell;
+      k := Origin.FCells[c].FirstItem;
+      last := k + Origin.FCells[c].ItemCount - 1;
+      while (k < last) and ((Origin.FItems[k].Cell <> c) or
+        (Origin.FItems[k].Y + Origin.FItems[k].Layout.Height <= AY + YOff)) do
+        Inc(k);
+      Exit(Origin.FItems[k].Pos + Origin.FItems[k].Layout.PosAtPoint(AX - Origin.FItems[k].X,
+        AY + YOff - Origin.FItems[k].Y, AAtLineEnd) - CharBack);
+    end;
   // the cell's paragraph at AY: above the first, the first; below the last, the last
   k := FCells[c].FirstItem;
   last := k + FCells[c].ItemCount - 1;
@@ -3146,7 +3291,8 @@ begin
   { Inside the cell's box: what an exact-height row (or a cell with no room) does not show,
     its caret is not drawn over the next row either - at the box's edge instead. }
   o := FCells[FItems[k].Cell].Owner;
-  if Result.Bottom > FHeight then Result.Bottom := FHeight;
+  // (a merged cell's box: all its rows)
+  if Result.Bottom > BoxBottom(o) then Result.Bottom := BoxBottom(o);
   if Result.Top > Result.Bottom - 1 then Result.Top := Result.Bottom - 1;
   if Result.Top < 0 then
   begin
@@ -3188,7 +3334,7 @@ begin
     if (b <= 0) or (a > FItems[k].Layout.Length) then Continue;
     rs := FItems[k].Layout.SelectionRects(a, b);
     o := FCells[FItems[k].Cell].Owner;
-    box := Rect(FCells[o].Left, 0, FCells[o].Right, FHeight);
+    box := Rect(FCells[o].Left, 0, FCells[o].Right, BoxBottom(o));
     SetLength(Result, n + System.Length(rs));
     for i := 0 to High(rs) do
     begin
@@ -4058,11 +4204,11 @@ end;
 procedure TTyRowLayout.PaintRow(ATarget: TBGRABitmap; AX, AY: Integer; const AClip,
   AOld: TRect; const AStyle: TTyRichPaintStyle; ASelFrom, ASelTo: TTyRichPos);
 var
-  i, k, w, lo, hi, next: Integer;
+  i, k, w, lo, hi, next, sl, y: Integer;
   s: TTyRowCellSide;
   lit: Boolean;
   clip, old, cr, box: TRect;
-  bx: ^TTyRichCellBox;
+  bx, ob: ^TTyRichCellBox;
   it: ^TTyRichRowItem;
   st: TTyRichPaintStyle;
 
@@ -4129,6 +4275,26 @@ begin
       if (bx^.Shading <> clNone) and (bx^.Shading <> clDefault) then
         st.SelectionText := InkOnSelection(ColorToBGRA(ColorToRGB(bx^.Shading)), AStyle);
     end;
+    sl := SliceOf(i);
+    if sl >= 0 then
+    begin
+      { the merged cell's content that falls in this row, as the row it starts in has it
+        placed (its positions are before this row's: the selection's too) }
+      ob := @FSlices[sl].Origin.FCells[FSlices[sl].OriginCell];
+      for k := ob^.FirstItem to ob^.FirstItem + ob^.ItemCount - 1 do
+      begin
+        it := @FSlices[sl].Origin.FItems[k];
+        if it^.Cell <> FSlices[sl].OriginCell then Continue;
+        y := AY - FSlices[sl].YOff + it^.Y;
+        if (y >= cr.Bottom) or (y + it^.Layout.Height <= cr.Top) then Continue;
+        if lit then
+          it^.Layout.Paint(ATarget, AX + it^.X, y, cr, st, 0, it^.Layout.Length + 1)
+        else
+          it^.Layout.Paint(ATarget, AX + it^.X, y, cr, st,
+            ASelFrom + FSlices[sl].CharBack - it^.Pos, ASelTo + FSlices[sl].CharBack - it^.Pos);
+      end;
+      Continue;
+    end;
     for k := bx^.FirstItem to bx^.FirstItem + bx^.ItemCount - 1 do
     begin
       it := @FItems[k];
@@ -4170,14 +4336,25 @@ begin
           DrawCellLine(ATarget, box.Left, box.Top, box.Left + w, box.Bottom, False,
             bx^.LineStyle[rcsLeft], Ink(rcsLeft));
         if (rcsTop in bx^.Sides) and (bx^.LinePx[rcsTop] = w) then
-          DrawCellLine(ATarget, box.Left, box.Top, box.Right, box.Top + w, True,
-            bx^.LineStyle[rcsTop], Ink(rcsTop));
+          if System.Length(bx^.TopParts) = 0 then
+            DrawCellLine(ATarget, box.Left, box.Top, box.Right, box.Top + w, True,
+              bx^.LineStyle[rcsTop], Ink(rcsTop))
+          else
+            for k := 0 to High(bx^.TopParts) do
+              DrawCellLine(ATarget, AX + bx^.TopParts[k].X, box.Top, AX + bx^.TopParts[k].Y,
+                box.Top + w, True, bx^.LineStyle[rcsTop], Ink(rcsTop));
         if (rcsRight in bx^.Sides) and (bx^.LinePx[rcsRight] = w) then
           DrawCellLine(ATarget, box.Right - w, box.Top, box.Right, box.Bottom, False,
             bx^.LineStyle[rcsRight], Ink(rcsRight));
         if (rcsBottom in bx^.Sides) and (bx^.LinePx[rcsBottom] = w) then
-          DrawCellLine(ATarget, box.Left, box.Bottom - w, box.Right, box.Bottom, True,
-            bx^.LineStyle[rcsBottom], Ink(rcsBottom));
+          if System.Length(bx^.BottomParts) = 0 then
+            DrawCellLine(ATarget, box.Left, box.Bottom - w, box.Right, box.Bottom, True,
+              bx^.LineStyle[rcsBottom], Ink(rcsBottom))
+          else
+            for k := 0 to High(bx^.BottomParts) do
+              DrawCellLine(ATarget, AX + bx^.BottomParts[k].X, box.Bottom - w,
+                AX + bx^.BottomParts[k].Y, box.Bottom, True, bx^.LineStyle[rcsBottom],
+                Ink(rcsBottom));
       end;
       w := next;
     end;
@@ -6526,9 +6703,9 @@ begin
   begin
     nx := L.FLruNext;
     // a row just above: its bottom line is the row below's business (BuildRow's BottomOpen)
-    if ((L.FLastPara >= AFirst) and (L.FFirstPara < AFirst + ACount)) or
+    if ((L.DepLast >= AFirst) and (L.DepFirst < AFirst + ACount)) or
       (L.FNumbered and (L.FFirstPara >= AFirst)) or
-      ((L is TTyRowLayout) and (L.FLastPara = AFirst - 1)) then
+      ((L is TTyRowLayout) and (L.DepLast = AFirst - 1)) then
       CacheDrop(L, True)
     else
       Vouch(L, FChangeGen);
@@ -6547,7 +6724,7 @@ begin
   while L <> nil do
   begin
     nx := L.FLruNext;
-    if (L.FFirstPara <= APara) and (L.FLastPara >= APara) then
+    if (L.DepFirst <= APara) and (L.DepLast >= APara) then
       CacheDrop(L, True)
     else
       Vouch(L, FChangeGen);
@@ -6695,8 +6872,8 @@ begin
     nx := L.FLruNext;
     { the changed paragraphs' blocks go, and a row that ends just before them: its bottom
       line is the row below's business (BuildRow's BottomOpen) }
-    if ((L.FLastPara >= first) and (L.FFirstPara < oldEnd)) or
-      ((L is TTyRowLayout) and (L.FLastPara = first - 1)) then
+    if ((L.DepLast >= first) and (L.DepFirst < oldEnd)) or
+      ((L is TTyRowLayout) and (L.DepLast = first - 1)) then
       CacheDrop(L, True)
     else if (L.FFirstPara >= oldEnd) and numbering and L.FNumbered then
       CacheDrop(L, True)
@@ -6706,6 +6883,8 @@ begin
       FCache.Remove(L.FFirstPara);
       Inc(L.FFirstPara, delta);
       Inc(L.FLastPara, delta);
+      Inc(L.FDepFirst, delta);
+      Inc(L.FDepLast, delta);
       if L is TTyRowLayout then
         for i := 0 to High(TTyRowLayout(L).FItems) do
           with TTyRowLayout(L).FItems[i].Layout do
@@ -7171,6 +7350,88 @@ var
     end;
   end;
 
+  // where cell ACell of a row starts (twips): its row's left, or the cell before's right edge
+  function CellLeftTw(const AEdges: TTyRichEdges; ALeft, ACell: Integer): Integer;
+  begin
+    if ACell <= 0 then Result := ALeft else Result := AEdges[ACell - 1];
+  end;
+
+  { Box ABox (its cells ABox .. ALastCell) along the edge it shares with the row above (ASide
+    top) or below (bottom), AOther: for each part of that edge it shares with a box of the
+    other row, its line when the rule (TyRichLaterLineWins) gives it - wider wins, the later
+    (lower) at the same width - and where no box of that row faces it, its line. A box below
+    that continues this one (a cell merged over rows) has no line toward it. The parts as
+    pixels (one part over the whole side: the side whole). }
+  procedure DrawFacing(ABox, ALastCell: Integer; ASide: TTyRowCellSide;
+    const AOwn: TTyRichBorder; AOFmt: TTyRichRowFormat; const AOEdges: TTyRichEdges);
+  var
+    lt, rt, ol, orr, a, b, m, mo, cur, nOther: Integer;
+    oth: TTyRichBorder;
+    wins: Boolean;
+    parts: array of TPoint;
+
+    procedure AddPart(AFrom, ATo: Integer);
+    var
+      x0, x1, q: Integer;
+    begin
+      if ATo - AFrom <= CRichEdgeSlackTwips then Exit;
+      // (an end within the slack of the box's own: the box's)
+      if AFrom - lt <= CRichEdgeSlackTwips then x0 := R.FCells[ABox].Left else x0 := Px(AFrom);
+      if rt - ATo <= CRichEdgeSlackTwips then x1 := R.FCells[ABox].Right else x1 := Px(ATo);
+      if x1 <= x0 then Exit;
+      q := System.Length(parts);
+      SetLength(parts, q + 1);
+      parts[q] := Point(x0, x1);
+    end;
+
+  begin
+    if AOwn.Style = rbsNone then Exit;
+    parts := nil;
+    lt := CellLeftTw(myEdges, fmt.Row.LeftTwips, ABox);
+    if ALastCell <= High(myEdges) then rt := myEdges[ALastCell] else rt := lt;
+    nOther := Min(AOFmt.CellCount, System.Length(AOEdges));
+    cur := lt;
+    m := 0;
+    while m < nOther do
+    begin
+      mo := m;
+      while (mo + 1 < nOther) and (AOFmt.Cells[mo + 1].HMerge = rcmContinue) do Inc(mo);
+      ol := CellLeftTw(AOEdges, AOFmt.Row.LeftTwips, m);
+      orr := AOEdges[mo];
+      a := Max(lt, ol);
+      b := Min(rt, orr);
+      if b - a > CRichEdgeSlackTwips then
+      begin
+        // the part before it no box of the other row faces: this one's line
+        if a > cur then AddPart(cur, a);
+        if ASide = rcsTop then
+        begin
+          oth := CellBorder(AOFmt, m, rcsBottom);
+          wins := TyRichLaterLineWins(oth, AOwn);
+        end
+        else if AOFmt.Cells[m].VMerge = rcmContinue then
+          wins := False
+        else
+        begin
+          oth := CellBorder(AOFmt, m, rcsTop);
+          wins := not TyRichLaterLineWins(AOwn, oth);
+        end;
+        if wins then AddPart(a, b);
+        cur := Max(cur, b);
+      end;
+      m := mo + 1;
+    end;
+    if rt > cur then AddPart(cur, rt);
+    if System.Length(parts) = 0 then Exit;
+    Draw(ABox, ASide, AOwn);
+    // (the whole side: no parts kept)
+    if (System.Length(parts) = 1) and (parts[0].X = R.FCells[ABox].Left) and
+      (parts[0].Y = R.FCells[ABox].Right) then
+      Exit;
+    if ASide = rcsTop then R.FCells[ABox].TopParts := parts
+    else R.FCells[ABox].BottomParts := parts;
+  end;
+
 begin
   R := TTyRowLayout.Create(Self);
   try
@@ -7273,32 +7534,24 @@ begin
         own := CellBorder(fmt, j, rcsRight);
         if own.Style <> rbsNone then Draw(i, rcsRight, own);
       end;
+      { top and bottom: by the parts of the edge the box shares with each box of the row
+        above and below (a wide cell against several, several against a wide one) }
       if bx^.VMerge <> rcmContinue then
       begin
         own := CellBorder(fmt, i, rcsTop);
-        // (the cell above: the one whose edges are this one's)
-        o := -1;
-        if prevRow <> nil then
-          o := BoxCellOf(prevFmt, TyRichFacingCell(myEdges, fmt.Row.LeftTwips, i, prevEdges,
-            prevFmt.Row.LeftTwips));
-        other := CellBorder(prevFmt, o, rcsBottom);
-        if (own.Style <> rbsNone) and TyRichLaterLineWins(other, own) then Draw(i, rcsTop, own);
+        if prevRow = nil then
+        begin
+          if own.Style <> rbsNone then Draw(i, rcsTop, own);
+        end
+        else
+          DrawFacing(i, j, rcsTop, own, prevFmt, prevEdges);
       end;
       own := CellBorder(fmt, i, rcsBottom);
       if own.Style <> rbsNone then
         if lastRow then
           Draw(i, rcsBottom, own)
         else
-        begin
-          // (the cell below: the one whose edges are this one's)
-          o := BoxCellOf(nextFmt, TyRichFacingCell(myEdges, fmt.Row.LeftTwips, i, nextEdges,
-            nextFmt.Row.LeftTwips));
-          if (o < 0) or (o >= nextFmt.CellCount) or (nextFmt.Cells[o].VMerge <> rcmContinue) then
-          begin
-            other := CellBorder(nextFmt, o, rcsTop);
-            if not TyRichLaterLineWins(own, other) then Draw(i, rcsBottom, own);
-          end;
-        end;
+          DrawFacing(i, j, rcsBottom, own, nextFmt, nextEdges);
     end;
     { \trqc / \trqr: the row centred in, or at the right of, the width it is laid out at (not
       without wrapping: there is no width to place it in) - by its alignment alone, as Word
@@ -7318,6 +7571,16 @@ begin
       begin
         Inc(R.FCells[i].Left, shift);
         Inc(R.FCells[i].Right, shift);
+        for j := 0 to High(R.FCells[i].TopParts) do
+        begin
+          Inc(R.FCells[i].TopParts[j].X, shift);
+          Inc(R.FCells[i].TopParts[j].Y, shift);
+        end;
+        for j := 0 to High(R.FCells[i].BottomParts) do
+        begin
+          Inc(R.FCells[i].BottomParts[j].X, shift);
+          Inc(R.FCells[i].BottomParts[j].Y, shift);
+        end;
       end;
     end;
     // the paragraphs, each in its cell (a merged-away cell's at the box it went into)
@@ -7367,12 +7630,20 @@ begin
     for i := 0 to nc - 1 do
     begin
       bx := @R.FCells[i];
+      bx^.PadTop := 0;
+      bx^.PadBottom := 0;
+      bx^.Need := 0;
+      bx^.SpanHeight := 0;
+      bx^.Covered := False;
       if bx^.Hidden then Continue;
       padT := pads[i][rcsTop];
       padB := pads[i][rcsBottom];
       if rcsTop in bx^.Sides then Inc(padT, bx^.LinePx[rcsTop]);
       if rcsBottom in bx^.Sides then Inc(padB, bx^.LinePx[rcsBottom]);
-      rowH := Max(rowH, SatAdd(SatAdd(padT, bx^.ContentHeight), padB));
+      bx^.PadTop := padT;
+      bx^.PadBottom := padB;
+      bx^.Need := SatAdd(SatAdd(padT, bx^.ContentHeight), padB);
+      rowH := Max(rowH, bx^.Need);
     end;
     R.FNatural := Max(1, rowH);
     if R.FDisplay.Height > 0 then rowH := Max(rowH, Px(R.FDisplay.Height))
@@ -7385,24 +7656,7 @@ begin
       bx := @R.FCells[i];
       if bx^.Hidden then Continue;
       if bx^.Right > R.FWidth then R.FWidth := bx^.Right;
-      padT := pads[i][rcsTop];
-      padB := pads[i][rcsBottom];
-      if rcsTop in bx^.Sides then Inc(padT, bx^.LinePx[rcsTop]);
-      if rcsBottom in bx^.Sides then Inc(padB, bx^.LinePx[rcsBottom]);
-      off := Max(0, rowH - padT - padB - bx^.ContentHeight);
-      case bx^.VAlign of
-        rcvCenter: off := off div 2;
-        rcvBottom: ;
-      else
-        off := 0;
-      end;
-      y := padT + off;
-      for j := bx^.FirstItem to bx^.FirstItem + bx^.ItemCount - 1 do
-        if R.FItems[j].Cell = i then
-        begin
-          R.FItems[j].Y := y;
-          if room[i] then y := SatAdd(y, R.FItems[j].Layout.Height);
-        end;
+      R.PlaceCell(i, rowH);
     end;
   except
     R.Release;
@@ -7457,13 +7711,247 @@ begin
   Result.AddRef;
 end;
 
+{ Row ARow has a cell that continues the one above it (a cell merged over rows). }
+function RowContinues(ARow: TTyRichRow): Boolean;
+var
+  f: TTyRichRowFormat;
+  i: Integer;
+begin
+  Result := False;
+  f := ARow.Format;
+  if f = nil then Exit;
+  for i := 0 to f.CellCount - 1 do
+    if f.Cells[i].VMerge = rcmContinue then Exit(True);
+end;
+
+const
+  { The most rows laid out together for cells merged over them: well inside the cache's
+    bound, so that laying a group out never pushes its own rows out of the cache. A group
+    longer than this (a cell merged over more rows) is laid out row by row, as plain rows. }
+  CRichMaxSpanGroupRows = CLayoutCacheParas div 2;
+
+function TTyRichLayouter.BuildSpanGroup(ADoc: TTyRichDocument; const AFirsts,
+  ALasts: array of Integer; const ARows: array of TTyRichRow; AWanted, AWidth, APPI: Integer;
+  AZoom: Single): TTyRowLayout;
+type
+  TOrigin = record
+    G, C: Integer;
+  end;
+var
+  G, gi, i, o, oc, need, sum, k: Integer;
+  rows: array of TTyRowLayout;
+  org: array of array of TOrigin;
+  lastOf: array of array of Integer;
+  h, nat, top, chars: array of Integer;
+  exact: array of Boolean;
+  fmt, pfmt: TTyRichRowFormat;
+  bx: ^TTyRichCellBox;
+  sl: TTyRichSpanSlice;
+begin
+  G := System.Length(ARows);
+  rows := nil;
+  SetLength(rows, G);
+  try
+    for gi := 0 to G - 1 do
+      rows[gi] := BuildRow(ADoc, AFirsts[gi], ALasts[gi], ARows[gi], AWidth, APPI, AZoom);
+    { Which merged cell each cell continues: the cell above it (by the rows' edges), or the
+      one that one continues. }
+    org := nil;
+    lastOf := nil;
+    SetLength(org, G);
+    SetLength(lastOf, G);
+    for gi := 0 to G - 1 do
+    begin
+      SetLength(org[gi], rows[gi].CellCount);
+      SetLength(lastOf[gi], rows[gi].CellCount);
+      for i := 0 to rows[gi].CellCount - 1 do
+      begin
+        org[gi][i].G := -1;
+        org[gi][i].C := -1;
+        lastOf[gi][i] := gi;
+      end;
+      if gi = 0 then Continue;
+      fmt := ARows[gi].Format;
+      pfmt := ARows[gi - 1].Format;
+      for i := 0 to rows[gi].CellCount - 1 do
+      begin
+        if rows[gi].FCells[i].Hidden or (i >= fmt.CellCount) or
+          (fmt.Cells[i].VMerge <> rcmContinue) then
+          Continue;
+        { (one that holds something - a file's - is a cell of its own, shown: the merge ends
+          above it) }
+        if (rows[gi].FCells[i].ItemCount <> 1) or
+          (rows[gi].FItems[rows[gi].FCells[i].FirstItem].Layout.Length <> 0) then
+          Continue;
+        o := BoxCellOf(pfmt, TyRichFacingCell(ARows[gi].CellEdges, fmt.Row.LeftTwips, i,
+          ARows[gi - 1].CellEdges, pfmt.Row.LeftTwips));
+        if (o < 0) or (o >= rows[gi - 1].CellCount) then Continue;
+        o := rows[gi - 1].FCells[o].Owner;
+        if org[gi - 1][o].G >= 0 then org[gi][i] := org[gi - 1][o]
+        else
+        begin
+          org[gi][i].G := gi - 1;
+          org[gi][i].C := o;
+        end;
+        lastOf[org[gi][i].G][org[gi][i].C] := gi;
+      end;
+    end;
+    { The rows' heights: each from its own cells and its format; then, row by row from the
+      top, the last row of each merged cell grows by what the cell needs more than its rows
+      give (an exact row does not grow). }
+    h := nil;
+    nat := nil;
+    exact := nil;
+    SetLength(h, G);
+    SetLength(nat, G);
+    SetLength(exact, G);
+    for gi := 0 to G - 1 do
+    begin
+      need := 0;
+      for i := 0 to rows[gi].CellCount - 1 do
+      begin
+        bx := @rows[gi].FCells[i];
+        if bx^.Hidden or (org[gi][i].G >= 0) or (lastOf[gi][i] > gi) then Continue;
+        need := Max(need, bx^.Need);
+      end;
+      nat[gi] := Max(1, need);
+      h[gi] := need;
+      exact[gi] := rows[gi].FDisplay.Height < 0;
+      if rows[gi].FDisplay.Height > 0 then
+        h[gi] := Max(h[gi], TyRichTwipsToPx(rows[gi].FDisplay.Height, APPI, AZoom))
+      else if exact[gi] then
+        h[gi] := TyRichTwipsToPx(-Int64(rows[gi].FDisplay.Height), APPI, AZoom);
+      h[gi] := Max(1, h[gi]);
+      for i := 0 to rows[gi].CellCount - 1 do
+      begin
+        if (org[gi][i].G < 0) or (lastOf[org[gi][i].G][org[gi][i].C] <> gi) then Continue;
+        bx := @rows[org[gi][i].G].FCells[org[gi][i].C];
+        // its content, its padding above and below, its top line and the bottom line here
+        need := SatAdd(SatAdd(bx^.PadTop, bx^.ContentHeight), bx^.PadBottom);
+        if rcsBottom in rows[gi].FCells[i].Sides then
+          need := SatAdd(need, rows[gi].FCells[i].LinePx[rcsBottom]);
+        sum := 0;
+        for k := org[gi][i].G to gi do sum := SatAdd(sum, h[k]);
+        if (need > sum) and not exact[gi] then
+        begin
+          Inc(h[gi], need - sum);
+          nat[gi] := Max(nat[gi], h[gi]);
+        end;
+      end;
+    end;
+    // the rows' tops and first characters, from the group's first row
+    top := nil;
+    chars := nil;
+    SetLength(top, G + 1);
+    SetLength(chars, G + 1);
+    top[0] := 0;
+    chars[0] := 0;
+    for gi := 0 to G - 1 do
+    begin
+      top[gi + 1] := SatAdd(top[gi], h[gi]);
+      chars[gi + 1] := chars[gi] + rows[gi].FCharCount;
+    end;
+    for gi := 0 to G - 1 do
+    begin
+      rows[gi].FHeight := h[gi];
+      rows[gi].FNatural := nat[gi];
+      for i := 0 to rows[gi].CellCount - 1 do
+      begin
+        bx := @rows[gi].FCells[i];
+        if bx^.Hidden then Continue;
+        if lastOf[gi][i] > gi then
+        begin
+          // a merged cell's first row: its content in all its rows' height
+          bx^.SpanHeight := Max(1, top[lastOf[gi][i] + 1] - top[gi]);
+          rows[gi].PlaceCell(i, bx^.SpanHeight);
+        end
+        else
+          rows[gi].PlaceCell(i, h[gi]);
+        if org[gi][i].G >= 0 then
+        begin
+          bx^.Covered := True;
+          oc := org[gi][i].C;
+          sl.Cell := i;
+          sl.Origin := rows[org[gi][i].G];
+          sl.OriginCell := oc;
+          sl.YOff := top[gi] - top[org[gi][i].G];
+          sl.CharBack := chars[gi] - chars[org[gi][i].G];
+          sl.Origin.AddRef;
+          k := System.Length(rows[gi].FSlices);
+          SetLength(rows[gi].FSlices, k + 1);
+          rows[gi].FSlices[k] := sl;
+        end;
+      end;
+    end;
+  except
+    for gi := 0 to G - 1 do
+      if rows[gi] <> nil then rows[gi].Release;
+    raise;
+  end;
+  // every row cached, tied to the others: a change of any of them makes them all go
+  for gi := 0 to G - 1 do
+  begin
+    rows[gi].FDep := True;
+    rows[gi].FDepFirst := AFirsts[0];
+    rows[gi].FDepLast := ALasts[G - 1];
+    CacheInsert(rows[gi]);
+  end;
+  Result := rows[AWanted];
+  CacheTrim(Result);
+  Result.AddRef;
+end;
+
 function TTyRichLayouter.LayoutBlock(ADoc: TTyRichDocument; AIndex: Integer; AWidth: Integer;
   APPI: Integer; AZoom: Single): TTyBlockLayout;
 var
   L: TTyBlockLayout;
   cell, c: TTyRichCell;
-  row: TTyRichRow;
-  first, last, n: Integer;
+  row, r2: TTyRichRow;
+  first, last, n, want, f2, l2: Integer;
+  firsts, lasts: array of Integer;
+  rws: array of TTyRichRow;
+
+  // the row whose paragraphs end at ALast: its first paragraph
+  function RowStartBack(ALast: Integer; ARow: TTyRichRow): Integer;
+  var
+    cc: TTyRichCell;
+  begin
+    Result := ALast;
+    while Result > 0 do
+    begin
+      cc := ADoc.CellAt(Result - 1);
+      if (cc = nil) or (cc.Row <> ARow) then Break;
+      Dec(Result);
+    end;
+  end;
+
+  // the row whose paragraphs begin at AFirst: its last paragraph
+  function RowEndOn(AFirst: Integer; ARow: TTyRichRow): Integer;
+  var
+    cc: TTyRichCell;
+  begin
+    Result := AFirst;
+    while Result < n - 1 do
+    begin
+      cc := ADoc.CellAt(Result + 1);
+      if (cc = nil) or (cc.Row <> ARow) then Break;
+      Inc(Result);
+    end;
+  end;
+
+  procedure AddRow(AF, AL: Integer; AR: TTyRichRow);
+  var
+    m: Integer;
+  begin
+    m := System.Length(rws);
+    SetLength(rws, m + 1);
+    SetLength(firsts, m + 1);
+    SetLength(lasts, m + 1);
+    rws[m] := AR;
+    firsts[m] := AF;
+    lasts[m] := AL;
+  end;
+
 begin
   Prepare(ADoc, AIndex, AWidth, APPI, AZoom);
   // the usual call: the block that starts here (a paragraph laid out by itself while it sits
@@ -7497,6 +7985,48 @@ begin
     Result := CacheHit(first, AWidth, APPI, AZoom, True);
     if Result <> nil then Exit;
     Inc(FMisses);
+    { Cells merged over rows tie their rows together: the rows above while a row continues one,
+      the rows below while the next continues one - laid out as one group. }
+    rws := nil;
+    firsts := nil;
+    lasts := nil;
+    r2 := row;
+    f2 := first;
+    while RowContinues(r2) and (System.Length(rws) < CRichMaxSpanGroupRows) do
+    begin
+      r2 := PrevRowOf(ADoc, f2, r2);
+      if r2 = nil then Break;
+      l2 := f2 - 1;
+      f2 := RowStartBack(l2, r2);
+      AddRow(f2, l2, r2);
+    end;
+    // (gathered upwards: put in order)
+    for want := 0 to System.Length(rws) div 2 - 1 do
+    begin
+      r2 := rws[want];
+      rws[want] := rws[High(rws) - want];
+      rws[High(rws) - want] := r2;
+      f2 := firsts[want];
+      firsts[want] := firsts[High(firsts) - want];
+      firsts[High(firsts) - want] := f2;
+      l2 := lasts[want];
+      lasts[want] := lasts[High(lasts) - want];
+      lasts[High(lasts) - want] := l2;
+    end;
+    want := System.Length(rws);
+    AddRow(first, last, row);
+    r2 := row;
+    l2 := last;
+    while System.Length(rws) < CRichMaxSpanGroupRows do
+    begin
+      r2 := NextRowOf(ADoc, l2, r2);
+      if (r2 = nil) or not RowContinues(r2) then Break;
+      f2 := l2 + 1;
+      l2 := RowEndOn(f2, r2);
+      AddRow(f2, l2, r2);
+    end;
+    if (System.Length(rws) > 1) and (System.Length(rws) < CRichMaxSpanGroupRows) then
+      Exit(BuildSpanGroup(ADoc, firsts, lasts, rws, want, AWidth, APPI, AZoom));
     Result := BuildRow(ADoc, first, last, row, AWidth, APPI, AZoom);
     CacheInsert(Result);
     CacheTrim(Result);

@@ -605,9 +605,18 @@ begin
   end;
   d := LoadDoc(BytesOf(Rows));
   try
+    { a cell under two above: the edge they share is one line, part by part - the wider
+      bottoms above win on both parts, its own narrower top is drawn nowhere }
     r := PaintRow(d, 3, Style);
     try
-      AssertTrue('a cell under no single cell above: its own top drawn', rcsTop in r.Row.Cells[0].Sides);
+      AssertFalse('a cell under two wider lines: its own top not drawn', rcsTop in r.Row.Cells[0].Sides);
+    finally
+      r.Free;
+    end;
+    r := PaintRow(d, 1, Style);
+    try
+      AssertTrue('the wider bottoms above drawn', (rcsBottom in r.Row.Cells[0].Sides) and
+        (rcsBottom in r.Row.Cells[1].Sides));
     finally
       r.Free;
     end;

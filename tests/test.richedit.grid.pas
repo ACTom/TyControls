@@ -14,7 +14,8 @@ uses
   Classes, SysUtils, LCLType, fpcunit, testregistry, tyControls.Controller,
   tyControls.RichEdit.Text, tyControls.RichEdit.Model, tyControls.RichEdit.RtfRead,
   tyControls.RichEdit.RtfWrite, tyControls.RichEdit.Layout, tyControls.RichEdit.TableSel,
-  tyControls.RichEdit, tyControls.RichEdit.Grid, test.richedit.layoutdevice;
+  tyControls.RichEdit, tyControls.RichEdit.Grid, tyControls.RichEdit.Commands, BGRABitmap,
+  BGRABitmapTypes, test.richedit.layoutdevice;
 
 type
   TTyRichGridTest = class(TTestCase)
@@ -49,6 +50,32 @@ type
     procedure TestTabAndArrowsFollowTheGrid;
     procedure TestAHitInASpanLandsInItsCell;
     procedure TestACellThatContinuesAMergeButHoldsTextIsReached;
+  end;
+
+  { A cell merged over rows laid out (TTyRichLayouter, the test device, no control): its
+    content over its rows' joint height - each row as tall as its own cells make it, the last
+    row grown by what the merged cell needs more, an exact row not -, placed in that height by
+    its vertical alignment; the rows it covers show the rest of it, answer a point in it with
+    its positions, and go with it when it changes. }
+  TTyRichSpanLayoutTest = class(TTestCase)
+  private
+    FDoc: TTyRichDocument;
+    FLay: TTyRichLayouter;
+    procedure Open(const ARtf: RawByteString);
+    function Row(APara: Integer; APPI: Integer = 96): TTyRowLayout;
+    procedure Changed;
+  protected
+    procedure TearDown; override;
+  published
+    procedure TestLayoutOfSpans;
+    procedure TestTheJointHeightComesFromThePlainCells;
+    procedure TestEachAlignmentInTheJointHeight;
+    procedure TestAnExactRowDoesNotGrow;
+    procedure TestAPointInACoveredPlaceLandsInTheSpan;
+    procedure TestAnEditInASpanLaysOutOnlyItsRows;
+    procedure TestANeighbourInAMiddleRowMovesTheCentredContent;
+    procedure TestTheCoveredRowShowsTheRestOfTheContent;
+    procedure TestALineTwoRowsShareIsDrawnOnce;
   end;
 
 { The listing of the grid of the table at ATablePos, in the form of
@@ -548,11 +575,12 @@ var
   p: TTyRichPos;
 begin
   Load(CSpans);
-  // the covered cell's own place: the span's cell, at its text's end
+  { the covered cell's own place: the span's cell - below its one line, that line at the
+    point's x (its start), as in a tall plain cell }
   r := FRich.ParagraphRect(4);
   p := FRich.PositionAtPoint(r.Left + 2, (r.Top + r.Bottom) div 2);
   AssertEquals('in the span''s cell', 1, FRich.Document.Text.ParaOfPos(p));
-  AssertEquals('at its end', PS(FRich, 1) + 1, p);
+  AssertEquals('on its last line, at the point''s x', PS(FRich, 1), p);
 end;
 
 { Word writes one line's cells up to 15 twips apart from row to row: one edge of the grid;
@@ -621,7 +649,334 @@ begin
     FRich.PositionAtPoint(r.Left + 2, (r.Top + r.Bottom) div 2)));
 end;
 
+{ ---- a cell merged over rows, laid out ---- }
+
+const
+  { x | A1..A4 over two rows beside B and D | after: paragraphs 0, 1-4, 5 (B), 6 (covered),
+    7 (D), 8. }
+  CTall = '{\rtf1\ansi{\fonttbl{\f0 Arial;}}\pard x\par' +
+    '\trowd\clvmgf\cellx1500\cellx3000\pard\intbl A1\par A2\par A3\par A4\cell B\cell\row' +
+    '\trowd\clvmrg\cellx1500\cellx3000\pard\intbl \cell D\cell\row' +
+    '\pard after\par}';
+
+{ A one-line merged cell (its vertical alignment AAlign) over two rows whose other cells are
+  three lines each: paragraphs 0 x, 1 A, 2-4 B, 5 covered, 6-8 D, 9 after. }
+function ShortSpan(const AAlign: string): RawByteString;
+begin
+  Result := '{\rtf1\ansi{\fonttbl{\f0 Arial;}}\pard x\par' +
+    '\trowd\clvmgf' + AAlign + '\cellx1500\cellx3000\pard\intbl A\cell B1\par B2\par B3\cell\row' +
+    '\trowd\clvmrg' + AAlign + '\cellx1500\cellx3000\pard\intbl \cell D1\par D2\par D3\cell\row' +
+    '\pard after\par}';
+end;
+
+procedure TTyRichSpanLayoutTest.Open(const ARtf: RawByteString);
+begin
+  FreeAndNil(FLay);
+  FreeAndNil(FDoc);
+  FDoc := LoadDoc(BytesOf(ARtf));
+  FLay := TTyRichLayouter.Create(TTyRichTestDevice.Create, True);
+end;
+
+procedure TTyRichSpanLayoutTest.TearDown;
+begin
+  FreeAndNil(FLay);
+  FreeAndNil(FDoc);
+end;
+
+// the row paragraph APara is in, laid out (the reference given back: the cache keeps it)
+function TTyRichSpanLayoutTest.Row(APara: Integer; APPI: Integer): TTyRowLayout;
+var
+  b: TTyBlockLayout;
+begin
+  b := FLay.LayoutBlock(FDoc, APara, 600, APPI, 1.0);
+  AssertTrue('a row', b is TTyRowLayout);
+  Result := TTyRowLayout(b);
+  b.Release;
+end;
+
+procedure TTyRichSpanLayoutTest.Changed;
+begin
+  FLay.DocumentChanged(FDoc.UndoStep.Change);
+end;
+
+{ A merged cell's content taller than its rows: the first row as tall as its own cell (B), the
+  last grown by what the content needs more; the content over both, its caret below the first
+  row's bottom; no grid made. }
+procedure TTyRichSpanLayoutTest.TestLayoutOfSpans;
+var
+  r0, r1: TTyRowLayout;
+  need: Integer;
+  n: Int64;
+  c: TRect;
+begin
+  n := TyRichGridBuildCount;
+  Open(CTall);
+  r0 := Row(1);
+  r1 := Row(6);
+  AssertEquals('the first row: its own cell B', r0.Cells[1].Need, r0.Height);
+  need := r0.Cells[0].PadTop + r0.Cells[0].ContentHeight + r0.Cells[0].PadBottom;
+  if rcsBottom in r1.Cells[0].Sides then Inc(need, r1.Cells[0].LinePx[rcsBottom]);
+  AssertTrue('the content is taller than the first row', need > r0.Height);
+  AssertEquals('the last row grown by what it needs more', need - r0.Height, r1.Height);
+  AssertTrue('more than its own cell D', r1.Height > r1.Cells[1].Need);
+  AssertEquals('the merged cell over both rows', r0.Height + r1.Height, r0.Cells[0].SpanHeight);
+  AssertTrue('the row below it covered', r1.Cells[0].Covered);
+  // the caret at A4's end: below the first row's bottom, inside the merged cell
+  c := r0.CaretRect(r0.Items[3].Pos + 2);
+  AssertTrue(Format('the caret in the last line (%d..%d, first row %d)', [c.Top, c.Bottom,
+    r0.Height]), (c.Top >= r0.Height) and (c.Bottom <= r0.Cells[0].SpanHeight));
+  AssertEquals('no grid made', n, TyRichGridBuildCount);
+end;
+
+{ A short merged cell: its rows as tall as their own cells (three lines each), it laid out
+  over the two together. }
+procedure TTyRichSpanLayoutTest.TestTheJointHeightComesFromThePlainCells;
+var
+  r0, r1: TTyRowLayout;
+begin
+  Open(ShortSpan(''));
+  r0 := Row(1);
+  r1 := Row(5);
+  AssertEquals('the first row: B', r0.Cells[1].Need, r0.Height);
+  AssertEquals('the second row: D', r1.Cells[1].Need, r1.Height);
+  AssertEquals('the joint height', r0.Height + r1.Height, r0.Cells[0].SpanHeight);
+  AssertEquals('top: under its padding', r0.Cells[0].PadTop, r0.Items[0].Y);
+end;
+
+{ Top, centre, bottom: the offset in the joint height to the pixel, at 100 % and 150 %. }
+procedure TTyRichSpanLayoutTest.TestEachAlignmentInTheJointHeight;
+const
+  Aligns: array[0..2] of string = ('', '\clvertalc', '\clvertalb');
+var
+  r0, r1: TTyRowLayout;
+  a, p, ppi, room, want: Integer;
+begin
+  for p := 0 to 1 do
+    for a := 0 to 2 do
+    begin
+      if p = 0 then ppi := 96 else ppi := 144;
+      Open(ShortSpan(Aligns[a]));
+      r0 := Row(1, ppi);
+      r1 := Row(5, ppi);
+      room := r0.Height + r1.Height - r0.Cells[0].PadTop - r0.Cells[0].PadBottom -
+        r0.Cells[0].ContentHeight;
+      case a of
+        1: want := room div 2;
+        2: want := room;
+      else
+        want := 0;
+      end;
+      AssertTrue('room to place it in', room > 0);
+      AssertEquals(Format('alignment %d at %d PPI', [a, ppi]), r0.Cells[0].PadTop + want,
+        r0.Items[0].Y);
+    end;
+end;
+
+{ An exact last row does not grow: the merged cell's content is cut off at its bottom. }
+procedure TTyRichSpanLayoutTest.TestAnExactRowDoesNotGrow;
+var
+  r0, r1: TTyRowLayout;
+begin
+  Open('{\rtf1\ansi{\fonttbl{\f0 Arial;}}\pard x\par' +
+    '\trowd\clvmgf\cellx1500\cellx3000\pard\intbl A1\par A2\par A3\par A4\cell B\cell\row' +
+    '\trowd\trrh-300\clvmrg\cellx1500\cellx3000\pard\intbl \cell D\cell\row' +
+    '\pard after\par}');
+  r0 := Row(1);
+  r1 := Row(6);
+  AssertEquals('exactly its height', TyRichTwipsToPx(300, 96, 1.0), r1.Height);
+  AssertEquals('the first row: its own cell', r0.Cells[1].Need, r0.Height);
+  AssertTrue('the content more than the rows',
+    r0.Cells[0].ContentHeight > r0.Height + r1.Height);
+  AssertEquals('the merged cell: the rows'' height', r0.Height + r1.Height, r0.Cells[0].SpanHeight);
+end;
+
+{ A point in the covered row's place answers the merged cell's position there - the same the
+  first row answers for that height (a position before the covered row's own). }
+procedure TTyRichSpanLayoutTest.TestAPointInACoveredPlaceLandsInTheSpan;
+var
+  r0, r1: TTyRowLayout;
+  x, y, got, want: Integer;
+  e: Boolean;
+begin
+  Open(CTall);
+  r0 := Row(1);
+  r1 := Row(6);
+  x := r0.Cells[0].Left + 3;
+  for y := 0 to r1.Height - 1 do
+  begin
+    got := FDoc.Text.ParaStart(6) + r1.PosAtPoint(x, y, e);
+    want := FDoc.Text.ParaStart(1) + r0.PosAtPoint(x, r0.Height + y, e);
+    AssertEquals(Format('at %d', [y]), want, got);
+    AssertTrue('in the merged cell', (FDoc.Text.ParaOfPos(got) >= 1) and
+      (FDoc.Text.ParaOfPos(got) <= 4));
+  end;
+  // below its last line: its last line
+  AssertEquals('below the content: the last line', 4, FDoc.Text.ParaOfPos(FDoc.Text.ParaStart(6) +
+    r1.PosAtPoint(x, r1.Height - 1, e)));
+  // the plain cell beside it is its own
+  AssertEquals('D is D', 7, FDoc.Text.ParaOfPos(FDoc.Text.ParaStart(6) +
+    r1.PosAtPoint(r1.Cells[1].Left + 3, 2, e)));
+end;
+
+{ A key in the merged cell: its rows go (the row below them stays, as the paragraph above),
+  and laid out again they take the new content's height. }
+procedure TTyRichSpanLayoutTest.TestAnEditInASpanLaysOutOnlyItsRows;
+var
+  r1: TTyRowLayout;
+  h1: Integer;
+  b: TTyBlockLayout;
+begin
+  Open(CTall);
+  b := FLay.LayoutBlock(FDoc, 0, 600, 96, 1.0);
+  b.Release;
+  Row(1);
+  r1 := Row(6);
+  h1 := r1.Height;
+  b := FLay.LayoutBlock(FDoc, 8, 600, 96, 1.0);
+  b.Release;
+  AssertTrue('a line more in A4', FDoc.Execute(TTyRichInsertText.Create(FDoc.Text.ParaStart(4) + 2,
+    #10 + 'A5')));
+  Changed;
+  AssertNull('the merged cell''s row goes', FLay.CachedLayout(1));
+  AssertNull('the row it covers goes too', FLay.CachedLayout(7));
+  AssertNotNull('the paragraph above stays', FLay.CachedLayout(0));
+  AssertNotNull('the paragraph below stays', FLay.CachedLayout(9));
+  r1 := Row(7);
+  AssertTrue(Format('the last row taller (%d, was %d)', [r1.Height, h1]), r1.Height > h1);
+end;
+
+{ A merged cell over three rows, centred: a line more in the middle row's other cell makes the
+  rows taller and moves the merged cell's content down. }
+procedure TTyRichSpanLayoutTest.TestANeighbourInAMiddleRowMovesTheCentredContent;
+const
+  Three = '{\rtf1\ansi{\fonttbl{\f0 Arial;}}\pard x\par' +
+    '\trowd\clvmgf\clvertalc\cellx1500\cellx3000\pard\intbl A\cell B\cell\row' +
+    '\trowd\clvmrg\clvertalc\cellx1500\cellx3000\pard\intbl \cell D\cell\row' +
+    '\trowd\clvmrg\clvertalc\cellx1500\cellx3000\pard\intbl \cell F\cell\row' +
+    '\pard after\par}';
+var
+  y0: Integer;
+begin
+  Open(Three);
+  y0 := Row(1).Items[0].Y;
+  // D is paragraph 4
+  AssertTrue('a line more in D', FDoc.Execute(TTyRichInsertText.Create(FDoc.Text.ParaStart(4) + 1,
+    #10 + 'D2')));
+  Changed;
+  AssertTrue(Format('the centred content lower (%d, was %d)', [Row(1).Items[0].Y, y0]),
+    Row(1).Items[0].Y > y0);
+end;
+
+{ The covered row draws the merged cell's lines that fall in it (the test device logs each
+  text it draws). }
+procedure TTyRichSpanLayoutTest.TestTheCoveredRowShowsTheRestOfTheContent;
+var
+  r1: TTyRowLayout;
+  bmp: TBGRABitmap;
+  i, found: Integer;
+  st: TTyRichPaintStyle;
+  log: TStringList;
+begin
+  Open(CTall);
+  Row(1);
+  r1 := Row(6);
+  st := TyRichDefaultPaintStyle;
+  log := TTyRichTestDevice(FLay.Device).DrawLog;
+  log.Clear;
+  bmp := TBGRABitmap.Create(600, r1.Height + 20, BGRAWhite);
+  try
+    r1.Paint(bmp, 0, 10, Rect(0, 0, 600, r1.Height + 20), st, 0, 0);
+  finally
+    bmp.Free;
+  end;
+  found := 0;
+  for i := 0 to log.Count - 1 do
+    if Copy(log[i], 1, 1) = 'A' then Inc(found);
+  AssertTrue('a line of the merged cell drawn by the covered row: ' + log.CommaText, found > 0);
+  AssertTrue('A1 is the first row''s: not here', Pos('A1|', log.Text) = 0);
+end;
+
+{ The rows of a table painted one under the other, as the view stacks them; the ink rows at
+  x AX from AY0 to AY1 (not the white ground). }
+function InkRun(ALay: TTyRichLayouter; ADoc: TTyRichDocument; const AFirsts: array of Integer;
+  APPI, AX, AY0, AY1: Integer): Integer;
+var
+  bmp: TBGRABitmap;
+  y, i: Integer;
+  b: TTyBlockLayout;
+  st: TTyRichPaintStyle;
+  p: TBGRAPixel;
+begin
+  st := TyRichDefaultPaintStyle;
+  bmp := TBGRABitmap.Create(800, 400, BGRAWhite);
+  try
+    y := 0;
+    for i := 0 to High(AFirsts) do
+    begin
+      b := ALay.LayoutBlock(ADoc, AFirsts[i], 800, APPI, 1.0);
+      try
+        b.Paint(bmp, 0, y, Rect(0, 0, 800, 400), st, 0, 0);
+        Inc(y, b.Height);
+      finally
+        b.Release;
+      end;
+    end;
+    Result := 0;
+    for y := AY0 to AY1 do
+    begin
+      p := bmp.GetPixel(AX, y);
+      if (p.red < 250) or (p.green < 250) or (p.blue < 250) then Inc(Result);
+    end;
+  finally
+    bmp.Free;
+  end;
+end;
+
+{ Along the edge two rows share, each part two cells really share has one line at one place:
+  a cell over three columns above three cells - their tops and its bottom are one line, as
+  wide as the same line between two rows of three (one pixel at 100 % and 150 %); a wider
+  line on one side wins on the part they share. }
+procedure TTyRichSpanLayoutTest.TestALineTwoRowsShareIsDrawnOnce;
+const
+  B = '\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10';
+  Wide30 = '\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw30\clbrdrr\brdrs\brdrw10';
+  function Doc(const AWideLook: string): RawByteString;
+  begin
+    Result := '{\rtf1\ansi{\fonttbl{\f0 Arial;}}' +
+      '\trowd' + AWideLook + '\cellx4500\pard\intbl\cell\row' +
+      '\trowd' + B + '\cellx1500' + B + '\cellx3000' + B + '\cellx4500\pard\intbl\cell\cell\cell\row' +
+      '\trowd' + B + '\cellx1500' + B + '\cellx3000' + B + '\cellx4500\pard\intbl\cell\cell\cell\row' +
+      '\pard\par}';
+  end;
+var
+  p, ppi, h0, h1, x, across, plain, wide: Integer;
+  r: TTyRowLayout;
+begin
+  for p := 0 to 1 do
+  begin
+    if p = 0 then ppi := 96 else ppi := 144;
+    Open(Doc(B));
+    r := Row(0, ppi);
+    h0 := r.Height;
+    h1 := Row(1, ppi).Height;
+    // the middle of the second column
+    x := (Row(1, ppi).Cells[1].Left + Row(1, ppi).Cells[1].Right) div 2;
+    across := InkRun(FLay, FDoc, [0, 1, 4], ppi, x, h0 - 4, h0 + 3);
+    plain := InkRun(FLay, FDoc, [0, 1, 4], ppi, x, h0 + h1 - 4, h0 + h1 + 3);
+    AssertEquals(Format('the wide cell''s edge with three: one line (%d PPI)', [ppi]), plain, across);
+    AssertEquals(Format('one pixel (%d PPI)', [ppi]), 1, plain);
+    // a wider bottom on the wide cell: it, not both
+    Open(Doc(Wide30));
+    h0 := Row(0, ppi).Height;
+    wide := InkRun(FLay, FDoc, [0, 1, 4], ppi, x, h0 - 6, h0 + 3);
+    h1 := TyRichTwipsToPx(30, ppi, 1.0);
+    if h1 < 1 then h1 := 1;
+    AssertEquals(Format('the wider wins, alone (%d PPI)', [ppi]), h1, wide);
+  end;
+end;
+
 initialization
   RegisterTest(TTyRichGridTest);
   RegisterTest(TTyRichGridControlTest);
+  RegisterTest(TTyRichSpanLayoutTest);
 end.

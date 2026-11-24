@@ -68,6 +68,7 @@ type
     procedure TestAutoHeightOfAThousandParagraphsAfterAWidthChange;
     procedure TestABuilderOfTenThousandFormattedParagraphs;
     procedure TestABookmarkAmong200000In100MB;
+    procedure TestALongTableWithASpanEveryTenthRow;
     procedure TestListItemsMadeInA100MBRtfSaveAsAKeyDoes;
     procedure TestATableCellPropertyAndARowInALongTable;
     procedure TestAScreenOfALongStyledTable;
@@ -2629,6 +2630,79 @@ begin
     AssertTrue(Format('Up in %.1f ms', [up]), up <= CKeystrokeMs);
     AssertTrue(Format('a key in %.1f ms', [key]), key <= CKeystrokeMs);
   finally
+    bmp.Free;
+  end;
+end;
+
+{ A table of 10,000 rows of three cells with a cell over two rows every tenth row, made by the
+  builder: the first paint, and the view set to the table's end and painted, within their
+  lines; then a table whose first cell is merged over 1,000 rows: a character typed in it, to
+  the end of its paint (its 1,000 rows laid out again: reported, within the scroll line). }
+procedure TTyRichEditPerfTest.TestALongTableWithASpanEveryTenthRow;
+const
+  Rows = 10000;
+  Long = 1000;
+var
+  bmp: TBitmap;
+  B: TTyRichBuilder;
+  i: Integer;
+  t0, first, toEnd, key, setc: Double;
+  t: TTyRichText;
+begin
+  bmp := TBitmap.Create;
+  B := TTyRichBuilder.Create;
+  try
+    bmp.PixelFormat := pf32bit;
+    bmp.SetSize(FRich.Width, FRich.Height);
+    B.Table([2000, 2000, 2000]);
+    for i := 0 to Rows - 1 do
+    begin
+      if i > 0 then B.Row;
+      if i mod 10 = 0 then B.Cell(1, 2).Text('span ' + IntToStr(i))
+      else if i mod 10 <> 1 then B.Cell.Text('a ' + IntToStr(i));
+      B.Cell.Text('b ' + IntToStr(i)).Cell.Text('c');
+    end;
+    B.EndTable;
+    t0 := Clock;
+    FRich.SetContent(B);
+    setc := Clock - t0;
+    Report(Format('table of %d rows, a cell over two rows every tenth: SetContent (not asserted)',
+      [Rows]), setc);
+    t0 := Clock;
+    TPerfRich(FRich).PaintInto(bmp);
+    first := Clock - t0;
+    Report('table with spans: the first paint', first);
+    t0 := Clock;
+    FRich.ScrollY := FRich.Document.Text.TotalHeight;
+    TPerfRich(FRich).PaintInto(bmp);
+    toEnd := Clock - t0;
+    Report('table with spans: the view set to its end and painted', toEnd);
+    AssertTrue(Format('the first paint in %.0f ms', [first]), first <= CFirstScreenMs);
+    AssertTrue(Format('the end in %.0f ms', [toEnd]), toEnd <= CScrollMs);
+    // one cell over 1,000 rows
+    B.Free;
+    B := TTyRichBuilder.Create;
+    B.Table([2000, 2000, 2000]);
+    for i := 0 to Long - 1 do
+    begin
+      if i > 0 then B.Row;
+      if i = 0 then B.Cell(1, Long).Text('the long one');
+      B.Cell.Text('b ' + IntToStr(i)).Cell.Text('c');
+    end;
+    B.EndTable;
+    FRich.SetContent(B);
+    t := FRich.Document.Text;
+    FRich.SelStart := t.ParaLength(0);
+    TPerfRich(FRich).PaintInto(bmp);
+    t0 := Clock;
+    TPerfRich(FRich).TypeChar('x');
+    TPerfRich(FRich).PaintInto(bmp);
+    key := Clock - t0;
+    Report(Format('a cell over %d rows: a character typed in it, to the end of its paint', [Long]), key);
+    AssertEquals('typed', 'x', string(t.GetText(t.ParaLength(0) - 1, 1)));
+    AssertTrue(Format('a key in it in %.1f ms', [key]), key <= CScrollMs);
+  finally
+    B.Free;
     bmp.Free;
   end;
 end;

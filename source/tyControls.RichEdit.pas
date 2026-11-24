@@ -5512,6 +5512,10 @@ begin
   if (ADown and (k < FBlockCount - 1)) or (not ADown and (k > 0)) then
   begin
     if ADown then y := FBlocks[k].Top + FBlocks[k].Height else y := FBlocks[k].Top - 1;
+    // (a cell merged over rows: below its last row)
+    if ADown and (FBlocks[k].Layout is TTyRowLayout) then
+      y := FBlocks[k].Top + TTyRowLayout(FBlocks[k].Layout).CellBottomAt(FCaret -
+        FDoc.Text.ParaStart(FBlocks[k].FirstPara));
     Result := HitRaster(FWishX, y, AAtEnd);
     if not Went(Result) then Result := -1;
   end
@@ -20802,6 +20806,14 @@ begin
     stop := t.ParaStart(FBlocks[AIndex].LastPara) + t.ParaLength(FBlocks[AIndex].LastPara);
     a := Math.Max(GetSelStart - start, 0);
     b := Math.Min(GetSelStart + GetSelLength - start, stop - start + 1);
+    { a row that shows a part of a cell merged from a row above: that cell's positions are
+      before the row's own, the selection there too }
+    if (FBlocks[AIndex].Layout is TTyRowLayout) and
+       TTyRowLayout(FBlocks[AIndex].Layout).HasSpanSlices then
+    begin
+      a := GetSelStart - start;
+      b := GetSelStart + GetSelLength - start;
+    end;
     if b <= a then
     begin
       a := 0;

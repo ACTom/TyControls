@@ -1834,7 +1834,9 @@ begin
   PaintAll(FB);
   FA.SelStart := 4;
   FA.SelLength := 3;
-  p := Point(FA.OtherAt.X + 40, FA.OtherAt.Y + FB.Height - 2);
+  { (in the second column: the first is merged over the nested table's row there, and a point
+    in a merged cell lands in it - in the row above) }
+  p := Point(FA.OtherAt.X + 250, FA.OtherAt.Y + FB.Height - 2);
   StartDrag(Mid(FA, 5), p);
   seenMove := False;
   seenNone := False;
