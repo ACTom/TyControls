@@ -22070,7 +22070,8 @@ begin
   t := FDoc.Text;
   FDoc.BeginRead;
   try
-    if not FDoc.TableRowsAt(ATablePos, AR1 - 1, AR2 + 1, rows, first, count) then Exit;
+    // (read from the rows' own place: a table's start would read every row before them)
+    if not FDoc.TableRowsAt(t.ParaStart(AFirstPara), AR1 - 1, AR2 + 1, rows, first, count) then Exit;
     any := False;
     for r := 0 to High(rows) do
       for i := 0 to rows[r].Format.CellCount - 1 do
@@ -22110,7 +22111,8 @@ begin
           edit.AddClear(0, i);
         end;
         if edit <> nil then comp.Add(edit);
-        comp.Add(TTyRichDeleteRow.Create(ATablePos, r));
+        // (named at its own first paragraph: the rows above it are where they were)
+        comp.Add(TTyRichDeleteRow.Create(t.ParaStart(starts[r - AR1]), r));
       end;
       Result := comp;
       comp := nil;

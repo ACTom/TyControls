@@ -2726,6 +2726,7 @@ var
   k: Integer;
   t0, ins, del: Double;
   n: Int64;
+  visits, plain: Int64;
 begin
   bmp := TBitmap.Create;
   try
@@ -2751,10 +2752,22 @@ begin
     FRich.Undo;
     FRich.SelStart := t.ParaStart(k);
     TPerfRich(FRich).PaintInto(bmp);
+    visits := d.TableParaVisits;
     t0 := Clock;
     AssertTrue('the span''s first row deleted', FRich.DeleteRow);
     TPerfRich(FRich).PaintInto(bmp);
     del := Clock - t0;
+    visits := d.TableParaVisits - visits;
+    // (a row with no merge by it, deleted the plain way, two rows above: what the door reads)
+    FRich.Undo;
+    FRich.SelStart := t.ParaStart(k - 6);
+    plain := d.TableParaVisits;
+    AssertTrue('a plain row deleted', FRich.DeleteRow);
+    plain := d.TableParaVisits - plain;
+    FRich.Undo;
+    Report(Format('table: paragraphs read: the span''s first row deleted %d, a plain row %d', [visits, plain]), 0);
+    AssertTrue(Format('the span''s row read %d paragraphs, a plain one %d', [visits, plain]),
+      visits <= plain + 200);
     Report('table: the span''s first row deleted, its content moved down, to the end of its paint', del);
     AssertEquals('no grid made for a row', n, TyRichGridBuildCount);
     AssertTrue(Format('the row in in %.1f ms', [ins]), ins <= CKeystrokeMs);
