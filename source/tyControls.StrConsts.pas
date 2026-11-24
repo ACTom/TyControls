@@ -503,6 +503,8 @@ resourcestring
   rsRichActSelectColumnHint  = 'Select the column';
   rsRichActSelectTable       = 'Select &Table';
   rsRichActSelectTableHint   = 'Select the whole table';
+  rsRichActClearCells        = 'Clear Cell &Contents';
+  rsRichActClearCellsHint    = 'Clear the contents of the selected cells';
   rsRichActCellShading = '&Shading';
   rsRichActCellShadingHint = 'Give the selected cells a shading';
   rsRichActCellBorders = '&Borders';

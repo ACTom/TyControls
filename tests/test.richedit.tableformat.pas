@@ -90,6 +90,7 @@ type
     procedure TestEdgesLinedUpAgainShareOneDefinition;
     procedure TestARandomWalkLeavesNoLineWithTwoDefinitions;
     procedure TestTheSelectActions;
+    procedure TestTheClearCellsAction;
     procedure TestTablePropertiesSetLinesInTheSameStep;
     procedure TestAlignmentActionsAreCheckedWhenAllAlike;
     procedure TestWidthsAndHeightsOverEverySelectedColumnAndRow;
@@ -1378,6 +1379,76 @@ begin
         AssertTrue('the table', g.WholeTable);
       end;
     end;
+  finally
+    list.Free;
+  end;
+end;
+
+{ Clear Cell Contents as an action: enabled by the control's own answer - with cells selected
+  (a rectangle, whole rows), not with a caret in a cell, text in one, a selection reaching out
+  of the table, outside a table, or read-only -; it empties the selected cells, the cells and
+  rows kept, in one step. }
+procedure TTyRichTableFormatTest.TestTheClearCellsAction;
+var
+  list: TActionList;
+  ac: TTyRichEditAction;
+  info: TTyRichTableInfo;
+
+  function TextOf(ARow, ACol: Integer): string;
+  begin
+    Result := FRich.Document.Text.GetText(CellStart(ARow, ACol),
+      CellEnd(ARow, ACol) - 1 - CellStart(ARow, ACol));
+  end;
+
+  procedure Off(const AWhat: string);
+  begin
+    ac.Update;
+    AssertFalse(AWhat, ac.Enabled);
+    AssertFalse(AWhat + ': the control''s answer', FRich.CanClearCells);
+  end;
+
+begin
+  list := TActionList.Create(nil);
+  try
+    ac := TTyRichEditClearCells.Create(list);
+    ac.RichEdit := FRich;
+    MakeTable(3, 3);
+    FRich.SelStart := 1;
+    Off('outside a table');
+    Sel(CellStart(1, 1) + 1, CellStart(1, 1) + 1);
+    Off('a caret in a cell');
+    Sel(CellStart(1, 1), CellStart(1, 1) + 2);
+    Off('text in a cell');
+    Sel(2, CellStart(1, 1) + 1);
+    Off('reaching out of the table');
+    // a rectangle: r0c1 .. r1c2
+    Sel(CellStart(0, 1), CellStart(1, 2) + 1);
+    ac.Update;
+    AssertTrue('on over cells', ac.Enabled);
+    AssertTrue('the control''s answer', FRich.CanClearCells);
+    ac.Execute;
+    AssertEquals('emptied', '', TextOf(0, 1));
+    AssertEquals('emptied too', '', TextOf(1, 2));
+    AssertEquals('beside them', 'r2c2', TextOf(2, 2));
+    AssertEquals('left of them', 'r0c0', TextOf(0, 0));
+    AssertEquals('one step', 1, FRich.Document.UndoDepth);
+    FRich.Undo;
+    AssertEquals('undone', 'r0c1', TextOf(0, 1));
+    // whole rows: emptied, not deleted
+    Sel(CellStart(1, 0), CellEnd(1, 2));
+    ac.Update;
+    AssertTrue('on over whole rows', ac.Enabled);
+    ac.Execute;
+    AssertTrue('the rows stay', FRich.Document.TableInfoAt(1, info) and (info.RowCount = 3));
+    AssertEquals('the row emptied', '', TextOf(1, 0));
+    AssertEquals('the row above kept', 'r0c0', TextOf(0, 0));
+    FRich.Undo;
+    // read-only: off, and the door does nothing
+    Sel(CellStart(0, 1), CellStart(1, 2) + 1);
+    FRich.ReadOnly := True;
+    Off('read-only');
+    AssertFalse('the door refuses', FRich.ClearCells);
+    AssertEquals('nothing emptied', 'r0c1', TextOf(0, 1));
   finally
     list.Free;
   end;

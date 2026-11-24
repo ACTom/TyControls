@@ -95,6 +95,7 @@ RichEdit1.SaveToFile('说明.rtf');
 | `TTyRichEditInsertColumnLeft` / `ColumnRight` | 在左侧 / 右侧插入列 | — | `CanInsertColumn` | — |
 | `TTyRichEditDeleteRow` / `DeleteColumn` / `DeleteTable` | 删除行 / 列 / 表格 | — | `CanDeleteRow` / `CanDeleteColumn` / `CanDeleteTable` | — |
 | `TTyRichEditSelectCell` / `SelectRow` / `SelectColumn` / `SelectTable` | 选择单元格 / 行 / 列 / 表格 | — | `CanSelectCells` | — |
+| `TTyRichEditClearCells` | 清除单元格内容 | — | `CanClearCells` | — |
 | `TTyRichEditCellShading` | 底色 | — | `CanFormatCells` | — |
 | `TTyRichEditCellBorders` | 边框 | — | `CanFormatCells` | — |
 | `TTyRichEditCellPadding` | 单元格内边距 | — | `CanFormatCells` | — |
@@ -259,7 +260,7 @@ end;
 
 代码里：`SelectCell`、`SelectRow`、`SelectColumn`、`SelectTable`(光标所在的格、行、列、表)；`SelectedCells` 给出范围(`TTyRichCellRange`：`InTable`、表的位置 `TablePos`、`Row0`、`Col0`、`Row1`、`Col1`、`WholeTable`)，`CaretCell(TablePos, Row, Col)` 给出光标所在的格。选择不算编辑：`ReadOnly` 时这些区域照样能选，只是没有手柄，什么也拖不动；`AllowSelection` 为 False 时没有这些区域，也没有手柄。动作 `TTyRichEditSelectCell`、`SelectRow`、`SelectColumn`、`SelectTable` 执行它们，由 `CanSelectCells` 决定是否可用。
 
-**选中单元格时按键做什么。** Delete 清空它们，格子留着(一步)；Backspace 删掉整个被选中的部分——整行选中删这些行，整列选中删这些列，整张表选中删表——其余同 Delete，只清空；剪切先复制这些格子，再做 Backspace 做的事(一块矩形复制后清空，整列复制后删列，整行和整张表按行剪切)；选区一头在表外时，打字、Delete、Backspace 和剪切都被拒绝；打字替换第一个格子的内容，其余格子不变(和 Word 一样)；字符格式、段落格式作用到每个选中的格子。复制出来的是一张小表，外加用制表符分隔的文字，一行一行。光标在单元格里时粘贴一张表——控件自己的、Word 的、或者电子表格那种带制表符的文字——从这一格起逐格填进去，行不够在末尾加行，超出最后一列的丢掉，并说一次。没有自己字号的文字(控件的默认字号)复制、剪切、保存时都按它显示的字号写出，和它的字体按名字写出一样：粘贴回本控件或者字号不同的另一个控件，不论是单元格还是文字，都和原来一样大；文字自己的字号、字体、颜色原样带过去。
+**选中单元格时按键做什么。** Delete 清空它们，格子留着(一步)——代码里 `ClearCells` 做同样的事，`CanClearCells` 回答现在能不能做，动作 `TTyRichEditClearCells` 执行它；Backspace 删掉整个被选中的部分——整行选中删这些行，整列选中删这些列，整张表选中删表——其余同 Delete，只清空；剪切先复制这些格子，再做 Backspace 做的事(一块矩形复制后清空，整列复制后删列，整行和整张表按行剪切)；选区一头在表外时，打字、Delete、Backspace 和剪切都被拒绝；打字替换第一个格子的内容，其余格子不变(和 Word 一样)；字符格式、段落格式作用到每个选中的格子。复制出来的是一张小表，外加用制表符分隔的文字，一行一行。光标在单元格里时粘贴一张表——控件自己的、Word 的、或者电子表格那种带制表符的文字——从这一格起逐格填进去，行不够在末尾加行，超出最后一列的丢掉，并说一次。没有自己字号的文字(控件的默认字号)复制、剪切、保存时都按它显示的字号写出，和它的字体按名字写出一样：粘贴回本控件或者字号不同的另一个控件，不论是单元格还是文字，都和原来一样大；文字自己的字号、字体、颜色原样带过去。
 
 **按选区增删行列。** "在上方 / 下方插入行"和"在左侧 / 右侧插入列"按选中的格子盖到几行(几列)就插几行(几列)——选了三行就插三行——插在第一行上方或最后一行下方(第一列左侧或最后一列右侧)；没选格子时在光标处插一行(一列)。"删除行""删除列"删掉选区盖到的行(列)，按选区画出来的样子算(盖满所有列的矩形就是整张表)；"删除表格"删整张表。每个都是一步撤销。
 

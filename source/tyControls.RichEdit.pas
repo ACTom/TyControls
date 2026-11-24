@@ -2030,7 +2030,7 @@ type
     function CaretCellPara: Integer;
     function SelectCells(AKind: Integer): Boolean;
     function CellsKey(AForward: Boolean): Boolean;
-    procedure ClearCells(const AArea: TTyRichCellArea);
+    procedure ClearArea(const AArea: TTyRichCellArea);
     function FirstAreaCell(const AArea: TTyRichCellArea; out AFirst, ALast: Integer): Boolean;
     function AreaCellCommand(const AArea: TTyRichCellArea; AParas: Boolean; AMaskC: TTyCharFormatMask;
       const AChar: TTyCharFormat; AKeep: TTyCharFormatMask; AMaskP: TTyParaFormatMask;
@@ -2908,6 +2908,14 @@ type
       that reaches from cells out of their table (refused there). Over cells it copies them
       and clears them (whole rows, columns, the table go, as Backspace takes them). }
     function CanCut: Boolean;
+    { The selected cells' contents cleared, the cells and their formats kept - what Delete does
+      to them -, in one step (rows that hold a nested table are left as they are, told once).
+      False: CanClearCells says no. }
+    function ClearCells: Boolean;
+    { ClearCells may run now: the selection is cells of one table (a rectangle, whole rows,
+      columns or the table - not rows reached from outside it), the control not read-only,
+      enabled. }
+    function CanClearCells: Boolean;
     { Column widths and row heights. With the pointer on a column's edge (the east-west cursor)
       a drag moves that edge: only a guide line follows the pointer, and the release runs ONE
       command - the cells either side trade width and the table keeps its width; with Shift the
@@ -21068,6 +21076,19 @@ begin
   if area.Range.InTable and area.Outside then Result := False;
 end;
 
+function TTyCustomRichEdit.CanClearCells: Boolean;
+begin
+  Result := not FReadOnly and IsEnabled and not ViewBehind and TyRichCellsEditable(CellArea);
+end;
+
+function TTyCustomRichEdit.ClearCells: Boolean;
+begin
+  // the door of a user's edit: a composition goes in first
+  EndCompositionForUser;
+  Result := CanClearCells;
+  if Result then ClearArea(CellArea);
+end;
+
 function TTyCustomRichEdit.CaretCellPara: Integer;
 var
   t: TTyRichText;
@@ -21377,7 +21398,7 @@ begin
   end;
 end;
 
-procedure TTyCustomRichEdit.ClearCells(const AArea: TTyRichCellArea);
+procedure TTyCustomRichEdit.ClearArea(const AArea: TTyRichCellArea);
 var
   g: TTyCellGather;
   place: TTyRichEditPlace;
@@ -21439,7 +21460,7 @@ begin
       Exit;
     end;
   end;
-  ClearCells(area);
+  ClearArea(area);
 end;
 
 { The content [AStart, AStart + ALen) of this document as a document of its own (RTF there and

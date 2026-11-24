@@ -117,7 +117,7 @@ type
     FCanRowIns, FCanColIns, FCanRowDel, FCanColDel, FCanTableDel: Boolean;
     FCanLink, FCanEditLink: Boolean;
     FCanCells, FCanColSize, FCanRowSize: Boolean;
-    FCanSelectCells: Boolean;
+    FCanSelectCells, FCanClearCells: Boolean;
     FHasTableProps: Boolean;
     FTableProps: TTyRichTableProperties;
     procedure ViewChanged(Sender: TObject);
@@ -178,6 +178,8 @@ type
     property CanResizeColumns: Boolean read FCanColSize;
     // the control's CanSelectCells
     property CanSelectCells: Boolean read FCanSelectCells;
+    // the control's CanClearCells
+    property CanClearCells: Boolean read FCanClearCells;
     { GetTableProperties of the selection (HasTableProperties: there were cells to read;
       read only while CanFormatCells): what the alignment actions show checked. }
     property HasTableProperties: Boolean read FHasTableProps;
@@ -879,6 +881,17 @@ type
     constructor Create(AOwner: TComponent); override;
   end;
 
+  { The selected cells' contents cleared, the cells kept (the control's ClearCells, what Delete
+    does to them), Enabled by its CanClearCells. No shortcut of its own: the Delete key is the
+    focused control's. }
+  TTyRichEditClearCells = class(TTyRichEditAction)
+  protected
+    procedure UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+    procedure ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+  public
+    constructor Create(AOwner: TComponent); override;
+  end;
+
 
   { ---- a table's formats and sizes: Enabled by the control's CanFormatCells / CanResize... ---- }
 
@@ -1028,7 +1041,7 @@ type
 
 const
   { Every action of this unit, in the order the IDE lists them. }
-  CTyRichEditActions: array[0..59] of TTyRichEditActionClass = (
+  CTyRichEditActions: array[0..60] of TTyRichEditActionClass = (
     TTyRichEditBold, TTyRichEditItalic, TTyRichEditUnderline, TTyRichEditStrikeOut,
     TTyRichEditSuperscript, TTyRichEditSubscript,
     TTyRichEditAlignLeft, TTyRichEditAlignCenter, TTyRichEditAlignRight,
@@ -1047,7 +1060,8 @@ const
     TTyRichEditCellPadding, TTyRichEditCellVAlign, TTyRichEditTableAlign,
     TTyRichEditTableProperties, TTyRichEditAutoFitColumn, TTyRichEditDistributeColumns,
     TTyRichEditDistributeRows, TTyRichEditFitTableToWindow, TTyRichEditSelectCell,
-    TTyRichEditSelectRow, TTyRichEditSelectColumn, TTyRichEditSelectTable);
+    TTyRichEditSelectRow, TTyRichEditSelectColumn, TTyRichEditSelectTable,
+    TTyRichEditClearCells);
 
   { The font sizes the grow and shrink actions step through (points). }
   CTyRichFontSizes: array[0..15] of Integer = (8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28,
@@ -1198,9 +1212,10 @@ begin
   FCanColSize := FRich.CanResizeColumns;
   FCanRowSize := FRich.CanResizeRows;
   FCanSelectCells := FRich.CanSelectCells;
+  FCanClearCells := FRich.CanClearCells;
   FHasTableProps := FCanCells and FRich.GetTableProperties(FTableProps);
   if not FHasTableProps then FTableProps := Default(TTyRichTableProperties);
-  Inc(FQueries, 14);
+  Inc(FQueries, 15);
 end;
 
 { TTyRichEditAction }
@@ -2832,6 +2847,26 @@ begin
   inherited Create(AOwner);
   Caption := rsRichActSelectTable;
   Hint := rsRichActSelectTableHint;
+end;
+
+{ ---- clearing cells ---- }
+
+constructor TTyRichEditClearCells.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  Caption := rsRichActClearCells;
+  Hint := rsRichActClearCellsHint;
+end;
+
+procedure TTyRichEditClearCells.UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState);
+begin
+  Enabled := AState.CanClearCells;
+  Checked := False;
+end;
+
+procedure TTyRichEditClearCells.ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState);
+begin
+  ARich.ClearCells;
 end;
 
 end.

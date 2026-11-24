@@ -757,6 +757,14 @@ msgstr ""
 msgid "Set where the selected cells' content sits"
 msgstr ""
 
+#: tycontrols.strconsts.rsrichactclearcells
+msgid "Clear Cell &Contents"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactclearcellshint
+msgid "Clear the contents of the selected cells"
+msgstr ""
+
 #: tycontrols.strconsts.rsrichactclearformat
 msgid "Clear &Formatting"
 msgstr ""

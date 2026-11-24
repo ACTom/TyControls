@@ -1576,6 +1576,14 @@ msgstr "选择表格(&T)"
 msgid "Select the whole table"
 msgstr "选择整个表格"
 
+#: tycontrols.strconsts.rsrichactclearcells
+msgid "Clear Cell &Contents"
+msgstr "清除单元格内容(&C)"
+
+#: tycontrols.strconsts.rsrichactclearcellshint
+msgid "Clear the contents of the selected cells"
+msgstr "清除所选单元格的内容"
+
 #: tycontrols.strconsts.rsrichactcellshading
 msgid "&Shading"
 msgstr "底色(&S)"
