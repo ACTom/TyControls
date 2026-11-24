@@ -129,6 +129,9 @@ type
 
 implementation
 
+uses
+  LazFileUtils;   { ChompPathDelim }
+
 { A friendly label for APath given a roots snapshot: a matching root's Display, else the
   leaf name, else the path verbatim. Shared by TyLookInPlaces and PaintFieldContent. }
 function TyLookInLabelFor(const APath: string; const ARoots: TTyFsRootArray): string;
@@ -408,7 +411,11 @@ procedure TTyShellComboBox.SetDirectory(const AValue: string);
 var
   p2: string;
 begin
-  p2 := ExcludeTrailingPathDelimiter(Trim(AValue));
+  { #247. No trailing delimiter -- EXCEPT on a root, which is not a root without it: 'C:' is
+    the current directory of drive C, and '/' less its slash is nothing. ExcludeTrailing-
+    PathDelimiter did not make the exception, so at a drive's root the row of the current
+    path was built from 'C:', matched none of the roots, and the drive was listed twice. }
+  p2 := ChompPathDelim(Trim(AValue));
   { Re-entrancy guard: navigating back to the same directory must not rebuild + loop. }
   if SameFileName(p2, FDirectory) then
     Exit;
