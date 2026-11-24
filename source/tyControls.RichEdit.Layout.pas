@@ -1197,8 +1197,9 @@ function TyRichReadCmapTable(const ATable: TBytes; out ASymbol: Boolean;
 { What a list item's marker reads: a bullet by level (U+2022, U+25E6, U+25AA, over again from
   level 3), or ANumber followed by a full stop - 1, 2, 3; a, b, ... z, aa, bb, ... zz, aaa
   (Word's letters: the letter of the number's place, once more each time round the alphabet,
-  up to 780 - thirty letters); i, ii, ... (roman up to 3999). A number the kind cannot write
-  (below 1, past 780 in letters, past 3999 in roman) is written in digits. '' for no list. }
+  up to 780 - thirty z's - and from a again after it, as Word: 781 is a); i, ii, ... (roman
+  up to 3999). A number the kind cannot write (below 1, past 3999 in roman) is written in
+  digits. '' for no list. }
 function TyRichListMarkerText(AKind: TTyListKind; ALevel: Integer; ANumber: Int64): UTF8String;
 { Black text, a blue selection with white text, grey placeholders and table lines: what a
   test or a probe paints with when it has no theme. }
@@ -1536,10 +1537,10 @@ begin
     lkBullet: Exit(Bullets[((ALevel mod 3) + 3) mod 3]);
   end;
   s := '';
-  if (ANumber >= 1) and (ANumber <= 780) and (AKind in [lkLowerAlpha, lkUpperAlpha]) then
+  if (ANumber >= 1) and (AKind in [lkLowerAlpha, lkUpperAlpha]) then
   begin
-    // Word's: 26 is z, 27 aa, 28 bb, 52 zz, 53 aaa
-    n := QWord(ANumber - 1);
+    // Word's: 26 is z, 27 aa, 28 bb, 52 zz, 53 aaa ... 780 thirty z's, 781 a again
+    n := QWord(ANumber - 1) mod 780;
     s := StringOfChar(Chr(Ord('a') + Integer(n mod 26)), Integer(n div 26) + 1);
   end
   else if (ANumber >= 1) and (ANumber <= 3999) and (AKind in [lkLowerRoman, lkUpperRoman]) then

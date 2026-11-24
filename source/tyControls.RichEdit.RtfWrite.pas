@@ -680,12 +680,15 @@ begin
     end;
 end;
 
-// a, b, ... z, aa, bb, ... zz, aaa, ... as Word writes them (up to 780: thirty letters; past
-// that, and below 1, digits - as the layout draws them)
+// a, b, ... z, aa, bb, ... zz, aaa, ... as Word writes them: up to 780 (thirty z's), then from
+// a again (781 is a); below 1, digits - as the layout draws them
 function AlphaNumber(AValue: Integer): string;
+var
+  k: Integer;
 begin
-  if (AValue <= 0) or (AValue > 780) then Exit(IntToStr(AValue));
-  Result := StringOfChar(Chr(Ord('a') + (AValue - 1) mod 26), (AValue - 1) div 26 + 1);
+  if AValue <= 0 then Exit(IntToStr(AValue));
+  k := (AValue - 1) mod 780;
+  Result := StringOfChar(Chr(Ord('a') + k mod 26), k div 26 + 1);
 end;
 
 function TyRtfListNumberText(AKind: TTyListKind; AValue: Integer): string;
