@@ -181,6 +181,7 @@ uses
   test.keytips,
   test.combobox,
   test.combobox.simple,
+  test.combobox.editfield,
   test.tabset,
   test.columns.compat,
   test.listview.layout,
