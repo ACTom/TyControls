@@ -59,6 +59,10 @@ type
         Shading: TColor;               // clNone: none
         // the borders, the padding and the alignment given (Props.Valid says which)
         Props: TTyRichCellProps;
+        // the columns and rows it covers (1 and 1: none but its own)
+        ColSpan, RowSpan: Integer;
+        // a place a span covers: no cell of the caller's, empty
+        Place: Boolean;
       end;
       TBRow = record
         HeightTwips: Integer;          // 0: automatic
@@ -74,6 +78,8 @@ type
         Align: TTyRowAlign;
         HasIndent: Boolean;
         IndentTwips: Integer;
+        // per row: the columns a span from a row above covers (bit c: column c)
+        Covered: array of QWord;
       end;
       TBStyle = record
         Name: string;
@@ -105,6 +111,10 @@ type
     FTextWidth: Integer;
     // the table being built (-1: none), its row and whether a cell is open
     FTable, FCellOpen: Integer;
+    // places the open span cell covers across, still to be made (at the next Cell, Row, EndTable)
+    FPendingPlaces: Integer;
+    // (the document TableProperties works on, for MergeSpansOf)
+    FDocFor: TTyRichDocument;
     FHasPage, FHasColor: Boolean;
     // the paragraph EndTable started holds nothing yet: a Paragraph right after is that one
     FAfterTable: Boolean;
@@ -127,6 +137,13 @@ type
     function PictureOfStream(const ACall: string; AStream: TStream;
       AWidthPt, AHeightPt: Double): TTyRichPicture;
     procedure CloseRow(const ACall: string);
+    // a cell of the current row (APlace: a place a span covers)
+    procedure AddCell(APlace: Boolean);
+    { The places due before the next cell (ATrailing: and the covered ones up to the row's
+      end, before a Row or an EndTable). }
+    procedure FlushPlaces(ATrailing: Boolean);
+    function TableColumns: Integer;
+    function MergeSpansOf(AT: Integer; APos: TTyRichPos): Boolean;
     function OpenCell(const ACall: string): Pointer;
     procedure TableProperties(ADoc: TTyRichDocument);
     function ColumnEdges(ATable: Integer; ACells: Integer): TTyRichEdges;
@@ -250,11 +267,17 @@ type
       too, twips (\trleft: the first cell's left line). }
     function TableAlign(AAlign: TTyRowAlign): TTyRichBuilder; overload;
     function TableAlign(AAlign: TTyRowAlign; AIndentTwips: Integer): TTyRichBuilder; overload;
-    { The next cell of the row: what follows is its content (paragraphs, links, pictures). }
-    function Cell: TTyRichBuilder;
+    { The next cell of the row: what follows is its content (paragraphs, links, pictures).
+      AColSpan, ARowSpan: the columns and rows it covers from here (a merged cell, as
+      MergeCells makes it: one wide cell across, a vertical merge down); its borders, padding,
+      shading and alignment are the span's. The builder keeps the places a span covers itself:
+      the next Cell is the first place to the right that no span covers - do not call Cell
+      for a place a span from above covers. A span past the table's columns or onto a place
+      already covered raises (Cell), one past the last row too (EndTable). }
+    function Cell(AColSpan: Integer = 1; ARowSpan: Integer = 1): TTyRichBuilder;
     { The table ends; what follows is a paragraph after it (a Paragraph right after EndTable
       is that same paragraph, not one more: call it twice for an empty one between). Every
-      row must have as many cells as the table has columns. }
+      row's cells and covered places must fill the table's columns. }
     function EndTable: TTyRichBuilder;
 
     { ---- styles: a convenience of the build, nothing of them goes into the document ---- }
@@ -950,6 +973,7 @@ begin
   Result := Self;
   if FTable < 0 then Misuse('Row', 'no table: call Table first');
   if AHeightTwips < 0 then Misuse('Row', 'a height is 0 or more');
+  FlushPlaces(True);
   CloseRow('Row');
   t := @FTables[FTable];
   if t^.RowCount = Length(t^.Rows) then SetLength(t^.Rows, t^.RowCount * 2);
@@ -981,6 +1005,7 @@ var
   plan: TTyRichBorderPlan;
   comp: TTyRichCompositeCommand;
   skipped: Integer;
+  r1, c1: Integer;
 
   procedure Run(ACmd: TTyRichCommand);
   begin
@@ -991,6 +1016,7 @@ var
 
 begin
   if FTableCount = 0 then Exit;
+  FDocFor := ADoc;
   any := False;
   first := nil;
   SetLength(first, FTableCount);
@@ -1013,6 +1039,10 @@ begin
       end;
       for c := 0 to FTables[t].Rows[r].CellCount - 1 do
       begin
+        if FTables[t].Rows[r].Cells[c].Place then Continue;
+        // (a span's: its whole rectangle - what the merge takes its look from)
+        r1 := r + FTables[t].Rows[r].Cells[c].RowSpan - 1;
+        c1 := c + FTables[t].Rows[r].Cells[c].ColSpan - 1;
         cp := FTables[t].Rows[r].Cells[c].Props;
         if FTables[t].Rows[r].Cells[c].Shading <> clNone then
         begin
@@ -1021,15 +1051,15 @@ begin
         end;
         // the borders on their own, each with its facing side
         cp.Valid := cp.Valid - [rcpBorderLeft, rcpBorderTop, rcpBorderRight, rcpBorderBottom];
-        if cp.Valid <> [] then Run(TTyRichSetCellProps.Create(pos, r, c, r, c, cp));
+        if cp.Valid <> [] then Run(TTyRichSetCellProps.Create(pos, r, c, r1, c1, cp));
         for sd := Low(TTyRichCellSide) to High(TTyRichCellSide) do
         begin
           if not (CBorderProp[sd] in FTables[t].Rows[r].Cells[c].Props.Valid) then Continue;
           skipped := 0;
           comp := TTyRichCompositeCommand.Create;
-          plan := TTyRichBorderPlan.Create(ADoc, pos, r, r);
+          plan := TTyRichBorderPlan.Create(ADoc, pos, r, r1);
           try
-            plan.Mark(r, c, r, c, [sd]);
+            plan.Mark(r, c, r1, c1, [sd]);
             plan.AddParts(comp, FTables[t].Rows[r].Cells[c].Props.Borders[sd], skipped);
           finally
             plan.Free;
@@ -1050,12 +1080,43 @@ begin
       end;
       Run(TTyRichSetRowProps.Create(pos, 0, FTables[t].RowCount - 1, rp));
     end;
+    if MergeSpansOf(t, pos) then any := True;
   end;
   if any then
   begin
     ADoc.ClearUndo;
     ADoc.Modified := False;
   end;
+end;
+
+{ The spans of table AT (its first position APos) merged as MergeCells merges them: every
+  row of the table as the builder made it (all rows alike), each span's rectangle by the
+  first row's edges. True: one was. }
+function TTyRichBuilder.MergeSpansOf(AT: Integer; APos: TTyRichPos): Boolean;
+var
+  rows: TTyRichRowList;
+  first, count, r, c, cs, rs: Integer;
+  e: TTyRichEdges;
+  edges: array of Integer;
+  i: Integer;
+begin
+  Result := False;
+  if not FDocFor.TableRowsAt(APos, 0, 0, rows, first, count) or (Length(rows) = 0) then Exit;
+  e := rows[0].CellEdges;
+  SetLength(edges, Length(e) + 1);
+  edges[0] := rows[0].Format.Row.LeftTwips;
+  for i := 0 to High(e) do edges[i + 1] := e[i];
+  for r := 0 to FTables[AT].RowCount - 1 do
+    for c := 0 to FTables[AT].Rows[r].CellCount - 1 do
+    begin
+      cs := FTables[AT].Rows[r].Cells[c].ColSpan;
+      rs := FTables[AT].Rows[r].Cells[c].RowSpan;
+      if FTables[AT].Rows[r].Cells[c].Place or ((cs <= 1) and (rs <= 1)) then Continue;
+      if c + cs > High(edges) then Continue;
+      if not FDocFor.Execute(TTyRichMergeCells.Create(APos, r, r + rs - 1, edges[c], edges[c + cs])) then
+        raise ETyRichEdit.Create('TTyRichBuilder: a span could not be merged');
+      Result := True;
+    end;
 end;
 
 function TTyRichBuilder.OpenCell(const ACall: string): Pointer;
@@ -1138,15 +1199,87 @@ begin
   FTables[FTable].IndentTwips := AIndentTwips;
 end;
 
-function TTyRichBuilder.Cell: TTyRichBuilder;
+function TTyRichBuilder.TableColumns: Integer;
+var
+  t: ^TBTable;
+begin
+  t := @FTables[FTable];
+  if Length(t^.Widths) > 0 then Result := Length(t^.Widths)
+  else if t^.RowCount > 1 then Result := t^.Rows[0].CellCount
+  else Result := MaxInt;
+end;
+
+procedure TTyRichBuilder.FlushPlaces(ATrailing: Boolean);
+var
+  t: ^TBTable;
+  r, n: Integer;
+
+  function CoveredHere: Boolean;
+  var
+    c: Integer;
+  begin
+    c := t^.Rows[r].CellCount;
+    Result := (r < Length(t^.Covered)) and (c < 64) and ((t^.Covered[r] shr c) and 1 = 1);
+  end;
+
+begin
+  t := @FTables[FTable];
+  r := t^.RowCount - 1;
+  while FPendingPlaces > 0 do
+  begin
+    AddCell(True);
+    Dec(FPendingPlaces);
+  end;
+  while CoveredHere do AddCell(True);
+  if not ATrailing then Exit;
+  n := TableColumns;
+  while (t^.Rows[r].CellCount < n) and CoveredHere do AddCell(True);
+end;
+
+function TTyRichBuilder.Cell(AColSpan: Integer; ARowSpan: Integer): TTyRichBuilder;
+var
+  t: ^TBTable;
+  r: ^TBRow;
+  c, k, ri: Integer;
+  bits: QWord;
+begin
+  Result := Self;
+  if FTable < 0 then Misuse('Cell', 'no table: Cell is called inside Table .. EndTable');
+  if (AColSpan < 1) or (ARowSpan < 1) then Misuse('Cell', 'a span is 1 or more');
+  FlushPlaces(False);
+  t := @FTables[FTable];
+  ri := t^.RowCount - 1;
+  r := @t^.Rows[ri];
+  c := r^.CellCount;
+  if (Length(t^.Widths) > 0) and (c + AColSpan > Length(t^.Widths)) then
+    Misuse('Cell', Format('the table has %d columns', [Length(t^.Widths)]));
+  if c + AColSpan > CRichMaxTableCols then
+    Misuse('Cell', Format('a table has %d columns at most', [CRichMaxTableCols]));
+  // the places the span covers across must be free of a span from above
+  bits := 0;
+  for k := c to c + AColSpan - 1 do bits := bits or (QWord(1) shl k);
+  if (ri < Length(t^.Covered)) and (t^.Covered[ri] and bits <> 0) then
+    Misuse('Cell', 'a span from a row above covers a place this one would');
+  // the rows below: their places covered
+  if ARowSpan > 1 then
+  begin
+    if Length(t^.Covered) < ri + ARowSpan then SetLength(t^.Covered, ri + ARowSpan);
+    for k := ri + 1 to ri + ARowSpan - 1 do t^.Covered[k] := t^.Covered[k] or bits;
+  end;
+  AddCell(False);
+  r := @t^.Rows[ri];
+  r^.Cells[c].ColSpan := AColSpan;
+  r^.Cells[c].RowSpan := ARowSpan;
+  FPendingPlaces := AColSpan - 1;
+end;
+
+procedure TTyRichBuilder.AddCell(APlace: Boolean);
 var
   t: ^TBTable;
   r: ^TBRow;
   p: ^TBPara;
   first: Boolean;
 begin
-  Result := Self;
-  if FTable < 0 then Misuse('Cell', 'no table: Cell is called inside Table .. EndTable');
   t := @FTables[FTable];
   r := @t^.Rows[t^.RowCount - 1];
   if (Length(t^.Widths) > 0) and (r^.CellCount >= Length(t^.Widths)) then
@@ -1164,6 +1297,9 @@ begin
   if r^.CellCount = Length(r^.Cells) then SetLength(r^.Cells, r^.CellCount * 2 + 2);
   r^.Cells[r^.CellCount] := Default(TBCell);
   r^.Cells[r^.CellCount].Shading := clNone;
+  r^.Cells[r^.CellCount].ColSpan := 1;
+  r^.Cells[r^.CellCount].RowSpan := 1;
+  r^.Cells[r^.CellCount].Place := APlace;
   p := @FParas[FParaCount - 1];
   p^.Table := FTable;
   p^.Row := t^.RowCount - 1;
@@ -1180,8 +1316,11 @@ var
 begin
   Result := Self;
   if FTable < 0 then Misuse('EndTable', 'no table to end');
+  FlushPlaces(True);
   CloseRow('EndTable');
   t := @FTables[FTable];
+  for i := t^.RowCount to High(t^.Covered) do
+    if t^.Covered[i] <> 0 then Misuse('EndTable', 'a cell spans past the table''s last row');
   if Length(t^.Widths) > 0 then n := Length(t^.Widths) else n := t^.Rows[0].CellCount;
   for i := 0 to t^.RowCount - 1 do
     if t^.Rows[i].CellCount <> n then

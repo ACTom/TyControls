@@ -14,7 +14,8 @@ uses
   tyControls.RichEdit.Text, tyControls.RichEdit.Model, tyControls.RichEdit.Commands,
   tyControls.RichEdit.RtfRead, tyControls.RichEdit.RtfWrite, tyControls.RichEdit.Layout,
   tyControls.RichEdit.TableProps, tyControls.RichEdit.TableSel, tyControls.RichEdit,
-  tyControls.RichEdit.Grid, test.richedit.layoutdevice, test.richedit.grid;
+  tyControls.RichEdit.Grid, tyControls.RichEdit.Builder, test.richedit.layoutdevice,
+  test.richedit.grid;
 
 type
   TMergeRich = class(TTyRichEdit)
@@ -50,6 +51,9 @@ type
     procedure TestCanMergeCellsAnswersWhatTheDoorDoes;
     procedure TestSplitRestoresAndSplitsIntoColsAndRows;
     procedure TestASplitThatCannotBeIsRefused;
+    procedure TestTheBuildersSpansAreMergeCellsOwn;
+    procedure TestTheBuildersSpanMisuseRaises;
+    procedure TestWordReadsWhatWeWrite;
   end;
 
 implementation
@@ -486,6 +490,324 @@ begin
   FRich.ReadOnly := True;
   AssertFalse('read-only: no', FRich.CanSplitCell);
   AssertFalse('... nor the door', FRich.SplitCell(2, 1));
+end;
+
+type
+  // a span: its top-left place and size
+  TSpan = record
+    R, C, RS, CS: Integer;
+  end;
+
+{ A 5 x 5 table of 1440-twip columns by the builder, a cell's text 'rNcM' at every place that
+  starts a cell - with ASpans as the builder's spans (AWithSpans), else as plain cells (the
+  places a span would cover empty). }
+procedure BuildFive(R: TTyRichEdit; const ASpans: array of TSpan; AWithSpans: Boolean);
+var
+  B: TTyRichBuilder;
+  rr, cc, k: Integer;
+  covered, start: Boolean;
+  sp: TSpan;
+begin
+  B := TTyRichBuilder.Create;
+  try
+    B.Text('before');
+    B.Table([1440, 1440, 1440, 1440, 1440]);
+    for rr := 0 to 4 do
+    begin
+      if rr > 0 then B.Row;
+      for cc := 0 to 4 do
+      begin
+        covered := False;
+        start := False;
+        sp := Default(TSpan);
+        for k := 0 to High(ASpans) do
+          if (rr >= ASpans[k].R) and (rr < ASpans[k].R + ASpans[k].RS) and (cc >= ASpans[k].C) and
+             (cc < ASpans[k].C + ASpans[k].CS) then
+          begin
+            if (rr = ASpans[k].R) and (cc = ASpans[k].C) then
+            begin
+              start := True;
+              sp := ASpans[k];
+            end
+            else
+              covered := True;
+          end;
+        if covered then
+        begin
+          // (the builder makes the places a span covers itself)
+          if not AWithSpans then B.Cell;
+        end
+        else if start and AWithSpans then
+          B.Cell(sp.CS, sp.RS).Text(Format('r%dc%d', [rr, cc]))
+        else
+          B.Cell.Text(Format('r%dc%d', [rr, cc]));
+      end;
+    end;
+    B.EndTable.Text('after');
+    R.SetContent(B);
+  finally
+    B.Free;
+  end;
+end;
+
+function Span(AR, AC, ARS, ACS: Integer): TSpan;
+begin
+  Result.R := AR;
+  Result.C := AC;
+  Result.RS := ARS;
+  Result.CS := ACS;
+end;
+
+{ The same table made by the builder's spans and by MergeCells over the builder's plain
+  cells: the same file - a 2 x 2 block, a row of three, a column of three, and all three. }
+procedure TTyRichMergeTest.TestTheBuildersSpansAreMergeCellsOwn;
+var
+  cases: array of array of TSpan;
+  i, k: Integer;
+  built, merged: RawByteString;
+begin
+  SetLength(cases, 4);
+  cases[0] := [Span(1, 1, 2, 2)];
+  cases[1] := [Span(0, 1, 1, 3)];
+  cases[2] := [Span(2, 0, 3, 1)];
+  cases[3] := [Span(1, 1, 2, 2), Span(0, 1, 1, 3), Span(2, 0, 3, 1)];
+  for i := 0 to High(cases) do
+  begin
+    BuildFive(FRich, cases[i], True);
+    built := SaveRtf;
+    BuildFive(FRich, cases[i], False);
+    for k := 0 to High(cases[i]) do
+    begin
+      with cases[i][k] do SelCells(R, C, R + RS - 1, C + CS - 1);
+      // (a cell's index in its row: after a merge in the row before it, fewer cells)
+      AssertTrue(Format('case %d: merged %d', [i, k]), FRich.MergeCells);
+    end;
+    merged := SaveRtf;
+    AssertTrue(Format('case %d: the same file', [i]), built = merged);
+  end;
+end;
+
+procedure TTyRichMergeTest.TestTheBuildersSpanMisuseRaises;
+
+  procedure Expect(ACase: Integer; const ACall: string);
+  var
+    B: TTyRichBuilder;
+    ok: Boolean;
+  begin
+    B := TTyRichBuilder.Create;
+    try
+      ok := False;
+      try
+        B.Table([1000, 1000, 1000]);
+        case ACase of
+          0: B.Cell(0);
+          1: B.Cell(4);
+          2: B.Cell.Cell(1, 2).Cell.Row.Cell(2, 1);
+          3: B.Cell(1, 3).Cell.Cell.Row.Cell.Cell.EndTable;
+        end;
+      except
+        on E: Exception do ok := Pos(ACall, E.Message) > 0;
+      end;
+      AssertTrue(Format('case %d raises, naming %s', [ACase, ACall]), ok);
+    finally
+      B.Free;
+    end;
+  end;
+
+begin
+  Expect(0, 'Cell');
+  Expect(1, 'Cell');
+  Expect(2, 'Cell');
+  Expect(3, 'EndTable');
+end;
+
+function FixtureDir: string;
+begin
+  Result := ExtractFilePath(ParamStr(0)) + '..' + PathDelim + 'tests' + PathDelim + 'fixtures' +
+    PathDelim + 'rtf' + PathDelim;
+end;
+
+function FixtureRaw: RawByteString;
+var
+  f: TFileStream;
+begin
+  Result := '';
+  f := TFileStream.Create(FixtureDir + 'word-table-styled.rtf', fmOpenRead or fmShareDenyWrite);
+  try
+    SetLength(Result, f.Size);
+    if f.Size > 0 then f.ReadBuffer(Result[1], f.Size);
+  finally
+    f.Free;
+  end;
+end;
+
+{ The files a person opens in Word to compare its grid with ours: each case saved, read again
+  as the same grid, and - with TY_RICH_WORD_DIR set - written there with its grid listing
+  (TyRichGridListing, from the model: the table the listing's first line names). }
+procedure TTyRichMergeTest.TestWordReadsWhatWeWrite;
+var
+  dir: string;
+  n: Integer;
+
+  // the table at ATable (0: the first) of the control's document: saved, read, compared, written
+  procedure Keep(const AName: string; ATable: Integer);
+  var
+    saved: RawByteString;
+    d: TTyRichDocument;
+    st: TBytesStream;
+    a, b: TStringList;
+    fs: TFileStream;
+    k, tp: Integer;
+    t: TTyRichTable;
+  begin
+    saved := SaveRtf;
+    // the paragraph the table starts at
+    tp := -1;
+    k := 0;
+    t := nil;
+    while k < FRich.Document.Text.ParaCount do
+    begin
+      if (FRich.Document.TableAt(k) <> nil) and (FRich.Document.TableAt(k) <> t) and
+         ((k = 0) or (FRich.Document.CellAt(k - 1) = nil)) then
+      begin
+        if ATable = 0 then
+        begin
+          tp := k;
+          Break;
+        end;
+        Dec(ATable);
+      end;
+      t := FRich.Document.TableAt(k);
+      Inc(k);
+    end;
+    AssertTrue(AName + ': the table', tp >= 0);
+    d := TTyRichDocument.Create;
+    st := TBytesStream.Create;
+    try
+      st.WriteBuffer(saved[1], Length(saved));
+      st.Position := 0;
+      TyRichLoadRtfFull(d, st);
+      a := TyRichGridListing(FRich.Document, FRich.Document.Text.ParaStart(tp));
+      b := TyRichGridListing(d, d.Text.ParaStart(tp));
+      try
+        AssertEquals(AName + ': read again, the same grid', a.Text, b.Text);
+        if dir <> '' then
+        begin
+          fs := TFileStream.Create(dir + AName + '.rtf', fmCreate);
+          try
+            fs.WriteBuffer(saved[1], Length(saved));
+          finally
+            fs.Free;
+          end;
+          a.Insert(0, Format('# %s.rtf, the table starting at paragraph %d, from the model', [AName, tp]));
+          a.SaveToFile(dir + AName + '.grid.txt');
+        end;
+      finally
+        a.Free;
+        b.Free;
+      end;
+    finally
+      st.Free;
+      d.Free;
+    end;
+    Inc(n);
+  end;
+
+  procedure LoadFixture;
+  var
+    st: TFileStream;
+  begin
+    st := TFileStream.Create(FixtureDir + 'word-table-styled.rtf', fmOpenRead or fmShareDenyWrite);
+    try
+      FRich.LoadFromStream(st, rfRtf);
+    finally
+      st.Free;
+    end;
+    FRich.FinishLoading;
+  end;
+
+  // row ARow, cell ACell of the second table
+  function Cell2(ARow, ACell: Integer): TTyRichPos;
+  var
+    f, l, k, seen: Integer;
+    t: TTyRichTable;
+  begin
+    k := 0;
+    seen := 0;
+    t := nil;
+    while k < FRich.Document.Text.ParaCount do
+    begin
+      if (FRich.Document.TableAt(k) <> nil) and (FRich.Document.TableAt(k) <> t) and
+         ((k = 0) or (FRich.Document.CellAt(k - 1) = nil)) then
+      begin
+        Inc(seen);
+        if seen = 2 then Break;
+      end;
+      t := FRich.Document.TableAt(k);
+      Inc(k);
+    end;
+    AssertTrue('the second table''s cell', FRich.Document.TableCellParas(k, ARow, ACell, f, l));
+    Result := FRich.Document.Text.ParaStart(f);
+  end;
+
+  procedure Sel2(AR0, AC0, AR1, AC1: Integer);
+  var
+    f, l, k: Integer;
+  begin
+    FRich.SelStart := Cell2(AR0, AC0);
+    k := FRich.Document.Text.ParaOfPos(Cell2(AR1, AC1));
+    AssertTrue('its last cell', TyRichCellParasOf(FRich.Document, k, f, l));
+    FRich.SelLength := FRich.Document.Text.ParaStart(l) + FRich.Document.Text.ParaLength(l) + 1 -
+      FRich.SelStart;
+  end;
+
+begin
+  dir := GetEnvironmentVariable('TY_RICH_WORD_DIR');
+  if dir <> '' then dir := IncludeTrailingPathDelimiter(dir);
+  n := 0;
+  // a new 5 x 5 table through the doors
+  MakeTable(5, 5);
+  SelCells(1, 1, 2, 2);
+  AssertTrue(FRich.MergeCells);
+  Keep('doors-2x2-merged', 0);
+  MakeTable(5, 5);
+  SelCells(0, 1, 0, 3);
+  AssertTrue(FRich.MergeCells);
+  Keep('doors-row-of-three', 0);
+  MakeTable(5, 5);
+  SelCells(1, 0, 3, 0);
+  AssertTrue(FRich.MergeCells);
+  Keep('doors-column-of-three', 0);
+  MakeTable(5, 5);
+  SelCells(1, 1, 2, 2);
+  AssertTrue(FRich.MergeCells);
+  FRich.SelStart := CellStart(1, 1);
+  AssertTrue(FRich.SplitCell(2, 2));
+  Keep('doors-merged-and-split-back', 0);
+  MakeTable(5, 5);
+  FRich.SelStart := CellStart(2, 2);
+  AssertTrue(FRich.SplitCell(3, 2));
+  Keep('doors-one-cell-3x2', 0);
+  // Word's merged table (the second of the file)
+  LoadFixture;
+  Keep('word-unchanged', 1);
+  AssertTrue('Word''s file unchanged: its bytes', SaveRtf = FixtureRaw);
+  LoadFixture;
+  FRich.SelStart := Cell2(2, 2);
+  AssertTrue('Word''s 2 x 2 split back', FRich.SplitCell(2, 2));
+  Keep('word-2x2-split-back', 1);
+  LoadFixture;
+  Sel2(0, 0, 0, 1);
+  AssertTrue('Word''s first-row span with the cell beside it', FRich.MergeCells);
+  Keep('word-first-row-merged-on', 1);
+  // the builder's spans: the same files as the doors' merges over the builder's cells
+  BuildFive(FRich, [Span(1, 1, 2, 2)], True);
+  Keep('builder-2x2-merged', 0);
+  BuildFive(FRich, [Span(0, 1, 1, 3)], True);
+  Keep('builder-row-of-three', 0);
+  BuildFive(FRich, [Span(1, 0, 3, 1)], True);
+  Keep('builder-column-of-three', 0);
+  AssertEquals('every case', 11, n);
 end;
 
 initialization

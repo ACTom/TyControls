@@ -172,7 +172,7 @@ end;
 - **制表位**:`Tab(位置, 对齐, 前导符)`，比如目录行用 `Tab(300, rtaRight, rtlDot)`。
 - **链接和书签**:`Link(文字, 地址)`——文字在前，按页面的阅读顺序，和 `Text` 一样；控件的 `InsertLink(地址, 文字)` 地址在前，因为文字可以不给——`Bookmark(名字)`(一个点)、`BookmarkStart` / `BookmarkEnd`(一段范围)。指向 `'#名字'` 的链接点了就跳到那个书签，不用写代码(见 §7)。
 - **图片**:`Picture` 可以来自 `TGraphic`、文件、流、图像列表加下标,`PictureResource` 来自程序的资源；大小用磅，给 0 就是它自己的大小(按 96 dpi 算像素)。PNG 和 JPEG 原样保存字节，其他格式转成 PNG。
-- **表格**:`Table(列宽)`(空数组就是平分正文宽度)，每个单元格的内容前面先 `Cell`,`Row` 开始下一行(也可以给行高和它的规则),`EndTable` 结束；单元格里有 `Shading`、`CellBorders`、`CellPadding`、`CellVAlign`，表格有 `TableAlign`(§8，有例子)。每一行的单元格数必须和列数相同。紧跟在 `EndTable` 后面的 `Paragraph` 就是表格后面的那一段，不会多出一段。
+- **表格**:`Table(列宽)`(空数组就是平分正文宽度)，每个单元格的内容前面先 `Cell`(合并的格子用 `Cell(colSpan, rowSpan)`),`Row` 开始下一行(也可以给行高和它的规则),`EndTable` 结束；单元格里有 `Shading`、`CellBorders`、`CellPadding`、`CellVAlign`，表格有 `TableAlign`(§8，有例子)。每一行的单元格加上被跨格盖住的位置必须正好填满各列。紧跟在 `EndTable` 后面的 `Paragraph` 就是表格后面的那一段，不会多出一段。
 - **样式**:`DefineStyle(名字)` 把当前的字符格式和段落格式记在一个名字下,`Style(名字)` 两样一起套用。它们只是搭页面时的方便，不会进文档。
 - **文档自己的设置**:`PageSetup(纸宽, 左边距, 右边距)` 和 `DocumentColor(颜色)` 只有 `SetContent` 会用。
 
@@ -188,7 +188,7 @@ end;
 
 **代价。** 构建器只做记录：每种格式在池里只存一份，搭的时候什么都不测量、不排版。放进控件时也不排版；下一次绘制时排一次版、画一次。在开发机上，一万段带格式的内容(加粗的词，每十段一个链接)搭好并用 `SetContent` 放进去，大约 100 毫秒。
 
-**现在还做不到的。** 没有合并单元格；单元格里建表格会被拒绝。
+**做不到的。** 单元格里建表格会被拒绝。
 
 ## 6. 当展示页用
 
@@ -281,7 +281,7 @@ end;
 
 **一条线，一个定义。** 两个单元格共用的一条线，在文件里写了两遍：一个单元格的这一边，和另一个单元格对着它的那一边。Word 让这两处保持一致，只显示一条线；控件写出的每条线也是这样。通过 `SetCellBorders`(每种预设都算，"无"也算)或构建器的 `CellBorders` 给单元格某一边设边框时，旁边那个单元格对着的一边也在同一步撤销里设上(上下相邻的行里，是整条边都落在设了边框的单元格下面的那些单元格；只有一部分落在下面的，保留自己的);插入、删除行列之后，两边也还是一致的。只有别的程序做的文件会给一条线两个定义：这时控件画两者中较宽的那个(一样宽时画右边或下边那个单元格的),这也是控件显示的线可能和 Word 不同的唯一情况。
 
-**在代码里搭。** 构建器的表格成员(§5)：`Table(widths)`——各列宽度，单位缇，空数组表示正文宽度内等分——打开第一行；`Row(height, exact)` 开下一行，跟内容一样高(0)、至少或正好这么多缇高；每个格子的内容前调 `Cell`；在格子里，`Shading(color)` 是格子的底色，`CellBorders(sides, style, width, color)` 是这几边的线，`CellPadding(left, top, right, bottom)` 是内边距(缇；负数会抛异常；没设的格子取行的)，`CellVAlign` 是内容的垂直位置；`TableAlign(align)` 或 `TableAlign(align, indent)` 是表格的对齐和起点；`EndTable` 结束表格。每一行的格子数必须等于表格的列数。示例"示例文档 → 表格"里那张价目表，原样摘自 `examples/richedit/utablesample.pas`：
+**在代码里搭。** 构建器的表格成员(§5)：`Table(widths)`——各列宽度，单位缇，空数组表示正文宽度内等分——打开第一行；`Row(height, exact)` 开下一行，跟内容一样高(0)、至少或正好这么多缇高；每个格子的内容前调 `Cell`，跨几列几行的格子用 `Cell(colSpan, rowSpan)`——被跨格盖住的位置由构建器自己补上，不要为上面跨下来的位置调 `Cell`，做出来的表和 `MergeCells` 合并出来的一样(文件相同)；在格子里，`Shading(color)` 是格子的底色，`CellBorders(sides, style, width, color)` 是这几边的线，`CellPadding(left, top, right, bottom)` 是内边距(缇；负数会抛异常；没设的格子取行的)，`CellVAlign` 是内容的垂直位置；`TableAlign(align)` 或 `TableAlign(align, indent)` 是表格的对齐和起点；`EndTable` 结束表格。每一行的格子加上被盖住的位置必须填满表格的列。示例"示例文档 → 表格"里那张价目表，原样摘自 `examples/richedit/utablesample.pas`：
 
 ```pascal
 procedure AddPriceTable(B: TTyRichBuilder);
