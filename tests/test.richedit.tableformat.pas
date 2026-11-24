@@ -13,7 +13,7 @@ unit test.richedit.tableformat;
 interface
 
 uses
-  Classes, SysUtils, Graphics, Controls, Forms, LCLType, ActnList, fpcunit, testregistry,
+  Classes, SysUtils, Math, Graphics, Controls, Forms, LCLType, ActnList, fpcunit, testregistry,
   tyControls.Controller, tyControls.RichEdit.Text, tyControls.RichEdit.Model,
   tyControls.RichEdit.Commands, tyControls.RichEdit.RowFormat, tyControls.RichEdit.TableProps,
   tyControls.RichEdit.RtfRead, tyControls.RichEdit.Layout, tyControls.RichEdit,
@@ -26,8 +26,12 @@ type
     function CreateDevice: TTyRichTextDevice; override;
   public
     Refusals: TStringList;
+    Waits, WaitsEnded: Integer;
     destructor Destroy; override;
     procedure Refused(Sender: TObject; const AReason: string);
+    procedure BeginWait; override;
+    procedure EndWait; override;
+    procedure SetWaitChars(AChars: Int64);
   end;
 
   TTyRichTableFormatTest = class(TTestCase)
@@ -70,6 +74,10 @@ type
     procedure TestANewTableIsWords;
     procedure TestWrittenAsWordWritesIt;
     procedure TestRefusedAndTold;
+    procedure TestTableEditsKeepBothSidesAlike;
+    procedure TestACellBelowGetsTheLineOnlyWhenItLiesUnderIt;
+    procedure TestARowWithANestedTableIsLeftAsItIs;
+    procedure TestDistributeRowsShowsTheWaitCursorWhenLong;
   end;
 
 implementation
@@ -90,6 +98,22 @@ end;
 procedure TFmtRich.Refused(Sender: TObject; const AReason: string);
 begin
   Refusals.Add(AReason);
+end;
+
+// (counted only: no cursor of the screen's is touched)
+procedure TFmtRich.BeginWait;
+begin
+  Inc(Waits);
+end;
+
+procedure TFmtRich.EndWait;
+begin
+  Inc(WaitsEnded);
+end;
+
+procedure TFmtRich.SetWaitChars(AChars: Int64);
+begin
+  CopyWaitChars := AChars;
 end;
 
 { ---- the fixture ---- }
@@ -283,6 +307,11 @@ begin
   end;
 end;
 
+const
+  // the cell beside a side: the one whose facing side it shares
+  FaceRow: array[TTyRowCellSide] of Integer = (0, -1, 0, 1);
+  FaceCol: array[TTyRowCellSide] of Integer = (-1, 0, 1, 0);
+
 procedure TTyRichTableFormatTest.TestBordersOnACellARectangleAndTheTable;
 var
   k, r, c, r0, c0, r1, c1: Integer;
@@ -302,14 +331,15 @@ begin
       begin
         p := Cell(r, c);
         for sd := Low(TTyRowCellSide) to High(TTyRowCellSide) do
-          if InRange(r, c, r0, c0, r1, c1) then
+          // (the facing side of a cell beside the range too: one line, one definition)
+          if InRange(r, c, r0, c0, r1, c1) or InRange(r + FaceRow[sd], c + FaceCol[sd], r0, c0, r1, c1) then
             AssertTrue(Format('%d: cell %d,%d side %d', [k, r, c, Ord(sd)]),
               TyRichSameBorder(p.Borders[sd], TyRichBorder(rbsDouble, 30, clRed)))
           else
             AssertTrue(Format('%d: cell %d,%d side %d as it was', [k, r, c, Ord(sd)]),
               p.Borders[sd].Style = rbsSingle);
       end;
-    CheckUntouchedRows(Format('borders %d', [k]), before, r0, r1);
+    CheckUntouchedRows(Format('borders %d', [k]), before, Max(0, r0 - 1), Min(3, r1 + 1));
     FRich.Undo;
     AssertTrue(Format('%d: undone', [k]), before = SaveRtf);
   end;
@@ -402,79 +432,77 @@ end;
 
 { ---- the presets ---- }
 
+{ The sides a preset gives the border on cells 1,1 .. 3,3 of a 5 x 5 table (Own), and the
+  facing side of each of those in the cell beside it: every side of every cell, the neighbours
+  too, is the border exactly when it or the side it faces is one the preset names. }
+function PresetOwns(APreset: TTyRichBorderPreset; ARow, ACol: Integer; ASide: TTyRowCellSide): Boolean;
+const
+  R0 = 1;
+  R1 = 3;
+begin
+  Result := False;
+  if (ARow < R0) or (ARow > R1) or (ACol < R0) or (ACol > R1) then Exit;
+  case APreset of
+    rbpAll, rbpNone: Result := True;
+    rbpOutside: Result := ((ASide = rcsTop) and (ARow = R0)) or ((ASide = rcsBottom) and (ARow = R1)) or
+      ((ASide = rcsLeft) and (ACol = R0)) or ((ASide = rcsRight) and (ACol = R1));
+    rbpInside: Result := ((ASide = rcsTop) and (ARow > R0)) or ((ASide = rcsBottom) and (ARow < R1)) or
+      ((ASide = rcsLeft) and (ACol > R0)) or ((ASide = rcsRight) and (ACol < R1));
+    rbpTop: Result := (ASide = rcsTop) and (ARow = R0);
+    rbpBottom: Result := (ASide = rcsBottom) and (ARow = R1);
+    rbpLeft: Result := (ASide = rcsLeft) and (ACol = R0);
+    rbpRight: Result := (ASide = rcsRight) and (ACol = R1);
+    rbpInsideH: Result := ((ASide = rcsTop) and (ARow > R0)) or ((ASide = rcsBottom) and (ARow < R1));
+    rbpInsideV: Result := ((ASide = rcsLeft) and (ACol > R0)) or ((ASide = rcsRight) and (ACol < R1));
+  end;
+end;
+
+function PresetSets(APreset: TTyRichBorderPreset; ARow, ACol: Integer; ASide: TTyRowCellSide): Boolean;
+const
+  Opposite: array[TTyRowCellSide] of TTyRowCellSide = (rcsRight, rcsBottom, rcsLeft, rcsTop);
+begin
+  Result := PresetOwns(APreset, ARow, ACol, ASide) or
+    PresetOwns(APreset, ARow + FaceRow[ASide], ACol + FaceCol[ASide], Opposite[ASide]);
+end;
+
 procedure TTyRichTableFormatTest.TestPresetsTouchTheRightSides;
 var
   r, c: Integer;
-  b: TTyRichBorder;
-
-  function Red(ARow, ACol: Integer; ASide: TTyRowCellSide): Boolean;
-  begin
-    Result := TyRichSameBorder(Cell(ARow, ACol).Borders[ASide], b);
-  end;
-
-  procedure Apply(APreset: TTyRichBorderPreset);
-  begin
-    MakeTable(5, 5);
-    Sel(CellStart(1, 1), CellEnd(3, 3));
-    AssertTrue('applied', FRich.SetCellBorders(APreset, b));
-  end;
-
-  function Inside(ARow, ACol: Integer): Boolean;
-  begin
-    Result := (ARow >= 1) and (ARow <= 3) and (ACol >= 1) and (ACol <= 3);
-  end;
-
+  b, want: TTyRichBorder;
+  pr: TTyRichBorderPreset;
+  sd: TTyRowCellSide;
+  before: RawByteString;
 begin
   b := TyRichBorder(rbsSingle, 40, clRed);
-  // inside horizontal: only the edges between the selected rows
-  Apply(rbpInsideH);
-  for r := 0 to 4 do
-    for c := 0 to 4 do
-    begin
-      AssertEquals(Format('insideH %d,%d bottom', [r, c]), Inside(r, c) and (r < 3), Red(r, c, rcsBottom));
-      AssertEquals(Format('insideH %d,%d top', [r, c]), Inside(r, c) and (r > 1), Red(r, c, rcsTop));
-      AssertFalse(Format('insideH %d,%d left', [r, c]), Red(r, c, rcsLeft));
-      AssertFalse(Format('insideH %d,%d right', [r, c]), Red(r, c, rcsRight));
-    end;
-  // inside vertical
-  Apply(rbpInsideV);
-  for r := 0 to 4 do
-    for c := 0 to 4 do
-    begin
-      AssertEquals(Format('insideV %d,%d right', [r, c]), Inside(r, c) and (c < 3), Red(r, c, rcsRight));
-      AssertEquals(Format('insideV %d,%d left', [r, c]), Inside(r, c) and (c > 1), Red(r, c, rcsLeft));
-      AssertFalse(Format('insideV %d,%d top', [r, c]), Red(r, c, rcsTop));
-    end;
-  // outside: the rectangle's outline only
-  Apply(rbpOutside);
-  for r := 0 to 4 do
-    for c := 0 to 4 do
-    begin
-      AssertEquals(Format('outside %d,%d top', [r, c]), Inside(r, c) and (r = 1), Red(r, c, rcsTop));
-      AssertEquals(Format('outside %d,%d bottom', [r, c]), Inside(r, c) and (r = 3), Red(r, c, rcsBottom));
-      AssertEquals(Format('outside %d,%d left', [r, c]), Inside(r, c) and (c = 1), Red(r, c, rcsLeft));
-      AssertEquals(Format('outside %d,%d right', [r, c]), Inside(r, c) and (c = 3), Red(r, c, rcsRight));
-    end;
-  // inside: both
-  Apply(rbpInside);
-  AssertTrue('inside: a horizontal one', Red(1, 2, rcsBottom));
-  AssertTrue('inside: a vertical one', Red(2, 1, rcsRight));
-  AssertFalse('inside: not the outline', Red(1, 1, rcsTop) or Red(1, 1, rcsLeft));
-  // one side each
-  Apply(rbpTop);
-  AssertTrue('top', Red(1, 2, rcsTop) and not Red(2, 2, rcsTop) and not Red(1, 2, rcsBottom));
-  Apply(rbpBottom);
-  AssertTrue('bottom', Red(3, 2, rcsBottom) and not Red(2, 2, rcsBottom));
-  Apply(rbpLeft);
-  AssertTrue('left', Red(2, 1, rcsLeft) and not Red(2, 2, rcsLeft));
-  Apply(rbpRight);
-  AssertTrue('right', Red(2, 3, rcsRight) and not Red(2, 2, rcsRight));
-  // all, then none
-  Apply(rbpAll);
-  AssertTrue('all', Red(2, 2, rcsTop) and Red(2, 2, rcsLeft) and Red(1, 1, rcsTop) and not Red(0, 0, rcsBottom));
+  for pr := Low(TTyRichBorderPreset) to High(TTyRichBorderPreset) do
+  begin
+    MakeTable(6, 6);
+    before := SaveRtf;
+    Sel(CellStart(1, 1), CellEnd(3, 3));
+    AssertTrue('applied', FRich.SetCellBorders(pr, b));
+    AssertEquals(Format('%d: one step', [Ord(pr)]), 1, FRich.Document.UndoDepth);
+    if pr = rbpNone then want := TyRichBorder(rbsNone, 0) else want := b;
+    for r := 0 to 5 do
+      for c := 0 to 5 do
+        for sd := Low(TTyRowCellSide) to High(TTyRowCellSide) do
+          if PresetSets(pr, r, c, sd) then
+            AssertTrue(Format('%d: %d,%d side %d set', [Ord(pr), r, c, Ord(sd)]),
+              TyRichSameBorder(Cell(r, c).Borders[sd], want))
+          else
+            AssertTrue(Format('%d: %d,%d side %d as it was', [Ord(pr), r, c, Ord(sd)]),
+              TyRichSameBorder(Cell(r, c).Borders[sd], TyRichBorder(rbsSingle, 10)));
+    // the rows beyond the neighbours: their bytes
+    AssertTrue(Format('%d: row 5: past the neighbours, its bytes', [Ord(pr)]),
+      (RowBytes(before, 5) = RowBytes(SaveRtf, 5)));
+    FRich.Undo;
+    AssertTrue(Format('%d: undone', [Ord(pr)]), before = SaveRtf);
+  end;
+  // none: no line is left around the rectangle - not the neighbours' facing sides either
+  MakeTable(5, 5);
   Sel(CellStart(1, 1), CellEnd(3, 3));
   AssertTrue('none', FRich.SetCellBorders(rbpNone, b));
-  AssertTrue('none: no line', Cell(2, 2).Borders[rcsTop].Style = rbsNone);
+  AssertTrue('none: the row above, its bottom', Cell(0, 2).Borders[rcsBottom].Style = rbsNone);
+  AssertTrue('none: the cell to the left, its right', Cell(2, 0).Borders[rcsRight].Style = rbsNone);
   AssertTrue('none: outside the rectangle as it was', Cell(0, 0).Borders[rcsBottom].Style = rbsSingle);
 end;
 
@@ -638,6 +666,9 @@ begin
   AssertTrue('a: top', TyRichSameBorder(p.Borders[rcsTop], b0));
   AssertTrue('a: bottom', TyRichSameBorder(p.Borders[rcsBottom], b0));
   AssertTrue('a: left as Word''s new table', p.Borders[rcsLeft].Style = rbsSingle);
+  // the line a's bottom is: also the top of the cell below (one line, one definition)
+  AssertTrue('d: its top, a''s bottom', TyRichSameBorder(Cell(1, 0).Borders[rcsTop], b0));
+  AssertTrue('d: its bottom as it was', Cell(1, 0).Borders[rcsBottom].Style = rbsSingle);
   p := Cell(0, 1);
   AssertEquals('b: left', 200, p.Pad[rcsLeft]);
   AssertEquals('b: top', 60, p.Pad[rcsTop]);
@@ -650,6 +681,21 @@ begin
   AssertTrue('right aligned', RowP(0).Align = rraRight);
   AssertTrue('every row', RowP(2).Align = rraRight);
   AssertEquals('c: no shading', clNone, Cell(0, 2).Shading);
+  // two cells giving one line two borders: the one given later is the line, on both sides
+  B := TTyRichBuilder.Create;
+  try
+    B.Text('before').Paragraph;
+    B.Table([1440, 1440]);
+    B.Cell.Text('a').CellBorders([rcsRight], rbsDouble, 30, clRed);
+    B.Cell.Text('b').CellBorders([rcsLeft], rbsDotted, 20, clBlue).EndTable;
+    B.Text('after');
+    FRich.SetContent(B);
+  finally
+    B.Free;
+  end;
+  b0 := TyRichBorder(rbsDotted, 20, clBlue);
+  AssertTrue('the later: b''s left', TyRichSameBorder(Cell(0, 1).Borders[rcsLeft], b0));
+  AssertTrue('the later: a''s right too', TyRichSameBorder(Cell(0, 0).Borders[rcsRight], b0));
 end;
 
 { A new table, the editor's and the builder's: single ½-point lines in the automatic colour,
@@ -751,6 +797,244 @@ begin
   FRich.Refusals.Clear;
   AssertFalse('read-only', FRich.SetCellShading(clYellow));
   AssertEquals('told nothing', 0, FRich.Refusals.Count);
+end;
+
+{ Rows whose edges differ: the cell below takes a line given to the cells above only when its
+  whole top lies under them (within 15 twips); one that only partly does keeps its own top. }
+procedure TTyRichTableFormatTest.TestACellBelowGetsTheLineOnlyWhenItLiesUnderIt;
+const
+  Doc = '{\rtf1 \pard before\par' +
+    '\trowd\cellx1440\cellx2880\cellx4320\pard\intbl a\cell \pard\intbl b\cell \pard\intbl c\cell\row' +
+    '\trowd\cellx2160\cellx2890\cellx4320\pard\intbl d\cell \pard\intbl e\cell \pard\intbl f\cell\row' +
+    '\pard after\par}';
+var
+  st: TStringStream;
+  b: TTyRichBorder;
+
+  procedure Load;
+  begin
+    st := TStringStream.Create(Doc);
+    try
+      FRich.LoadFromStream(st);
+    finally
+      st.Free;
+    end;
+    FRich.UpdateView;
+  end;
+
+begin
+  b := TyRichBorder(rbsDouble, 30, clRed);
+  // a: 0 .. 1440; d below it reaches 2160 - only partly under a
+  Load;
+  Sel(CellStart(0, 0), CellEnd(0, 0));
+  AssertTrue('a: its bottom', FRich.SetCellBorders(rbpBottom, b));
+  AssertTrue('a: set', TyRichSameBorder(Cell(0, 0).Borders[rcsBottom], b));
+  AssertFalse('d: partly under a - its own top', TyRichSameBorder(Cell(1, 0).Borders[rcsTop], b));
+  // a and b: 0 .. 2880; d (0 .. 2160) and e (.. 2890, within 15 twips) lie under them, f not
+  Load;
+  Sel(CellStart(0, 0), CellEnd(0, 1));
+  AssertTrue('a, b: their bottom', FRich.SetCellBorders(rbpBottom, b));
+  AssertTrue('d: under them', TyRichSameBorder(Cell(1, 0).Borders[rcsTop], b));
+  AssertTrue('e: under them, its edge 10 twips past', TyRichSameBorder(Cell(1, 1).Borders[rcsTop], b));
+  AssertFalse('f: not', TyRichSameBorder(Cell(1, 2).Borders[rcsTop], b));
+end;
+
+{ Rows and columns in and out keep every line two cells share one definition: the one's side
+  and the other's facing side alike, the line drawn there before (the wider) on both. }
+procedure TTyRichTableFormatTest.TestTableEditsKeepBothSidesAlike;
+var
+  thick, thin: TTyRichBorder;
+  before: RawByteString;
+
+  procedure SetSide(ARow0, ACol0, ARow1, ACol1: Integer; ASide: TTyRowCellSide; const B: TTyRichBorder);
+  var
+    p: TTyRichCellProps;
+  begin
+    p := Default(TTyRichCellProps);
+    case ASide of
+      rcsLeft: p.Valid := [rcpBorderLeft];
+      rcsTop: p.Valid := [rcpBorderTop];
+      rcsRight: p.Valid := [rcpBorderRight];
+    else
+      p.Valid := [rcpBorderBottom];
+    end;
+    p.Borders[ASide] := B;
+    // (straight to the document: one side only, as a file made elsewhere may have it)
+    AssertTrue('a side', FRich.Document.Execute(TTyRichSetCellProps.Create(TablePos, ARow0, ACol0,
+      ARow1, ACol1, p)));
+    FRich.Document.ClearUndo;
+  end;
+
+  procedure CheckAgree(const AWhat: string);
+  var
+    r, c: Integer;
+  begin
+    for r := 0 to RowCount - 1 do
+      for c := 0 to ColCount(r) - 1 do
+      begin
+        if c < ColCount(r) - 1 then
+          AssertTrue(Format('%s: %d,%d right = %d,%d left', [AWhat, r, c, r, c + 1]),
+            TyRichSameBorder(Cell(r, c).Borders[rcsRight], Cell(r, c + 1).Borders[rcsLeft]));
+        if r < RowCount - 1 then
+          AssertTrue(Format('%s: %d,%d bottom = %d,%d top', [AWhat, r, c, r + 1, c]),
+            TyRichSameBorder(Cell(r, c).Borders[rcsBottom], Cell(r + 1, c).Borders[rcsTop]));
+      end;
+  end;
+
+begin
+  thick := TyRichBorder(rbsDouble, 30, clRed);
+  thin := TyRichBorder(rbsDashed, 20, clBlue);
+  // a row in below one whose bottom differs from the next row's top (the wider is the line)
+  MakeTable(4, 4);
+  SetSide(1, 0, 1, 3, rcsBottom, thick);
+  before := SaveRtf;
+  FRich.SelStart := CellStart(1, 1);
+  AssertTrue('a row below', FRich.InsertRow(True));
+  AssertEquals('one step', 1, FRich.Document.UndoDepth);
+  AssertEquals('five rows', 5, RowCount);
+  CheckAgree('row in');
+  AssertTrue('row in: the wider is the line', TyRichSameBorder(Cell(2, 1).Borders[rcsTop], thick));
+  FRich.Undo;
+  AssertTrue('row in: undone', before = SaveRtf);
+  // a row out between two that come to meet
+  MakeTable(4, 4);
+  SetSide(0, 0, 0, 3, rcsBottom, thin);
+  SetSide(2, 0, 2, 3, rcsTop, thick);
+  before := SaveRtf;
+  FRich.SelStart := CellStart(1, 1);
+  AssertTrue('a row out', FRich.DeleteRow);
+  CheckAgree('row out');
+  AssertTrue('row out: the wider is the line', TyRichSameBorder(Cell(0, 1).Borders[rcsBottom], thick));
+  FRich.Undo;
+  AssertTrue('row out: undone', before = SaveRtf);
+  // a column in right of one whose right differs from the next cell's left
+  MakeTable(4, 4);
+  SetSide(0, 1, 3, 1, rcsRight, thick);
+  before := SaveRtf;
+  FRich.SelStart := CellStart(1, 1);
+  AssertTrue('a column right', FRich.InsertColumn(True));
+  AssertEquals('five columns', 5, ColCount(0));
+  CheckAgree('column in');
+  FRich.Undo;
+  AssertTrue('column in: undone', before = SaveRtf);
+  // a column out between two that come to meet
+  MakeTable(4, 4);
+  SetSide(0, 0, 3, 0, rcsRight, thick);
+  SetSide(0, 2, 3, 2, rcsLeft, thin);
+  FRich.SelStart := CellStart(1, 1);
+  AssertTrue('a column out', FRich.DeleteColumn);
+  CheckAgree('column out');
+  AssertTrue('column out: the wider is the line', TyRichSameBorder(Cell(2, 0).Borders[rcsRight], thick));
+  // a table already alike: a row in writes no row it does not make
+  MakeTable(4, 4);
+  before := SaveRtf;
+  FRich.SelStart := CellStart(1, 1);
+  AssertTrue('a row below', FRich.InsertRow(True));
+  AssertTrue('the rows beside it as they were', (RowBytes(before, 1) = RowBytes(SaveRtf, 1)) and
+    (RowBytes(before, 2) = RowBytes(SaveRtf, 3)));
+end;
+
+{ Rows 0 and 2 plain, row 1 holding a nested table: every cell-format door and every resize
+  door on all three rows changes rows 0 and 2, leaves row 1 as it is, and says so once. }
+procedure TTyRichTableFormatTest.TestARowWithANestedTableIsLeftAsItIs;
+const
+  Doc = '{\rtf1 \pard before\par' +
+    '\trowd\cellx1440\cellx2880\pard\intbl a\cell \pard\intbl b\cell\row' +
+    '\trowd\cellx1440\cellx2880\pard\intbl c\cell \pard\intbl\itap2 x' +
+    '\nestcell{\*\nesttableprops\trowd\cellx500\nestrow}{\nonesttables\par}\pard\intbl\cell\row' +
+    '\trowd\cellx1440\cellx2880\pard\intbl d\cell \pard\intbl e\cell\row' +
+    '\pard after\par}';
+  Doors = 9;
+var
+  st: TStringStream;
+  k, r: Integer;
+  before: RawByteString;
+  was: array[0..2] of string;
+  ok: Boolean;
+
+  // a row's look: its cells' properties, its own, its edges
+  function Look(ARow: Integer): string;
+  var
+    c: Integer;
+    p: TTyRichCellProps;
+    sd: TTyRowCellSide;
+    e: TTyRichEdges;
+  begin
+    Result := Format('h%d l%d a%d', [RowP(ARow).HeightTwips, RowP(ARow).LeftTwips, Ord(RowP(ARow).Align)]);
+    for c := 0 to 1 do
+    begin
+      p := Cell(ARow, c);
+      Result := Result + Format(' |s%d v%d', [Integer(p.Shading), Ord(p.VAlign)]);
+      for sd := Low(TTyRowCellSide) to High(TTyRowCellSide) do
+        Result := Result + Format(' b%d,%d,%d p%d', [Ord(p.Borders[sd].Style), p.Borders[sd].WidthTwips,
+          Integer(p.Borders[sd].Color), p.Pad[sd]]);
+    end;
+    FRich.Document.BeginRead;
+    try
+      e := FRich.Document.CellAt(FRich.Document.Text.ParaOfPos(CellStart(ARow, 0))).Row.CellEdges;
+    finally
+      FRich.Document.EndRead;
+    end;
+    for c := 0 to High(e) do Result := Result + Format(' e%d', [e[c]]);
+  end;
+
+begin
+  for k := 0 to Doors - 1 do
+  begin
+    st := TStringStream.Create(Doc);
+    try
+      FRich.LoadFromStream(st);
+    finally
+      st.Free;
+    end;
+    FRich.UpdateView;
+    AssertTrue('(row 1 holds a nested table)', FRich.Document.CellAt(
+      FRich.Document.Text.ParaOfPos(CellStart(1, 0))).Row.HoldsNestedTable);
+    before := SaveRtf;
+    for r := 0 to 2 do was[r] := Look(r);
+    Sel(CellStart(0, 0), CellEnd(2, 1));
+    FRich.Refusals.Clear;
+    case k of
+      0: ok := FRich.SetCellShading(clYellow);
+      1: ok := FRich.SetCellBorders(rbpAll, TyRichBorder(rbsDouble, 30, clRed));
+      2: ok := FRich.SetCellPadding(300, -1, -1, -1);
+      3: ok := FRich.SetCellVAlign(rcvBottom);
+      4: ok := FRich.SetRowHeight(600, False);
+      5: ok := FRich.SetColumnWidth(2000);
+      6: ok := FRich.DistributeRows;
+      7: ok := FRich.FitTableToWindow;
+    else
+      ok := FRich.AutoFitColumn;
+    end;
+    AssertTrue(Format('%d: done', [k]), ok);
+    AssertEquals(Format('%d: row 1 as it was', [k]), was[1], Look(1));
+    AssertFalse(Format('%d: row 0 changed', [k]), was[0] = Look(0));
+    AssertFalse(Format('%d: row 2 changed', [k]), was[2] = Look(2));
+    AssertEquals(Format('%d: told once', [k]), 1, FRich.Refusals.Count);
+    AssertEquals(Format('%d: why', [k]), rsRichEditRefusedResizeNested, FRich.Refusals[0]);
+    AssertEquals(Format('%d: one step', [k]), 1, FRich.Document.UndoDepth);
+    FRich.Undo;
+    AssertTrue(Format('%d: undone', [k]), before = SaveRtf);
+  end;
+end;
+
+{ DistributeRows lays out every row it reads: above the threshold the control's other long
+  synchronous work uses (CopyWaitChars; a paragraph laid out counts as a hundred characters)
+  the wait cursor shows meanwhile, put back after. }
+procedure TTyRichTableFormatTest.TestDistributeRowsShowsTheWaitCursorWhenLong;
+begin
+  MakeTable(4, 4);
+  FRich.SelStart := CellStart(1, 1);
+  // sixteen paragraphs: 1600 against the threshold
+  FRich.SetWaitChars(1600);
+  FRich.Waits := 0;
+  FRich.WaitsEnded := 0;
+  FRich.DistributeRows;
+  AssertEquals('at the threshold: none', 0, FRich.Waits);
+  FRich.SetWaitChars(1599);
+  FRich.DistributeRows;
+  AssertEquals('above it: shown', 1, FRich.Waits);
+  AssertEquals('and put back', 1, FRich.WaitsEnded);
 end;
 
 initialization

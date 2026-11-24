@@ -906,6 +906,8 @@ end;
 procedure TTyRichTableEditTest.TestATabThatMovesReadsNoTable;
 const
   Rows = 10000;
+  // four rows of two cells, and the window's look past its ends
+  AgreeReads = 12;
 var
   d: TTyRichDocument;
   t: TTyRichText;
@@ -930,8 +932,10 @@ begin
   AssertEquals('no table paragraph visited', 0, d.TableParaVisits);
   AssertTrue(Format('%d paragraphs laid out', [FRich.LaidParas]), FRich.LaidParas < 100);
   AssertFalse('no step', d.CanUndo);
-  { a row by Tab in the last cell, and by InsertRow: the engine's own reads only - of the row
-    beside the position (a row named by its place reads that row, not the table) }
+  { a row by Tab in the last cell, and by InsertRow: the engine's own reads - of the row
+    beside the position (a row named by its place reads that row, not the table) - and the
+    agreement's of the lines the new row shares (a window of the rows beside it, no more than
+    AgreeReads paragraphs: never the table) }
   d.TableParaVisits := 0;
   AssertTrue('the engine''s row', d.Execute(TTyRichInsertRow.Create(t.ParaStart(2 * Rows),
     CRichRowBelow)));
@@ -941,7 +945,8 @@ begin
   FRich.SelStart := t.ParaStart(2 * Rows);
   d.TableParaVisits := 0;
   Press(VK_TAB);
-  AssertEquals('Tab''s row: the engine''s reads, no more', engine, d.TableParaVisits);
+  AssertTrue(Format('Tab''s row: the engine''s reads and the agreement''s (%d)', [d.TableParaVisits]),
+    (d.TableParaVisits >= engine) and (d.TableParaVisits <= engine + AgreeReads));
   AssertEquals('Tab''s row: below the last', '', ParaText(d, 2 * Rows + 1));
   AssertTrue('Tab''s row: in the table', d.CellAt(2 * Rows + 2) <> nil);
   CheckSel('Tab''s row: its first cell', t.ParaStart(2 * Rows + 1), 0);
@@ -949,12 +954,14 @@ begin
   FRich.SelStart := t.ParaStart(k);
   d.TableParaVisits := 0;
   AssertTrue('InsertRow', FRich.InsertRow);
-  AssertEquals('InsertRow: the engine''s reads, no more', engine, d.TableParaVisits);
+  AssertTrue(Format('InsertRow: the engine''s reads and the agreement''s (%d)', [d.TableParaVisits]),
+    (d.TableParaVisits >= engine) and (d.TableParaVisits <= engine + AgreeReads));
   CheckSel('InsertRow: the new row''s first cell', t.ParaStart(k + 2), 0);
   FRich.Undo;
   d.TableParaVisits := 0;
   AssertTrue('InsertRow above', FRich.InsertRow(False));
-  AssertEquals('InsertRow above: the engine''s reads, no more', engine, d.TableParaVisits);
+  AssertTrue(Format('InsertRow above: the engine''s reads and the agreement''s (%d)', [d.TableParaVisits]),
+    (d.TableParaVisits >= engine) and (d.TableParaVisits <= engine + AgreeReads));
   CheckSel('InsertRow above: the new row''s first cell', t.ParaStart(k), 0);
 end;
 

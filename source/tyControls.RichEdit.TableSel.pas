@@ -29,7 +29,8 @@ unit tyControls.RichEdit.TableSel;
 interface
 
 uses
-  SysUtils, tyControls.RichEdit.Text, tyControls.RichEdit.Model, tyControls.RichEdit.Commands;
+  SysUtils, tyControls.RichEdit.Text, tyControls.RichEdit.Model, tyControls.RichEdit.Commands,
+  tyControls.RichEdit.RowFormat, tyControls.RichEdit.TableProps;
 
 type
   TTyRichCellRange = record
@@ -138,10 +139,63 @@ type
   them: a command dropping those outside marks (nil: none). }
 function TyRichLoneMarksOutside(ADoc: TTyRichDocument; AFirst, ALast: Integer): TTyRichDropLoneMarks;
 
+{ ---- one edge, one definition ----
+
+  A line two cells share is defined twice in a file: as the one cell's side and as the other's
+  facing side. Word keeps both the same - it shows one line and tells it from either cell -
+  and so does this control for every line it writes: a border given to a cell's side is given
+  to the facing side too, in the same step, and the table edits leave both sides alike. Only
+  a file made elsewhere can still have two that differ (the layout then draws the wider, the
+  later cell's at the same width: where Word may show another line). }
+
+type
+  { The cells' sides a border goes to (Mark), and then the facing sides of the cells beside
+    them: in a row, the cell before / after (by index); between rows, the cells of the row
+    above / below whose whole edge lies inside the span the marked cells' edge covers there
+    (positions within CRichSharedEdgeTwips) - a cell that only partly shares it keeps its own
+    side, as does a cell wider than the span. Rows that hold a nested table are left as they
+    are and counted. The parts: TTyRichSetCellProps, as few as the marks allow. }
+  TTyRichBorderPlan = class
+  private
+    FPos: TTyRichPos;
+    FFirst: Integer;
+    FLeft: array of Integer;
+    FEdges: array of TTyRichEdges;
+    FNested: array of Boolean;
+    FOwn: array of array of TTyRowCellSides;
+    function CellLeft(I, C: Integer): Integer;
+    function CellCount(I: Integer): Integer;
+  public
+    { The rows ARow0 - 1 .. ARow1 + 1 of the table APos is in are read. }
+    constructor Create(ADoc: TTyRichDocument; APos: TTyRichPos; ARow0, ARow1: Integer);
+    procedure Mark(ARow0, ACol0, ARow1, ACol1: Integer; ASides: TTyRowCellSides);
+    { The parts, ABorder on every side marked and on every side facing one, added to AComp;
+      ASkipped: rows left as they are (they hold a nested table) added. }
+    procedure AddParts(AComp: TTyRichCompositeCommand; const ABorder: TTyRichBorder;
+      var ASkipped: Integer);
+  end;
+
+  { After a table edit (rows or columns in or out): both sides of every line two cells share
+    made alike in rows ARow0 .. ARow1 (cut to the table's) and between them - the side that
+    loses takes the other's border, the winner being the line the layout draws there (the
+    wider, the later cell's at the same width), so nothing a person sees changes. Between rows
+    only cells whose edges are where the other's are (within CRichSharedEdgeTwips); a row that
+    holds a nested table is left as it is. Planned at its first run, from the table as the
+    edit before it in the step left it; a row already alike is not touched. }
+  TTyRichAgreeEdges = class(TTyRichCompositeCommand)
+  private
+    FPos: TTyRichPos;
+    FRow0, FRow1: Integer;
+  protected
+    procedure DoExecute(ADoc: TTyRichDocument); override;
+  public
+    constructor Create(APos: TTyRichPos; ARow0, ARow1: Integer);
+  end;
+
 implementation
 
 uses
-  Math, tyControls.RichEdit.TableProps, tyControls.RichEdit.RtfRead, tyControls.RichEdit.Bookmarks;
+  Math, tyControls.RichEdit.RtfRead, tyControls.RichEdit.Bookmarks;
 
 function TyRichCellsEditable(const AArea: TTyRichCellArea): Boolean;
 begin
@@ -267,6 +321,333 @@ begin
       Result.Add(s, names[i]);
     end;
   end;
+end;
+
+{ ---- one edge, one definition ---- }
+
+const
+  CBorderCellProp: array[TTyRichCellSide] of TTyRichCellProp = (rcpBorderLeft, rcpBorderTop,
+    rcpBorderRight, rcpBorderBottom);
+
+function SideProps(ASide: TTyRichCellSide; const ABorder: TTyRichBorder): TTyRichCellProps;
+begin
+  Result := Default(TTyRichCellProps);
+  Result.Valid := [CBorderCellProp[ASide]];
+  Result.Borders[ASide] := ABorder;
+end;
+
+constructor TTyRichBorderPlan.Create(ADoc: TTyRichDocument; APos: TTyRichPos; ARow0, ARow1: Integer);
+var
+  rows: TTyRichRowList;
+  n, i, c: Integer;
+begin
+  inherited Create;
+  FPos := APos;
+  ADoc.BeginRead;
+  try
+    if not ADoc.TableRowsAt(APos, ARow0 - 1, ARow1 + 1, rows, FFirst, n) then rows := nil;
+    SetLength(FLeft, Length(rows));
+    SetLength(FEdges, Length(rows));
+    SetLength(FNested, Length(rows));
+    SetLength(FOwn, Length(rows));
+    for i := 0 to High(rows) do
+    begin
+      FLeft[i] := rows[i].Format.Row.LeftTwips;
+      FEdges[i] := rows[i].CellEdges;
+      FNested[i] := rows[i].HoldsNestedTable;
+      SetLength(FOwn[i], Length(FEdges[i]));
+      for c := 0 to High(FOwn[i]) do FOwn[i][c] := [];
+    end;
+  finally
+    ADoc.EndRead;
+  end;
+end;
+
+function TTyRichBorderPlan.CellCount(I: Integer): Integer;
+begin
+  Result := Length(FEdges[I]);
+end;
+
+function TTyRichBorderPlan.CellLeft(I, C: Integer): Integer;
+begin
+  if C = 0 then Result := FLeft[I] else Result := FEdges[I][C - 1];
+end;
+
+procedure TTyRichBorderPlan.Mark(ARow0, ACol0, ARow1, ACol1: Integer; ASides: TTyRowCellSides);
+var
+  r, i, c: Integer;
+begin
+  for r := ARow0 to ARow1 do
+  begin
+    i := r - FFirst;
+    if (i < 0) or (i > High(FOwn)) then Continue;
+    for c := Math.Max(ACol0, 0) to Math.Min(ACol1, CellCount(i) - 1) do
+      FOwn[i][c] := FOwn[i][c] + ASides;
+  end;
+end;
+
+procedure TTyRichBorderPlan.AddParts(AComp: TTyRichCompositeCommand; const ABorder: TTyRichBorder;
+  var ASkipped: Integer);
+var
+  all: array of array of TTyRowCellSides;
+  i, c, a, b, j, lo, hi: Integer;
+  sd: TTyRichCellSide;
+  pend: Boolean;
+  pr0, pr1, pa, pb: Integer;
+  runs: Integer;
+
+  // the cells of row AI whose whole edge lies inside ALo .. AHi get ASide
+  procedure Face(AI, ALo, AHi: Integer; ASide: TTyRichCellSide);
+  var
+    k: Integer;
+  begin
+    if (AI < 0) or (AI > High(all)) then Exit;
+    for k := 0 to CellCount(AI) - 1 do
+      if (CellLeft(AI, k) >= ALo - CRichSharedEdgeTwips) and
+         (FEdges[AI][k] <= AHi + CRichSharedEdgeTwips) then
+        Include(all[AI][k], ASide);
+  end;
+
+  procedure Flush(ASide: TTyRichCellSide);
+  begin
+    if not pend then Exit;
+    pend := False;
+    AComp.Add(TTyRichSetCellProps.Create(FPos, FFirst + pr0, pa, FFirst + pr1, pb,
+      SideProps(ASide, ABorder)));
+  end;
+
+begin
+  all := nil;
+  SetLength(all, Length(FOwn));
+  for i := 0 to High(FOwn) do all[i] := Copy(FOwn[i]);
+  for i := 0 to High(FOwn) do
+  begin
+    for c := 0 to CellCount(i) - 1 do
+    begin
+      if (rcsLeft in FOwn[i][c]) and (c > 0) then Include(all[i][c - 1], rcsRight);
+      if (rcsRight in FOwn[i][c]) and (c < CellCount(i) - 1) then Include(all[i][c + 1], rcsLeft);
+    end;
+    // between rows: by the span each run of marked cells covers
+    for sd := rcsTop to rcsBottom do
+    begin
+      if sd = rcsRight then Continue;
+      c := 0;
+      while c < CellCount(i) do
+      begin
+        if not (sd in FOwn[i][c]) then
+        begin
+          Inc(c);
+          Continue;
+        end;
+        a := c;
+        while (c + 1 < CellCount(i)) and (sd in FOwn[i][c + 1]) do Inc(c);
+        lo := CellLeft(i, a);
+        hi := FEdges[i][c];
+        if sd = rcsTop then Face(i - 1, lo, hi, rcsBottom) else Face(i + 1, lo, hi, rcsTop);
+        Inc(c);
+      end;
+    end;
+  end;
+  // rows that hold a nested table: told, not touched
+  for i := 0 to High(all) do
+    if FNested[i] then
+    begin
+      j := 0;
+      for c := 0 to High(all[i]) do
+        if all[i][c] <> [] then j := 1;
+      Inc(ASkipped, j);
+    end;
+  // each side: runs of cells, a run the same in the rows below it one part
+  for sd := Low(TTyRichCellSide) to High(TTyRichCellSide) do
+  begin
+    pend := False;
+    pr0 := 0;
+    pr1 := 0;
+    pa := 0;
+    pb := 0;
+    for i := 0 to High(all) do
+    begin
+      if FNested[i] then
+      begin
+        Flush(sd);
+        Continue;
+      end;
+      runs := 0;
+      c := 0;
+      while c < Length(all[i]) do
+      begin
+        if not (sd in all[i][c]) then
+        begin
+          Inc(c);
+          Continue;
+        end;
+        a := c;
+        while (c + 1 < Length(all[i])) and (sd in all[i][c + 1]) do Inc(c);
+        b := c;
+        Inc(runs);
+        if pend and (pr1 = i - 1) and (pa = a) and (pb = b) and (runs = 1) then
+          pr1 := i
+        else
+        begin
+          Flush(sd);
+          pend := True;
+          pr0 := i;
+          pr1 := i;
+          pa := a;
+          pb := b;
+        end;
+        Inc(c);
+      end;
+      // (a row with no run, or with several: nothing runs on past it)
+      if runs <> 1 then Flush(sd);
+    end;
+    Flush(sd);
+  end;
+end;
+
+constructor TTyRichAgreeEdges.Create(APos: TTyRichPos; ARow0, ARow1: Integer);
+begin
+  inherited Create;
+  FPos := APos;
+  FRow0 := ARow0;
+  FRow1 := ARow1;
+end;
+
+type
+  TTyRichAgreeChange = record
+    Row, Cell: Integer;
+    Side: TTyRichCellSide;
+    Border: TTyRichBorder;
+  end;
+
+procedure TTyRichAgreeEdges.DoExecute(ADoc: TTyRichDocument);
+var
+  rows: TTyRichRowList;
+  first, n: Integer;
+  ch: array of TTyRichAgreeChange;
+  nch: Integer;
+
+  function BorderOf(AI, AC: Integer; ASide: TTyRichCellSide): TTyRichBorder;
+  var
+    f: TTyRichRowFormat;
+  begin
+    f := rows[AI].Format;
+    if (AC >= 0) and (AC < Length(f.Cells)) then Result := f.Cells[AC].Props.Borders[ASide]
+    else Result := TyRichBorder(rbsNone, 0);
+  end;
+
+  function Weight(const B: TTyRichBorder): Integer;
+  begin
+    if B.Style = rbsNone then Result := 0 else Result := B.WidthTwips;
+  end;
+
+  procedure Change(AI, AC: Integer; ASide: TTyRichCellSide; const B: TTyRichBorder);
+  begin
+    if nch = Length(ch) then SetLength(ch, nch * 2 + 8);
+    ch[nch].Row := AI;
+    ch[nch].Cell := AC;
+    ch[nch].Side := ASide;
+    ch[nch].Border := B;
+    Inc(nch);
+  end;
+
+  { The earlier side (AI, AC, ASide) and the later one (AJ, AD, AFace): the loser takes the
+    winner's border - the wider, the later's at the same width (the line drawn there). }
+  procedure Agree(AI, AC: Integer; ASide: TTyRichCellSide; AJ, AD: Integer; AFace: TTyRichCellSide);
+  var
+    e, l: TTyRichBorder;
+  begin
+    e := BorderOf(AI, AC, ASide);
+    l := BorderOf(AJ, AD, AFace);
+    if TyRichSameBorder(e, l) then Exit;
+    if Weight(e) > Weight(l) then Change(AJ, AD, AFace, e)
+    else Change(AI, AC, ASide, l);
+  end;
+
+  function LeftOf(AI, AC: Integer; const AE: TTyRichEdges): Integer;
+  begin
+    if AC = 0 then Result := rows[AI].Format.Row.LeftTwips else Result := AE[AC - 1];
+  end;
+
+  procedure Plan;
+  var
+    ea, eb: TTyRichEdges;
+    i, a, b, na, nb, k, m, j: Integer;
+    merged: Boolean;
+  begin
+    nch := 0;
+    ch := nil;
+    for i := 0 to High(rows) do
+    begin
+      if rows[i].HoldsNestedTable then Continue;
+      for a := 0 to rows[i].CellCount - 2 do Agree(i, a, rcsRight, i, a + 1, rcsLeft);
+      if (i = High(rows)) or rows[i + 1].HoldsNestedTable then Continue;
+      ea := rows[i].CellEdges;
+      eb := rows[i + 1].CellEdges;
+      na := Length(ea);
+      nb := Length(eb);
+      a := 0;
+      b := 0;
+      while (a < na) and (b < nb) do
+      begin
+        if (Abs(LeftOf(i, a, ea) - LeftOf(i + 1, b, eb)) <= CRichSharedEdgeTwips) and
+           (Abs(ea[a] - eb[b]) <= CRichSharedEdgeTwips) then
+          Agree(i, a, rcsBottom, i + 1, b, rcsTop);
+        if Abs(ea[a] - eb[b]) <= CRichSharedEdgeTwips then
+        begin
+          Inc(a);
+          Inc(b);
+        end
+        else if ea[a] < eb[b] then Inc(a)
+        else Inc(b);
+      end;
+    end;
+    { The parts: a change the same in the next row (the same cell, side and border) runs on
+      into it - a column put in a long table is one part. }
+    k := 0;
+    while k < nch do
+    begin
+      if ch[k].Row < 0 then
+      begin
+        Inc(k);
+        Continue;
+      end;
+      m := ch[k].Row;
+      j := k + 1;
+      repeat
+        merged := False;
+        while (j < nch) and (ch[j].Row <= m + 1) do
+        begin
+          if (ch[j].Row = m + 1) and (ch[j].Cell = ch[k].Cell) and (ch[j].Side = ch[k].Side) and
+             TyRichSameBorder(ch[j].Border, ch[k].Border) then
+          begin
+            ch[j].Row := -1;
+            Inc(m);
+            merged := True;
+            Inc(j);
+            Break;
+          end;
+          Inc(j);
+        end;
+      until not merged;
+      Add(TTyRichSetCellProps.Create(FPos, first + ch[k].Row, ch[k].Cell, first + m, ch[k].Cell,
+        SideProps(ch[k].Side, ch[k].Border)));
+      ch[k].Row := -1;
+      Inc(k);
+    end;
+  end;
+
+begin
+  if Count = 0 then
+  begin
+    ADoc.BeginRead;
+    try
+      if ADoc.TableRowsAt(FPos, FRow0, FRow1, rows, first, n) then Plan;
+    finally
+      ADoc.EndRead;
+    end;
+  end;
+  inherited DoExecute(ADoc);
 end;
 
 function TyRichAreaWholeRows(ADoc: TTyRichDocument; const AArea: TTyRichCellArea): Boolean;

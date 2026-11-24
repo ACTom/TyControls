@@ -132,6 +132,9 @@ const
   CRichWordWindow = 4096;
   { A copy of more characters than this shows the wait cursor while it is made. }
   CRichCopyWaitChars = 1000000;
+  { What a paragraph laid out counts as against CopyWaitChars (DistributeRows): a layout costs
+    about what a hundred characters copied do. }
+  CRichLayoutParaChars = 100;
   { A background find's piece: units of a finder's step at most, and at least (bytes of text
     read, bytes of a file's unparsed paragraph lexed, a picture's bytes passed over at a
     sixteenth: TTyRichFinder.Step - a paragraph larger than a piece is read in pieces) - a
@@ -1902,6 +1905,9 @@ type
     FEdgeShift: Boolean;
     // a command to run after the table edit, in its step (CellsKey: a deleted row's lone marks)
     FTableThen: TTyRichDropLoneMarks;
+    // (MakeTableEdit's: the rows whose shared lines are agreed after it, -2 none)
+    FAgreePos: TTyRichPos;
+    FAgreeRow0, FAgreeRow1: Integer;
     FGuideRowOn: Boolean;
     FGuideY: Integer;
     function EdgeBand: Integer;
@@ -1929,7 +1935,8 @@ type
     function CaretEdgePara(out APara, ACell: Integer; ATell: Boolean): Boolean;
     function CellTarget(out ATablePos: TTyRichPos; out ARow0, ACol0, ARow1, ACol1: Integer;
       ATell: Boolean): Boolean;
-    function RunCellProps(ACmd: TTyRichCommand): Boolean;
+    function RunCellProps(ACmd: TTyRichCommand; ASkipped: Integer = 0): Boolean;
+    procedure TellSkipped;
     function EdgeRowsWhole(APara: Integer; out ATablePos: TTyRichPos;
       out ARow0, ARow1: Integer): Boolean;
     function UserTableDoorOpen: Boolean;
@@ -10804,7 +10811,9 @@ var
   atEnd, ok: Boolean;
   marks: TTyRichStepMarks;
   refusal, cannot: string;
-  lateWhy, propsWhy: Boolean;
+  lateWhy, propsWhy, lateFirst, partRefused: Boolean;
+  lateCmd: TTyRichCommand;
+  why: TTyRichTableRefusal;
   edit: TTyRichTableEdit;
   pedit: TTyRichPropEdit;
   xfer: Boolean;
@@ -10829,16 +10838,27 @@ begin
   { Asked before: a command the document refuses is freed by it. A built-in table command
     would read its whole table for a reason that is rarely needed: its edit (a record) is
     kept instead, and the reason asked only when the command was refused. }
-  lateWhy := (ACmd.ClassType = TTyRichInsertTable) or (ACmd.ClassType = TTyRichInsertRow) or
-    (ACmd.ClassType = TTyRichDeleteRow) or (ACmd.ClassType = TTyRichInsertColumn) or
-    (ACmd.ClassType = TTyRichDeleteColumn);
+  { (a table edit's step: the edit first, then what keeps its lines and marks right - the
+    edit's reason is the step's) }
+  lateCmd := ACmd;
+  lateFirst := False;
+  if (ACmd is TTyRichCompositeCommand) and (TTyRichCompositeCommand(ACmd).Count > 0) then
+  begin
+    lateCmd := TTyRichCompositeCommand(ACmd).Items[0];
+    lateFirst := True;
+  end;
+  lateWhy := (lateCmd.ClassType = TTyRichInsertTable) or (lateCmd.ClassType = TTyRichInsertRow) or
+    (lateCmd.ClassType = TTyRichDeleteRow) or (lateCmd.ClassType = TTyRichInsertColumn) or
+    (lateCmd.ClassType = TTyRichDeleteColumn);
+  if not lateWhy then lateFirst := False;
+  partRefused := False;
   { A table properties command reads the rows it changes for its reason as for its work (a
     column's edge in ten thousand rows): the reason is asked only when it was refused. }
   propsWhy := ACmd is TTyRichTablePropsCommand;
   if propsWhy then pedit := TTyRichTablePropsCommand(ACmd).Edit;
   if lateWhy then
   begin
-    edit := TTyRichTableCommand(ACmd).Edit;
+    edit := TTyRichTableCommand(lateCmd).Edit;
     cannot := '';
   end
   else if xfer or propsWhy then
@@ -10875,6 +10895,7 @@ begin
         FCaretAtEnd := atEnd;
         if not AUser then raise;
         refusal := EngineRefusal(E);
+        partRefused := lateFirst and (E is ETyRichRefused);
       end;
       on E: EOutOfMemory do
       begin
@@ -10888,6 +10909,12 @@ begin
     end;
   finally
     Dec(FEditing);
+  end;
+  // a table edit's step refused at its edit: the edit's own reason
+  if partRefused and (RefusalReason = '') then
+  begin
+    why := FDoc.TableEditRefusal(edit);
+    if why <> rtrNone then refusal := TableRefusalText(why, edit);
   end;
   { Told once the edit's bracket is closed: a handler that changes or loads the document is
     heard as a change from elsewhere (its OnChange), not taken for this edit's. }
@@ -11703,18 +11730,27 @@ begin
   Result := RunUserEdit(@MakeTableEditThen);
 end;
 
-{ MakeTableEdit's command, and after it in the same step what FTableThen holds (taken over:
-  the lone marks of the rows it deletes). }
+{ MakeTableEdit's command, and after it in the same step the agreement of the lines its rows
+  and columns share (FAgreeRow0 .. FAgreeRow1 of the table at FAgreePos, when it set them:
+  TTyRichAgreeEdges) and what FTableThen holds (taken over: the lone marks of the rows it
+  deletes). }
 function TTyCustomRichEdit.MakeTableEditThen(var APlace: TTyRichEditPlace): TTyRichCommand;
 var
   comp: TTyRichCompositeCommand;
 begin
+  FAgreeRow0 := -2;
   Result := MakeTableEdit(APlace);
-  if (Result = nil) or (FTableThen = nil) or (FTableThen.Count = 0) then Exit;
+  if Result = nil then Exit;
+  if (FAgreeRow0 = -2) and ((FTableThen = nil) or (FTableThen.Count = 0)) then Exit;
   comp := TTyRichCompositeCommand.Create(Result.Description);
   comp.Add(Result);
-  comp.Add(FTableThen);
-  FTableThen := nil;
+  // (rows or columns in or out: the lines the cells share stay one definition each)
+  if FAgreeRow0 <> -2 then comp.Add(TTyRichAgreeEdges.Create(FAgreePos, FAgreeRow0, FAgreeRow1));
+  if (FTableThen <> nil) and (FTableThen.Count > 0) then
+  begin
+    comp.Add(FTableThen);
+    FTableThen := nil;
+  end;
   Result := comp;
 end;
 
@@ -11722,7 +11758,7 @@ function TTyCustomRichEdit.MakeTableEdit(var APlace: TTyRichEditPlace): TTyRichC
 var
   t: TTyRichText;
   s, e, pos, from, stop: TTyRichPos;
-  k, ks, ke, p1, p2, r1, r2, c1, c2, m, n, lastFirst: Integer;
+  k, ks, ke, p1, p2, r1, r2, c1, c2, m, n, lastFirst, ri, rc: Integer;
   cols: array of Boolean;
   info: TTyRichTableInfo;
   why: TTyRichTableRefusal;
@@ -11783,6 +11819,7 @@ var
   begin
     Result := nil;
     FTableKind := CTableDeleteTable;
+    FAgreeRow0 := -2;
     FAimPara := info.First;
     if info.Last < t.ParaCount - 1 then
     begin
@@ -11859,6 +11896,13 @@ begin
               Inc(p2);
           end;
         end;
+        // the rows beside the new ones share lines with them
+        if FDoc.TableRowIndex(k, ri, rc) then
+        begin
+          FAgreePos := pos;
+          FAgreeRow0 := ri - 1;
+          FAgreeRow1 := ri + n + 1;
+        end;
         // (Tab's row: below the caret's row, the last of the table a person sees)
         if (FTableKind = CTableTabRow) or FTableAfter then
         begin
@@ -11913,6 +11957,9 @@ begin
             n := area.Range.Col1 - area.Range.Col0 + 1;
             if FTableAfter then FAimCell := area.Range.Col1 + 1 else FAimCell := area.Range.Col0;
           end;
+          FAgreePos := t.ParaStart(info.First);
+          FAgreeRow0 := 0;
+          FAgreeRow1 := MaxInt;
           Result := TTyRichInsertColumn.Create(pos, FAimCell);
           if n > 1 then
           begin
@@ -11959,6 +12006,10 @@ begin
           FAimCell := FDoc.CellAt(k).Index;
           FAimFollows := r2 < info.RowCount - 1;
           FAimBefore := r1 > 0;
+          // the rows before and after those that go come to share a line
+          FAgreePos := t.ParaStart(info.First);
+          FAgreeRow0 := r1 - 1;
+          FAgreeRow1 := r1;
           if r1 = r2 then
             Result := TTyRichDeleteRow.Create(pos, r1)
           else
@@ -12036,6 +12087,9 @@ begin
           FAimPara := info.First;
           FAimRow := info.Row;
           FAimCell := c1;
+          FAgreePos := t.ParaStart(info.First);
+          FAgreeRow0 := 0;
+          FAgreeRow1 := MaxInt;
           if n = 1 then
             Result := TTyRichDeleteColumn.Create(pos, c1)
           else
@@ -12488,7 +12542,7 @@ begin
       Exit;
     end;
     FTableKind := CTableTabRow;
-    RunUserEdit(@MakeTableEdit);
+    RunUserEdit(@MakeTableEditThen);
   end;
 end;
 
@@ -21987,11 +22041,13 @@ begin
     screen out once for the old place and again for the new one). }
   keep := FNoEditScroll;
   FNoEditScroll := True;
+  FDoc.PropsSkipped := 0;
   try
     Result := RunMade(ACmd, place, True);
   finally
     FNoEditScroll := keep;
   end;
+  TellSkipped;
 end;
 
 { The horizontal guide of a row drag: a line across the text at client y AValue (-1: none),
@@ -22402,7 +22458,11 @@ begin
   Result := RunEdgeCommand(TTyRichSetRowWidths.CreateDistribute(pos, r0, r1));
 end;
 
-{ The rows (selected, else the table's) as high as their average now, each at least that. }
+{ The rows (selected, else the table's) as high as their average now, each at least that.
+  Synchronous: every row in range is laid out to read its height - about 3 s for a table of
+  10,000 rows of three cells. Above the threshold the control's other long synchronous work
+  uses (CopyWaitChars, a laid-out paragraph counted as CRichLayoutParaChars characters) the
+  wait cursor shows meanwhile. }
 function TTyCustomRichEdit.DistributeRows: Boolean;
 var
   p, c, r0, r1, k, ri, cnt: Integer;
@@ -22413,6 +22473,7 @@ var
   b: TTyBlockLayout;
   total: Int64;
   rp: TTyRichRowProps;
+  wait: Boolean;
 begin
   Result := False;
   if not UserTableDoorOpen then Exit;
@@ -22423,6 +22484,9 @@ begin
   cnt := 0;
   ri := -1;
   cur := nil;
+  wait := Int64(info.Last - info.First + 1) * CRichLayoutParaChars > FCopyWaitChars;
+  if wait then BeginWait;
+  try
   k := info.First;
   while k <= info.Last do
   begin
@@ -22451,6 +22515,9 @@ begin
       end;
     end;
     Inc(k);
+  end;
+  finally
+    if wait then EndWait;
   end;
   if cnt = 0 then Exit;
   rp := Default(TTyRichRowProps);
@@ -22596,7 +22663,9 @@ begin
   Result := TableActionsOpen and CaretParaRead and CellTarget(pos, r0, c0, r1, c1, False);
 end;
 
-function TTyCustomRichEdit.RunCellProps(ACmd: TTyRichCommand): Boolean;
+{ ACmd run as a table properties edit; ASkipped: rows its maker left as they are already (they
+  hold a nested table) - told once with those the edit leaves, when it ran. }
+function TTyCustomRichEdit.RunCellProps(ACmd: TTyRichCommand; ASkipped: Integer): Boolean;
 var
   place: TTyRichEditPlace;
   keep: Boolean;
@@ -22612,10 +22681,22 @@ begin
   place.Caret := CRichPlaceStays;
   keep := FNoEditScroll;
   FNoEditScroll := True;
+  FDoc.PropsSkipped := ASkipped;
   try
     Result := RunMade(ACmd, place, True);
   finally
     FNoEditScroll := keep;
+  end;
+  if Result then TellSkipped else FDoc.PropsSkipped := 0;
+end;
+
+{ Rows the last table properties edit left as they were (they hold a nested table): told once. }
+procedure TTyCustomRichEdit.TellSkipped;
+begin
+  if FDoc.PropsSkipped > 0 then
+  begin
+    FDoc.PropsSkipped := 0;
+    EditRefused(rsRichEditRefusedResizeNested);
   end;
 end;
 
@@ -22636,30 +22717,20 @@ end;
 
 function TTyCustomRichEdit.SetCellBorders(APreset: TTyRichBorderPreset;
   const ABorder: TTyRichBorder): Boolean;
-const
-  CProp: array[TTyRichCellSide] of TTyRichCellProp = (rcpBorderLeft, rcpBorderTop,
-    rcpBorderRight, rcpBorderBottom);
 var
   pos: TTyRichPos;
-  r0, c0, r1, c1: Integer;
+  r0, c0, r1, c1, skipped: Integer;
   comp: TTyRichCompositeCommand;
   b: TTyRichBorder;
+  plan: TTyRichBorderPlan;
 
-  // ASides of rows AR0..AR1, cells AC0..AC1 get the border
+  { ASides of rows AR0..AR1, cells AC0..AC1 get the border - and the facing side of the cell
+    beside each of them (TTyRichBorderPlan: one line two cells share has one definition, as
+    Word keeps it) }
   procedure Part(AR0, AC0, AR1, AC1: Integer; ASides: TTyRowCellSides);
-  var
-    p: TTyRichCellProps;
-    sd: TTyRichCellSide;
   begin
     if (AR1 < AR0) or (AC1 < AC0) or (ASides = []) then Exit;
-    p := Default(TTyRichCellProps);
-    for sd := Low(TTyRichCellSide) to High(TTyRichCellSide) do
-      if sd in ASides then
-      begin
-        Include(p.Valid, CProp[sd]);
-        p.Borders[sd] := b;
-      end;
-    comp.Add(TTyRichSetCellProps.Create(pos, AR0, AC0, AR1, AC1, p));
+    plan.Mark(AR0, AC0, AR1, AC1, ASides);
   end;
 
   procedure InsideH;
@@ -22685,8 +22756,11 @@ begin
     b.WidthTwips := 0;
     b.Color := clDefault;
   end;
+  skipped := 0;
   comp := TTyRichCompositeCommand.Create(rsRichUndoCellBorders);
+  plan := nil;
   try
+    plan := TTyRichBorderPlan.Create(FDoc, pos, r0, r1);
     case APreset of
       rbpAll, rbpNone: Part(r0, c0, r1, c1, [rcsLeft, rcsTop, rcsRight, rcsBottom]);
       rbpOutside:
@@ -22708,17 +22782,21 @@ begin
       rbpInsideH: InsideH;
       rbpInsideV: InsideV;
     end;
+    plan.AddParts(comp, b, skipped);
   except
+    plan.Free;
     comp.Free;
     raise;
   end;
+  plan.Free;
   // (inside lines of one cell: there are none - nothing to do)
   if comp.Count = 0 then
   begin
     comp.Free;
-    Exit(True);
+    if skipped > 0 then EditRefused(rsRichEditRefusedResizeNested);
+    Exit(skipped = 0);
   end;
-  Result := RunCellProps(comp);
+  Result := RunCellProps(comp, skipped);
 end;
 
 function TTyCustomRichEdit.SetCellPadding(ALeft, ATop, ARight, ABottom: Integer): Boolean;

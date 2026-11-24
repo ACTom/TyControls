@@ -696,6 +696,7 @@ var
   pos: TTyRichPos;
   t: TTyRichTable;
   r, nested: Integer;
+  was: TColor;
 begin
   orig := StrOf(FixtureBytes('word-table-merged.rtf'));
   d := LoadDoc(BytesOf(orig));
@@ -713,9 +714,19 @@ begin
     AssertTrue('a row with a nested table', nested > 0);
     AssertEquals('that row refuses', Ord(rtrNestedTable), Ord(TTyRichSetCellProps(
       TTyRichSetCellProps.Create(pos, nested, 0, nested, 0, Shading(clLime))).Refusal(d)));
-    AssertFalse('nothing changes', Exec(d, TTyRichSetCellProps.Create(pos, 0, 0, nested, 0,
+    { rows with it: the others take the change, that row is left as it is (counted) }
+    was := d.CellProps(pos, nested, 0).Shading;
+    d.PropsSkipped := 0;
+    AssertTrue('the others change', Exec(d, TTyRichSetCellProps.Create(pos, 0, 0, nested, 0,
       Shading(clLime))));
-    AssertEquals('nothing in the history', 0, d.UndoDepth);
+    AssertEquals('that row counted', 1, d.PropsSkipped);
+    AssertEquals('that row as it was', Integer(was), Integer(d.CellProps(pos, nested, 0).Shading));
+    AssertEquals('the row before it changed', Integer(clLime),
+      Integer(d.CellProps(pos, nested - 1, 0).Shading));
+    d.Undo;
+    AssertTrue('undone: the file as it was', SameBytes(BytesOf(orig), SaveBytes(d)));
+    d.ClearUndo;
+    d.PropsSkipped := 0;
     // the other rows take it
     AssertTrue('the first row', Exec(d, TTyRichSetCellProps.Create(pos, 0, 0, 0, 0, Shading(clLime))));
     got := StrOf(SaveBytes(d));

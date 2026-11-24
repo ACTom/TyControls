@@ -289,7 +289,7 @@ implementation
 
 uses
   Math, LCLType, LCLIntf, Types, tyControls.RichEdit.Commands,
-  tyControls.RichEdit.Bookmarks, tyControls.RichEdit;
+  tyControls.RichEdit.Bookmarks, tyControls.RichEdit.TableSel, tyControls.RichEdit;
 
 type
   // the readers' way in: a document's text and paragraphs set as a load sets them
@@ -959,8 +959,13 @@ end;
 { The open cell's record (a misuse outside a cell names ACall). }
 { The table properties given put into ADoc's tables through the property commands (what a
   user's edit makes, the file written as Word writes it), then no undo step kept: the
-  document is as built. }
+  document is as built. A border given to a cell's side goes to the facing side of the cell
+  beside it too (TTyRichBorderPlan: one line two cells share, one definition, as Word keeps
+  it); two cells that give one line different borders: the one given later is the line. }
 procedure TTyRichBuilder.TableProperties(ADoc: TTyRichDocument);
+const
+  CBorderProp: array[TTyRichCellSide] of TTyRichCellProp = (rcpBorderLeft, rcpBorderTop,
+    rcpBorderRight, rcpBorderBottom);
 var
   first: array of Integer;
   i, t, r, c: Integer;
@@ -968,6 +973,10 @@ var
   cp: TTyRichCellProps;
   rp: TTyRichRowProps;
   any: Boolean;
+  sd: TTyRichCellSide;
+  plan: TTyRichBorderPlan;
+  comp: TTyRichCompositeCommand;
+  skipped: Integer;
 
   procedure Run(ACmd: TTyRichCommand);
   begin
@@ -1006,7 +1015,23 @@ begin
           Include(cp.Valid, rcpShading);
           cp.Shading := FTables[t].Rows[r].Cells[c].Shading;
         end;
+        // the borders on their own, each with its facing side
+        cp.Valid := cp.Valid - [rcpBorderLeft, rcpBorderTop, rcpBorderRight, rcpBorderBottom];
         if cp.Valid <> [] then Run(TTyRichSetCellProps.Create(pos, r, c, r, c, cp));
+        for sd := Low(TTyRichCellSide) to High(TTyRichCellSide) do
+        begin
+          if not (CBorderProp[sd] in FTables[t].Rows[r].Cells[c].Props.Valid) then Continue;
+          skipped := 0;
+          comp := TTyRichCompositeCommand.Create;
+          plan := TTyRichBorderPlan.Create(ADoc, pos, r, r);
+          try
+            plan.Mark(r, c, r, c, [sd]);
+            plan.AddParts(comp, FTables[t].Rows[r].Cells[c].Props.Borders[sd], skipped);
+          finally
+            plan.Free;
+          end;
+          if comp.Count = 0 then comp.Free else Run(comp);
+        end;
       end;
     end;
     if FTables[t].HasAlign then

@@ -589,6 +589,7 @@ type
   TTyRichTable = class;
   TTyRichRow = class;
   TTyRichEdges = array of Integer;
+  TTyRichRowList = array of TTyRichRow;
 
   TTyRichCell = class
   private
@@ -1587,6 +1588,7 @@ type
     FBaseFontName: string;
     FTableParaVisits: Int64;
     FTableEditSteps: Int64;
+    FPropsSkipped: Integer;
     { The rows a property edit's refusal read (a TTyRichShape on the heap, nil none), for the
       edit itself when it runs at once after it - a command's CanExecute and then its work, with
       nothing changed between (ContentState as it was, the same edit): a column's edge in ten
@@ -1994,9 +1996,17 @@ type
       table paragraph ATablePara is in. False when there is no such cell, or the cell has no
       paragraph. One walk of the table's paragraphs. }
     function TableCellParas(ATablePara, ARow, ACell: Integer; out AFirst, ALast: Integer): Boolean;
+    { Rows ARow0 .. ARow1 (cut to the table's) of the table APos is in, counted as the table
+      edits count them, AFirstRow the first's index and ARowCount the table's rows (a table a
+      loader gives in parts that it cannot give whole: the part's). The row objects are good
+      inside a read scope - call it inside one. A window of the rows when they are known, else
+      one walk of the table's paragraphs. False in no table. }
+    function TableRowsAt(APos: TTyRichPos; ARow0, ARow1: Integer; out ARows: TTyRichRowList;
+      out AFirstRow, ARowCount: Integer): Boolean;
     { Why AEdit cannot be made (rtrNone: it can): rtrReadOnly, rtrNoTable, rtrOutOfRange (rows
-      or cells out of range, ARow0 > ARow1, ACol0 > ACol1), rtrNestedTable (one of the rows
-      holds a nested table: such a row is only its file's bytes), rtrMergedCells (a width or a
+      or cells out of range, ARow0 > ARow1, ACol0 > ACol1), rtrNestedTable (every row named
+      holds a nested table: such a row is only its file's bytes - one among others is left as
+      it is, PropsSkipped counts it), rtrMergedCells (a width or a
       row's left, which move edges, on a table with merged cells). A table a loader gives in
       parts that it cannot give whole counts its rows in the part APos is in: its other parts
       are not read. }
@@ -2029,6 +2039,9 @@ type
     { The table edits' own steps (a cell matched, an edit planned and applied), for the tests
       that hold them linear in the table. }
     property TableEditSteps: Int64 read FTableEditSteps write FTableEditSteps;
+    { Rows a table properties edit left as they were because they hold a nested table, counted
+      as the edits run (a caller sets it to 0 before and reads it after). }
+    property PropsSkipped: Integer read FPropsSkipped write FPropsSkipped;
 
     { Runs ACmd and keeps it for undo; the document owns ACmd from here on, also when this
       returns False or raises. False: ACmd.CanExecute said no, or the document is Loading,
@@ -8568,7 +8581,7 @@ const
   PadProp: array[TTyRichCellSide] of TTyRichCellProp = (rcpPadLeft, rcpPadTop, rcpPadRight,
     rcpPadBottom);
 var
-  k, r, most: Integer;
+  k, r, most, nested: Integer;
   c: TTyRichCell;
   t: TTyRichTable;
   row: TTyRichRow;
@@ -8619,15 +8632,19 @@ begin
     if AEdit.Row1 >= S.RowCount then Exit(rtrOutOfRange);
   end;
   most := 0;
+  nested := 0;
   for r := AEdit.Row0 - S.Base to AEdit.Row1 - S.Base do
   begin
     row := S.Rows[r].Row;
-    // (only the file's bytes are such a row: it cannot be made again)
-    if row.FHoldsNestedTable then Exit(rtrNestedTable);
+    { A row that holds a nested table is only the file's bytes: it cannot be made again - it
+      is left as it is (EditTableProps skips it, PropsSkipped counts it); refused only when
+      every row named is one. }
+    if row.FHoldsNestedTable then Inc(nested);
     if Length(row.FCells) > most then most := Length(row.FCells);
     if row.FTable.FRows[row.FIndex] <> row then
       raise ETyRichModel.Create('A table''s row is not in its place');
   end;
+  if nested = AEdit.Row1 - AEdit.Row0 + 1 then Exit(rtrNestedTable);
   if not AEdit.OfRows and (AEdit.Col0 >= most) then Exit(rtrOutOfRange);
   { The edges moved where rows share them (an edge drag, a fit to a width): merged cells keep
     their place among the edges, so a table with them takes it - not one with a nested table,
@@ -8636,7 +8653,6 @@ begin
   if AEdit.OfRows and (AEdit.EdgeKind <> rekNone) then
   begin
     if (AEdit.EdgeKind = rekFit) and (AEdit.FitWidth < 1) then Exit(rtrOutOfRange);
-    if t.FContentLocked and HasNestedRow(t) then Exit(rtrNestedTable);
     if (AEdit.EdgeKind = rekDistribute) and t.FContentLocked then Exit(rtrMergedCells);
     Exit(rtrNone);
   end;
@@ -8683,6 +8699,62 @@ begin
     PTyRichShape(FPropShape)^ := s;
     FPropShapeState := FState;
     FPropShapeEdit := AEdit;
+  end;
+end;
+
+function TTyRichDocument.TableRowsAt(APos: TTyRichPos; ARow0, ARow1: Integer;
+  out ARows: TTyRichRowList; out AFirstRow, ARowCount: Integer): Boolean;
+var
+  k, r: Integer;
+  c: TTyRichCell;
+  t: TTyRichTable;
+  s: TTyRichShape;
+begin
+  ARows := nil;
+  AFirstRow := 0;
+  ARowCount := 0;
+  Result := False;
+  if (APos < 0) or (APos > FText.Length) then Exit;
+  BeginRead;
+  try
+    k := FText.ParaOfPos(APos);
+    c := CellAt(k);
+    if c = nil then Exit;
+    t := c.FRow.FTable;
+    s := Default(TTyRichShape);
+    if not t.FCut and t.FRowsValid then
+    begin
+      ARowCount := Length(t.FRows);
+      if ARow0 < 0 then ARow0 := 0;
+      if ARow1 > ARowCount - 1 then ARow1 := ARowCount - 1;
+      if ARow1 < ARow0 then
+      begin
+        AFirstRow := ARow0;
+        Exit(True);
+      end;
+      if not ReadRowWindow(Self, k, t, ARow0, ARow1, s) then
+      begin
+        // the paragraphs are not where its rows say: as if they were not known
+        t.FRowsValid := False;
+        s := Default(TTyRichShape);
+      end;
+    end;
+    if not s.Window then
+    begin
+      if ReadTableShape(Self, k, s) = rtrNoTable then Exit;
+      ARowCount := s.RowCount;
+      if ARow0 < 0 then ARow0 := 0;
+      if ARow1 > ARowCount - 1 then ARow1 := ARowCount - 1;
+    end;
+    AFirstRow := ARow0;
+    if ARow1 >= ARow0 then
+    begin
+      SetLength(ARows, ARow1 - ARow0 + 1);
+      for r := ARow0 to ARow1 do ARows[r - ARow0] := s.Rows[r - s.Base].Row;
+    end;
+    Result := True;
+  finally
+    EndRead;
   end;
 end;
 
@@ -8862,6 +8934,13 @@ begin
         for rr := AEdit.Row0 - s.Base to AEdit.Row1 - s.Base do
         begin
           row := s.Rows[rr].Row;
+          // a row that holds a nested table: left as it is, counted (see PropsRefusal)
+          if row.FHoldsNestedTable then
+          begin
+            Inc(FPropsSkipped);
+            FlushRun;
+            Continue;
+          end;
           if AEdit.OfRows and (AEdit.EdgeKind <> rekNone) then
           begin
             // the edges, and the left when it moved (in the row's format)
