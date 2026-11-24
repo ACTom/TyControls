@@ -383,6 +383,7 @@ type
     FDocColor: TColor;
     FDefChp: TTyRtfDefChp;
     FDefPap: TTyParaFormat;
+    FDefChpEarlier, FDefPapEarlier: array of TTyRtfRange;   // groups before the last of each
     FPaperWAt, FMargLAt, FMargRAt, FBackgroundAt, FDefChpAt, FDefPapAt,
       FViewBkAt: TTyRtfRange;
     FFonts: array of TTyRtfFont;
@@ -624,6 +625,13 @@ type
     property BackgroundAt: TTyRtfRange read FBackgroundAt;
     property DefChpAt: TTyRtfRange read FDefChpAt;
     property DefPapAt: TTyRtfRange read FDefPapAt;
+    { A header with more than one {\*\defchp ...} or {\*\defpap ...} (the last is DefChpAt /
+      DefPapAt; the values are those of all of them read in turn): the ones before it, in
+      their order - a writer that gives the header new defaults takes them out. }
+    function DefChpEarlierCount: Integer;
+    function DefChpEarlier(AIndex: Integer): TTyRtfRange;
+    function DefPapEarlierCount: Integer;
+    function DefPapEarlier(AIndex: Integer): TTyRtfRange;
     // Paragraph AIndex's text (building only), without its separator.
     function ParaText(AIndex: Integer): RawByteString;
     // The paragraphs this parser read (after a Resume: ParaRec(0) is the first after the
@@ -2185,6 +2193,8 @@ begin
   FBackgroundAt := AOther.FBackgroundAt;
   FDefChpAt := AOther.FDefChpAt;
   FDefPapAt := AOther.FDefPapAt;
+  FDefChpEarlier := Copy(AOther.FDefChpEarlier, 0, Length(AOther.FDefChpEarlier));
+  FDefPapEarlier := Copy(AOther.FDefPapEarlier, 0, Length(AOther.FDefPapEarlier));
   FViewBkAt := AOther.FViewBkAt;
 end;
 
@@ -3170,6 +3180,11 @@ begin
       end;
     kwDDefChp:
       begin
+        if FDefChpAt.Start >= 0 then
+        begin
+          SetLength(FDefChpEarlier, Length(FDefChpEarlier) + 1);
+          FDefChpEarlier[High(FDefChpEarlier)] := FDefChpAt;
+        end;
         FDefChpAt := Range(AStart, AStop);
         depth := 0;
         while lex.Next(t) do
@@ -3200,6 +3215,11 @@ begin
       end;
     kwDDefPap:
       begin
+        if FDefPapAt.Start >= 0 then
+        begin
+          SetLength(FDefPapEarlier, Length(FDefPapEarlier) + 1);
+          FDefPapEarlier[High(FDefPapEarlier)] := FDefPapAt;
+        end;
         FDefPapAt := Range(AStart, AStop);
         FDefPap := TyDefaultParaFormat;
         depth := 0;
@@ -3819,6 +3839,26 @@ begin
   FLists[FListCount] := FCurList;
   Inc(FListCount);
   TablesChanged;
+end;
+
+function TTyRtfParser.DefChpEarlierCount: Integer;
+begin
+  Result := Length(FDefChpEarlier);
+end;
+
+function TTyRtfParser.DefChpEarlier(AIndex: Integer): TTyRtfRange;
+begin
+  Result := FDefChpEarlier[AIndex];
+end;
+
+function TTyRtfParser.DefPapEarlierCount: Integer;
+begin
+  Result := Length(FDefPapEarlier);
+end;
+
+function TTyRtfParser.DefPapEarlier(AIndex: Integer): TTyRtfRange;
+begin
+  Result := FDefPapEarlier[AIndex];
 end;
 
 function TTyRtfParser.ListRefPlain(ALs: Integer): Boolean;

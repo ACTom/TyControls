@@ -79,6 +79,7 @@ type
     procedure TestAWordFilesHeaderChangesOnlyWhereTheSettingsAre;
     procedure TestAnyMultipleIsLaidOutAsWordLaysItOut;
     procedure TestALazyFileKeepsItsLookWhenTheDefaultsChange;
+    procedure TestNewDefaultsReplaceEveryDefaultsGroup;
   end;
 
 implementation
@@ -147,6 +148,21 @@ end;
 function Has(const B: TBytes; const S: RawByteString): Boolean;
 begin
   Result := Pos(S, AsRaw(B)) > 0;
+end;
+
+function Count(const B: TBytes; const S: RawByteString): Integer;
+var
+  r: RawByteString;
+  i: Integer;
+begin
+  r := AsRaw(B);
+  Result := 0;
+  i := Pos(S, r);
+  while i > 0 do
+  begin
+    Inc(Result);
+    i := Pos(S, r, i + 1);
+  end;
 end;
 
 function Sentinel: TBGRAPixel;
@@ -1125,6 +1141,40 @@ begin
   d.Undo;
   AssertEquals('undone: the file''s default', 24, d.DefaultCharFormat.SizeHalfPt);
   AssertEquals('undone: the paragraph in it', d.DefaultCharFormatId, d.RunsOf(0)[0].Format);
+end;
+
+{ A header with two {\*\defchp} and two {\*\defpap} (read in turn: the second's words over the
+  first's): new defaults replace all of them - saved and read back, the new values, nothing of
+  an earlier group's. }
+procedure TTyRichApiGapsTest.TestNewDefaultsReplaceEveryDefaultsGroup;
+var
+  d: TTyRichDocument;
+  c: TTyCharFormat;
+  p: TTyParaFormat;
+  b: TBytes;
+begin
+  Load('{' + BS + 'rtf1' + BS + 'ansi' + BS + 'deff0{' + BS + 'fonttbl{' + BS + 'f0 Arial;}}' +
+    '{' + BS + '*' + BS + 'defchp ' + BS + 'fs20' + BS + 'b}{' + BS + '*' + BS + 'defchp ' + BS +
+    'fs28}{' + BS + '*' + BS + 'defpap ' + BS + 'qc}{' + BS + '*' + BS + 'defpap ' + BS +
+    'sa100}' + BS + 'viewkind4' + BS + 'uc1' + BS + 'pard x' + BS + 'par}');
+  AssertEquals('read in turn: the size of the second', 28, FRich.Document.DefaultCharFormat.SizeHalfPt);
+  AssertTrue('and bold from the first', fsBold in FRich.Document.DefaultCharFormat.Style);
+  c := TyDefaultCharFormat;
+  c.FontName := 'Arial';
+  c.Charset := 0;
+  c.SizeHalfPt := 22;
+  p := TyDefaultParaFormat;
+  p.SpaceAfter := 40;
+  FRich.SetDefaultFormats(c, p);
+  b := Saved;
+  AssertEquals('one group of each: ' + AsRaw(b), 1, Count(b, '{' + BS + '*' + BS + 'defchp'));
+  AssertEquals('one defpap', 1, Count(b, '{' + BS + '*' + BS + 'defpap'));
+  d := ReadBack(b);
+  AssertEquals('read back: the new size', 22, d.DefaultCharFormat.SizeHalfPt);
+  AssertFalse('read back: not bold', fsBold in d.DefaultCharFormat.Style);
+  p := d.Formats.ParaFormat(d.DefaultParaFormatId);
+  AssertEquals('read back: the new space after', 40, p.SpaceAfter);
+  AssertEquals('read back: not centred', Ord(paraLeft), Ord(p.Align));
 end;
 
 initialization

@@ -2122,9 +2122,18 @@ begin
     if FDoc.PaperWidth <> scan.PaperWidth then Add(scan.PaperWAt, 1, True);
     if FDoc.MarginLeft <> scan.MarginLeft then Add(scan.MargLAt, 2, True);
     if FDoc.MarginRight <> scan.MarginRight then Add(scan.MargRAt, 3, True);
-    if not FDoc.DefaultCharFormat.Equals(scan.DefaultCharFormat) then Add(scan.DefChpAt, 5, True);
+    { new defaults: the last group of the header written again whole, the ones before it
+      taken out (the values were read from all of them in turn) }
+    if not FDoc.DefaultCharFormat.Equals(scan.DefaultCharFormat) then
+    begin
+      Add(scan.DefChpAt, 5, True);
+      for i := 0 to scan.DefChpEarlierCount - 1 do Add(scan.DefChpEarlier(i), 5, False);
+    end;
     if not FDoc.Formats.ParaFormat(FDoc.DefaultParaFormatId).Equals(scan.DefaultParaFormat) then
+    begin
       Add(scan.DefPapAt, 6, True);
+      for i := 0 to scan.DefPapEarlierCount - 1 do Add(scan.DefPapEarlier(i), 6, False);
+    end;
     if FDoc.DocumentColor <> scan.DocumentColor then
     begin
       Add(scan.BackgroundAt, 4, FDoc.DocumentColor <> clNone);
