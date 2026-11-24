@@ -96,6 +96,10 @@ type
     procedure TestTheRowAndColumnZonesAreWideEnough;
     procedure TestCutOverCellsCopiesAndClears;
     procedure TestTabOverListCellsMovesAndNoLevelChanges;
+    procedure TestDefaultTextCopiedAndPastedKeepsItsSize;
+    procedure TestDefaultTextBetweenTwoControlsKeepsTheSizeItWasShownIn;
+    procedure TestTheTextsOwnFormatsArriveAsTheyAre;
+    procedure TestASavedDocumentNamesTheSizeOfItsDefaultText;
   end;
 
 implementation
@@ -1636,6 +1640,194 @@ begin
     for c := 0 to 2 do
       AssertEquals(Format('%d,%d: its level as it was', [r, c]), 0, LevelAt(FRich, CellStart(r, c)));
   AssertEquals('no step', 0, FRich.Document.UndoDepth);
+end;
+
+// (each road names the size itself: what an earlier copy or save left on the document goes)
+procedure Unnamed(R: TSelRich);
+begin
+  R.Document.BaseFontSizeHalfPt := 0;
+end;
+
+// the size the control shows the character at APos in (its size box's), in points
+function ShownSize(R: TSelRich; APos: TTyRichPos): Integer;
+begin
+  R.SelStart := APos;
+  R.SelLength := 1;
+  Result := R.SelAttributes.Size;
+end;
+
+{ Text in the document's default format (no size of its own: the control's, 9 pt here) keeps
+  the size it is shown in through a copy or a cut and a paste: cells into cells, whole rows
+  after the table, text outside the table - the same on every road. }
+procedure TTyRichTableSelTest.TestDefaultTextCopiedAndPastedKeepsItsSize;
+var
+  d: TTyRichDocument;
+  r, c, k: Integer;
+  info: TTyRichTableInfo;
+begin
+  FRich.Font.Size := 9;
+  MakeTable(3, 3);
+  d := FRich.Document;
+  AssertEquals('(shown at the control''s size)', 9, ShownSize(FRich, CellStart(0, 0)));
+  AssertEquals('(no size of its own)', 0,
+    d.Formats.CharFormat(d.RunsOf(d.Text.ParaOfPos(CellStart(0, 0)))[0].Format).SizeHalfPt);
+  // a 2 x 2 block copied into other cells
+  Sel(CellStart(0, 0), CellStart(1, 1) + 1);
+  Unnamed(FRich);
+  FRich.CopyToClipboard;
+  Sel(CellStart(1, 1), CellStart(1, 1));
+  FRich.PasteFromClipboard;
+  AssertEquals('copied: its text', 'r0c0', CellText(1, 1));
+  for r := 1 to 2 do
+    for c := 1 to 2 do
+      AssertEquals(Format('copied: %d,%d', [r, c]), 9, ShownSize(FRich, CellStart(r, c)));
+  FRich.Undo;
+  // cut, then pasted
+  Sel(CellStart(0, 0), CellStart(1, 1) + 1);
+  Unnamed(FRich);
+  FRich.CutToClipboard;
+  Sel(CellStart(1, 1), CellStart(1, 1));
+  FRich.PasteFromClipboard;
+  AssertEquals('cut: its text', 'r1c1', CellText(2, 2));
+  for r := 1 to 2 do
+    for c := 1 to 2 do
+      AssertEquals(Format('cut: %d,%d', [r, c]), 9, ShownSize(FRich, CellStart(r, c)));
+  FRich.Undo;
+  FRich.Undo;
+  // whole rows, after the table
+  Sel(CellStart(1, 0), CellEnd(1, 2));
+  Unnamed(FRich);
+  FRich.CopyToClipboard;
+  k := d.Text.ParaCount - 1;
+  Sel(d.Text.ParaStart(k), d.Text.ParaStart(k));
+  FRich.PasteFromClipboard;
+  AssertTrue('a table after it', d.TableInfoAt(k, info));
+  AssertEquals('rows: its text', 'r1c0', d.Text.GetText(d.Text.ParaStart(k), 4));
+  AssertEquals('rows: a cell', 9, ShownSize(FRich, d.Text.ParaStart(k)));
+  AssertEquals('rows: the last cell', 9, ShownSize(FRich, d.Text.ParaStart(info.Last)));
+  FRich.Undo;
+  // text outside the table
+  Sel(0, 6);
+  Unnamed(FRich);
+  FRich.CopyToClipboard;
+  k := d.Text.ParaCount - 1;
+  Sel(d.Text.ParaStart(k), d.Text.ParaStart(k));
+  FRich.PasteFromClipboard;
+  AssertEquals('text: its text', 'beforeafter', d.Text.GetText(d.Text.ParaStart(k), 11));
+  AssertEquals('text', 9, ShownSize(FRich, d.Text.ParaStart(k)));
+end;
+
+{ Between two controls of different sizes: text in the source's default arrives at the size
+  the source showed it in - as its font arrives named; the target's default is not the
+  source's. }
+procedure TTyRichTableSelTest.TestDefaultTextBetweenTwoControlsKeepsTheSizeItWasShownIn;
+var
+  r2: TSelRich;
+  d2: TTyRichDocument;
+  f, l, k: Integer;
+begin
+  FRich.Font.Size := 9;
+  MakeTable(3, 3);
+  r2 := TSelRich.Create(nil);
+  try
+    r2.Refusals := TStringList.Create;
+    r2.Controller := FCtl;
+    r2.Font.PixelsPerInch := 96;
+    r2.Font.Size := 14;
+    r2.SetBounds(0, 0, 600, 400);
+    r2.Lines.Text := 'top' + LineEnding + 'end';
+    d2 := r2.Document;
+    AssertTrue('a table there', d2.Execute(TTyRichInsertTable.Create(d2.Text.ParaStart(1), 2, 2, 2880)));
+    AssertEquals('(its own size)', 14, ShownSize(r2, 0));
+    // cells into its cells
+    Sel(CellStart(0, 0), CellStart(1, 1) + 1);
+    Unnamed(FRich);
+  FRich.CopyToClipboard;
+    r2.ClipRtf := FRich.ClipRtf;
+    r2.ClipText := FRich.ClipText;
+    AssertTrue('its cell', d2.TableCellParas(1, 0, 0, f, l));
+    r2.SelStart := d2.Text.ParaStart(f);
+    r2.SelLength := 0;
+    r2.PasteFromClipboard;
+    AssertEquals('cells: the text', 'r0c0', d2.Text.GetText(d2.Text.ParaStart(f), 4));
+    AssertEquals('cells: as it was shown', 9, ShownSize(r2, d2.Text.ParaStart(f)));
+    AssertTrue('its last cell', d2.TableCellParas(1, 1, 1, f, l));
+    AssertEquals('cells: the last', 9, ShownSize(r2, d2.Text.ParaStart(f)));
+    // text outside a table
+    Sel(0, 6);
+    Unnamed(FRich);
+  FRich.CopyToClipboard;
+    r2.ClipRtf := FRich.ClipRtf;
+    r2.ClipText := FRich.ClipText;
+    r2.SelStart := 0;
+    r2.SelLength := 0;
+    r2.PasteFromClipboard;
+    AssertEquals('text: the text', 'beforetop', d2.Text.GetText(0, 9));
+    AssertEquals('text: as it was shown', 9, ShownSize(r2, 0));
+    AssertEquals('its own text stays its own', 14, ShownSize(r2, 6));
+    k := 0;
+    AssertEquals('(no refusal)', k, r2.Refusals.Count);
+  finally
+    r2.Free;
+  end;
+end;
+
+{ What is the text's own - a size, a font, a colour - arrives as it is, beside cells in the
+  default format. }
+procedure TTyRichTableSelTest.TestTheTextsOwnFormatsArriveAsTheyAre;
+var
+  d: TTyRichDocument;
+  fmt: TTyCharFormat;
+begin
+  FRich.Font.Size := 9;
+  MakeTable(3, 3);
+  d := FRich.Document;
+  Sel(CellStart(0, 0), CellStart(0, 0) + 4);
+  FRich.SelAttributes.Size := 15;
+  FRich.SelAttributes.Name := 'Courier New';
+  FRich.SelAttributes.Color := clRed;
+  Sel(CellStart(0, 0), CellStart(1, 1) + 1);
+  Unnamed(FRich);
+  FRich.CopyToClipboard;
+  Sel(CellStart(1, 1), CellStart(1, 1));
+  FRich.PasteFromClipboard;
+  fmt := d.Formats.CharFormat(d.RunsOf(d.Text.ParaOfPos(CellStart(1, 1)))[0].Format);
+  AssertEquals('its size', 30, fmt.SizeHalfPt);
+  AssertEquals('its font', 'Courier New', fmt.FontName);
+  AssertEquals('its colour', ColorToString(clRed), ColorToString(fmt.Color));
+  AssertEquals('beside it: the default''s size', 9, ShownSize(FRich, CellStart(1, 2)));
+  AssertEquals('below it too', 9, ShownSize(FRich, CellStart(2, 2)));
+end;
+
+{ A document saved as RTF names the size its default text is shown in, as it names the
+  font: read again - here by a control of another size - the text is as big as it was. }
+procedure TTyRichTableSelTest.TestASavedDocumentNamesTheSizeOfItsDefaultText;
+var
+  r2: TSelRich;
+  st: TMemoryStream;
+begin
+  FRich.Font.Size := 9;
+  MakeTable(2, 2);
+  Unnamed(FRich);
+  st := TMemoryStream.Create;
+  r2 := TSelRich.Create(nil);
+  try
+    FRich.SaveToStream(st, rfRtf);
+    st.Position := 0;
+    r2.Refusals := TStringList.Create;
+    r2.Controller := FCtl;
+    r2.Font.PixelsPerInch := 96;
+    r2.Font.Size := 14;
+    r2.SetBounds(0, 0, 600, 400);
+    r2.LoadFromStream(st, rfRtf);
+    r2.FinishLoading;
+    AssertEquals('the text', 'before', r2.Document.Text.GetText(0, 6));
+    AssertEquals('as it was shown', 9, ShownSize(r2, 0));
+    AssertEquals('a cell too', 9, ShownSize(r2, r2.Document.Text.ParaStart(1)));
+  finally
+    r2.Free;
+    st.Free;
+  end;
 end;
 
 { ---- painting ---- }

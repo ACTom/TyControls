@@ -1135,6 +1135,9 @@ type
     { ... and its name: never '' (the Font's when neither the theme nor the platform names
       one). }
     function BaseFontName(const AStyle: TTyStyleSet): string;
+    { What RTF written of the document names for text with no font or size of its own
+      (TTyRichDocument.BaseFontName, BaseFontSizeHalfPt): the view's, before a save or a copy. }
+    procedure NameDocBase;
     procedure SetBaseCharFormat(AMask: TTyCharFormatMask; const AValue: TTyCharFormat);
     { AFormat with the base filled in where it has none of its own (a name, a size). }
     function ResolvedFormat(const AFormat: TTyCharFormat): TTyCharFormat;
@@ -10811,7 +10814,7 @@ var
   st: TTyRichStringOut;
 begin
   Result := '';
-  FDoc.BaseFontName := TyEffectiveFontName(CurrentStyle.FontName);
+  NameDocBase;
   st := TTyRichStringOut.Create;
   try
     try
@@ -13697,6 +13700,15 @@ begin
   // the theme's, else the platform's fallback, else the Font's ('default': the system's)
   Result := TyEffectiveFontName(AStyle.FontName);
   if Result = '' then Result := Font.Name;
+end;
+
+procedure TTyCustomRichEdit.NameDocBase;
+var
+  s: TTyStyleSet;
+begin
+  s := CurrentStyle;
+  FDoc.BaseFontName := TyEffectiveFontName(s.FontName);
+  FDoc.BaseFontSizeHalfPt := BaseHalfPt(s);
 end;
 
 function TTyCustomRichEdit.BaseCharFormat: TTyCharFormat;
@@ -19732,8 +19744,9 @@ begin
       // the document's state decides, not where the content came from
       if AFormat = rfAuto then
         if FPlainText then AFormat := rfText else AFormat := rfRtf;
-      // a document of ours names the font its plain text is shown in (RtfWrite's \f0)
-      FDoc.BaseFontName := TyEffectiveFontName(CurrentStyle.FontName);
+      // a document of ours names the font its plain text is shown in (RtfWrite's \f0), and
+      // its size
+      NameDocBase;
       Inc(FSaving);
       try
         if AFormat = rfText then
@@ -21485,6 +21498,8 @@ begin
   Result := False;
   ARtf := '';
   AText := '';
+  // (each cell's content is written and read back: its text in the view's font and size)
+  NameDocBase;
   g := TTyCellGather.Create;
   d := TTyRichDocument.Create;
   try

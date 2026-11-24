@@ -34,7 +34,8 @@ unit tyControls.RichEdit.RtfWrite;
 // writing: every character above 7F as \uN? under \uc1 (nothing written here is a byte
 // above 7F), fonts in a font table with their \fcharset, \par after every paragraph. Its
 // header names the page, and the view's font (TTyRichDocument.BaseFontName) as \f0 for the
-// text that names no font of its own.
+// text that names no font of its own. Text with no size of its own written from the model -
+// in any document - gets the view's size (TTyRichDocument.BaseFontSizeHalfPt) as \fsN.
 //
 // Saving reads the model; it changes nothing in the document (a paragraph it has to write
 // from the model is parsed if it was not).
@@ -1488,6 +1489,9 @@ begin
     Result^.DefName := DefNameIndex(FDoc.BaseFontName);
     if Result^.DefName >= 0 then Result^.Font := -2;
   end;
+  // text in no size of its own: the size the view shows it in (a reader's would be 12 pt)
+  if (f.SizeHalfPt <= 0) and (FDoc.BaseFontSizeHalfPt > 0) then
+    Result^.Fmt.SizeHalfPt := FDoc.BaseFontSizeHalfPt;
   n := f.Extra.Count;
   Result^.OneShot := (n > 0) and SameBytes(f.Extra.Item(n - 1), '\-');
 end;

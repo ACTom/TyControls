@@ -1602,6 +1602,7 @@ type
     FIncomplete: Boolean;
     FSaving: Integer;
     FBaseFontName: string;
+    FBaseFontSizeHalfPt: Integer;
     FTableParaVisits: Int64;
     FTableEditSteps: Int64;
     FPropsSkipped: Integer;
@@ -2196,6 +2197,11 @@ type
       defines it as \f0, the document's default font, with the charset its name or the text
       in it calls for. '' (a document no view set it for): such text is written in no font. }
     property BaseFontName: string read FBaseFontName write FBaseFontName;
+    { ... and the size it shows that text in (a character format's SizeHalfPt 0), in half
+      points: TTyRichEdit puts its base size here, as BaseFontName. Not content either; what
+      RTF written of the document gives such text (\fsN) - a reader would show it in 12 pt,
+      RTF's own. 0 (a document no view set it for): such text is written with no size. }
+    property BaseFontSizeHalfPt: Integer read FBaseFontSizeHalfPt write FBaseFontSizeHalfPt;
   end;
 
 function TyDefaultCharFormat: TTyCharFormat;
