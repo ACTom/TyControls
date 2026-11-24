@@ -6,16 +6,19 @@ unit upagesample;
   BuildPage below makes the whole page with a TTyRichBuilder, top to bottom, in the order the
   page reads:
     - a picture (a glyph of the example's icon font) and a heading;
-    - a paragraph with bold and coloured words;
+    - a paragraph with bold and coloured words, written as ONE sentence with marked spans
+      (Say): a translator gets the whole sentence and may move the words - do the same in your
+      own pages rather than cutting a sentence around its bold words;
     - a contents list of links to the sections further down ("#name": a click jumps to the
       bookmark by itself) and a link to a web page;
     - three sections, each with a bookmark at its heading: a shaded note; a bulleted and a
       numbered list with a second level; lines with tab stops and a dot leader; a two-column
       table with its own column widths;
     - "Back to the top" links.
-  Nothing here has a colour of the theme's: text is in the automatic colour, links in the
-  link look, so the page follows the skin and its dark mode. The two colours of their own
-  (the red word, the note's ground) are the page's, as a document's colours are.
+  Text is in the automatic colour and links in the link look, so the page follows the skin
+  and its dark mode by itself. The picture is pixels: it is drawn in the theme's accent when
+  the page is built, so the form builds the page again when the skin changes. The two colours
+  of the page's own (the red word, the note's ground) stay, as a document's colours do.
 
   Putting it in (upageform): Rich.SetContent(B) - a new content, no undo history;
   Rich.AppendContent(B) - added at the end as one undo step. }
@@ -26,12 +29,16 @@ interface
 
 uses
   Classes, SysUtils, Graphics, BGRABitmap, BGRABitmapTypes, tyControls.Types,
-  tyControls.IconFont, tyControls.RichEdit.Model, tyControls.RichEdit.Attrs,
-  tyControls.RichEdit.Builder, tyControls.RichEdit;
+  tyControls.Controller, tyControls.IconFont, tyControls.RichEdit.Model, StrUtils,
+  tyControls.RichEdit.Attrs, tyControls.RichEdit.Builder, tyControls.RichEdit;
 
 { The whole page into B (a builder from Rich.NewBuilder). AIcons gives the picture at the top
   (nil: no picture). }
 procedure BuildPage(B: TTyRichBuilder; AIcons: TTyCustomIconFont);
+
+{ ASentence into B, the sentence whole: **text** bold, `text` in a code font, !!text!! red;
+  the rest in B's current format, which it is again after each span. }
+procedure Say(B: TTyRichBuilder; const ASentence: string);
 
 { One line "Appended at <time>." into B, for AppendContent. }
 procedure BuildStamp(B: TTyRichBuilder);
@@ -42,13 +49,11 @@ procedure ShowWelcome(Rich: TTyRichEdit);
 
 resourcestring
   rsPgTitle      = 'A page built from code';
-  rsPgIntro1     = 'This page is not a file. It is made in ';
-  rsPgIntro2     = ' with ';
-  rsPgIntro3     = ', in calls that read the way the page does: ';
-  rsPgIntroBold  = 'bold words';
-  rsPgIntro4     = ', a word in ';
-  rsPgIntroRed   = 'red';
-  rsPgIntro5     = ', links, lists, tab stops, a table and a picture.';
+  // one sentence, its spans marked (see Say): a translator may reorder it as a whole
+  rsPgIntro      = 'This page is not a file. It is made in `upagesample.pas` with ' +
+                   '**TTyRichBuilder**, in calls that read the way the page does: ' +
+                   '**bold words**, a word in !!red!!, links, lists, tab stops, a table and ' +
+                   'a picture.';
   rsPgContents   = 'Contents';
   rsPgWeb        = 'The Lazarus home page';
   rsPgS1         = '1. Showing a page';
@@ -96,14 +101,17 @@ resourcestring
 
 implementation
 
-{ The glyph AName of AIcons as a PNG picture, ASize pixels, in the theme's accent blue. }
+{ The glyph AName of AIcons as a PNG picture, ASize pixels, in the theme's accent (--accent)
+  as the skin has it now - a picture does not change colour later: build the page again on a
+  skin change (upageform does). }
 procedure AddGlyph(B: TTyRichBuilder; AIcons: TTyCustomIconFont; const AName: string; ASize: Integer);
 var
   bmp: TBGRABitmap;
   s: TMemoryStream;
 begin
   if (AIcons = nil) or not AIcons.HasGlyph(AName) then Exit;
-  bmp := AIcons.RenderGlyph(AName, ASize, TyRGB(37, 99, 235));
+  bmp := AIcons.RenderGlyph(AName, ASize,
+    TyDefaultController.Model.ResolveColorToken('--accent', TyRGB(37, 99, 235)));
   s := TMemoryStream.Create;
   try
     bmp.SaveToStreamAsPng(s);
@@ -140,11 +148,7 @@ begin
 
   // a paragraph with words of its own format
   B.Paragraph.Reset.SpaceAfter(8);
-  B.Text(rsPgIntro1).Font('Consolas').Text('upagesample.pas').Reset;
-  B.Text(rsPgIntro2).Bold.Text('TTyRichBuilder').Reset;
-  B.Text(rsPgIntro3).Bold.Text(rsPgIntroBold).Reset;
-  B.Text(rsPgIntro4).Color(clRed).Text(rsPgIntroRed).Reset;
-  B.Text(rsPgIntro5);
+  Say(B, rsPgIntro);
 
   // the contents: links to the sections' bookmarks, and one to a web page
   B.Paragraph.Bold.Text(rsPgContents).Reset;
@@ -216,6 +220,42 @@ begin
     Rich.SetContent(B);              // a new content; AppendContent, InsertContent add to it
   finally
     B.Free;
+  end;
+end;
+
+procedure Say(B: TTyRichBuilder; const ASentence: string);
+var
+  i, j: Integer;
+  mark: string;
+begin
+  i := 1;
+  while i <= Length(ASentence) do
+  begin
+    // a span: its opening mark, its text, the same mark closing it
+    mark := '';
+    if Copy(ASentence, i, 2) = '**' then mark := '**'
+    else if Copy(ASentence, i, 2) = '!!' then mark := '!!'
+    else if ASentence[i] = '`' then mark := '`';
+    if mark <> '' then
+    begin
+      j := PosEx(mark, ASentence, i + Length(mark));
+      if j > 0 then
+      begin
+        if mark = '**' then B.Bold
+        else if mark = '!!' then B.Color(clRed)
+        else B.Font('Consolas');
+        B.Text(Copy(ASentence, i + Length(mark), j - i - Length(mark))).Reset;
+        i := j + Length(mark);
+        Continue;
+      end;
+    end;
+    // plain text up to the next mark
+    j := i + 1;
+    while (j <= Length(ASentence)) and (Copy(ASentence, j, 2) <> '**') and
+      (Copy(ASentence, j, 2) <> '!!') and (ASentence[j] <> '`') do
+      Inc(j);
+    B.Text(Copy(ASentence, i, j - i));
+    i := j;
   end;
 end;
 

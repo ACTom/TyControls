@@ -75,7 +75,7 @@ object PageForm: TPageForm
           Width = 760
           Align = alClient
           ReadOnly = True
-          ReadOnlyCaret = False
+          CaretWhenReadOnly = False
           TabOrder = 0
           OnLinkClick = RichLinkClick
         end
@@ -101,7 +101,7 @@ object PageForm: TPageForm
             Width = 744
             Align = alTop
             ReadOnly = True
-            ReadOnlyCaret = False
+            CaretWhenReadOnly = False
             AllowSelection = False
             FocusOnClick = False
             TabStop = False

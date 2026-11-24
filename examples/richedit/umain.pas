@@ -366,8 +366,8 @@ type
     procedure ActEditLinkExecute(Sender: TObject);
     procedure ActEditLinkUpdate(Sender: TObject);
     procedure ActBookmarksExecute(Sender: TObject);
-    procedure EditorObjectDblClick(Sender: TObject; AObject: TTyRichObject; APos: TTyRichPos;
-      AButton: TMouseButton; AShift: TShiftState; var AHandled: Boolean);
+    procedure EditorObjectDblClick(Sender: TObject; const AClick: TTyRichObjectClick;
+      var AHandled: Boolean);
     procedure EditorEditRefused(Sender: TObject; const AReason: string);
     procedure EditorLinkClick(Sender: TObject; const AURL: string; AButton: TMouseButton);
     procedure EditorLoadProgress(Sender: TObject; ADone, ATotal: Int64; var ACancel: Boolean);
@@ -722,11 +722,11 @@ end;
 
 { A double click on a picture, or on a block that shows one (an equation): the viewer. Any
   other object, or a picture the control draws as a frame: what a double click does. }
-procedure TMainForm.EditorObjectDblClick(Sender: TObject; AObject: TTyRichObject;
-  APos: TTyRichPos; AButton: TMouseButton; AShift: TShiftState; var AHandled: Boolean);
+procedure TMainForm.EditorObjectDblClick(Sender: TObject; const AClick: TTyRichObjectClick;
+  var AHandled: Boolean);
 begin
-  if AButton <> mbLeft then Exit;
-  AHandled := ViewPicture(AObject, rsPicture);
+  if AClick.Button <> mbLeft then Exit;
+  AHandled := ViewPicture(AClick.RichObject, rsPicture);
 end;
 
 procedure TMainForm.SetSkin(const AName: string);
@@ -758,7 +758,11 @@ var
 begin
   for i := 0 to Screen.CustomFormCount - 1 do
     if Screen.CustomForms[i] is TTyForm then
+    begin
       TTyForm(Screen.CustomForms[i]).ApplyChromeTheme(TyDefaultController);
+      // the page's picture is drawn in the accent: the page is built again
+      if Screen.CustomForms[i] is TPageForm then TPageForm(Screen.CustomForms[i]).ThemeChanged;
+    end;
 end;
 
 { The page made from code (upagesample), shown as a help page and as a home page. }

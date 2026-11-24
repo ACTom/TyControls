@@ -1,7 +1,7 @@
 unit upageform;
 
 { The page built from code (upagesample) shown the two ways a page is shown:
-  - Help page: a rich edit that is ReadOnly with no caret (ReadOnlyCaret False) - the text can
+  - Help page: a rich edit that is ReadOnly with no caret (CaretWhenReadOnly False) - the text can
     be selected and copied, a plain click follows a link, it scrolls by itself;
   - Home page: a rich edit inside a scroll box that cannot be selected (AllowSelection False),
     never takes the focus (FocusOnClick False, TabStop False), has no bars of its own
@@ -44,6 +44,9 @@ type
   public
     { Both pages made from the start (SetContent). }
     procedure Rebuild;
+    { The skin or its mode changed: the page again, its picture in the new accent (text and
+      links follow by themselves; a picture is pixels). What was appended is gone with it. }
+    procedure ThemeChanged;
   end;
 
 { The page form, made the first time and shown (not modal: the skin can be switched with it
@@ -87,6 +90,11 @@ procedure TPageForm.Rebuild;
 begin
   Fill(HelpRich, PageIcons);
   Fill(HomeRich, PageIcons);
+end;
+
+procedure TPageForm.ThemeChanged;
+begin
+  Rebuild;
 end;
 
 procedure TPageForm.BtnRebuildClick(Sender: TObject);

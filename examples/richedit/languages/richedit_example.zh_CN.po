@@ -609,33 +609,9 @@ msgstr "首页"
 msgid "A page built from code"
 msgstr "用代码搭的页面"
 
-#: upagesample.rspgintro1
-msgid "This page is not a file. It is made in "
-msgstr "这个页面不是文件，它是在 "
-
-#: upagesample.rspgintro2
-msgid " with "
-msgstr " 里用 "
-
-#: upagesample.rspgintro3
-msgid ", in calls that read the way the page does: "
-msgstr " 搭出来的，调用的顺序就是页面的顺序："
-
-#: upagesample.rspgintrobold
-msgid "bold words"
-msgstr "加粗的词"
-
-#: upagesample.rspgintro4
-msgid ", a word in "
-msgstr "，"
-
-#: upagesample.rspgintrored
-msgid "red"
-msgstr "红色的字"
-
-#: upagesample.rspgintro5
-msgid ", links, lists, tab stops, a table and a picture."
-msgstr "，链接、列表、制表位、表格和一张图片。"
+#: upagesample.rspgintro
+msgid "This page is not a file. It is made in `upagesample.pas` with **TTyRichBuilder**, in calls that read the way the page does: **bold words**, a word in !!red!!, links, lists, tab stops, a table and a picture."
+msgstr "这个页面不是文件，它是在 `upagesample.pas` 里用 **TTyRichBuilder** 搭出来的，调用的顺序就是页面的顺序：**加粗的词**、!!红色的字!!，还有链接、列表、制表位、表格和一张图片。"
 
 #: upagesample.rspgcontents
 msgid "Contents"
