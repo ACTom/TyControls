@@ -3711,6 +3711,8 @@ type
       the caller does what it does for other paragraphs. }
     function ChangeListLevel(ADelta: Integer): Boolean;
   private
+    { The paragraphs of each cell of AArea (VisitArea's order): AFirst[i] .. ALast[i]. }
+    procedure AreaParaSpans(const AArea: TTyRichCellArea; out AFirst, ALast: TIntegerDynArray);
     // Tab (ADeeper) or Shift+Tab at a list item's start or over whole items: its level moved
     function ListTab(ADeeper: Boolean): Boolean;
     { The place's half of CanFormatCharacters / CanFormatParagraphs (AParagraphs) and of their
@@ -21267,7 +21269,39 @@ type
     procedure Clear(ARowNo, ACol, AFirst, ALast: Integer);
     procedure Format(ARowNo, ACol, AFirst, ALast: Integer);
     procedure Take(ARowNo, ACol, AFirst, ALast: Integer);
+    procedure Span(ARowNo, ACol, AFirst, ALast: Integer);
   end;
+
+procedure TTyCellGather.Span(ARowNo, ACol, AFirst, ALast: Integer);
+begin
+  SetLength(Cells, Length(Cells) + 1);
+  Cells[High(Cells)].Row := AFirst;
+  Cells[High(Cells)].Col := ALast;
+end;
+
+procedure TTyCustomRichEdit.AreaParaSpans(const AArea: TTyRichCellArea; out AFirst,
+  ALast: TIntegerDynArray);
+var
+  g: TTyCellGather;
+  i: Integer;
+begin
+  AFirst := nil;
+  ALast := nil;
+  g := TTyCellGather.Create;
+  try
+    g.Doc := FDoc;
+    VisitArea(FDoc, AArea, @g.Span);
+    SetLength(AFirst, Length(g.Cells));
+    SetLength(ALast, Length(g.Cells));
+    for i := 0 to High(g.Cells) do
+    begin
+      AFirst[i] := g.Cells[i].Row;
+      ALast[i] := g.Cells[i].Col;
+    end;
+  finally
+    g.Free;
+  end;
+end;
 
 procedure TTyCellGather.Clear(ARowNo, ACol, AFirst, ALast: Integer);
 begin
@@ -24081,15 +24115,28 @@ end;
 function TTyCustomRichEdit.ChangeListLevel(ADelta: Integer): Boolean;
 var
   life: TTyRichLife;
-  first, last, k: Integer;
+  first, last, k, i: Integer;
   place: TTyRichEditPlace;
   reason: string;
+  area: TTyRichCellArea;
+  fs, ls: TIntegerDynArray;
+  comp: TTyRichCompositeCommand;
 
   procedure Work;
+  var
+    j: Integer;
   begin
     Inc(FApiWrite);
     try
-      RunMade(TTyRichChangeListLevel.Create(first, last, ADelta), place, True);
+      if Length(fs) = 0 then
+        RunMade(TTyRichChangeListLevel.Create(first, last, ADelta), place, True)
+      else
+      begin
+        // the selected cells' paragraphs, each cell's a part: one step
+        comp := TTyRichCompositeCommand.Create;
+        for j := 0 to High(fs) do comp.Add(TTyRichChangeListLevel.Create(fs[j], ls[j], ADelta));
+        RunMade(comp, place, True);
+      end;
     finally
       if not life.Gone then Dec(FApiWrite);
     end;
@@ -24101,14 +24148,35 @@ begin
   if FReadOnly or not IsEnabled or ViewBehind then Exit;
   EndCompositionForUser;
   if FReadOnly or not IsEnabled or ViewBehind then Exit;
-  // every paragraph of the selection a list item (what the selection reads, as a format does)
-  ParasOfRange(GetSelStart, GetSelLength, first, last);
-  FDoc.BeginRead;
-  try
-    for k := first to last do
-      if FDoc.Formats.ParaFormat(FDoc.ParaFormatOf(k)).List.Kind = lkNone then Exit;
-  finally
-    FDoc.EndRead;
+  { every paragraph of the selection a list item (what the selection reads, as a format does:
+    selected cells are their own paragraphs, the rectangle's, as the paragraph formats take
+    them) }
+  fs := nil;
+  ls := nil;
+  area := CellArea;
+  if TyRichCellsEditable(area) then
+  begin
+    AreaParaSpans(area, fs, ls);
+    if Length(fs) = 0 then Exit;
+    FDoc.BeginRead;
+    try
+      for i := 0 to High(fs) do
+        for k := fs[i] to ls[i] do
+          if FDoc.Formats.ParaFormat(FDoc.ParaFormatOf(k)).List.Kind = lkNone then Exit;
+    finally
+      FDoc.EndRead;
+    end;
+  end
+  else
+  begin
+    ParasOfRange(GetSelStart, GetSelLength, first, last);
+    FDoc.BeginRead;
+    try
+      for k := first to last do
+        if FDoc.Formats.ParaFormat(FDoc.ParaFormatOf(k)).List.Kind = lkNone then Exit;
+    finally
+      FDoc.EndRead;
+    end;
   end;
   Result := True;
   if RefusalReason = '' then
