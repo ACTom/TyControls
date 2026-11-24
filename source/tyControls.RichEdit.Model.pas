@@ -776,7 +776,9 @@ type
   { What a document has besides its paragraphs (TTyRichDocument.Settings): the page, in twips
     (what a page-wide layout wraps at), the formats of a paragraph with nothing of its own
     (DefaultCharFormat, DefaultParaFormatId), and the document's own ground - clNone: none,
-    a view shows its own. }
+    a view shows its own. Start a change from the document's own (Document.Settings) and
+    change the members you mean: members may be added, and a record built from nothing would
+    give them zero. }
   TTyRichDocSettings = record
     PaperWidth, PaperHeight, MarginLeft, MarginRight: Integer;
     CharFormat: TTyCharFormat;

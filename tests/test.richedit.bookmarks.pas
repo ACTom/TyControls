@@ -61,6 +61,7 @@ type
     procedure TestAHomePageFollowsItsLinks;
     procedure TestANameIsWrittenInTheFilesCodePage;
     procedure TestAJumpShowsItsTargetAtTheTop;
+    procedure TestALinkToNoBookmarkAsksNothing;
   end;
 
 implementation
@@ -644,7 +645,7 @@ begin
   Load(Rtf(src));
   FRich.ReadOnly := True;
   FRich.AllowSelection := False;
-  FRich.ReadOnlyCaret := False;
+  FRich.CaretWhenReadOnly := False;
   FRich.FocusOnClick := False;
   FRich.OnFollowLink := @Follow;
   FRich.UpdateView;
@@ -747,6 +748,26 @@ begin
   r := FRich.PositionRect(FRich.SelStart);
   AssertTrue('the last line in view', (r.Bottom > r.Top) and (r.Bottom <= FRich.Height));
   AssertTrue('not at the top: the document ends below it', r.Top > FRich.Area.Top + 10);
+end;
+
+{ A link to a bookmark that is not there: the click is told (OnLinkClick), nothing is
+  followed and OnFollowLink is not asked - the control looks first. }
+procedure TTyRichBookmarksTest.TestALinkToNoBookmarkAsksNothing;
+begin
+  FRich.Lines.Text := 'Go there, or stay here.';
+  FRich.UpdateView;
+  FRich.SelStart := 0;
+  FRich.SelLength := 8;
+  AssertTrue('a link', FRich.InsertLink('#missing'));
+  FRich.Lines.Add('Second paragraph.');
+  FRich.ReadOnly := True;
+  FRich.OnFollowLink := @Follow;
+  FRich.UpdateView;
+  FClicks := 0;
+  FFollows := 0;
+  ClickChar(3);
+  AssertEquals('the click is told', 1, FClicks);
+  AssertEquals('no such bookmark: not asked', 0, FFollows);
 end;
 
 initialization

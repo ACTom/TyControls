@@ -8585,7 +8585,7 @@ type
     property TextEncoding;
     property TextCodePage;
     property ScrollBarAutoHide;
-    property ReadOnlyCaret;
+    property CaretWhenReadOnly;
     property FocusOnClick;
     property AllowSelection;
     property ScrollBars;

@@ -65,6 +65,7 @@ unit tyControls.RichEdit;
 
 {$mode objfpc}{$H+}
 {$modeswitch nestedprocvars}
+{$modeswitch advancedrecords}
 
 interface
 
@@ -83,6 +84,11 @@ const
   CRichZoomMax = 500;
   { Ctrl + one wheel notch. }
   CRichZoomStep = 10;
+  { The tallest AutoHeight makes the control, in device pixels: a window, and the LCL's
+    layout, fail far above it (a height of about 112,000 raises in SetBounds). A page
+    longer than this keeps this height; a document that long belongs in a control that
+    scrolls itself. }
+  CRichAutoHeightLimit = 32000;
   { ContentHeight measures a document of at most this many paragraphs whole (a page built
     from code, a help page): its answer is then exact. A larger one answers the estimate. }
   CRichContentExactParas = 10000;
@@ -220,13 +226,32 @@ type
   TTyRichFollowLinkEvent = procedure(Sender: TObject; const AName: string;
     var AAllow: Boolean) of object;
 
-  { A click or a double click on an object of the document (TTyCustomRichEdit.OnObjectClick,
-    OnObjectDblClick): AObject the object (a picture, a block that shows one, another block
-    with a width), APos its character's position. The object is good during the call (a
-    reference is held for it); one kept past it takes a reference of its own (AddRef). AHandled
-    True: what the control would still do with the press does not happen. }
-  TTyRichObjectClickEvent = procedure(Sender: TObject; AObject: TTyRichObject; APos: TTyRichPos;
-    AButton: TMouseButton; AShift: TShiftState; var AHandled: Boolean) of object;
+  { What a click or a double click on an object of the document tells
+    (TTyCustomRichEdit.OnObjectClick, OnObjectDblClick). A record so that a member added later
+    breaks no handler: read the members a handler needs, never build one.
+    RichObject: the object (a picture, a block that shows one, another block with a width) -
+    good during the call (a reference is held for it); one kept past it takes a reference of
+    its own (AddRef). Pos: its character's position in the document. Button, Shift: the
+    mouse button and the keys. Point: where the button went down (a double click's second
+    press, a click's release), client pixels. Bounds: the object's box, client pixels - Point
+    is inside it. }
+  TTyRichObjectClick = record
+    RichObject: TTyRichObject;
+    Pos: TTyRichPos;
+    Button: TMouseButton;
+    Shift: TShiftState;
+    Point: TPoint;
+    Bounds: TRect;
+    { Point inside a picture of AWidth x AHeight pixels shown in Bounds (an image map: which
+      part of the picture was clicked), clamped to the picture. }
+    function PointInPicture(AWidth, AHeight: Integer): TPoint;
+  end;
+
+  { A click or a double click on an object: AClick says which, where and how (see
+    TTyRichObjectClick). AHandled True: what the control would still do with the press does
+    not happen. }
+  TTyRichObjectClickEvent = procedure(Sender: TObject; const AClick: TTyRichObjectClick;
+    var AHandled: Boolean) of object;
 
   { A field around a place the control has read: its open mark's place, its close mark's (-1
     not known), how deep it is (-1 not known), whether it is a link and its target. }
@@ -633,9 +658,9 @@ type
     FBarScale: Int64;
     FVBar, FHBar: TTyScrollBar;
     FScrollBarAutoHide: TTyScrollBarAutoHide;
-    // a display page's switches (ReadOnlyCaret, FocusOnClick, AllowSelection, ScrollBars,
+    // a display page's switches (CaretWhenReadOnly, FocusOnClick, AllowSelection, ScrollBars,
     // AutoHeight) and the content's size as last reported (OnContentSizeChange; -1: none yet)
-    FReadOnlyCaret: Boolean;
+    FCaretWhenReadOnly: Boolean;
     FFocusOnClick: Boolean;
     FAllowSelection: Boolean;
     FScrollBars: TScrollStyle;
@@ -1049,10 +1074,13 @@ type
     // the document's settings (DocumentColor, SetPageSetup, SetDefaultFormats)
     function GetDocumentColor: TColor;
     // the display page's switches
-    procedure SetReadOnlyCaret(AValue: Boolean);
+    procedure SetCaretWhenReadOnly(AValue: Boolean);
     procedure SetAllowSelection(AValue: Boolean);
     procedure SetScrollBars(AValue: TScrollStyle);
     procedure SetAutoHeight(AValue: Boolean);
+    { The wheel scrolls the control this way (else the parent gets it): the bar may show
+      there and the content does not fit, or the view is off its start. }
+    function WheelScrolls(AVertical: Boolean): Boolean;
     function BarAllowed(AVertical: Boolean): Boolean;
     function CaretHidden: Boolean;
     { Every paragraph measured, where a document small enough is whole (ContentHeight's
@@ -1063,6 +1091,7 @@ type
       height. AQueue: from a place that must not run it now (a paint, a document's change,
       a resize) - queued to the loop. Nothing at all while nobody listens. }
     procedure CheckContentSize(AQueue: Boolean);
+    function AutoHeightFor(AH: Integer): Integer;
     function ContentSizeWanted: Boolean;
     function AutoHeightApplies: Boolean;
     procedure SetDocumentColor(AValue: TColor);
@@ -1598,7 +1627,9 @@ type
     { OnObjectDblClick (ADouble) or OnObjectClick for the object at APos, through the lifetime
       guard (the handler may free the control: ETyRichGone travels on). True: AHandled. }
     function FireObjectEvent(ADouble: Boolean; APos: TTyRichPos; AButton: TMouseButton;
-      AShift: TShiftState): Boolean;
+      AShift: TShiftState; X, Y: Integer): Boolean;
+    { The client box of the object at APos in a held block; False: not laid out in view. }
+    function ObjectClientRect(APos: TTyRichPos; out ARect: TRect): Boolean;
     { A release of the button an object's press began with, on that object, no drag between:
       its click. True: handled. }
     function ObjectRelease(AButton: TMouseButton; AShift: TShiftState; X, Y: Integer): Boolean;
@@ -2295,8 +2326,9 @@ type
       that (OnLinkClick). A bookmark that is not there: nothing happens. }
     property FollowBookmarkLinks: Boolean read FFollowBookmarkLinks write FFollowBookmarkLinks
       default True;
-    { Before a link is followed to its bookmark: AAllow False stays. The handler may free the
-      control, load another document or show a dialog. }
+    { Before a link is followed to its bookmark - one that is there (a link to no bookmark
+      asks nothing): AAllow False stays. The handler may free the control, load another
+      document or show a dialog. }
     property OnFollowLink: TTyRichFollowLinkEvent read FOnFollowLink write FOnFollowLink;
     { A click on an object (a picture, a block that shows a picture - an equation, an embedded
       object, a shape -, another kept block with a width; never a field's marks, a bookmark's
@@ -2677,6 +2709,8 @@ type
       for a link inside another field's result (an entry of a table of contents).
       CanInsertLink / CanEditLink: the action would be taken now (for an action's Update);
       reads the selection's paragraph and the fields around it, never raises. }
+    { (The address first, its text optional; the builder's Link(AText, AURL) takes the text
+      first, in reading order - mind the order.) }
     function InsertLink(const AURL: string; const AText: string = ''): Boolean;
     function SetLink(const AURL: string; const AText: string = ''): Boolean;
     function RemoveLink: Boolean;
@@ -2985,8 +3019,10 @@ type
     { ---- content built from code (tyControls.RichEdit.Builder) ----
       All three are edits from code: ReadOnly is not asked; nothing is laid out or painted
       until the next paint (one layout, one paint); the builder stays the caller's, as it was
-      (it can be put in again). A builder that holds nothing puts nothing in. A document that
-      is loading, incomplete or being saved raises ETyRichEdit and nothing changes.
+      (it can be put in again). A builder that holds nothing puts nothing in. A document being
+      saved raises ETyRichEdit and nothing changes; SetContent on a document still loading
+      ends the load and replaces the document, AppendContent and InsertContent raise on a
+      document that is loading or incomplete.
       NewBuilder: a builder (the caller frees it) whose defaults are this document's - its
       default character and paragraph formats (what Reset and Paragraph go back to) and its
       text width (what equal columns share). }
@@ -3254,10 +3290,10 @@ type
     property ScrollBarAutoHide: TTyScrollBarAutoHide read FScrollBarAutoHide
       write SetScrollBarAutoHide default sbahDefault;
     { ---- a display page (a home page, a help page built from code) ----
-      ReadOnlyCaret: False hides the caret while ReadOnly (an editable control shows it
+      CaretWhenReadOnly: False hides the caret while ReadOnly (an editable control shows it
       whatever this says); the caret still is where it was, the end a selection grows from
       with Shift and the arrows, and the selection is drawn as ever. }
-    property ReadOnlyCaret: Boolean read FReadOnlyCaret write SetReadOnlyCaret default True;
+    property CaretWhenReadOnly: Boolean read FCaretWhenReadOnly write SetCaretWhenReadOnly default True;
     { False: a mouse press never takes the focus (the wheel still scrolls under the pointer,
       a link still clicks); with TabStop False the control is never focused at all - it still
       paints, follows the theme and fires OnLinkClick. }
@@ -3267,17 +3303,26 @@ type
       Select All, CopyToClipboard); the pointer is the arrow over the text (the hand over a
       link, which a plain left click fires, as under ReadOnly); a press places no caret. What
       code selects (SelStart, SelLength, SelectAll, a find's match) is the application's
-      asking: it is drawn and scrolled into view as ever. }
+      asking: it is drawn and scrolled into view as ever. With ReadOnly as well, a right click
+      shows no menu of the control's own (all of it would be grey); PopupMenu and
+      OnContextPopup work as on any control. }
     property AllowSelection: Boolean read FAllowSelection write SetAllowSelection default True;
     { The bars that may show, each only when the content needs it (as ScrollBarAutoHide
-      decides how it looks); ssNone: never - the wheel, the keys, ScrollX and the anchor still
-      scroll. ssAutoHorizontal, ssAutoVertical, ssAutoBoth are ssHorizontal, ssVertical,
-      ssBoth: every bar here is shown only when needed. }
+      decides how it looks); ssNone: never - the keys, ScrollX and the anchor still scroll.
+      ssAutoHorizontal, ssAutoVertical, ssAutoBoth are ssHorizontal, ssVertical, ssBoth: every
+      bar here is shown only when needed. The wheel is the control's in a direction it can
+      scroll (a bar may show there and the content does not fit, or the view is off its
+      start) - also at its end; in any other it goes on to the parent (a page in a scroll box
+      scrolls with the box). Ctrl + wheel always zooms. }
     property ScrollBars: TScrollStyle read FScrollBars write SetScrollBars default ssBoth;
     { True: the control's Height is ContentHeight (within Constraints), set again whenever the
       content, the width, the zoom, the PPI, the theme or the padding change; no vertical bar
       then. Nothing is set while Align or the anchors (top and bottom) make the parent decide
-      the height. }
+      the height, nor while the content's size is an estimate (ContentSizeIsEstimate: a file
+      still loading, more paragraphs than are measured whole) - the height stays. Never more
+      than CRichAutoHeightLimit. For pages, not files: the control keeps a drawing surface of
+      its own size (width x height x 4 bytes); a document longer than the limit belongs in a
+      control that scrolls itself. }
     property AutoHeight: Boolean read FAutoHeight write SetAutoHeight default False;
     { The client pixels the content needs at the current width, zoom, PPI and theme, the
       padding included (and a horizontal bar that shows): exact once every paragraph is laid
@@ -3422,7 +3467,7 @@ type
     property TextEncoding;
     property TextCodePage;
     property ScrollBarAutoHide;
-    property ReadOnlyCaret;
+    property CaretWhenReadOnly;
     property FocusOnClick;
     property AllowSelection;
     property ScrollBars;
@@ -4169,7 +4214,7 @@ begin
   FTextEncoding := teAuto;
   FTextCodePage := 0;
   FScrollBarAutoHide := sbahDefault;
-  FReadOnlyCaret := True;
+  FCaretWhenReadOnly := True;
   FFocusOnClick := True;
   FAllowSelection := True;
   FScrollBars := ssBoth;
@@ -5794,7 +5839,7 @@ begin
   FCaretDrawn := Rect(0, 0, 0, 0);
   // (inside the document's update the view knows nothing of the change yet: no query)
   if not HasCaretFocus or (csDesigning in ComponentState) or ViewBehind then Exit;
-  // a viewer asked to show none (ReadOnlyCaret): the caret is still there, undrawn
+  // a viewer asked to show none (CaretWhenReadOnly): the caret is still there, undrawn
   if CaretHidden then Exit;
   // the candidate window follows the caret: after a scroll, a zoom, a composition's change
   PlaceImeWindows;
@@ -5923,7 +5968,7 @@ var
 
   procedure DblClick;
   begin
-    dblHandled := FireObjectEvent(True, o, Button, Shift);
+    dblHandled := FireObjectEvent(True, o, Button, Shift, X, Y);
   end;
 
 begin
@@ -6965,16 +7010,46 @@ begin
   if Result = nil then APos := -1;
 end;
 
-function TTyCustomRichEdit.FireObjectEvent(ADouble: Boolean; APos: TTyRichPos;
-  AButton: TMouseButton; AShift: TShiftState): Boolean;
+function TTyRichObjectClick.PointInPicture(AWidth, AHeight: Integer): TPoint;
 var
+  w, h: Integer;
+begin
+  Result := Types.Point(0, 0);
+  w := Bounds.Right - Bounds.Left;
+  h := Bounds.Bottom - Bounds.Top;
+  if (w <= 0) or (h <= 0) or (AWidth <= 0) or (AHeight <= 0) then Exit;
+  Result.X := Math.Max(0, Math.Min(AWidth - 1, Int64(Point.X - Bounds.Left) * AWidth div w));
+  Result.Y := Math.Max(0, Math.Min(AHeight - 1, Int64(Point.Y - Bounds.Top) * AHeight div h));
+end;
+
+function TTyCustomRichEdit.ObjectClientRect(APos: TTyRichPos; out ARect: TRect): Boolean;
+var
+  k: Integer;
+  r: TRect;
+begin
+  ARect := Rect(0, 0, 0, 0);
+  Result := False;
+  if ViewBehind or not FViewValid then Exit;
+  k := HeldBlockOf(APos);
+  if k < 0 then Exit;
+  if not FBlocks[k].Layout.ObjectBox(APos - FDoc.Text.ParaStart(FBlocks[k].FirstPara), r) then
+    Exit;
+  ARect := ClientOf(TextArea(Rect(0, 0, Width, Height), ViewPPI), Int64(r.Left) - FScrollX,
+    Int64(FBlocks[k].Top) + r.Top, Int64(r.Right) - FScrollX, Int64(FBlocks[k].Top) + r.Bottom);
+  Result := True;
+end;
+
+function TTyCustomRichEdit.FireObjectEvent(ADouble: Boolean; APos: TTyRichPos;
+  AButton: TMouseButton; AShift: TShiftState; X, Y: Integer): Boolean;
+var
+  info: TTyRichObjectClick;
   obj: TTyRichObject;
   handled: Boolean;
   h: TTyRichObjectClickEvent;
 
   procedure Fire;
   begin
-    h(Self, obj, APos, AButton, AShift, handled);
+    h(Self, info, handled);
   end;
 
 begin
@@ -6983,6 +7058,13 @@ begin
   if not Assigned(h) or (APos < 0) or (APos >= FDoc.Text.Length) then Exit;
   obj := FDoc.ObjectAt(APos);
   if obj = nil then Exit;
+  info := Default(TTyRichObjectClick);
+  info.RichObject := obj;
+  info.Pos := APos;
+  info.Button := AButton;
+  info.Shift := AShift;
+  info.Point := Types.Point(X, Y);
+  ObjectClientRect(APos, info.Bounds);
   handled := False;
   // (held for the handler: one that loads another document does not free it under it)
   obj.AddRef;
@@ -7007,7 +7089,7 @@ begin
   if (Abs(X - FObjPressPoint.X) > DragThreshold) or (Abs(Y - FObjPressPoint.Y) > DragThreshold) then
     Exit;
   if ObjectPosAtPoint(X, Y) <> at then Exit;
-  Result := FireObjectEvent(False, at, AButton, AShift);
+  Result := FireObjectEvent(False, at, AButton, AShift, X, Y);
 end;
 
 function TTyCustomRichEdit.CanEditBookmarks: Boolean;
@@ -7151,6 +7233,7 @@ procedure TTyCustomRichEdit.FollowLink(const AURL: string);
 var
   bk: string;
   allow: Boolean;
+  s, e: TTyRichPos;
 
   procedure Ask;
   begin
@@ -7161,6 +7244,8 @@ begin
   // a place of this document only: "#name" (a target with a place is the application's)
   if not FFollowBookmarkLinks or (Length(AURL) < 2) or (AURL[1] <> '#') then Exit;
   bk := Copy(AURL, 2, MaxInt);
+  // no such bookmark: nothing happens, nothing is asked
+  if not FindBookmark(bk, s, e) then Exit;
   allow := True;
   if Assigned(FOnFollowLink) then CallHandler(@Ask);
   if allow then GoToBookmark(bk);
@@ -13422,13 +13507,13 @@ end;
 
 function TTyCustomRichEdit.CaretHidden: Boolean;
 begin
-  Result := FReadOnly and not FReadOnlyCaret;
+  Result := FReadOnly and not FCaretWhenReadOnly;
 end;
 
-procedure TTyCustomRichEdit.SetReadOnlyCaret(AValue: Boolean);
+procedure TTyCustomRichEdit.SetCaretWhenReadOnly(AValue: Boolean);
 begin
-  if FReadOnlyCaret = AValue then Exit;
-  FReadOnlyCaret := AValue;
+  if FCaretWhenReadOnly = AValue then Exit;
+  FCaretWhenReadOnly := AValue;
   // the caret's place is blitted again: drawn now, or gone
   if not IsRectEmpty(FCaretDrawn) then InvalidateArea(FCaretDrawn);
   if HasCaretFocus and not ViewBehind and not (csDestroying in ComponentState) then
@@ -13573,6 +13658,13 @@ begin
     not ((akTop in Anchors) and (akBottom in Anchors));
 end;
 
+{ The height AutoHeight gives for content AH pixels tall: within Constraints and never above
+  CRichAutoHeightLimit. }
+function TTyCustomRichEdit.AutoHeightFor(AH: Integer): Integer;
+begin
+  Result := Math.Min(Constraints.MinMaxHeight(AH), CRichAutoHeightLimit);
+end;
+
 function TTyCustomRichEdit.ContentSizeWanted: Boolean;
 begin
   Result := FAutoHeight or Assigned(FOnContentSizeChange);
@@ -13598,7 +13690,7 @@ begin
     h := Integer(Math.Min(FDoc.Text.TotalHeight div Math.Max(1, FScale), Int64(MaxInt div 2))) + h;
     w := FWidestSeen div Math.Max(1, FScale) + w;
     if (h <> FReportedH) or (w <> FReportedW) or (FAutoHeight and AutoHeightApplies and
-       (Constraints.MinMaxHeight(h) <> Height)) or (ContentSizeIsEstimate and not FDoc.Loading and
+       (AutoHeightFor(h) <> Height)) or (ContentSizeIsEstimate and not FDoc.Loading and
        (FDoc.Text.ParaCount <= CRichContentExactParas)) then
       ScheduleCall(FSizeCall);
     Exit;
@@ -13607,20 +13699,23 @@ begin
   { The height set, and the view made for it: a bar that comes or goes with it (the
     horizontal one: the text no longer fits, or fits again) changes what the content needs -
     the height follows it, a few times at most (the width never changes here, so the
-    heights of the text stay). }
+    heights of the text stay). Not while the size is an estimate (a file still loading, or
+    more paragraphs than are measured whole): the control keeps the height it has - a height
+    from an estimate would make the view, and so the layout and the kept surface, the whole
+    document's. And never above CRichAutoHeightLimit. }
   tries := 0;
-  while FAutoHeight and AutoHeightApplies and (Constraints.MinMaxHeight(h) <> Height) and
-    (tries < 3) do
-  begin
-    Inc(tries);
-    FSizingSelf := True;
-    try
-      Height := Constraints.MinMaxHeight(h);
-    finally
-      FSizingSelf := False;
+  if FAutoHeight and AutoHeightApplies and not ContentSizeIsEstimate then
+    while (AutoHeightFor(h) <> Height) and (tries < 3) do
+    begin
+      Inc(tries);
+      FSizingSelf := True;
+      try
+        Height := AutoHeightFor(h);
+      finally
+        FSizingSelf := False;
+      end;
+      h := ContentHeight;
     end;
-    h := ContentHeight;
-  end;
   w := ContentWidth;
   if (h = FReportedH) and (w = FReportedW) then Exit;
   FReportedH := h;
@@ -14439,6 +14534,10 @@ begin
   // as the memo: OnContextPopup first, then a user's PopupMenu (LCL shows it), else ours
   inherited DoContextPopup(MousePos, Handled);
   if Handled or (PopupMenu <> nil) then Exit;
+  { A page with nothing to edit or select (ReadOnly, AllowSelection False): every item of
+    the text menu would be grey - no menu of the control's own (the application's PopupMenu
+    and OnContextPopup work as on any control). }
+  if FReadOnly and not FAllowSelection then Exit;
   ShowTextMenu(MousePos);
   Handled := True;
 end;
@@ -20328,6 +20427,18 @@ begin
   Key := 0;
 end;
 
+function TTyCustomRichEdit.WheelScrolls(AVertical: Boolean): Boolean;
+begin
+  { A direction the control can scroll: its bar may show there (ScrollBars, and AutoHeight
+    leaves the vertical one out) and the content does not fit, or the view is off its start.
+    Not "at its end": a control that can scroll keeps the wheel there too. }
+  if not BarAllowed(AVertical) then Exit(False);
+  if AVertical then
+    Result := (FDoc.Text.TotalHeight > FViewH) or (AnchorY > 0)
+  else
+    Result := (FWidestSeen > FViewW) or (FScrollX > 0);
+end;
+
 function TTyCustomRichEdit.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer;
   MousePos: TPoint): Boolean;
 var
@@ -20340,13 +20451,17 @@ begin
   if ViewBehind then Exit;
   if ssCtrl in Shift then
   begin
-    // Ctrl + wheel zooms, a notch at a time
+    // Ctrl + wheel zooms, a notch at a time (always on: the zoom is the control's own)
     Inc(FZoomWheelRest, WheelDelta);
     notches := FZoomWheelRest div 120;
     Dec(FZoomWheelRest, notches * 120);
     if notches <> 0 then Zoom := FZoom + notches * CRichZoomStep;
     Exit;
   end;
+  { Nothing to scroll this way (the content fits, ScrollBars leaves the direction out,
+    AutoHeight): not taken, so the parent scrolls - a home page in a scroll box. }
+  CheckLayoutParams(ViewPPI);
+  if not WheelScrolls(True) then Exit(False);
   Inc(FWheelRest, WheelDelta);
   notches := FWheelRest div 120;
   Dec(FWheelRest, notches * 120);
@@ -20369,6 +20484,9 @@ begin
   if inherited DoMouseWheelHorz(Shift, WheelDelta, MousePos) then Exit(True);
   Result := True;
   if ViewBehind then Exit;
+  // nothing to scroll sideways: the parent's
+  CheckLayoutParams(ViewPPI);
+  if not WheelScrolls(False) then Exit(False);
   Inc(FWheelHRest, WheelDelta);
   notches := FWheelHRest div 120;
   Dec(FWheelHRest, notches * 120);

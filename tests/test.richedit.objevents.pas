@@ -26,14 +26,17 @@ type
     FObj: TTyRichObject;
     FObjPos: TTyRichPos;
     FButton: TMouseButton;
+    FShift: TShiftState;
+    FPoint: TPoint;
+    FBounds: TRect;
+    FInPicture: TPoint;
     FHandle: Boolean;
     FDo: Integer;            // 0 nothing, 1 free the control, 2 load another document
     FPicW, FPicH: Integer;   // what AssignTo gave, inside the handler
     FAssign: Boolean;
-    procedure Click(Sender: TObject; AObject: TTyRichObject; APos: TTyRichPos;
-      AButton: TMouseButton; AShift: TShiftState; var AHandled: Boolean);
-    procedure Dbl(Sender: TObject; AObject: TTyRichObject; APos: TTyRichPos;
-      AButton: TMouseButton; AShift: TShiftState; var AHandled: Boolean);
+    procedure Click(Sender: TObject; const AClick: TTyRichObjectClick; var AHandled: Boolean);
+    procedure Dbl(Sender: TObject; const AClick: TTyRichObjectClick; var AHandled: Boolean);
+    procedure Note(const AClick: TTyRichObjectClick);
     procedure LinkClicked(Sender: TObject; const AURL: string; AButton: TMouseButton);
     procedure Act;
     procedure Load(const S: RawByteString);
@@ -51,6 +54,8 @@ type
     procedure TestNoEventOnPlainText;
     procedure TestAPictureInALinkIsTheLinksClick;
     procedure TestAClickWithNoSelectionAndOtherButtons;
+    procedure TestTheClickTellsThePointAndTheBox;
+    procedure TestAReleaseOfAnotherButtonIsNoClick;
   end;
 
 implementation
@@ -264,24 +269,31 @@ begin
   end;
 end;
 
-procedure TTyRichObjEventsTest.Click(Sender: TObject; AObject: TTyRichObject; APos: TTyRichPos;
-  AButton: TMouseButton; AShift: TShiftState; var AHandled: Boolean);
+procedure TTyRichObjEventsTest.Note(const AClick: TTyRichObjectClick);
+begin
+  FObj := AClick.RichObject;
+  FObjPos := AClick.Pos;
+  FButton := AClick.Button;
+  FShift := AClick.Shift;
+  FPoint := AClick.Point;
+  FBounds := AClick.Bounds;
+  FInPicture := AClick.PointInPicture(60, 40);
+end;
+
+procedure TTyRichObjEventsTest.Click(Sender: TObject; const AClick: TTyRichObjectClick;
+  var AHandled: Boolean);
 begin
   Inc(FClicks);
-  FObj := AObject;
-  FObjPos := APos;
-  FButton := AButton;
+  Note(AClick);
   AHandled := FHandle;
   Act;
 end;
 
-procedure TTyRichObjEventsTest.Dbl(Sender: TObject; AObject: TTyRichObject; APos: TTyRichPos;
-  AButton: TMouseButton; AShift: TShiftState; var AHandled: Boolean);
+procedure TTyRichObjEventsTest.Dbl(Sender: TObject; const AClick: TTyRichObjectClick;
+  var AHandled: Boolean);
 begin
   Inc(FDbls);
-  FObj := AObject;
-  FObjPos := APos;
-  FButton := AButton;
+  Note(AClick);
   AHandled := FHandle;
   Act;
 end;
@@ -584,6 +596,55 @@ begin
   AssertEquals('the middle button', Ord(mbMiddle), Ord(FButton));
 end;
 
+{ The event tells where: Point is the press's (the release's for a click) in client pixels,
+  Bounds the picture's box (60 x 40 pixels here) with Point inside it, and PointInPicture
+  maps the point into a picture of a given size - an image map. A click and a double click
+  alike; the keys held come along. }
+procedure TTyRichObjEventsTest.TestTheClickTellsThePointAndTheBox;
+var
+  c, p: TPoint;
+begin
+  Load(PictDoc('pngblip', PngBytes(8, 8)));
+  c := Centre(2);
+  // a point in the picture's upper left quarter
+  p := Point(c.X - 15, c.Y - 10);
+  ClickAt(p);
+  AssertEquals('a click', 1, FClicks);
+  AssertEquals('the point x', p.X, FPoint.X);
+  AssertEquals('the point y', p.Y, FPoint.Y);
+  AssertEquals('the box is the picture''s width', 60, FBounds.Right - FBounds.Left);
+  AssertEquals('and its height', 40, FBounds.Bottom - FBounds.Top);
+  AssertTrue('the point is in the box', PtInRect(FBounds, p));
+  AssertEquals('in the picture: x as far in as in the box', p.X - FBounds.Left, FInPicture.X);
+  AssertEquals('y the same', p.Y - FBounds.Top, FInPicture.Y);
+  // the box is where the picture is drawn: its centre is the character's
+  AssertEquals('the box around the centre', c.X, (FBounds.Left + FBounds.Right) div 2, 1);
+  // a double click with Shift: the second press's point and the keys
+  FRich.MDown(mbLeft, [ssLeft, ssDouble, ssShift], c.X, c.Y);
+  FRich.MUp(mbLeft, [ssDouble, ssShift], c.X, c.Y);
+  AssertEquals('a double click', 1, FDbls);
+  AssertEquals('its point', c.X, FPoint.X);
+  AssertTrue('the keys', ssShift in FShift);
+end;
+
+{ A press of one button on an object released with another: no click (the release must be
+  the press's own button). }
+procedure TTyRichObjEventsTest.TestAReleaseOfAnotherButtonIsNoClick;
+var
+  c: TPoint;
+begin
+  Load(PictDoc('pngblip', PngBytes(8, 8)));
+  c := Centre(2);
+  FRich.MDown(mbMiddle, [ssMiddle], c.X, c.Y);
+  FRich.MUp(mbLeft, [], c.X, c.Y);
+  AssertEquals('a middle press, a left release: no click', 0, FClicks);
+  FRich.MDown(mbMiddle, [ssMiddle], c.X, c.Y);
+  FRich.MUp(mbMiddle, [], c.X, c.Y);
+  AssertEquals('a middle press and release: the click', 1, FClicks);
+  AssertTrue('of the middle button', FButton = mbMiddle);
+end;
+
 initialization
   RegisterTest(TTyRichObjEventsTest);
+
 end.

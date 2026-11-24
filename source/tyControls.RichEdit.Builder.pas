@@ -188,7 +188,9 @@ type
     { AText as a link to AURL, in the current character format underlined; automatic text is
       drawn in the theme's link colour, a colour of its own as it is. '#name' is the bookmark
       name in this document (a click jumps there by itself: FollowBookmarkLinks); 'file#name'
-      a bookmark of another file. AText '' shows the address. }
+      a bookmark of another file. AText '' shows the address. The text comes first, in the
+      order the page reads (as Text); the control's InsertLink(AURL, AText) takes the address
+      first, its text being optional - mind the order. }
     function Link(const AText, AURL: string): TTyRichBuilder;
     { A bookmark AName at this place (a point: what a '#AName' link jumps to). Word's rule for
       the name (a letter first, letters, digits and '_', at most 40). }

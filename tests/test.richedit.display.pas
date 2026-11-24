@@ -3,7 +3,7 @@ unit test.richedit.display;
 { TTyRichEdit as a page: a help page (read-only, selectable and copyable, no caret, links on a
   plain click, bars as needed) and a home page (read-only, nothing to select, no caret, never
   focused, no bars, as tall as its content inside a scroll box). Each switch alone -
-  ReadOnlyCaret, FocusOnClick, AllowSelection, ScrollBars, AutoHeight - the content's size
+  CaretWhenReadOnly, FocusOnClick, AllowSelection, ScrollBars, AutoHeight - the content's size
   (ContentHeight / ContentWidth, ContentSizeIsEstimate, OnContentSizeChange), and the two pages
   as a whole.
 
@@ -18,8 +18,8 @@ interface
 
 uses
   Classes, SysUtils, Math, fpcunit, testregistry, Controls, Graphics, Forms, StdCtrls,
-  LCLType, BGRABitmap, BGRABitmapTypes, BGRAWritePNG,
-  tyControls.Controller, tyControls.ScrollBar, tyControls.RichEdit.Text, tyControls.RichEdit.Model,
+  LCLType, LMessages, Menus, BGRABitmap, BGRABitmapTypes, BGRAWritePNG,
+  tyControls.Controller, tyControls.ScrollBar, tyControls.ScrollBox, tyControls.RichEdit.Text, tyControls.RichEdit.Model,
   tyControls.RichEdit.Commands, tyControls.RichEdit.Layout, tyControls.RichEdit,
   test.richedit.control;
 
@@ -39,6 +39,19 @@ type
     function PointerAt(X, Y: Integer): TCursor;
     // the pixels DrawCaret inks on a white bitmap of the control's size
     function CaretInk: Integer;
+    // the wheel: whether the control took it, and what the message answers (0: the parent's)
+    function WheelTaken(ADelta: Integer; AShift: TShiftState): Boolean;
+    function WheelHTaken(ADelta: Integer): Boolean;
+    function WheelMessage(ADelta: Integer): PtrInt;
+  end;
+
+  // (the box's wheel and the LCL's align pass, protected)
+  TBoxAccess = class(TTyScrollBox)
+  public
+    function Wheel(ADelta: Integer): Boolean;
+    procedure Align;
+    // the width an aligned child gets (the client rectangle the box adjusts)
+    function AlignWidth: Integer;
   end;
 
   // (the bar's own drawing, protected)
@@ -58,9 +71,11 @@ type
     FRich: TDisplayProbe;
     FClicks, FSizeEvents, FResizeInHandler: Integer;
     FClickURL: string;
+    FMenusAsked: Integer;
     FDarkTheme: string;
     FInPaint: Boolean;
     FInPaintEvents: Integer;
+    procedure MenuAsked(Sender: TObject; MousePos: TPoint; var Handled: Boolean);
     procedure LinkClicked(Sender: TObject; const AURL: string; AButton: TMouseButton);
     procedure SizeChanged(Sender: TObject);
     procedure SizeChangedResizes(Sender: TObject);
@@ -84,6 +99,11 @@ type
     procedure TestAHelpPage;
     procedure TestAHomePage;
     procedure TestShotsOfBothPages;
+    procedure TestTheWheelOverAHomePageIsTheBoxs;
+    procedure TestNoMenuOfItsOwnWithNothingToEditOrSelect;
+    procedure TestAutoHeightWaitsForAnExactSizeAndHasALimit;
+    procedure TestAutoHeightUnderAlignAndAtAnotherPPI;
+    procedure TestTheContentWidthCountsAShownBar;
   end;
 
 implementation
@@ -121,6 +141,53 @@ function TDisplayProbe.CanFocus: Boolean;
 begin
   // (a test's focus: whatever a press without it refuses is refused here too)
   Result := Focusable and not PressRefusesFocus;
+end;
+
+function TDisplayProbe.WheelTaken(ADelta: Integer; AShift: TShiftState): Boolean;
+begin
+  Result := DoMouseWheel(AShift, ADelta, Point(10, 10));
+end;
+
+function TDisplayProbe.WheelHTaken(ADelta: Integer): Boolean;
+begin
+  Result := DoMouseWheelHorz([], ADelta, Point(10, 10));
+end;
+
+
+function TDisplayProbe.WheelMessage(ADelta: Integer): PtrInt;
+var
+  m: TLMMouseEvent;
+begin
+  FillChar(m, SizeOf(m), 0);
+  m.Msg := LM_MOUSEWHEEL;
+  m.WheelDelta := ADelta;
+  m.X := 10;
+  m.Y := 10;
+  Dispatch(m);
+  Result := m.Result;
+end;
+
+function TBoxAccess.Wheel(ADelta: Integer): Boolean;
+begin
+  Result := DoMouseWheel([], ADelta, Point(10, 10));
+end;
+
+function TBoxAccess.AlignWidth: Integer;
+var
+  r: TRect;
+begin
+  r := ClientRect;
+  AdjustClientRect(r);
+  Result := r.Right - r.Left;
+end;
+
+// what the LCL's align pass does: the raw client rectangle (AlignControls applies the box's own)
+procedure TBoxAccess.Align;
+var
+  r: TRect;
+begin
+  r := ClientRect;
+  AlignControls(nil, r);
 end;
 
 procedure TDisplayProbe.SetFocus;
@@ -306,7 +373,7 @@ end;
 
 procedure TTyRichDisplayTest.TestTheDefaultsAreTodaysControl;
 begin
-  AssertTrue('ReadOnlyCaret', FRich.ReadOnlyCaret);
+  AssertTrue('CaretWhenReadOnly', FRich.CaretWhenReadOnly);
   AssertTrue('FocusOnClick', FRich.FocusOnClick);
   AssertTrue('AllowSelection', FRich.AllowSelection);
   AssertTrue('ScrollBars', FRich.ScrollBars = ssBoth);
@@ -322,7 +389,7 @@ begin
   AssertTrue('editable: the caret', FRich.CaretInk > 0);
   FRich.ReadOnly := True;
   AssertTrue('read-only, as today: the caret', FRich.CaretInk > 0);
-  FRich.ReadOnlyCaret := False;
+  FRich.CaretWhenReadOnly := False;
   AssertEquals('read-only and asked: no caret', 0, FRich.CaretInk);
   // the selection still grows from the caret's place with Shift and the arrows
   FRich.SelStart := 2;
@@ -429,8 +496,8 @@ begin
   AssertFalse('ssNone: no bar', (FRich.VBar <> nil) and FRich.VBar.Visible);
   AssertEquals('the text area to the right edge', FRich.Width - FRich.Area.Left,
     FRich.Area.Right);
-  FRich.Wheel(-120, []);
-  AssertTrue('the wheel still scrolls', FRich.ScrollY > 0);
+  AssertFalse('the wheel: the parent''s (no direction to scroll)', FRich.WheelTaken(-120, []));
+  AssertEquals('so nothing moved', Int64(0), FRich.ScrollY);
   y := FRich.ScrollY;
   FRich.KeyOf(VK_END, [ssCtrl]);
   AssertTrue('the keys still scroll', FRich.ScrollY > y);
@@ -453,10 +520,11 @@ begin
   FRich.ScrollBars := ssVertical;
   FRich.UpdateView;
   AssertFalse('ssVertical: no horizontal bar', (FRich.HBar <> nil) and FRich.HBar.Visible);
-  FRich.WheelH(120);
-  AssertTrue('the horizontal wheel still scrolls', FRich.ScrollX > 0);
+  AssertFalse('the horizontal wheel: the parent''s', FRich.WheelHTaken(120));
+  FRich.KeyOf(VK_END, []);
+  AssertTrue('the keys scroll sideways', FRich.ScrollX > 0);
   FRich.UpdateView;
-  AssertTrue('... and stays scrolled with no bar', FRich.ScrollX > 0);
+  AssertTrue('... and it stays scrolled with no bar', FRich.ScrollX > 0);
   FRich.ScrollBars := ssBoth;
   FRich.UpdateView;
   AssertTrue('ssBoth: the horizontal bar', (FRich.HBar <> nil) and FRich.HBar.Visible);
@@ -624,7 +692,7 @@ var
   i: Integer;
 begin
   FRich.ReadOnly := True;
-  FRich.ReadOnlyCaret := False;
+  FRich.CaretWhenReadOnly := False;
   FRich.OnLinkClick := @LinkClicked;
   LoadRtf(PageRtf);
   FRich.ForceFocus := True;
@@ -668,7 +736,7 @@ begin
     FRich.Parent := box;
     FRich.ReadOnly := True;
     FRich.AllowSelection := False;
-    FRich.ReadOnlyCaret := False;
+    FRich.CaretWhenReadOnly := False;
     FRich.FocusOnClick := False;
     FRich.TabStop := False;
     FRich.ScrollBars := ssNone;
@@ -741,7 +809,7 @@ var
       r.Font.PixelsPerInch := APPI;
       r.SetBounds(0, 0, MulDiv(420, APPI, 96), MulDiv(220, APPI, 96));
       r.ReadOnly := True;
-      r.ReadOnlyCaret := False;
+      r.CaretWhenReadOnly := False;
       if AHome then
       begin
         r.AllowSelection := False;
@@ -820,6 +888,230 @@ begin
   Shot('t7-help-100-dark.png', False, 96, True);
   Shot('t7-help-150-dark.png', False, 144, True);
   FCtl.Mode := 'light';
+end;
+
+{ The wheel over a home page reaches the scroll box: the page, as tall as its content in a
+  TTyScrollBox (Align alTop, as the documentation sets it), has nothing to scroll - it does
+  not take the wheel (the message answers 0, so the widgetset hands it to the parent) and the
+  box scrolls. A help page takes it and scrolls - also at its end (a page never starts moving
+  because an inner one stopped). Ctrl + wheel zooms on both. }
+procedure TTyRichDisplayTest.TestTheWheelOverAHomePageIsTheBoxs;
+var
+  box: TBoxAccess;
+  y: Int64;
+begin
+  box := TBoxAccess.Create(nil);
+  try
+    box.SetBounds(0, 0, 420, 120);
+    FRich.Parent := box;
+    FRich.ReadOnly := True;
+    FRich.CaretWhenReadOnly := False;
+    FRich.AllowSelection := False;
+    FRich.FocusOnClick := False;
+    FRich.TabStop := False;
+    FRich.ScrollBars := ssNone;
+    FRich.AutoHeight := True;
+    FRich.Align := alTop;
+    SetLongText(30);
+    box.Align;
+    FRich.UpdateView;
+    // (the box's bar came with the page's height: the LCL aligns again)
+    box.UpdateScrollbars;
+    box.Align;
+    FRich.UpdateView;
+    AssertEquals('alTop in the box: its width', box.AlignWidth, FRich.Width);
+    AssertEquals('as tall as its content', FRich.ContentHeight, FRich.Height);
+    AssertTrue('taller than the box', FRich.Height > box.ClientHeight);
+    AssertFalse('the page does not take the wheel', FRich.WheelTaken(-120, []));
+    AssertEquals('and does not scroll', Int64(0), FRich.ScrollY);
+    AssertEquals('the message answers 0: the parent''s', 0, FRich.WheelMessage(-120));
+    AssertTrue('the box takes it', box.Wheel(-120));
+    AssertTrue('and scrolls the page', box.ScrollY > 0);
+    AssertTrue('Ctrl + wheel: still the zoom', FRich.WheelTaken(120, [ssCtrl]));
+    AssertEquals('zoomed', 110, FRich.Zoom);
+    FRich.Parent := nil;
+  finally
+    box.Free;
+  end;
+  // a help page: the wheel is its own, at its end too
+  FRich.Align := alNone;
+  FRich.AutoHeight := False;
+  FRich.ScrollBars := ssBoth;
+  FRich.Zoom := 100;
+  FRich.SetBounds(0, 0, 300, 120);
+  SetLongText(60);
+  AssertTrue('a help page takes the wheel', FRich.WheelTaken(-120, []));
+  AssertTrue('and scrolls', FRich.ScrollY > 0);
+  AssertEquals('the message answers 1', 1, FRich.WheelMessage(-120));
+  FRich.KeyOf(VK_END, [ssCtrl]);
+  y := FRich.ScrollY;
+  AssertTrue('at its end: still taken', FRich.WheelTaken(-120, []));
+  AssertEquals('at its end: nothing moves', y, FRich.ScrollY);
+  // content that fits: nothing to scroll, the parent's
+  FRich.Lines.Text := 'short';
+  FRich.UpdateView;
+  AssertFalse('content that fits: not taken', FRich.WheelTaken(-120, []));
+  AssertFalse('sideways, nothing wider: not taken', FRich.WheelHTaken(120));
+end;
+
+procedure TTyRichDisplayTest.MenuAsked(Sender: TObject; MousePos: TPoint; var Handled: Boolean);
+begin
+  Inc(FMenusAsked);
+end;
+
+{ A page with nothing to edit or select (ReadOnly, AllowSelection False) shows no menu of the
+  control's own - every item of it would be grey; OnContextPopup is still asked, and an
+  application's PopupMenu is still the one shown (LCL's own). A help page keeps the text
+  menu (Copy, Select All). }
+procedure TTyRichDisplayTest.TestNoMenuOfItsOwnWithNothingToEditOrSelect;
+var
+  handled: Boolean;
+  menu: TPopupMenu;
+begin
+  FRich.Lines.Text := 'Some text on a page';
+  FRich.UpdateView;
+  FRich.ReadOnly := True;
+  FRich.AllowSelection := False;
+  FRich.OnContextPopup := @MenuAsked;
+  FMenusAsked := 0;
+  FRich.MenuShows := 0;
+  handled := FRich.PopupAt(10, 10);
+  AssertEquals('OnContextPopup asked', 1, FMenusAsked);
+  AssertEquals('no menu of its own', 0, FRich.MenuShows);
+  AssertFalse('not handled: the LCL goes on (a PopupMenu, the parent)', handled);
+  menu := TPopupMenu.Create(nil);
+  try
+    FRich.PopupMenu := menu;
+    handled := FRich.PopupAt(10, 10);
+    AssertEquals('with a PopupMenu: not ours either', 0, FRich.MenuShows);
+    FRich.PopupMenu := nil;
+  finally
+    menu.Free;
+  end;
+  // a help page: selectable - the text menu (Copy, Select All)
+  FRich.AllowSelection := True;
+  handled := FRich.PopupAt(10, 10);
+  AssertEquals('a help page: the text menu', 1, FRich.MenuShows);
+  AssertTrue('handled', handled);
+  // editable, nothing selectable: the menu too (Paste may be there)
+  FRich.ReadOnly := False;
+  FRich.AllowSelection := False;
+  FRich.PopupAt(10, 10);
+  AssertEquals('editable: the text menu', 2, FRich.MenuShows);
+end;
+
+{ AutoHeight sets nothing while the content's size is an estimate - a file still loading
+  (read on demand): the height stays, the layout does not grow to the whole file, nothing
+  raises; once the load is done and the size exact the height follows. And never above the
+  limit: a page taller than CRichAutoHeightLimit keeps that height. }
+procedure TTyRichDisplayTest.TestAutoHeightWaitsForAnExactSizeAndHasALimit;
+var
+  s: RawByteString;
+  st: TMemoryStream;
+  i, h0, steps: Integer;
+begin
+  FRich.SetBounds(0, 0, 300, 200);
+  FRich.AutoHeight := True;
+  s := '{' + #92 + 'rtf1' + #92 + 'ansi{' + #92 + 'fonttbl{' + #92 + 'f0 Arial;}}';
+  for i := 1 to 600 do
+    s := s + 'Paragraph ' + IntToStr(i) + ' with some words in it to make bytes.' + #92 + 'par ';
+  s := s + '}';
+  FRich.Slices(4 * 1024, 4 * 1024);
+  st := TMemoryStream.Create;
+  try
+    st.WriteBuffer(s[1], Length(s));
+    st.Position := 0;
+    FRich.LoadFromStream(st);
+  finally
+    st.Free;
+  end;
+  AssertTrue('still loading', FRich.Document.Loading);
+  AssertTrue('an estimate', FRich.ContentSizeIsEstimate);
+  h0 := FRich.Height;
+  steps := 0;
+  while FRich.Document.Loading and (steps < 200) do
+  begin
+    FRich.Step;
+    FRich.UpdateView;
+    Inc(steps);
+    if FRich.Document.Loading then
+    begin
+      AssertEquals(Format('loading, step %d: the height stays', [steps]), h0, FRich.Height);
+      AssertTrue(Format('step %d: no more laid out than the view shows', [steps]),
+        FRich.Document.Text.MeasuredParaCount < FRich.Document.Text.ParaCount);
+    end;
+  end;
+  AssertFalse('loaded', FRich.Document.Loading);
+  FRich.UpdateView;
+  FRich.ContentHeight;
+  FRich.UpdateView;
+  AssertFalse('exact now', FRich.ContentSizeIsEstimate);
+  AssertEquals('exact: the height follows', FRich.ContentHeight, FRich.Height);
+  // a page taller than the limit: the limit
+  SetLongText(4000);
+  FRich.UpdateView;
+  AssertTrue('the content is taller than the limit', FRich.ContentHeight > CRichAutoHeightLimit);
+  AssertEquals('the control at the limit', CRichAutoHeightLimit, FRich.Height);
+  SetLongText(10);
+  FRich.UpdateView;
+  AssertEquals('short again: its height', FRich.ContentHeight, FRich.Height);
+end;
+
+{ Align alLeft or alRight gives the height to the parent: AutoHeight sets nothing (alClient
+  and both vertical anchors are tested with the switch; the LCL anchors a side-aligned
+  control top and bottom, so either rule alone keeps it). A change of PPI under AutoHeight: the
+  height follows the content at the new PPI. }
+procedure TTyRichDisplayTest.TestAutoHeightUnderAlignAndAtAnotherPPI;
+var
+  a: TAlign;
+  h0: Integer;
+begin
+  SetLongText(12);
+  for a in [alLeft, alRight] do
+  begin
+    FRich.AutoHeight := False;
+    FRich.Align := a;
+    FRich.SetBounds(0, 0, 300, 77);
+    FRich.AutoHeight := True;
+    FRich.UpdateView;
+    AssertTrue('the LCL anchors a side-aligned control top and bottom', (akTop in FRich.Anchors) and
+      (akBottom in FRich.Anchors));
+    AssertTrue('the content is taller', FRich.ContentHeight > 77);
+    AssertEquals('aligned to a side: the height is the parent''s', 77, FRich.Height);
+  end;
+  FRich.Align := alNone;
+  FRich.UpdateView;
+  AssertEquals('no align: the content''s', FRich.ContentHeight, FRich.Height);
+  h0 := FRich.Height;
+  FRich.Font.PixelsPerInch := 144;
+  FRich.UpdateView;
+  AssertTrue('144 PPI: taller', FRich.Height > h0);
+  AssertEquals('144 PPI: the content''s', FRich.ContentHeight, FRich.Height);
+  FRich.Font.PixelsPerInch := 96;
+  FRich.UpdateView;
+  AssertEquals('96 again', h0, FRich.Height);
+end;
+
+{ ContentWidth counts a vertical bar that shows (the width the control needs not to wrap
+  under it): with the bar it is as much more as the text area is narrower - the bar lies over
+  the padding on its side, so that is the bar's width beyond the padding. }
+procedure TTyRichDisplayTest.TestTheContentWidthCountsAShownBar;
+var
+  wBar, wNone, aBar, aNone: Integer;
+begin
+  FRich.WrapMode := rwmNone;
+  SetLongText(60);
+  FRich.UpdateView;
+  AssertTrue('a vertical bar shows', (FRich.VBar <> nil) and FRich.VBar.Visible);
+  wBar := FRich.ContentWidth;
+  aBar := FRich.Area.Right - FRich.Area.Left;
+  FRich.ScrollBars := ssNone;
+  FRich.UpdateView;
+  AssertFalse('no bar now', (FRich.VBar <> nil) and FRich.VBar.Visible);
+  wNone := FRich.ContentWidth;
+  aNone := FRich.Area.Right - FRich.Area.Left;
+  AssertTrue('the bar takes room from the text', aNone > aBar);
+  AssertEquals('the content width: that much more with the bar', aNone - aBar, wBar - wNone);
 end;
 
 initialization
