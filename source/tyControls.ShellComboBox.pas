@@ -39,6 +39,9 @@ type
   TTyLookInPlace = record
     Path, Display: string;
     Depth: Integer;
+    { #245: one of the user's common folders, listed as a place. At Depth 0 like a root,
+      but a folder: it takes the folder glyph. }
+    Folder: Boolean;
   end;
   TTyLookInPlaceArray = array of TTyLookInPlace;
 
@@ -49,7 +52,12 @@ type
   Each crumb's Display is a friendly label: the matching TyFsRoots.Display when a root's
   Path SameFileName's the crumb; else ExtractFileName(ExcludeTrailingPathDelimiter(crumb));
   else the crumb verbatim (a bare drive root 'C:\'). ADir = '' yields only the roots. }
-function TyLookInPlaces(const ADir: string): TTyLookInPlaceArray;
+function TyLookInPlaces(const ADir: string): TTyLookInPlaceArray; overload;
+{ #245: the same with AFolders -- the user's common folders -- listed between the chain and
+  the other roots, each a Depth 0 row under its Display name and marked Folder. A folder
+  that is also on the chain is listed all the same: the list of places does not change with
+  the directory, so a place is always found on the same row from the end. }
+function TyLookInPlaces(const ADir: string; const AFolders: TTyFsRootArray): TTyLookInPlaceArray; overload;
 
 type
   TTyCustomShellComboBox = class(TTyCustomComboBox)
@@ -61,6 +69,10 @@ type
     FOnSelectPath: TNotifyEvent;
     FIcons: TTyImageCollection;     { owned; the 128px folder/drive BGRA masters }
     FImages: TTyVirtualImageList;   { owned; the glyph list the popup + field draw from }
+    FShowPlaces: Boolean;           { #245: the user's common folders after the chain }
+    FFolders: TTyFsRootArray;       { those folders as BuildPlaces last listed them: the field
+                                      is painted from this, not from a look at the disk }
+    procedure SetShowPlaces(AValue: Boolean);
     procedure SetDirectory(const AValue: string);
     { Rebuild Items from FDirectory: its breadcrumb, then the other roots. }
     procedure BuildPlaces;
@@ -73,6 +85,12 @@ type
     procedure PaintFieldContent(P: TTyPainter; const ATextRect: TRect; const AStyle: TTyStyleSet); override;
     { The drop-down list draws each row's glyph + indented label. }
     function CreatePopupList: TTyCustomListBox; override;
+    { #245. The common folders the drop-down lists as places: TyFsKnownFolders with
+      ShowPlaces, none without. Virtual so a descendant can list places of its own. }
+    function KnownFolders: TTyFsRootArray; virtual;
+    { What the closed field shows for the current directory: the name of the place it is,
+      else a root's label, else the folder's own name. }
+    function FieldCaption: string;
     { Always pick-only -- ignore any attempt to make the field editable. }
     procedure SetStyle(AValue: TTyComboBoxStyle); override;
     { #163: the rows are the file system's, made again from Directory -- rows an older form file
@@ -88,6 +106,15 @@ type
     function DepthOfModel(AModel: Integer): Integer;
     { The glyph index for a row at ADepth: a root (0) is a drive, deeper is a folder. }
     function GlyphForDepth(ADepth: Integer): Integer;
+    { The glyph index of model row AModel: as GlyphForDepth says, except that a common
+      folder listed as a place is a folder though it sits at depth 0 (#245). }
+    function GlyphOfModel(AModel: Integer): Integer;
+    { #245. List the user's common folders -- Desktop, Documents, Downloads, Pictures,
+      Music, Videos, those that exist -- in the drop-down, after the levels of the current
+      path and before the other roots. Off by default; the file dialogs turn it on.
+
+      PUBLIC, not published: the 3.0 line adds no published properties. Set it in code. }
+    property ShowPlaces: Boolean read FShowPlaces write SetShowPlaces;
     { The glyph list the popup rows + the field draw from (fixed-palette folder/drive). }
     property LookInImages: TTyVirtualImageList read FImages;
     { The current directory. Writing it rebuilds the drop-down and selects the current-dir
@@ -191,6 +218,11 @@ begin
 end;
 
 function TyLookInPlaces(const ADir: string): TTyLookInPlaceArray;
+begin
+  Result := TyLookInPlaces(ADir, nil);
+end;
+
+function TyLookInPlaces(const ADir: string; const AFolders: TTyFsRootArray): TTyLookInPlaceArray;
 var
   crumbs: TStringArray;
   roots: TTyFsRootArray;
@@ -208,6 +240,17 @@ begin
     Result[n].Path := crumbs[i];
     Result[n].Display := TyLookInLabelFor(crumbs[i], roots);
     Result[n].Depth := i;
+    Result[n].Folder := False;
+    Inc(n);
+  end;
+  { 1b. The user's common folders (#245), by name, at the left edge. }
+  for i := 0 to High(AFolders) do
+  begin
+    SetLength(Result, n + 1);
+    Result[n].Path := AFolders[i].Path;
+    Result[n].Display := AFolders[i].Display;
+    Result[n].Depth := 0;
+    Result[n].Folder := True;
     Inc(n);
   end;
   { 2. The other roots (Path <> the chain's own root crumb), Depth 0. }
@@ -223,6 +266,7 @@ begin
     Result[n].Path := roots[i].Path;
     Result[n].Display := roots[i].Display;
     Result[n].Depth := 0;
+    Result[n].Folder := False;
     Inc(n);
   end;
 end;
@@ -282,7 +326,7 @@ begin
     combo := TTyCustomShellComboBox(Owner);
     model := PtrInt(Items.Objects[AIndex]);
     depth := combo.DepthOfModel(model);
-    TyDrawLookInRow(P, ARowRect, Items[AIndex], combo.GlyphForDepth(depth), depth,
+    TyDrawLookInRow(P, ARowRect, Items[AIndex], combo.GlyphOfModel(model), depth,
       combo.LookInImages, AStyle, ResolveFontSize(AStyle));
   end
   else
@@ -379,6 +423,40 @@ begin
     Result := 0;
 end;
 
+function TTyCustomShellComboBox.GlyphOfModel(AModel: Integer): Integer;
+begin
+  if (AModel >= 0) and (AModel <= High(FPlaces)) and FPlaces[AModel].Folder then
+    Result := TyLookInFolderGlyph
+  else
+    Result := GlyphForDepth(DepthOfModel(AModel));
+end;
+
+function TTyCustomShellComboBox.KnownFolders: TTyFsRootArray;
+begin
+  if FShowPlaces then
+    Result := TyFsKnownFolders
+  else
+    Result := nil;
+end;
+
+function TTyCustomShellComboBox.FieldCaption: string;
+var
+  i: Integer;
+begin
+  { In a place, the field says the place's name -- the one it was picked by. }
+  for i := 0 to High(FFolders) do
+    if SameFileName(FFolders[i].Path, FDirectory) then
+      Exit(FFolders[i].Display);
+  Result := TyLookInLabelFor(FDirectory, TyFsRoots);
+end;
+
+procedure TTyCustomShellComboBox.SetShowPlaces(AValue: Boolean);
+begin
+  if FShowPlaces = AValue then Exit;
+  FShowPlaces := AValue;
+  BuildPlaces;
+end;
+
 function TTyCustomShellComboBox.GlyphForDepth(ADepth: Integer): Integer;
 begin
   if ADepth = 0 then
@@ -418,7 +496,8 @@ begin
   FUpdating := True;
   BeginQuietChange;   { #145: writing Directory fires no event, as the documentation says }
   try
-    FPlaces := TyLookInPlaces(FDirectory);
+    FFolders := KnownFolders;
+    FPlaces := TyLookInPlaces(FDirectory, FFolders);
     Items.Clear;
     { Plain Display -- hierarchy is drawn as pixel indentation from Depth (via Objects[]),
       not as leading spaces in the item text. }
@@ -473,7 +552,7 @@ begin
     inherited PaintFieldContent(P, ATextRect, AStyle);
     Exit;
   end;
-  lbl := TyLookInLabelFor(FDirectory, TyFsRoots);
+  lbl := FieldCaption;
   { The current dir is always the last breadcrumb -> a valid selected row -> its depth
     picks the field glyph; the field itself is never indented (ADepth = 0). }
   if (ItemIndex >= 0) and (ItemIndex < Items.Count) then

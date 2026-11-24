@@ -43,6 +43,7 @@ List.ShellTreeView := Tree;   // 列表里进入文件夹 → 树跟着走(两�
 |---|---|
 | `Directory: string` | 读 = 当前焦点目录(`SelectedPath`,**不带**尾分隔符);写 = 展开定位并聚焦到该路径。**写不到时抛 `ETyShellInvalidPath`**(设计期/流式化时不抛),见下节。 |
 | `Path: string` | **public(非 published)**,LCL 那个名字与那套语义(`shellctrls.pas:142`):读回目录时**带**尾分隔符,写时接受绝对路径**或**相对于 `GetRootPath` 的路径。以前只认"以某个根为前缀的绝对路径",相对写法静默什么也不做。不 published:同一份选中状态挂两个 published 名字会在每个 `.lfm` 里写两遍。 |
+| `ShowPlaces: Boolean` | **public(非 published)**,默认 `False`。打开后,用户的常用文件夹(桌面、文档、下载、图片、音乐、视频,见 [filesystem.md](filesystem.md) 的 `TyFsKnownFolders`)列在顶层最上面、盘符之前。每个都和盘符一样是根:能展开;位于其中的路径显示在它下面,而不是它所在的盘下面;在盘符分支里的同一个文件夹仍然显示自己的目录名。写它会重建顶层并回到原来所在的文件夹;`Root` 非空时不起作用。文件对话框会打开它。3.0.5 新增(3.0 线不加 published 属性,所以只能在代码里设)。 |
 | `Root: string` | 把整棵树收窄到这一个目录;`''`(默认)= `TyFsRoots` 那套全机器"位置"。写它重建整棵树;目录不存在则抛 `ETyShellInvalidPath`(设计期/流式化不抛,同 LCL `shellctrls.pas:625`)。以前根本没有 —— 想做一棵限定在项目目录里的选择器只能派生。 |
 | `ObjectTypes: TTyFsObjectTypes` | 枚举哪几类条目。默认 `[fotFolders]`(同 LCL)。加 `fotFiles` 则文件作为**叶子**出现(没有展开箭头、不会去读盘)。**写入即刷新**。 |
 | `ShowHidden: Boolean` | 是否枚举隐藏项 —— 就是 `ObjectTypes` 里 `fotHidden` 那一位的另一个名字,两边**双向同步**。默认 `False`。**写入即刷新**。 |

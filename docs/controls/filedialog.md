@@ -115,6 +115,10 @@ LCL 的默认值是 `[ofEnableSizing, ofViewDetail]`,这里仍是 `[]`:这两个
 ## 关键设计
 
 - **一个 form 两个标志 = 四变体**;`FBtnNewFolder` 仅 SaveMode 建,`FPreview` 仅 PreviewMode 建(标志 setter 懒建)。
+- **常用文件夹一点就到(#245,3.0.5)**:桌面、文档、下载、图片、音乐、视频列在目录树的顶部(盘符上面)和
+  查找范围下拉里(当前路径之后)。对话框只是打开了两个控件的 `ShowPlaces`;位置从哪来见
+  [filesystem.md](filesystem.md) 的 `TyFsKnownFolders`。名字走库的翻译,所以中文界面显示「文档」。
+  左栏仍然是树;换成「位置」面板、应用固定的文件夹和最近位置是 4.0 的事(#246)。
 - **四方联动**(树↔列表↔查找范围)靠一个 `FSyncing` 防回环;查找范围字段是纯显示同步(写 `Directory` 不触发事件)。
   过滤下拉 `OnFilterChange` → `List.Mask`。选中文件 → 填文件名框(**只认选中,不认取消选中** ——
   列表的 `OnSelectItem` 现在也会报告刚被**离开**的那一行,拿它去填名字会写进一个用户已经不在的文件名,

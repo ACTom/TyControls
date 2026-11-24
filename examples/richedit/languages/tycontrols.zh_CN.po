@@ -536,6 +536,30 @@ msgstr ""
 msgid "Images (*.png;*.jpg;*.jpeg;*.bmp;*.gif)|*.png;*.jpg;*.jpeg;*.bmp;*.gif|All Files (*.*)|*.*"
 msgstr "图片 (*.png;*.jpg;*.jpeg;*.bmp;*.gif)|*.png;*.jpg;*.jpeg;*.bmp;*.gif|所有文件 (*.*)|*.*"
 
+#: tycontrols.strconsts.rsfdplacedesktop
+msgid "Desktop"
+msgstr "桌面"
+
+#: tycontrols.strconsts.rsfdplacedocuments
+msgid "Documents"
+msgstr "文档"
+
+#: tycontrols.strconsts.rsfdplacedownloads
+msgid "Downloads"
+msgstr "下载"
+
+#: tycontrols.strconsts.rsfdplacemusic
+msgid "Music"
+msgstr "音乐"
+
+#: tycontrols.strconsts.rsfdplacepictures
+msgid "Pictures"
+msgstr "图片"
+
+#: tycontrols.strconsts.rsfdplacevideos
+msgid "Videos"
+msgstr "视频"
+
 #: tycontrols.strconsts.rsfdsavetitle
 msgid "Save As"
 msgstr "另存为"

@@ -183,6 +183,7 @@ uses
   test.combobox.simple,
   test.combobox.editfield,
   test.dialogs.focus,
+  test.shell.places,
   test.tabset,
   test.columns.compat,
   test.listview.layout,

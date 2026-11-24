@@ -30,7 +30,8 @@ interface
 
 uses
   SysUtils, LazFileUtils, FileUtil, Masks, LazUTF8
-  {$IFDEF MSWINDOWS}, Windows{$ENDIF};
+  {$IFDEF MSWINDOWS}, Windows{$ENDIF},
+  tyControls.StrConsts;
 
 type
   { One enumerated directory entry. All fields are RAW values (not display
@@ -176,6 +177,39 @@ function TyFsHasEntry(const APath: string; AOptions: TTyFsObjectTypes): Boolean;
   Never raises; never returns an empty array. This is the unit's only
   conditional platform branch. }
 function TyFsRoots: TTyFsRootArray;
+
+{ #245. The user's COMMON FOLDERS -- Desktop, Documents, Downloads, Pictures, Music, Videos,
+  always in that order -- as rkPlace entries: only those that exist, each once. Display is
+  the library's own (translated) name for the folder, whatever it is called on disk; Path
+  has no trailing delimiter. May be empty; never raises.
+
+  Where they are is each platform's own business:
+    Windows   the shell's special folders, so a Documents folder moved to another drive or
+              into OneDrive is found where it is (Downloads through the known-folder call
+              Vista added, and under the profile where that is not there);
+    macOS     the fixed folders of the home directory (Videos is "Movies" there);
+    else      the user-dirs.dirs file of the XDG configuration, whose folder names are
+              localized (TyFsParseUserDirs), and the usual names under the home directory
+              when there is no such file. }
+function TyFsKnownFolders: TTyFsRootArray;
+
+{ The known folders, then TyFsRoots: the places a file dialog offers. A stand-alone shell
+  tree or look-in combo lists TyFsRoots alone unless its ShowPlaces is set. }
+function TyFsPlaces: TTyFsRootArray;
+
+{ What a user-dirs.dirs file says (xdg-user-dirs), pure: AText is the file, AHome the home
+  directory $HOME stands for. One rkPlace entry per folder the file names, in the fixed
+  order of TyFsKnownFolders whatever the order of the lines; nothing is looked up on disk.
+
+  A line counts when it assigns one of the six keys a QUOTED value that is "$HOME/<path>" or
+  an absolute path -- the two forms the format has. A folder pointed at the home directory
+  itself ("$HOME/") is that format's way of switching the folder off, and is left out.
+  Paths are joined with '/', the file's own separator, on every platform. }
+function TyFsParseUserDirs(const AText, AHome: string): TTyFsRootArray;
+
+{ ACandidates less the entries whose folder does not exist and the repeats of a folder
+  already listed (compared as file names), in the same order; trailing delimiters removed. }
+function TyFsExistingPlaces(const ACandidates: TTyFsRootArray): TTyFsRootArray;
 
 { True when APath contains at least one subdirectory. Stops at the FIRST one
   found via FindFirstUTF8 with faDirectory (skipping '.'/'..') -- it never
@@ -630,6 +664,276 @@ begin
   ScanMounts('/Volumes');             { macOS mounts }
 end;
 {$ENDIF}
+
+{ ---------------------------------------------------------------------------
+  #245: the user's common folders
+  --------------------------------------------------------------------------- }
+
+type
+  { The six, in the order they are always listed in. }
+  TTyKnownFolder = (kfDesktop, kfDocuments, kfDownloads, kfPictures, kfMusic, kfVideos);
+
+function KnownFolderName(AFolder: TTyKnownFolder): string;
+begin
+  case AFolder of
+    kfDesktop:   Result := rsFdPlaceDesktop;
+    kfDocuments: Result := rsFdPlaceDocuments;
+    kfDownloads: Result := rsFdPlaceDownloads;
+    kfPictures:  Result := rsFdPlacePictures;
+    kfMusic:     Result := rsFdPlaceMusic;
+  else
+    Result := rsFdPlaceVideos;
+  end;
+end;
+
+procedure AddKnownFolder(var AList: TTyFsRootArray; const APath: string;
+  AFolder: TTyKnownFolder);
+var
+  n: Integer;
+begin
+  if APath = '' then Exit;
+  n := Length(AList);
+  SetLength(AList, n + 1);
+  AList[n].Path    := APath;
+  AList[n].Display := KnownFolderName(AFolder);
+  AList[n].Kind    := rkPlace;
+end;
+
+function TyFsParseUserDirs(const AText, AHome: string): TTyFsRootArray;
+const
+  cKeys: array[TTyKnownFolder] of string = ('XDG_DESKTOP_DIR', 'XDG_DOCUMENTS_DIR',
+    'XDG_DOWNLOAD_DIR', 'XDG_PICTURES_DIR', 'XDG_MUSIC_DIR', 'XDG_VIDEOS_DIR');
+var
+  found: array[TTyKnownFolder] of string;
+  home, line, key, raw, val, path: string;
+  f: TTyKnownFolder;
+  p, lineStart, i: Integer;
+  closed, known: Boolean;
+
+  { '/' off the end, by hand: this is the file's separator, not the platform's, and the
+    platform's helpers would rewrite it on Windows. }
+  function NoTrailingSlash(const S: string): string;
+  begin
+    Result := S;
+    while (Length(Result) > 1) and (Result[Length(Result)] = '/') do
+      SetLength(Result, Length(Result) - 1);
+  end;
+
+begin
+  Result := nil;
+  home := NoTrailingSlash(AHome);
+  for f := Low(TTyKnownFolder) to High(TTyKnownFolder) do
+    found[f] := '';
+  lineStart := 1;
+  while lineStart <= Length(AText) do
+  begin
+    p := lineStart;
+    while (p <= Length(AText)) and (AText[p] <> #10) do Inc(p);
+    line := Trim(Copy(AText, lineStart, p - lineStart));   // Trim takes a CR with it
+    lineStart := p + 1;
+    if (line = '') or (line[1] = '#') then Continue;
+    p := Pos('=', line);
+    if p < 2 then Continue;
+    key := Trim(Copy(line, 1, p - 1));
+    known := False;
+    for f := Low(TTyKnownFolder) to High(TTyKnownFolder) do
+      if key = cKeys[f] then
+      begin
+        known := True;
+        Break;
+      end;
+    if not known then Continue;
+    { The value: a double-quoted string in which a backslash takes the next character as it
+      is. Anything else -- no quote, a quote that never closes -- is not a value. }
+    raw := Trim(Copy(line, p + 1, MaxInt));
+    if (raw = '') or (raw[1] <> '"') then Continue;
+    val := '';
+    closed := False;
+    i := 2;
+    while i <= Length(raw) do
+    begin
+      if raw[i] = '"' then
+      begin
+        closed := True;
+        Break;
+      end;
+      if (raw[i] = '\') and (i < Length(raw)) then Inc(i);
+      val := val + raw[i];
+      Inc(i);
+    end;
+    if not closed then Continue;
+    { "$HOME/<path>" or an absolute path; the format has no third form. }
+    if Copy(val, 1, 6) = '$HOME/' then
+      path := NoTrailingSlash(home + Copy(val, 6, MaxInt))
+    else if (val <> '') and (val[1] = '/') then
+      path := NoTrailingSlash(val)
+    else
+      Continue;
+    if path = home then Continue;   // "$HOME/": the folder is switched off
+    found[f] := path;
+  end;
+  for f := Low(TTyKnownFolder) to High(TTyKnownFolder) do
+    AddKnownFolder(Result, found[f], f);
+end;
+
+function TyFsExistingPlaces(const ACandidates: TTyFsRootArray): TTyFsRootArray;
+var
+  i, j, n: Integer;
+  p: string;
+  repeated: Boolean;
+begin
+  Result := nil;
+  n := 0;
+  for i := 0 to High(ACandidates) do
+  begin
+    p := ChompPathDelim(ACandidates[i].Path);
+    if (p = '') or not DirectoryExistsUTF8(p) then Continue;
+    repeated := False;
+    for j := 0 to n - 1 do
+      if CompareFilenames(Result[j].Path, p) = 0 then
+      begin
+        repeated := True;
+        Break;
+      end;
+    if repeated then Continue;
+    SetLength(Result, n + 1);
+    Result[n] := ACandidates[i];
+    Result[n].Path := p;
+    Inc(n);
+  end;
+end;
+
+{$IFDEF MSWINDOWS}
+const
+  { shlobj.h. Declared here, with the two calls, so this unit needs nothing but Windows. }
+  TyCsidlPersonal         = $0005;   // Documents
+  TyCsidlMyMusic          = $000D;
+  TyCsidlMyVideo          = $000E;
+  TyCsidlDesktopDirectory = $0010;
+  TyCsidlMyPictures       = $0027;
+  TyFolderIdDownloads: TGUID = '{374DE290-123F-4565-9164-39C4925E467B}';
+
+function TySHGetSpecialFolderPathW(hwndOwner: HWND; lpszPath: PWideChar; csidl: LongInt;
+  fCreate: BOOL): BOOL; stdcall; external 'shell32.dll' name 'SHGetSpecialFolderPathW';
+procedure TyCoTaskMemFree(pv: Pointer); stdcall; external 'ole32.dll' name 'CoTaskMemFree';
+
+{ Where the shell has one of its special folders, '' when it has none. The folder is asked
+  for, never created. }
+function WinSpecialFolder(ACsidl: LongInt): string;
+var
+  buf: array[0..MAX_PATH] of WideChar;
+begin
+  Result := '';
+  FillChar(buf{%H-}, SizeOf(buf), 0);
+  if TySHGetSpecialFolderPathW(0, @buf[0], ACsidl, False) then
+    Result := UTF8Encode(UnicodeString(PWideChar(@buf[0])));
+end;
+
+{ Downloads has no CSIDL: it came with the known-folder call of Windows Vista. That call is
+  looked up at run time, so the library still loads where it is missing; there, and wherever
+  the shell will not say, the folder of that name under the profile is the answer. }
+function WinDownloadsFolder: string;
+type
+  TGetKnownFolderPath = function(const rfid: TGUID; dwFlags: DWORD; hToken: THandle;
+    out ppszPath: PWideChar): HRESULT; stdcall;
+var
+  shell: HMODULE;
+  get: TGetKnownFolderPath;
+  p: PWideChar;
+begin
+  Result := '';
+  shell := GetModuleHandle('shell32.dll');   // loaded: the special-folder call is its import
+  if shell <> 0 then
+  begin
+    Pointer(get) := GetProcAddress(shell, 'SHGetKnownFolderPath');
+    if Assigned(get) then
+    begin
+      p := nil;
+      if (get(TyFolderIdDownloads, 0, 0, p) = S_OK) and (p <> nil) then
+        Result := UTF8Encode(UnicodeString(p));
+      if p <> nil then TyCoTaskMemFree(p);
+    end;
+  end;
+  if Result = '' then
+  begin
+    Result := GetEnvironmentVariableUTF8('USERPROFILE');
+    if Result <> '' then Result := AppendPathDelim(Result) + 'Downloads';
+  end;
+end;
+{$ENDIF}
+
+function TyFsKnownFolders: TTyFsRootArray;
+var
+  c: TTyFsRootArray;
+{$IFNDEF MSWINDOWS}
+  home: string;
+  {$IFNDEF DARWIN}
+  cfg: string;
+  {$ENDIF}
+
+  procedure UnderHome(const AName: string; AFolder: TTyKnownFolder);
+  begin
+    AddKnownFolder(c, home + '/' + AName, AFolder);
+  end;
+{$ENDIF}
+begin
+  c := nil;
+  {$IFDEF MSWINDOWS}
+  AddKnownFolder(c, WinSpecialFolder(TyCsidlDesktopDirectory), kfDesktop);
+  AddKnownFolder(c, WinSpecialFolder(TyCsidlPersonal), kfDocuments);
+  AddKnownFolder(c, WinDownloadsFolder, kfDownloads);
+  AddKnownFolder(c, WinSpecialFolder(TyCsidlMyPictures), kfPictures);
+  AddKnownFolder(c, WinSpecialFolder(TyCsidlMyMusic), kfMusic);
+  AddKnownFolder(c, WinSpecialFolder(TyCsidlMyVideo), kfVideos);
+  {$ELSE}
+  home := ChompPathDelim(GetUserDir);
+  if home <> '' then
+  begin
+    {$IFDEF DARWIN}
+    { The Finder shows these under localized names; on disk they are always these. }
+    UnderHome('Desktop', kfDesktop);
+    UnderHome('Documents', kfDocuments);
+    UnderHome('Downloads', kfDownloads);
+    UnderHome('Pictures', kfPictures);
+    UnderHome('Music', kfMusic);
+    UnderHome('Movies', kfVideos);
+    {$ELSE}
+    cfg := GetEnvironmentVariableUTF8('XDG_CONFIG_HOME');
+    if cfg = '' then cfg := home + '/.config';
+    cfg := ChompPathDelim(cfg) + '/user-dirs.dirs';
+    if FileExistsUTF8(cfg) then
+      try
+        c := TyFsParseUserDirs(ReadFileToString(cfg), home);
+      except
+        c := nil;   // unreadable: the usual names below
+      end;
+    if Length(c) = 0 then
+    begin
+      UnderHome('Desktop', kfDesktop);
+      UnderHome('Documents', kfDocuments);
+      UnderHome('Downloads', kfDownloads);
+      UnderHome('Pictures', kfPictures);
+      UnderHome('Music', kfMusic);
+      UnderHome('Videos', kfVideos);
+    end;
+    {$ENDIF}
+  end;
+  {$ENDIF}
+  Result := TyFsExistingPlaces(c);
+end;
+
+function TyFsPlaces: TTyFsRootArray;
+var
+  roots: TTyFsRootArray;
+  i, n: Integer;
+begin
+  Result := TyFsKnownFolders;
+  roots := TyFsRoots;
+  n := Length(Result);
+  SetLength(Result, n + Length(roots));
+  for i := 0 to High(roots) do
+    Result[n + i] := roots[i];
+end;
 
 function TyFsHasSubdir(const APath: string): Boolean;
 var
