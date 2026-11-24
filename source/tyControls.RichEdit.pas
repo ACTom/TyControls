@@ -19913,8 +19913,8 @@ begin
       end;
       { A block's ink may reach past its box (a descender, an italic, a picture frame): the
         blocks next to a region are painted into it too (clipped), as a full redraw would leave
-        them. No block of today's layouts inks outside its box (painting the neighbours changes
-        nothing today); the handles of a selected picture, which reach past its line, are drawn
+        them. A paragraph spaced below one line inks outside its box (its glyphs are drawn
+        whole over the lines next to it); the handles of a selected picture, which reach past its line, are drawn
         over all the blocks afterwards (PaintObjectOverlay). }
       reach := Math.Max(1, FEstimate);
       FLayouter.BeginPaintPass;
@@ -20055,7 +20055,7 @@ var
   P: TTyPainter;
   R, area, textClip, rClip: TRect;
   st: TTyRichPaintStyle;
-  s, k, x: Integer;
+  s, k, x, reach: Integer;
   y: Int64;
 begin
   s := Math.Max(1, AScale.Scale);
@@ -20078,13 +20078,16 @@ begin
         P.Bitmap.FillRect(rClip.Left, rClip.Top, rClip.Right, rClip.Bottom,
           ColorToBGRA(ColorToRGB(st.Ground)), dmSet);
       P.Bitmap.ClipRect := rClip;
+      reach := Math.Max(1, FEstimate);
       FLayouter.BeginPaintPass;
       try
         x := area.Left * s - FScrollX;
         for k := 0 to FBlockCount - 1 do
         begin
           y := Int64(area.Top) * s + FBlocks[k].Top;
-          if (y >= rClip.Bottom) or (y + FBlocks[k].Height <= rClip.Top) then Continue;
+          // the blocks next to the clip too: their ink may reach into it (see RedrawSurface)
+          if (y >= rClip.Bottom + reach) or (y + FBlocks[k].Height <= rClip.Top - reach) then
+            Continue;
           PaintBlock(P.Bitmap, k, x, Integer(y), rClip, st);
           if ADefer then QueueSkipped(k);
         end;

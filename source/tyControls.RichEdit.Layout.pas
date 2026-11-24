@@ -123,6 +123,9 @@ const
     past the cut show at the cut (TTyBlockLayout.Truncated, ShownChars, LastCaretPos). The
     layout cache counts such a paragraph by what it shows. }
   CRichMaxParaLayoutChars = 100000;
+  { The least line-spacing multiple laid out (a file may say 1/240): lines at a tenth of their
+    own height still advance, their glyphs overlapping. }
+  CRichMinLineMultiple: Double = 0.1;
   { A numbered list item shows the file's own marker text (TTyRichDocument.ListTextOf: Word's
     and WordPad's {\listtext ...}) while it can be trusted: until a change that can renumber
     (paragraphs that came or went, a format change, Invalidate) happens at or before it - an
@@ -667,6 +670,8 @@ type
     function FragmentInk(const F: TTyRichFragment; const PF: TTyRichPaintFormat;
       const AStyle: TTyRichPaintStyle): TBGRAPixel;
     function LineSelection(ALine: Integer; AFrom, ATo: TTyRichPos; out AXa, AXb: Integer): Boolean;
+    { The top (ATop) or the bottom of line ALine's box and its glyphs together. }
+    function LineInk(ALine: Integer; ATop: Boolean): Integer;
     procedure PaintLine(ATarget: TBGRABitmap; ALine, AX, AY: Integer; const AClip: TRect;
       const AStyle: TTyRichPaintStyle; ASelFrom, ASelTo: TTyRichPos);
   public
@@ -3630,13 +3635,15 @@ begin
   ATarget.ClipRect := clip;
   FLayouter.PaintEnter;
   try
-    // the lines that meet the clip, and no others
+    { the lines whose box or ink meets the clip, and no others: a line spaced below 1 is
+      lower than its glyphs, which are drawn whole over the lines next to it }
     ln := LineAtY(clip.Top - AY);
+    while (ln > 0) and (AY + LineInk(ln - 1, False) > clip.Top) do Dec(ln);
     while ln < FLineCount do
     begin
       top := AY + FLines[ln].Top;
-      if top >= clip.Bottom then Break;
-      if top + FLines[ln].Height > clip.Top then
+      if (top >= clip.Bottom) and (AY + LineInk(ln, True) >= clip.Bottom) then Break;
+      if (top + FLines[ln].Height > clip.Top) or (AY + LineInk(ln, False) > clip.Top) then
         PaintLine(ATarget, ln, AX, AY, clip, AStyle, ASelFrom, ASelTo);
       Inc(ln);
     end;
@@ -3649,6 +3656,19 @@ begin
     FLayouter.PaintLeave;
     ATarget.ClipRect := old;
   end;
+end;
+
+function TTyParaLayout.LineInk(ALine: Integer; ATop: Boolean): Integer;
+var
+  i: Integer;
+  ln: ^TTyRichLine;
+begin
+  ln := @FLines[ALine];
+  if ATop then Result := ln^.Top else Result := ln^.Top + ln^.Height;
+  for i := ln^.FirstFrag to ln^.FirstFrag + ln^.FragCount - 1 do
+    // a fragment's ascent and descent have its shift in them already
+    if ATop then Result := Min(Result, ln^.Baseline - FFrags[i].Ascent)
+    else Result := Max(Result, ln^.Baseline + FFrags[i].Descent);
 end;
 
 procedure TTyParaLayout.PaintLine(ATarget: TBGRABitmap; ALine, AX, AY: Integer;
@@ -4810,7 +4830,7 @@ var
   contentEnd, contentRight, avail, off, extra, gaps, spaces, done, add, cum: Integer;
   h, k: Integer;
   sh: TLineShare;
-  natural, base, hx: Double;
+  natural, base, hx, mult: Double;
   al: TTyTabAlign;
   ld: TTyTabLeader;
   decFound: Boolean;
@@ -5063,34 +5083,45 @@ begin
     if Layout.FMarker.Descent > sh.Desc then sh.Desc := Layout.FMarker.Descent;
   end;
   { Word's rules (Word 16, measured). Single: the line's own height H0, the baseline below
-    the gap, half the East Asian 0.3 and the ascent. A multiple: m x H0, the text where single
-    puts it and the rest below. At least v: max(H0, v), the rest above. Exactly v: v, the
-    baseline at 0.8 v from the top whatever the fonts. }
+    the gap, half the East Asian 0.3 and the ascent. A multiple m of 1 or more: m x H0, the
+    text where single puts it and the rest below. A multiple below 1: the single line scaled
+    whole - m x H0 high, the baseline at m x its single place, so what is taken off comes from
+    above and below alike; the glyphs keep their size and reach past the line (Paint draws
+    them whole). At least v: max(H0, v), the rest above. Exactly v: v, the baseline at 0.8 v
+    from the top whatever the fonts. }
   natural := TyRichSingleLine(sh);
   base := sh.Gap + 0.15 * sh.East + sh.Asc;
-  case Pf.LineSpacing of
-    ls115: hx := natural * 1.15;
-    ls15: hx := natural * 1.5;
-    lsDouble: hx := natural * 2;
-    // any other multiple, the same rule (a file's \slN\slmult1: N / 240)
-    lsMultiple: hx := natural * Max(1, Pf.LineSpacingValue) / 240;
-    lsExact:
-      begin
-        hx := TyRichClampPx(Px(Pf.LineSpacingValue));
-        base := 0.8 * Max(0.0, Pf.LineSpacingValue * PPI * Double(Zoom) / 1440);
-        if base > hx then base := 0.8 * hx;
-      end;
-    lsAtLeast:
-      begin
-        hx := Max(natural, Pf.LineSpacingValue * PPI * Double(Zoom) / 1440);
-        base := base + (hx - natural);
-      end;
+  if not (Pf.LineSpacing in [lsExact, lsAtLeast]) then
+  begin
+    mult := TyRichLineMultiple(Pf);
+    // a file's \slN\slmult1 is N / 240; 0 or less is single (TyRichSetLineMultiple's
+    // reading), and the least is CRichMinLineMultiple
+    if Pf.LineSpacing = lsMultiple then
+      if Pf.LineSpacingValue <= 0 then mult := 1
+      else if mult < CRichMinLineMultiple then mult := CRichMinLineMultiple;
+    hx := natural * mult;
+    if mult < 1 then base := base * mult;
+    if hx > CRichMaxLengthPx then hx := CRichMaxLengthPx;
+    h := Max(1, Round(hx));
+  end
   else
-    hx := natural;
+  begin
+    if Pf.LineSpacing = lsExact then
+    begin
+      hx := TyRichClampPx(Px(Pf.LineSpacingValue));
+      base := 0.8 * Max(0.0, Pf.LineSpacingValue * PPI * Double(Zoom) / 1440);
+      if base > hx then base := 0.8 * hx;
+    end
+    else
+    begin
+      // at least
+      hx := Max(natural, Pf.LineSpacingValue * PPI * Double(Zoom) / 1440);
+      base := base + (hx - natural);
+    end;
+    if hx > CRichMaxLengthPx then hx := CRichMaxLengthPx;
+    h := Max(1, Round(hx));
+    if base > h then base := h;
   end;
-  if hx > CRichMaxLengthPx then hx := CRichMaxLengthPx;
-  h := Max(1, Round(hx));
-  if base > h then base := h;
   // the line
   with Layout do
   begin
