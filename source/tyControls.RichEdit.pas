@@ -1720,6 +1720,12 @@ type
     { The layouter's question (TTyRichLayouter.OnLinkField): the field's open mark found near
       (FieldOpenNear), its instruction read - never a walk of a long field. }
     function LayoutLinkField(AAt: TTyRichPos; ADepth: Integer): Boolean;
+    { The layouter laid out rows that merged cells tie together: their heights into the
+      height index - every row of them, shown or not - when laid out for the view; and when
+      their layouts went with a change, their heights estimates until they are laid out. }
+    procedure LayoutSpanHeights(const AFirsts, ALasts, AHeights: array of Integer;
+      AWidth, APPI: Integer; AZoom: Single);
+    procedure LayoutSpanDropped(AFirst, ALast: Integer);
     { The open mark of the field around APos that is ADepth deep there (1 the outermost): in
       APos's paragraph, else in one of the CRichLinkLookBack paragraphs before it (passed by
       their depths). -1: none found there. }
@@ -4642,6 +4648,8 @@ begin
   FLayouter := CreateLayouter;
   FLayouter.Document := FDoc;
   FLayouter.OnLinkField := @LayoutLinkField;
+  FLayouter.OnSpanHeights := @LayoutSpanHeights;
+  FLayouter.OnSpanDropped := @LayoutSpanDropped;
   FFollowBookmarkLinks := True;
   FObjPressAt := -1;
   // the layouter empties its caches when the list changes; the view must drop its blocks too
@@ -16401,6 +16409,36 @@ begin
   if w > FWidestSeen then FWidestSeen := w;
 end;
 
+procedure TTyCustomRichEdit.LayoutSpanHeights(const AFirsts, ALasts, AHeights: array of Integer;
+  AWidth, APPI: Integer; AZoom: Single);
+var
+  g, k, n: Integer;
+  h: array of Int64;
+begin
+  // (a layout for another width or scale - a print's - is no height of the view's)
+  if (AWidth <> FLayoutWidth) or (APPI <> FLayoutPPI) or (AZoom <> FLayoutZoom) then Exit;
+  n := FDoc.Text.ParaCount;
+  for g := 0 to High(AFirsts) do
+  begin
+    if (AFirsts[g] < 0) or (ALasts[g] < AFirsts[g]) or (ALasts[g] >= n) then Continue;
+    h := nil;
+    SetLength(h, ALasts[g] - AFirsts[g] + 1);
+    for k := 0 to High(h) do h[k] := 0;
+    h[0] := AHeights[g];
+    FDoc.Text.SetParaHeights(AFirsts[g], h);
+  end;
+end;
+
+procedure TTyCustomRichEdit.LayoutSpanDropped(AFirst, ALast: Integer);
+var
+  n: Integer;
+begin
+  n := FDoc.Text.ParaCount;
+  if AFirst < 0 then AFirst := 0;
+  if ALast > n - 1 then ALast := n - 1;
+  if AFirst <= ALast then FDoc.Text.UnmeasureParas(AFirst, ALast);
+end;
+
 { The heights of view blocks AFrom .. ATo (which follow each other in the document) in one
   call: a block's height on its first paragraph, 0 on the others (a table row). }
 procedure TTyCustomRichEdit.WriteHeights(AFrom, ATo: Integer);
@@ -22694,8 +22732,9 @@ begin
     if (Abs(ry - (FBlocks[i].Top + FBlocks[i].Height)) <= e) and (EdgeRowOf(i) <> nil) then
     begin
       r := TTyRowLayout(FBlocks[i].Layout);
+      // (not inside a cell merged over rows: the row's bottom there is no line)
       if (r.CellCount > 0) and (rx >= r.Cells[0].Left - e) and
-         (rx <= r.Cells[r.CellCount - 1].Right + e) then
+         (rx <= r.Cells[r.CellCount - 1].Right + e) and not r.BottomInSpanAt(Integer(rx)) then
       begin
         AKind := CEdgeRow;
         ABlock := i;

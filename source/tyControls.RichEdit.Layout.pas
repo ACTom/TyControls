@@ -909,6 +909,9 @@ type
       for a cell merged over rows the bottom of its last row - where a step down from its last
       line goes on. }
     function CellBottomAt(APos: TTyRichPos): Integer;
+    { The row's bottom at AX (row pixels) lies inside a cell merged over rows - the cell
+      there goes on below this row: no line, no edge to drag there. }
+    function BottomInSpanAt(AX: Integer): Boolean;
   end;
 
   { A character the font in effect has no glyph for: name a font for it in AFontName (left
@@ -920,6 +923,15 @@ type
     at document position AAt; ADepth d > 0: the field open at the start AAt of a paragraph
     that is d deep there (1 the outermost). }
   TTyRichLinkFieldEvent = function(AAt: TTyRichPos; ADepth: Integer): Boolean of object;
+
+  { The rows cells merged over rows tie together were laid out (as one, at AWidth, APPI,
+    AZoom): row g's paragraphs AFirsts[g] .. ALasts[g], its height AHeights[g] - every row,
+    shown or not, since a change in one can change another's height. }
+  TTyRichSpanHeightsEvent = procedure(const AFirsts, ALasts, AHeights: array of Integer;
+    AWidth, APPI: Integer; AZoom: Single) of object;
+  { Such rows' layouts went with a change (the paragraphs AFirst .. ALast, as the document now
+    counts them): their heights are estimates until they are laid out again. }
+  TTyRichSpanDroppedEvent = procedure(AFirst, ALast: Integer) of object;
 
   TTyRichFormatFont = record
     Font: TTyRichFontId;
@@ -947,6 +959,8 @@ type
     FFallbackFonts: TStringList;
     FOnFallbackFont: TTyRichFallbackEvent;
     FOnLinkField: TTyRichLinkFieldEvent;
+    FOnSpanHeights: TTyRichSpanHeightsEvent;
+    FOnSpanDropped: TTyRichSpanDroppedEvent;
     // the layout cache: by first paragraph, LRU order, two bounds
     FCache: specialize TDictionary<Integer, TTyBlockLayout>;
     FLruFirst, FLruLast: TTyBlockLayout;
@@ -1176,6 +1190,11 @@ type
       only when characters of the paragraph lie in it and in no link opened in the paragraph.
       Unassigned: no field is a link. Set it before laying out (the layouts made are kept). }
     property OnLinkField: TTyRichLinkFieldEvent read FOnLinkField write FOnLinkField;
+    { Told the heights of every row of a group of rows that cells merged over rows tie
+      together, when the group is laid out (BuildSpanGroup), and when the group's layouts go
+      with a change - what keeps a height index right for the rows not shown. }
+    property OnSpanHeights: TTyRichSpanHeightsEvent read FOnSpanHeights write FOnSpanHeights;
+    property OnSpanDropped: TTyRichSpanDroppedEvent read FOnSpanDropped write FOnSpanDropped;
     property CacheHits: Int64 read FHits;
     property CacheMisses: Int64 read FMisses;
     function CachedCount: Integer;
@@ -3105,6 +3124,21 @@ end;
 function TTyRowLayout.HasSpanSlices: Boolean;
 begin
   Result := System.Length(FSlices) > 0;
+end;
+
+function TTyRowLayout.BottomInSpanAt(AX: Integer): Boolean;
+var
+  c, s: Integer;
+begin
+  Result := False;
+  c := CellAtX(AX);
+  if c < 0 then Exit;
+  c := FCells[c].Owner;
+  if FCells[c].SpanHeight > FHeight then Exit(True);
+  s := SliceOf(c);
+  if s >= 0 then
+    with FSlices[s] do
+      Result := YOff + FHeight < Origin.FCells[OriginCell].SpanHeight;
 end;
 
 function TTyRowLayout.CellBottomAt(APos: TTyRichPos): Integer;
@@ -6706,7 +6740,10 @@ begin
     if ((L.DepLast >= AFirst) and (L.DepFirst < AFirst + ACount)) or
       (L.FNumbered and (L.FFirstPara >= AFirst)) or
       ((L is TTyRowLayout) and (L.DepLast = AFirst - 1)) then
-      CacheDrop(L, True)
+    begin
+      if L.FDep and Assigned(FOnSpanDropped) then FOnSpanDropped(L.FDepFirst, L.FDepLast);
+      CacheDrop(L, True);
+    end
     else
       Vouch(L, FChangeGen);
     L := nx;
@@ -6841,7 +6878,7 @@ end;
 procedure TTyRichLayouter.DocumentChanged(const AChange: TTyRichChange; AFromLoad: Boolean);
 var
   L, nx: TTyBlockLayout;
-  first, oldEnd, delta: Integer;
+  first, oldEnd, delta, gLast: Integer;
   moved: array of TTyBlockLayout;
   n, i: Integer;
   numbering: Boolean;
@@ -6874,7 +6911,17 @@ begin
       line is the row below's business (BuildRow's BottomOpen) }
     if ((L.DepLast >= first) and (L.DepFirst < oldEnd)) or
       ((L is TTyRowLayout) and (L.DepLast = first - 1)) then
-      CacheDrop(L, True)
+    begin
+      { a group of rows tied by merged cells: its heights are estimates now (its range as
+        the document counts it after the change, the changed paragraphs taken in) }
+      if L.FDep and Assigned(FOnSpanDropped) then
+      begin
+        if L.FDepLast >= oldEnd then gLast := L.FDepLast + delta
+        else gLast := Max(L.FDepLast, first + Max(AChange.NewParaCount, 1) - 1);
+        FOnSpanDropped(Min(L.FDepFirst, first), gLast);
+      end;
+      CacheDrop(L, True);
+    end
     else if (L.FFirstPara >= oldEnd) and numbering and L.FNumbered then
       CacheDrop(L, True)
     else if (L.FFirstPara >= oldEnd) and (delta <> 0) then
@@ -7899,6 +7946,7 @@ begin
   Result := rows[AWanted];
   CacheTrim(Result);
   Result.AddRef;
+  if Assigned(FOnSpanHeights) then FOnSpanHeights(AFirsts, ALasts, h, AWidth, APPI, AZoom);
 end;
 
 function TTyRichLayouter.LayoutBlock(ADoc: TTyRichDocument; AIndex: Integer; AWidth: Integer;

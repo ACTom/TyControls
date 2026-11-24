@@ -98,6 +98,7 @@ type
     procedure TestTheSizeEventFiresOncePerChange;
     procedure TestAHelpPage;
     procedure TestAHomePage;
+    procedure TestShotsOfMergedCells;
     procedure TestShotsOfBothPages;
     procedure TestTheWheelOverAHomePageIsTheBoxs;
     procedure TestNoMenuOfItsOwnWithNothingToEditOrSelect;
@@ -782,6 +783,208 @@ begin
   finally
     box.Free;
   end;
+end;
+
+{ Cells merged over rows drawn with real fonts, off-screen, at 100 % and 150 %, light and dark
+  - into TY_RICH_SHOTS when the environment names a folder (for a person to look at): merged
+  cells shaded, in each vertical alignment; a tall content in a short merged cell (its last
+  row grown), and in exact rows (cut off); a selection over a merged cell; a table's outline
+  after a merge and after a split; a merged cell half scrolled out at the top; a cell over
+  three columns above three cells (the line between them, cropped). Each drawn whole. }
+procedure TTyRichDisplayTest.TestShotsOfMergedCells;
+const
+  Bd = '\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10';
+  Head = '{\rtf1\ansi{\fonttbl{\f0 Segoe UI;}}{\colortbl;\red255\green230\blue180;' +
+    '\red200\green230\blue255;\red220\green255\blue220;}\pard\f0\fs20 ';
+var
+  dir: string;
+  names: TStringArray;
+  i: Integer;
+
+  function Tall: string;
+  begin
+    Result := 'one\par two\par three\par four\par five\par six';
+  end;
+
+  function Scene(AIndex: Integer): RawByteString;
+  var
+    k: Integer;
+  begin
+    case AIndex of
+      // shaded, top / centre / bottom, beside cells of three lines
+      0: Result := Head + 'Merged cells, each alignment\par' +
+           '\trowd\clvmgf\clcbpat1' + Bd + '\cellx1600\clvmgf\clvertalc\clcbpat2' + Bd +
+           '\cellx3200\clvmgf\clvertalb\clcbpat3' + Bd + '\cellx4800' + Bd + '\cellx6400' +
+           '\pard\intbl Top\cell Centre\cell Bottom\cell r1\par r1\par r1\cell\row' +
+           '\trowd\clvmrg\clcbpat1' + Bd + '\cellx1600\clvmrg\clvertalc\clcbpat2' + Bd +
+           '\cellx3200\clvmrg\clvertalb\clcbpat3' + Bd + '\cellx4800' + Bd + '\cellx6400' +
+           '\pard\intbl\cell\cell\cell r2\par r2\par r2\cell\row\pard after\par}';
+      // a tall content in a short merged cell: its last row grows
+      1, 2:
+        begin
+          Result := Head + 'A tall merged cell\par';
+          for k := 0 to 2 do
+          begin
+            Result := Result + '\trowd';
+            if AIndex = 2 then Result := Result + '\trrh-300';
+            if k = 0 then Result := Result + '\clvmgf\clcbpat2' else Result := Result + '\clvmrg\clcbpat2';
+            Result := Result + Bd + '\cellx2400' + Bd + '\cellx4800\pard\intbl';
+            if k = 0 then Result := Result + ' ' + Tall;
+            Result := Result + '\cell row ' + IntToStr(k + 1) + '\cell\row';
+          end;
+          Result := Result + '\pard after\par}';
+        end;
+      // a table of four by four, for the selection, the merge and the split
+      3, 6, 7:
+        begin
+          Result := Head + 'A table\par';
+          for k := 0 to 3 do
+            Result := Result + '\trowd' + Bd + '\cellx1600' + Bd + '\cellx3200' + Bd + '\cellx4800' + Bd +
+              '\cellx6400\pard\intbl r' + IntToStr(k) + 'c0\cell r' + IntToStr(k) + 'c1\cell r' +
+              IntToStr(k) + 'c2\cell r' + IntToStr(k) + 'c3\cell\row';
+          Result := Result + '\pard after\par}';
+        end;
+      // a long merged cell, to be scrolled half out at the top
+      4:
+        begin
+          Result := Head + 'Above\par';
+          for k := 0 to 3 do
+          begin
+            Result := Result + '\trowd';
+            if k = 0 then Result := Result + '\clvmgf\clcbpat1' else Result := Result + '\clvmrg\clcbpat1';
+            Result := Result + Bd + '\cellx2400' + Bd + '\cellx4800\pard\intbl';
+            if k = 0 then Result := Result + ' ' + Tall + '\par seven\par eight\par nine\par ten';
+            Result := Result + '\cell row ' + IntToStr(k + 1) + '\cell\row';
+          end;
+          Result := Result + '\pard after\par}';
+        end;
+    else
+      // a cell over three columns above three cells
+      Result := Head + 'Lines\par\trowd' + Bd + '\cellx4800\pard\intbl Monday to Wednesday\cell\row' +
+        '\trowd' + Bd + '\cellx1600' + Bd + '\cellx3200' + Bd + '\cellx4800\pard\intbl Reading\cell' +
+        ' Writing\cell Drawing\cell\row\trowd' + Bd + '\cellx4800\pard\intbl Free time\cell\row' +
+        '\pard after\par}';
+    end;
+  end;
+
+  procedure Shot(const AName: string; AScene, APPI: Integer; ADark: Boolean);
+  var
+    r: TShotRich;
+    bmp, part: TBGRABitmap;
+    st: TBytesStream;
+    t: TTyRichText;
+    f, l: Integer;
+  begin
+    if ADark then FCtl.Mode := 'dark' else FCtl.Mode := 'light';
+    FCtl.ThemeName := FDarkTheme;
+    r := TShotRich.Create(nil);
+    try
+      r.Controller := FCtl;
+      r.Font.PixelsPerInch := APPI;
+      r.SetBounds(0, 0, MulDiv(480, APPI, 96), MulDiv(240, APPI, 96));
+      st := TBytesStream.Create(RawBytes(Scene(AScene)));
+      try
+        r.LoadFromStream(st);
+      finally
+        st.Free;
+      end;
+      r.FinishLoading;
+      t := r.Document.Text;
+      case AScene of
+        3:
+          begin
+            // a selection over cells: r1c1 .. r2c2
+            f := t.ParaOfPos(Pos('r1c1', t.GetText(0, t.Length)) - 1);
+            l := t.ParaOfPos(Pos('r2c2', t.GetText(0, t.Length)) - 1);
+            r.SelStart := t.ParaStart(f);
+            r.SelLength := t.ParaStart(l) + t.ParaLength(l) - t.ParaStart(f);
+            AssertTrue(AName + ': merged', r.MergeCells);
+            r.SelStart := t.ParaStart(f);
+            r.SelLength := t.ParaStart(l + 1) + 2 - t.ParaStart(f);
+          end;
+        6, 7:
+          begin
+            f := t.ParaOfPos(Pos('r1c1', t.GetText(0, t.Length)) - 1);
+            l := t.ParaOfPos(Pos('r2c2', t.GetText(0, t.Length)) - 1);
+            r.SelStart := t.ParaStart(f);
+            r.SelLength := t.ParaStart(l) + t.ParaLength(l) - t.ParaStart(f);
+            AssertTrue(AName + ': merged', r.MergeCells);
+            if AScene = 7 then
+            begin
+              r.UpdateView;
+              r.SelStart := t.ParaStart(f);
+              AssertTrue(AName + ': may split', r.CanSplitCell);
+              // (back to its columns over its two rows, else into two columns)
+              AssertTrue(AName + ': split', r.SplitCell(2, 2) or r.SplitCell(2, 1));
+            end;
+            r.SelStart := 0;
+          end;
+        4:
+          begin
+            // (a view shorter than the content, the merged cell's first lines out at the top)
+            r.Height := MulDiv(130, APPI, 96);
+            r.UpdateView;
+            r.ScrollViewBy(MulDiv(64, APPI, 96));
+          end;
+      end;
+      r.UpdateView;
+      r.UpdateView;
+      bmp := r.Shot(APPI);
+      try
+        if dir <> '' then
+          if AScene = 5 then
+          begin
+            // the lines' crop: the first table's left part
+            part := bmp.GetPart(Rect(0, 0, MulDiv(200, APPI, 96), MulDiv(110, APPI, 96))) as TBGRABitmap;
+            try
+              part.ResampleFilter := rfBox;
+              BGRAReplace(part, part.Resample(part.Width * 3, part.Height * 3, rmSimpleStretch));
+              part.SaveToFile(dir + AName);
+            finally
+              part.Free;
+            end;
+          end
+          else
+            bmp.SaveToFile(dir + AName);
+      finally
+        bmp.Free;
+      end;
+    finally
+      r.Free;
+    end;
+  end;
+
+const
+  SceneNames: array[0..7] of string = ('spans-shading-valign', 'tall-in-short-span', 'tall-in-exact-rows',
+    'selection-over-span', 'span-half-scrolled-out', 'wide-cell-line-crop', 'outline-after-merge',
+    'outline-after-split');
+var
+  sc, p: Integer;
+  mode: Boolean;
+begin
+  dir := GetEnvironmentVariable('TY_RICH_SHOTS');
+  if dir <> '' then dir := IncludeTrailingPathDelimiter(dir);
+  if dir <> '' then ForceDirectories(dir);
+  TyRegisterBuiltinThemes;
+  FDarkTheme := '';
+  names := TyBuiltinThemeNames;
+  for i := 0 to High(names) do
+  begin
+    FCtl.ThemeName := names[i];
+    FCtl.Mode := 'dark';
+    FRich.UpdateView;
+    if FRich.Style.TextColor.green > 128 then
+    begin
+      FDarkTheme := names[i];
+      Break;
+    end;
+  end;
+  AssertTrue('a theme with a dark mode', FDarkTheme <> '');
+  for sc := 0 to 7 do
+    for p := 0 to 1 do
+      for mode in [False, True] do
+        Shot(Format('m15b-%s-%s-%d.png', [SceneNames[sc], BoolToStr(mode, 'dark', 'light'),
+          100 + 50 * p]), sc, 96 + 48 * p, mode);
 end;
 
 { The two pages drawn with real fonts, off-screen, at 100 % and 150 %, light and dark - into

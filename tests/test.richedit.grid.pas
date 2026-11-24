@@ -11,7 +11,7 @@ unit test.richedit.grid;
 interface
 
 uses
-  Classes, SysUtils, LCLType, fpcunit, testregistry, tyControls.Controller,
+  Classes, SysUtils, StrUtils, Types, Controls, Graphics, LCLType, fpcunit, testregistry, tyControls.Controller,
   tyControls.RichEdit.Text, tyControls.RichEdit.Model, tyControls.RichEdit.RtfRead,
   tyControls.RichEdit.RtfWrite, tyControls.RichEdit.Layout, tyControls.RichEdit.TableSel,
   tyControls.RichEdit, tyControls.RichEdit.Grid, tyControls.RichEdit.Commands, BGRABitmap,
@@ -32,6 +32,7 @@ type
     function CreateDevice: TTyRichTextDevice; override;
   public
     procedure Key(AKey: Word; AShift: TShiftState = []);
+    function CursorAtPoint(X, Y: Integer): TCursor;
   end;
 
   { The grid in the control: a selection grows over spans, Tab, Shift+Tab and the arrows pass
@@ -50,6 +51,9 @@ type
     procedure TestTabAndArrowsFollowTheGrid;
     procedure TestAHitInASpanLandsInItsCell;
     procedure TestACellThatContinuesAMergeButHoldsTextIsReached;
+    procedure TestTheHeightIndexFollowsASpansRows;
+    procedure TestARowsEdgeIsNotInsideASpan;
+    procedure TestUndoOfAMergeAndASplitGivesTheHeightsBack;
   end;
 
   { A cell merged over rows laid out (TTyRichLayouter, the test device, no control): its
@@ -76,6 +80,7 @@ type
     procedure TestANeighbourInAMiddleRowMovesTheCentredContent;
     procedure TestTheCoveredRowShowsTheRestOfTheContent;
     procedure TestALineTwoRowsShareIsDrawnOnce;
+    procedure TestASpanOverMoreRowsThanAGroupKeepsItsLook;
   end;
 
 { The listing of the grid of the table at ATablePos, in the form of
@@ -441,6 +446,11 @@ begin
   KeyDown(AKey, AShift);
 end;
 
+function TGridRich.CursorAtPoint(X, Y: Integer): TCursor;
+begin
+  Result := CursorAt(X, Y);
+end;
+
 const
   { 'x', then a table of three rows: A over two rows (its cell below covered), B C / D E
     beside it, then F and G - G a wide cell over two columns; the paragraphs: 0 x, 1 A, 2 B,
@@ -581,6 +591,144 @@ begin
   p := FRich.PositionAtPoint(r.Left + 2, (r.Top + r.Bottom) div 2);
   AssertEquals('in the span''s cell', 1, FRich.Document.Text.ParaOfPos(p));
   AssertEquals('on its last line, at the point''s x', PS(FRich, 1), p);
+end;
+
+const
+  { x | A over three rows beside cells of six lines | twenty paragraphs after the table: A 1,
+    b 2-7, the covered cells 8 and 15, d 9-14, f 16-21, the first after 22. }
+  CThree = '{\rtf1\ansi{\fonttbl{\f0 Arial;}}\pard x\par' +
+    '\trowd\clvmgf\cellx1500\cellx3000\pard\intbl A\cell b\par b\par b\par b\par b\par b\cell\row' +
+    '\trowd\clvmrg\cellx1500\cellx3000\pard\intbl\cell d\par d\par d\par d\par d\par d\cell\row' +
+    '\trowd\clvmrg\cellx1500\cellx3000\pard\intbl\cell f\par f\par f\par f\par f\par f\cell\row' +
+    '\pard p1\par p2\par p3\par p4\par p5\par p6\par p7\par p8\par p9\par p10\par' +
+    'p11\par p12\par p13\par p14\par p15\par p16\par p17\par p18\par p19\par p20\par}';
+
+{ Lines typed into a merged cell while its last row is below the view: the height index has
+  every row of the span right at once - the content's height, the first paragraph after the
+  table where a fresh layout of the same document puts it. }
+procedure TTyRichGridControlTest.TestTheHeightIndexFollowsASpansRows;
+var
+  fresh: TGridRich;
+  st: TBytesStream;
+  last, after, k: Integer;
+  t: TTyRichText;
+begin
+  FRich.SetBounds(0, 0, 600, 40);
+  Load(CThree);
+  FRich.ContentHeight;
+  { 24 lines more at the merged cell's end (by the document: the view stays at the top, the
+    span's last row several views below it, where the view lays nothing out), and the paint
+    that follows }
+  AssertTrue('typed', FRich.Document.Execute(TTyRichInsertText.Create(PS(FRich, 1) + 1,
+    DupeString(#10'a', 24))));
+  FRich.UpdateView;
+  t := FRich.Document.Text;
+  // A 1-25, B 26-31, covered 32, D 33-38, covered 39, F 40-45, after 46
+  last := 39;
+  after := 46;
+  AssertTrue(Format('the last row views below the view (%d)', [t.ParaTop(last)]),
+    t.ParaTop(last) > 4 * FRich.Height);
+  fresh := TGridRich.Create(nil);
+  try
+    fresh.Controller := FCtl;
+    fresh.Font.PixelsPerInch := 96;
+    fresh.SetBounds(0, 0, 600, 40);
+    st := TBytesStream.Create;
+    try
+      FRich.SaveToStream(st, rfRtf);
+      st.Position := 0;
+      fresh.LoadFromStream(st, rfRtf);
+    finally
+      st.Free;
+    end;
+    fresh.FinishLoading;
+    fresh.ContentHeight;
+    for k := 1 to after do
+      AssertEquals(Format('paragraph %d''s height in the index', [k]),
+        fresh.Document.Text.ParaHeight(k), t.ParaHeight(k));
+    AssertEquals('the content''s height', fresh.ContentHeight, FRich.ContentHeight);
+    AssertEquals('the first paragraph after the table', fresh.ParagraphRect(after).Top,
+      FRich.ParagraphRect(after).Top);
+  finally
+    fresh.Free;
+  end;
+  AssertTrue('the last row grew', t.ParaHeight(last) > t.ParaHeight(33));
+end;
+
+{ A row's bottom is an edge to drag only where it is a line: not inside a merged cell (the
+  first row's bottom under A), beside it (B's) and under the merged cell's last row it is. }
+procedure TTyRichGridControlTest.TestARowsEdgeIsNotInsideASpan;
+var
+  x0, x1, y, y0, y1: Integer;
+begin
+  Load(CSpans);
+  FRich.UpdateView;
+  // (the first two cells' middles - 1500 twips, 100 pixels each: away from their edges)
+  x0 := FRich.ParagraphRect(1).Left + 40;
+  x1 := x0 + 100;
+  // the first row's bottom: the first north-south place under B
+  y0 := -1;
+  for y := FRich.ParagraphRect(2).Top to FRich.Height - 1 do
+    if FRich.CursorAtPoint(x1, y) = crSizeNS then
+    begin
+      y0 := y;
+      Break;
+    end;
+  AssertTrue('the first row''s bottom beside the span', y0 >= 0);
+  AssertTrue('not inside the span', FRich.CursorAtPoint(x0, y0) <> crSizeNS);
+  // the next: the span's last row's bottom
+  y1 := -1;
+  for y := y0 + 8 to FRich.Height - 1 do
+    if FRich.CursorAtPoint(x1, y) = crSizeNS then
+    begin
+      y1 := y;
+      Break;
+    end;
+  AssertTrue('the second row''s bottom', y1 > y0);
+  AssertEquals('under the span''s last row: an edge', Ord(crSizeNS), Ord(FRich.CursorAtPoint(x0, y1)));
+end;
+
+{ A merge undone gives every row its height back, the table's end its place; so does a split
+  undone. }
+procedure TTyRichGridControlTest.TestUndoOfAMergeAndASplitGivesTheHeightsBack;
+const
+  T3 = '{\rtf1\ansi{\fonttbl{\f0 Arial;}}\pard x\par' +
+    '\trowd\cellx1500\cellx3000\pard\intbl a1\par a2\par a3\cell b\cell\row' +
+    '\trowd\cellx1500\cellx3000\pard\intbl c\cell d1\par d2\cell\row' +
+    '\pard after\par}';
+var
+  before, merged, now: TIntegerDynArray;
+  i: Integer;
+
+  function Tops: TIntegerDynArray;
+  var
+    k: Integer;
+  begin
+    FRich.ContentHeight;
+    Result := nil;
+    SetLength(Result, FRich.Document.Text.ParaCount);
+    for k := 0 to High(Result) do Result[k] := FRich.ParagraphRect(k).Top;
+  end;
+
+begin
+  Load(T3);
+  before := Tops;
+  // a1 .. c: the first column of both rows
+  FRich.SelStart := PS(FRich, 1);
+  FRich.SelLength := PS(FRich, 5) + 1 - PS(FRich, 1);
+  AssertTrue('merged', FRich.MergeCells);
+  merged := Tops;
+  FRich.Undo;
+  now := Tops;
+  for i := 0 to High(before) do
+    AssertEquals(Format('the merge undone: paragraph %d', [i]), before[i], now[i]);
+  FRich.Redo;
+  FRich.SelStart := PS(FRich, 1);
+  AssertTrue('split', FRich.SplitCell(1, 2));
+  FRich.Undo;
+  now := Tops;
+  for i := 0 to High(merged) do
+    AssertEquals(Format('the split undone: paragraph %d', [i]), merged[i], now[i]);
 end;
 
 { Word writes one line's cells up to 15 twips apart from row to row: one edge of the grid;
@@ -973,6 +1121,39 @@ begin
     if h1 < 1 then h1 := 1;
     AssertEquals(Format('the wider wins, alone (%d PPI)', [ppi]), h1, wide);
   end;
+end;
+
+{ A cell merged over more rows than a group lays out together is laid out row by row: its
+  content in its first row (that row as tall as it needs), and still one cell to look at - no
+  line inside it, its shading in every row. }
+procedure TTyRichSpanLayoutTest.TestASpanOverMoreRowsThanAGroupKeepsItsLook;
+const
+  Look = '\clcbpat1\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10';
+var
+  s: RawByteString;
+  i, n: Integer;
+  r0, r1: TTyRowLayout;
+begin
+  n := 1100;
+  s := '{\rtf1\ansi{\fonttbl{\f0 Arial;}}{\colortbl;\red200\green220\blue255;}\pard x\par';
+  for i := 0 to n - 1 do
+  begin
+    s := s + '\trowd';
+    if i = 0 then s := s + '\clvmgf' else s := s + '\clvmrg';
+    s := s + Look + '\cellx1500\cellx3000\pard\intbl';
+    if i = 0 then s := s + ' A1\par A2\par A3';
+    s := s + '\cell b\cell\row';
+  end;
+  Open(s + '\pard after\par}');
+  r0 := Row(1);
+  r1 := Row(5);
+  AssertEquals('laid out row by row: no joint height', 0, r0.Cells[0].SpanHeight);
+  AssertFalse('nothing covered by a slice', r1.Cells[0].Covered);
+  AssertTrue('its content in its first row', r0.Height >= r0.Cells[0].Need);
+  AssertFalse('no line under the first row inside it', rcsBottom in r0.Cells[0].Sides);
+  AssertFalse('none over the second', rcsTop in r1.Cells[0].Sides);
+  AssertEquals('its shading in the rows below', r0.Cells[0].Shading, r1.Cells[0].Shading);
+  AssertTrue('shaded', r1.Cells[0].Shading <> clNone);
 end;
 
 initialization

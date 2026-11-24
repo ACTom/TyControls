@@ -1609,22 +1609,25 @@ begin
   begin
     paths[i] := NewFile('.rtf');
     MakeWrappedRtf(paths[i], 8 * 1024 * 1024, 8 * i);
-    best := 1e12;
-    for k := 1 to 2 do
+    times[i] := 1e12;
+  end;
+  { the two read in turn, three times each, the best of each kept: a busy machine slows both
+    alike, so the ratio holds where two runs one after the other would not }
+  for k := 1 to 3 do
+    for i := 0 to 1 do
     begin
       d := TTyRichDocument.Create;
       s := TFileStream.Create(paths[i], fmOpenRead or fmShareDenyWrite);
       try
         t0 := Clock;
         TyRichLoadRtfFull(d, s);
-        if Clock - t0 < best then best := Clock - t0;
+        best := Clock - t0;
+        if best < times[i] then times[i] := best;
       finally
         s.Free;
         d.Free;
       end;
     end;
-    times[i] := best;
-  end;
   Report('8 MB of paragraphs, no field: the whole parse', times[0]);
   Report('8 MB of paragraphs in fields eight deep: the whole parse', times[1]);
   AssertTrue(Format('eight deep in %.0f ms, none in %.0f ms', [times[1], times[0]]),
