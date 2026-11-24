@@ -176,7 +176,9 @@ A call in the wrong place - a `Cell` outside a table, a table inside a cell, an 
 
 **What it costs.** The builder only records: formats are kept once each in a pool, nothing is measured or laid out while you build. Putting the content in lays out nothing either; the next paint lays the view out once and paints once. Ten thousand formatted paragraphs (bold words, a link every tenth paragraph) are built and put in with `SetContent` in about 100 ms on the development machine.
 
-**What it cannot make yet.** A cell's shading and borders and a row's height are accepted (`Shading` inside a cell, `Row(height)`) and kept, but not shown until the table properties come; column widths work. There are no merged cells, and a table inside a cell is refused.
+**What it cannot make yet.** There are no merged cells, and a table inside a cell is refused.
+
+**One line, one definition.** A line two cells share is written in the file twice: as the one cell's side and as the other's facing side. Word keeps the two alike and shows one line; so does the control for every line it writes. A border given to a cell's side, through `SetCellBorders` (every preset, "none" too) or the builder's `CellBorders`, goes to the facing side of the cell beside it in the same undo step (in the row below or above: a cell whose whole edge lies under the cells given the border; one that only partly does keeps its own); rows and columns inserted or deleted leave both sides alike. Only a file made elsewhere can give one line two definitions: the control then draws the wider of the two (at the same width, the right or lower cell's), and that is the one case where it may show another line than Word.
 
 ## 6. As a display page
 
