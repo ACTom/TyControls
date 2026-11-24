@@ -76,7 +76,7 @@ type
     procedure TestARowEditLaysOutOnlyTheRowsItChanged;
     procedure TestThePathsThatStayAsTheyWereOnAChangedTable;
     // which cells a selection takes, which paragraph a caret stands for, the edges
-    procedure TestDeleteColumnTakesTheColumnOfEveryCellCovered;
+    procedure TestDeleteColumnTakesTheColumnsOfTheSelectedCells;
     procedure TestTheCaretStandsForOneParagraphForEveryAction;
     procedure TestTheTableKeysAndActionsAtTheEdges;
     procedure TestSeveralColumnsGoFromTheirOwnTable;
@@ -1102,7 +1102,8 @@ begin
   FRich.SelLength := t.ParaStart(f + 8) + 1 - FRich.SelStart;
   AssertTrue('the last two rows', FRich.DeleteRow);
   AssertEquals('rows 1 and 2 gone', 'r0c0|r0c1|r0c2', Shape(d, f));
-  CheckSel('the row above', t.ParaStart(f + 2), 0);
+  // (selected rows with none below them: the caret to the paragraph after the table)
+  CheckSel('after the table', t.ParaStart(f + 3), 0);
   FRich.Undo;
   // from before the table: its rows from the first
   FRich.SelStart := 2;
@@ -1141,9 +1142,9 @@ begin
   FRich.SelStart := t.ParaStart(f + 1);
   FRich.SelLength := t.ParaStart(f + 5) + 1 - FRich.SelStart;
   AssertTrue('two rows'' cells', FRich.DeleteColumn);
-  // (row 0 from cell 1 on and row 1 to cell 2: every column is covered)
-  AssertEquals('every column: the table', -1, FirstTablePara(d));
-  AssertEquals('one step', rsRichUndoDeleteTable, d.UndoDescription);
+  // (cells 0,1 .. 1,2: the rectangle's columns 1 and 2, counted by the grid)
+  AssertEquals('columns 1 and 2', 'r0c0/r1c0/r2c0', Shape(d, f));
+  AssertEquals('one step', rsRichUndoDeleteColumn, d.UndoDescription);
   FRich.Undo;
   AssertEquals('undone at once', shape0, Shape(d, f));
   FRich.SelStart := t.ParaStart(f + 3);
@@ -1222,7 +1223,7 @@ begin
   AssertEquals('and a paragraph after it', 4, t.ParaCount);
   AssertTrue('in no table', d.CellAt(3) = nil);
   AssertEquals('one step', rsRichUndoDeleteRow, d.UndoDescription);
-  CheckSel('the caret end''s cell of the row above', t.ParaStart(2), 0);
+  CheckSel('the paragraph after the table', t.ParaStart(3), 0);
   // the whole text a table
   FRich.Lines.Text := 'a' + LineEnding + 'b' + LineEnding + 'c' + LineEnding + 'd';
   t := d.Text;
@@ -2140,7 +2141,7 @@ end;
 
 { ---- which cells, which paragraph, the edges ---- }
 
-procedure TTyRichTableEditTest.TestDeleteColumnTakesTheColumnOfEveryCellCovered;
+procedure TTyRichTableEditTest.TestDeleteColumnTakesTheColumnsOfTheSelectedCells;
 var
   d: TTyRichDocument;
   t: TTyRichText;
@@ -2183,17 +2184,18 @@ begin
   // from after the table back into row 0's last cell: every cell of row 1 is covered
   Sel(t.ParaStart(f + 6) + 2, t.ParaStart(f + 2) + 1);
   Check('from after the table into row 0', '');
-  // from before the table into row 0: the cells up to the end's
+  // from before the table into row 0: the whole row is selected - every column
   Sel(2, t.ParaStart(f + 1) + 1);
-  Check('from before the table into row 0', 'r0c2/r1c2');
-  // ends in rows next to each other: the start's cell to its row's end, the end's row to its cell
+  Check('from before the table into row 0', '');
+  { ends in rows next to each other: the rectangle between their cells, counted by the grid -
+    from row 0's last cell to row 1's first is every column }
   Sel(t.ParaStart(f + 2) + 1, t.ParaStart(f + 3) + 1);
-  // (the caret in its row's cell that took the place of the first column that went)
-  Check('row 0''s last cell to row 1''s first', 'r0c1/r1c1', f + 1);
+  Check('row 0''s last cell to row 1''s first', '');
   Sel(t.ParaStart(f + 3) + 1, t.ParaStart(f + 2) + 1);
-  Check('the same, reversed', 'r0c1/r1c1');
+  Check('the same, reversed', '');
+  // row 0's second cell to row 1's second: column 1
   Sel(t.ParaStart(f + 1) + 1, t.ParaStart(f + 4) + 1);
-  Check('row 0''s second cell to row 1''s second', '');
+  Check('row 0''s second cell to row 1''s second', 'r0c0|r0c2/r1c0|r1c2', f + 1);
   // in one row, reversed
   Sel(t.ParaStart(f + 2) + 1, t.ParaStart(f + 1) + 1);
   Check('in one row, reversed', 'r0c0/r1c0');
@@ -2411,12 +2413,12 @@ begin
   f := FirstTablePara(d);
   Sel(t.ParaStart(f + 4) + 1, t.ParaStart(f + 5) + 1);
   Check('two cells of the lower row', ShapeWithout(2, 3, [1, 2]));
-  // 3 x 3, from row 1's last cell to row 2's first: columns 0 and 2
+  // 3 x 3, from row 1's second cell to row 2's last: columns 1 and 2 (the rectangle)
   LoadRtf(TableRtf(3, 3, []));
   t := d.Text;
   f := FirstTablePara(d);
-  Sel(t.ParaStart(f + 5) + 1, t.ParaStart(f + 6) + 1);
-  Check('row 1''s last cell to row 2''s first', ShapeWithout(3, 3, [0, 2]));
+  Sel(t.ParaStart(f + 4) + 1, t.ParaStart(f + 8) + 1);
+  Check('row 1''s second cell to row 2''s last', ShapeWithout(3, 3, [1, 2]));
   // 3 x 4: two and three columns in each row, column 0 among them, one reversed
   LoadRtf(TableRtf(3, 4, []));
   t := d.Text;

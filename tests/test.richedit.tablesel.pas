@@ -18,7 +18,7 @@ uses
   tyControls.RichEdit.Text, tyControls.RichEdit.Model, tyControls.RichEdit.Commands,
   tyControls.RichEdit.TableProps, tyControls.RichEdit.TableSel, tyControls.RichEdit.RtfRead,
   tyControls.RichEdit.Layout, tyControls.RichEdit, tyControls.RichEdit.Builder,
-  tyControls.RichEdit.Bookmarks, test.richedit.layoutdevice;
+  tyControls.RichEdit.Bookmarks, tyControls.StrConsts, test.richedit.layoutdevice;
 
 type
   TSelRich = class(TTyRichEdit)
@@ -60,6 +60,9 @@ type
     procedure Sel(AAnchor, ACaret: TTyRichPos);
     function BoldAt(APos: TTyRichPos): Boolean;
     function CentredAt(APos: TTyRichPos): Boolean;
+    function RowCount: Integer;
+    function ColCount: Integer;
+    function HasTable: Boolean;
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -83,6 +86,14 @@ type
     procedure TestAPartOfALongFileSelectsRowsNotColumns;
     procedure TestSelectingReadsOnlyTheRowsItNeeds;
     procedure TestMarksAtACellsEdgesDecideNothing;
+    procedure TestDeleteColumnTakesTheSelectedColumns;
+    procedure TestEveryDoorAgreesWithItsCan;
+    procedure TestRowsReachedFromOutsideAreWhatTheDoorsTake;
+    procedure TestTheCaretAfterRowsGo;
+    procedure TestBackspaceAndDeleteOnColumnsRowsAndCells;
+    procedure TestDeleteOverANestedRowIsTold;
+    procedure TestShiftClickOnAZoneExtendsByRowsOrColumns;
+    procedure TestTheRowAndColumnZonesAreWideEnough;
   end;
 
 implementation
@@ -323,6 +334,31 @@ procedure TTyRichTableSelTest.Sel(AAnchor, ACaret: TTyRichPos);
 begin
   FRich.SelStart := AAnchor;
   FRich.SelLength := ACaret - AAnchor;
+end;
+
+function TTyRichTableSelTest.RowCount: Integer;
+var
+  info: TTyRichTableInfo;
+begin
+  AssertTrue('a table', FRich.Document.TableInfoAt(1, info));
+  Result := info.RowCount;
+end;
+
+function TTyRichTableSelTest.ColCount: Integer;
+var
+  info: TTyRichTableInfo;
+begin
+  AssertTrue('a table', FRich.Document.TableInfoAt(1, info));
+  Result := info.CellCount;
+end;
+
+function TTyRichTableSelTest.HasTable: Boolean;
+var
+  k: Integer;
+begin
+  Result := False;
+  for k := 0 to FRich.Document.Text.ParaCount - 1 do
+    if FRich.Document.CellAt(k) <> nil then Exit(True);
 end;
 
 function TTyRichTableSelTest.BoldAt(APos: TTyRichPos): Boolean;
@@ -1119,6 +1155,414 @@ begin
   AssertEquals('that cell', clAqua, FRich.Document.CellProps(CellStart(0, 0), 2, 1).Shading);
   AssertEquals('not the one before', clNone, FRich.Document.CellProps(CellStart(0, 0), 2, 0).Shading);
   AssertTrue('no lone mark at the end: ' + counts, NoLone);
+end;
+
+
+{ ---- the doors on what is selected ---- }
+
+{ Delete Column takes the selected cells' columns, counted by the grid: a column, a rectangle
+  of several rows, the last column, every column (the table); rows of different cells refuse
+  it, told once. Insert Column on a selected column puts one beside it. }
+procedure TTyRichTableSelTest.TestDeleteColumnTakesTheSelectedColumns;
+const
+  Rtf = '{\rtf1\ansi{\fonttbl{\f0 Arial;}}\pard before\par' +
+    '\trowd\cellx1440\cellx2880\cellx4320\pard\intbl a0\cell a1\cell a2\cell\row' +
+    '\trowd\cellx2160\cellx4320\pard\intbl b0\cell b1\cell\row\pard after\par}';
+var
+  st: TStringStream;
+begin
+  MakeTable(4, 4);
+  Sel(CellStart(0, 1) + 1, CellStart(0, 1) + 1);
+  AssertTrue('a column', FRich.SelectColumn);
+  AssertTrue('deleted', FRich.DeleteColumn);
+  AssertTrue('the table stays', HasTable);
+  AssertEquals('three columns', 3, ColCount);
+  AssertEquals('four rows', 4, RowCount);
+  AssertEquals('the next column came left', 'r0c2', CellText(0, 1));
+  AssertEquals('the next column came left, below', 'r3c2', CellText(3, 1));
+  AssertEquals('one step', 1, FRich.Document.UndoDepth);
+  FRich.Undo;
+  // a 2 x 2 rectangle
+  Sel(CellStart(1, 1), CellStart(2, 2) + 1);
+  CheckRange('the rectangle', 1, 1, 2, 2);
+  AssertTrue('deleted', FRich.DeleteColumn);
+  AssertEquals('two columns', 2, ColCount);
+  AssertEquals('the first stays', 'r0c0', CellText(0, 0));
+  AssertEquals('the last came left', 'r0c3', CellText(0, 1));
+  FRich.Undo;
+  // the last column (the selection ends after the table's last cell)
+  Sel(CellStart(1, 3) + 1, CellStart(1, 3) + 1);
+  AssertTrue('the last column', FRich.SelectColumn);
+  AssertTrue('the last column: may', FRich.CanDeleteColumn);
+  AssertTrue('the last column deleted', FRich.DeleteColumn);
+  AssertEquals('three columns left', 3, ColCount);
+  AssertEquals('its neighbour stays', 'r0c2', CellText(0, 2));
+  FRich.Undo;
+  // every column, two rows: the table
+  Sel(CellStart(1, 0) + 1, CellStart(2, 3) + 1);
+  CheckRange('every column', 1, 0, 2, 3);
+  AssertTrue('every column deleted', FRich.DeleteColumn);
+  AssertFalse('the table went', HasTable);
+  FRich.Undo;
+  // Insert Column on a selected column: one, right of it
+  Sel(CellStart(0, 1) + 1, CellStart(0, 1) + 1);
+  AssertTrue('a column', FRich.SelectColumn);
+  AssertTrue('inserted', FRich.InsertColumn(True));
+  AssertEquals('five columns', 5, ColCount);
+  AssertEquals('the new one empty', '', CellText(0, 2));
+  AssertEquals('the next moved right', 'r0c2', CellText(0, 3));
+  // rows of different cells: refused, told once, the table as it was
+  st := TStringStream.Create(Rtf);
+  try
+    FRich.LoadFromStream(st);
+  finally
+    st.Free;
+  end;
+  Sel(FRich.Document.Text.ParaStart(2) + 1, FRich.Document.Text.ParaStart(4) + 1);
+  AssertTrue('cells', FRich.SelectedCells.InTable);
+  FRich.Refusals.Clear;
+  AssertFalse('refused', FRich.DeleteColumn);
+  AssertEquals('told once', 1, FRich.Refusals.Count);
+  AssertTrue('the table as it was', HasTable and (FRich.Document.Text.ParaCount = 7));
+end;
+
+{ Every insert and delete of rows, columns and the table, with its Can... answer, on every kind
+  of cell selection - a caret, a rectangle, one ending at the table's last cell, whole rows, a
+  whole column, the whole table, rows reached from before and from after the table: the
+  answer is yes and the door does it. }
+procedure TTyRichTableSelTest.TestEveryDoorAgreesWithItsCan;
+const
+  Doors: array[0..6] of string = ('InsertRow below', 'InsertRow above', 'InsertColumn right',
+    'InsertColumn left', 'DeleteRow', 'DeleteColumn', 'DeleteTable');
+  Kinds: array[0..7] of string = ('a caret', 'a rectangle', 'to the last cell', 'whole rows',
+    'the last column', 'the table', 'from before', 'to after');
+var
+  dk, sk: Integer;
+  can, done: Boolean;
+  what: string;
+begin
+  for sk := 0 to High(Kinds) do
+    for dk := 0 to High(Doors) do
+    begin
+      MakeTable(4, 4);
+      case sk of
+        0: Sel(CellStart(1, 1) + 1, CellStart(1, 1) + 1);
+        1: Sel(CellStart(1, 1), CellStart(2, 2) + 1);
+        2: Sel(CellStart(2, 2), CellEnd(3, 3));
+        3: Sel(CellStart(1, 0), CellEnd(2, 3));
+        4:
+          begin
+            Sel(CellStart(1, 3) + 1, CellStart(1, 3) + 1);
+            FRich.SelectColumn;
+          end;
+        5: FRich.SelectTable;
+        6: Sel(2, CellStart(1, 1) + 1);
+      else
+        Sel(CellStart(2, 1) + 1, FRich.Document.Text.Length);
+      end;
+      if sk = 5 then
+      begin
+        Sel(CellStart(0, 0) + 1, CellStart(0, 0) + 1);
+        FRich.SelectTable;
+      end;
+      what := Doors[dk] + ', ' + Kinds[sk];
+      AssertTrue(what + ': cells', (sk = 0) or FRich.SelectedCells.InTable);
+      case dk of
+        0, 1: can := FRich.CanInsertRow;
+        2, 3: can := FRich.CanInsertColumn;
+        4: can := FRich.CanDeleteRow;
+        5: can := FRich.CanDeleteColumn;
+      else
+        can := FRich.CanDeleteTable;
+      end;
+      FRich.Refusals.Clear;
+      case dk of
+        0: done := FRich.InsertRow(True);
+        1: done := FRich.InsertRow(False);
+        2: done := FRich.InsertColumn(True);
+        3: done := FRich.InsertColumn(False);
+        4: done := FRich.DeleteRow;
+        5: done := FRich.DeleteColumn;
+      else
+        done := FRich.DeleteTable;
+      end;
+      AssertTrue(what + ': may', can);
+      AssertTrue(what + ': done (' + FRich.Refusals.Text + ')', done);
+      AssertEquals(what + ': nothing told', 0, FRich.Refusals.Count);
+    end;
+end;
+
+{ A selection with one end outside the table shows whole rows: the format and resize doors
+  take those rows, every cell of them, and say so in their Can... answers; typing, Backspace,
+  Delete and Cut stay refused, told once. }
+procedure TTyRichTableSelTest.TestRowsReachedFromOutsideAreWhatTheDoorsTake;
+var
+  r, c: Integer;
+  before: string;
+  e0: TTyRichEdges;
+
+  function Shaded(ARow, ACol: Integer): Boolean;
+  begin
+    Result := FRich.Document.CellProps(CellStart(0, 0), ARow, ACol).Shading = clYellow;
+  end;
+
+  function EdgeOf(ARow: Integer): Integer;
+  begin
+    FRich.Document.BeginRead;
+    try
+      e0 := FRich.Document.CellAt(FRich.Document.Text.ParaOfPos(CellStart(ARow, 0))).Row.CellEdges;
+      // the second column's width (the caret's cell's)
+      Result := e0[1] - e0[0];
+    finally
+      FRich.Document.EndRead;
+    end;
+  end;
+
+begin
+  MakeTable(4, 4);
+  // from before the table into cell 1,1: rows 0 and 1
+  Sel(2, CellStart(1, 1) + 1);
+  AssertTrue('may format', FRich.CanFormatCells);
+  AssertTrue('shaded', FRich.SetCellShading(clYellow));
+  for r := 0 to 3 do
+    for c := 0 to 3 do
+      AssertEquals(Format('from before: %d,%d', [r, c]), r <= 1, Shaded(r, c));
+  FRich.Undo;
+  // from cell 2,1 to after the table: rows 2 and 3
+  Sel(CellStart(2, 1) + 1, FRich.Document.Text.Length);
+  AssertTrue('may format, to after', FRich.CanFormatCells);
+  AssertTrue('shaded, to after', FRich.SetCellShading(clYellow));
+  for r := 0 to 3 do
+    for c := 0 to 3 do
+      AssertEquals(Format('to after: %d,%d', [r, c]), r >= 2, Shaded(r, c));
+  FRich.Undo;
+  // a column's width: the rows it covers
+  e0 := nil;
+  Sel(2, CellStart(1, 1) + 1);
+  AssertTrue('may resize', FRich.CanResizeColumns);
+  AssertTrue('a width', FRich.SetColumnWidth(2000));
+  AssertEquals('row 0 changed', 2000, EdgeOf(0));
+  AssertEquals('row 1 changed', 2000, EdgeOf(1));
+  AssertEquals('row 2 as it was', 1440, EdgeOf(2));
+  FRich.Undo;
+  // the keys: refused as before, told once
+  Sel(2, CellStart(1, 1) + 1);
+  before := FRich.Text;
+  FRich.Refusals.Clear;
+  FRich.Typed('x');
+  AssertEquals('typing refused, told once', 1, FRich.Refusals.Count);
+  FRich.Refusals.Clear;
+  FRich.Key(VK_BACK);
+  AssertEquals('Backspace refused, told once', 1, FRich.Refusals.Count);
+  FRich.Refusals.Clear;
+  FRich.Key(VK_DELETE);
+  AssertEquals('Delete refused, told once', 1, FRich.Refusals.Count);
+  FRich.Refusals.Clear;
+  FRich.CutToClipboard;
+  AssertEquals('Cut refused, told once', 1, FRich.Refusals.Count);
+  AssertEquals('nothing changed', before, FRich.Text);
+end;
+
+{ After Backspace on selected rows the caret stands at the start of the first cell of the row
+  that took their place - after the table's last row, at the start of the paragraph after it. }
+procedure TTyRichTableSelTest.TestTheCaretAfterRowsGo;
+var
+  c: Integer;
+begin
+  for c := 0 to 2 do
+  begin
+    MakeTable(3, 3);
+    Sel(CellStart(1, c) + 1, CellStart(1, c) + 1);
+    AssertTrue('a row', FRich.SelectRow);
+    FRich.Key(VK_BACK);
+    AssertEquals(Format('%d: two rows', [c]), 2, RowCount);
+    AssertEquals(Format('%d: the caret at the next row''s first cell', [c]), CellStart(1, 0), FRich.SelStart);
+    AssertEquals(Format('%d: nothing selected', [c]), 0, FRich.SelLength);
+  end;
+  MakeTable(3, 3);
+  Sel(CellStart(2, 1) + 1, CellStart(2, 1) + 1);
+  AssertTrue('the last row', FRich.SelectRow);
+  FRich.Key(VK_BACK);
+  AssertEquals('the caret after the table', FRich.Document.Text.ParaStart(
+    FRich.Document.Text.ParaCount - 1), FRich.SelStart);
+end;
+
+{ As Word: Backspace on whole columns deletes them, on whole rows the rows, on the table the
+  table, on other cells clears them; Delete always clears and never removes structure. }
+procedure TTyRichTableSelTest.TestBackspaceAndDeleteOnColumnsRowsAndCells;
+begin
+  MakeTable(3, 3);
+  Sel(CellStart(0, 1) + 1, CellStart(0, 1) + 1);
+  FRich.SelectColumn;
+  FRich.Key(VK_BACK);
+  AssertEquals('Backspace on a column: it goes', 2, ColCount);
+  AssertEquals('the next came left', 'r0c2', CellText(0, 1));
+  FRich.Undo;
+  Sel(CellStart(0, 1) + 1, CellStart(0, 1) + 1);
+  FRich.SelectColumn;
+  FRich.Key(VK_DELETE);
+  AssertEquals('Delete on a column: it stays', 3, ColCount);
+  AssertEquals('cleared', '', CellText(1, 1));
+  FRich.Undo;
+  Sel(CellStart(1, 0), CellEnd(1, 2));
+  FRich.Key(VK_DELETE);
+  AssertEquals('Delete on a row: it stays', 3, RowCount);
+  AssertEquals('cleared too', '', CellText(1, 0));
+  FRich.Undo;
+  Sel(CellStart(1, 0), CellEnd(1, 2));
+  FRich.Key(VK_BACK);
+  AssertEquals('Backspace on a row: it goes', 2, RowCount);
+  FRich.Undo;
+  Sel(CellStart(0, 0), CellStart(1, 1) + 1);
+  FRich.Key(VK_BACK);
+  AssertEquals('Backspace on a rectangle: cleared', '', CellText(1, 1));
+  AssertEquals('Backspace on a rectangle: the columns stay', 3, ColCount);
+  FRich.Undo;
+  FRich.SelectTable;
+  FRich.Key(VK_DELETE);
+  AssertTrue('Delete on the table: it stays', HasTable);
+  FRich.Undo;
+  FRich.SelectTable;
+  FRich.Key(VK_BACK);
+  AssertFalse('Backspace on the table: it goes', HasTable);
+end;
+
+{ Delete over cells of which a row holds a nested table: the others are cleared, that row is
+  left as it is and that is told once, as the format doors tell it. }
+procedure TTyRichTableSelTest.TestDeleteOverANestedRowIsTold;
+const
+  Doc = '{\rtf1 \pard before\par' +
+    '\trowd\cellx1440\cellx2880\pard\intbl a\cell \pard\intbl b\cell\row' +
+    '\trowd\cellx1440\cellx2880\pard\intbl c\cell \pard\intbl\itap2 x' +
+    '\nestcell{\*\nesttableprops\trowd\cellx500\nestrow}{\nonesttables\par}\pard\intbl\cell\row' +
+    '\pard after\par}';
+var
+  st: TStringStream;
+begin
+  st := TStringStream.Create(Doc);
+  try
+    FRich.LoadFromStream(st);
+  finally
+    st.Free;
+  end;
+  FRich.UpdateView;
+  Sel(CellStart(0, 0), CellEnd(1, 0));
+  AssertTrue('cells', FRich.SelectedCells.InTable);
+  FRich.Refusals.Clear;
+  FRich.Key(VK_DELETE);
+  AssertEquals('row 0 cleared', '', CellText(0, 0));
+  AssertEquals('the nested row as it was', 'c', CellText(1, 0));
+  AssertEquals('told once', 1, FRich.Refusals.Count);
+  AssertEquals('why', rsRichEditRefusedResizeNested, FRich.Refusals[0]);
+end;
+
+{ Shift+click on a row's zone extends the selection by whole rows from the anchor's row; on a
+  column's zone by whole columns from the anchor's column. }
+procedure TTyRichTableSelTest.TestShiftClickOnAZoneExtendsByRowsOrColumns;
+var
+  a: TRect;
+  x: Integer;
+
+  // a point of row ARow's zone: found by the press that selects that row
+  function RowZoneX(ARow: Integer): Integer;
+  var
+    i: Integer;
+  begin
+    Result := -1;
+    a := CellRect(ARow, 0);
+    for i := 0 to a.Left + 20 do
+      if FRich.CursorAtPoint(i, a.Top + 5) = crArrow then
+      begin
+        Sel(CellStart(ARow, 1) + 1, CellStart(ARow, 1) + 1);
+        FRich.Press(i, a.Top + 5);
+        FRich.Release(i, a.Top + 5);
+        if FRich.SelectedCells.InTable and (FRich.SelectedCells.Col0 = 0) and
+           (FRich.SelectedCells.Col1 = 3) then
+          Exit(i);
+      end;
+  end;
+
+begin
+  MakeTable(4, 4);
+  FRich.UpdateView;
+  x := RowZoneX(2);
+  AssertTrue('the row zone', x >= 0);
+  Sel(CellStart(0, 1) + 1, CellStart(0, 1) + 1);
+  a := CellRect(2, 0);
+  FRich.Press(x, a.Top + 5, [ssShift]);
+  FRich.Release(x, a.Top + 5);
+  CheckRange('Shift+click on row 2''s zone', 0, 0, 2, 3);
+  // a column: from the anchor's
+  Sel(CellStart(1, 1) + 1, CellStart(1, 1) + 1);
+  a := CellRect(0, 2);
+  AssertEquals('the column''s zone', crUpArrow, FRich.CursorAtPoint(a.Left + 30, a.Top - 2));
+  FRich.Press(a.Left + 30, a.Top - 2, [ssShift]);
+  FRich.Release(a.Left + 30, a.Top - 2);
+  CheckRange('Shift+click on column 2''s zone', 0, 1, 3, 2);
+end;
+
+{ The zone left of a row is at least 6 device-independent pixels wide inside the control - for
+  a table at the margin and for Word's (\trleft-108), at 100 % and 150 % -, a press there
+  selects the row; the zone above a column likewise. }
+procedure TTyRichTableSelTest.TestTheRowAndColumnZonesAreWideEnough;
+const
+  WordRtf = '{\rtf1\ansi{\fonttbl{\f0 Arial;}}\pard before\par' +
+    '\trowd\trgaph108\trleft-108\cellx1440\cellx2880\pard\intbl a0\cell a1\cell\row' +
+    '\trowd\trgaph108\trleft-108\cellx1440\cellx2880\pard\intbl b0\cell b1\cell\row' +
+    '\pard after\par}';
+var
+  k, ppi, x, y, n, need: Integer;
+  st: TStringStream;
+  a: TRect;
+begin
+  for k := 0 to 3 do
+  begin
+    if k mod 2 = 0 then ppi := 96 else ppi := 144;
+    FRich.Font.PixelsPerInch := ppi;
+    FRich.SetBounds(0, 0, 600 * ppi div 96, 400 * ppi div 96);
+    if k < 2 then MakeTable(2, 2)
+    else
+    begin
+      st := TStringStream.Create(WordRtf);
+      try
+        FRich.LoadFromStream(st);
+      finally
+        st.Free;
+      end;
+    end;
+    FRich.UpdateView;
+    need := 6 * ppi div 96;
+    // the row zone: pixels whose press selects row 1
+    a := CellRect(1, 0);
+    y := a.Top + 5 * ppi div 96;
+    n := 0;
+    for x := 0 to FRich.Width div 4 do
+      if FRich.CursorAtPoint(x, y) = crArrow then
+      begin
+        Sel(CellStart(0, 0) + 1, CellStart(0, 0) + 1);
+        FRich.Press(x, y);
+        FRich.Release(x, y);
+        if FRich.SelectedCells.InTable and (FRich.SelectedCells.Row0 = 1) and
+           (FRich.SelectedCells.Row1 = 1) and (FRich.SelectedCells.Col1 = 1) and
+           (FRich.SelectedCells.Col0 = 0) then
+          Inc(n);
+      end;
+    AssertTrue(Format('%d: the row zone %d px (at least %d)', [k, n, need]), n >= need);
+    // the column zone: pixels above the first row whose press selects column 1
+    a := CellRect(0, 1);
+    n := 0;
+    for y := a.Top - 12 * ppi div 96 to a.Top + 4 * ppi div 96 do
+      if FRich.CursorAtPoint(a.Left + 30, y) = crUpArrow then
+      begin
+        Sel(CellStart(1, 0) + 1, CellStart(1, 0) + 1);
+        FRich.Press(a.Left + 30, y);
+        FRich.Release(a.Left + 30, y);
+        if FRich.SelectedCells.InTable and (FRich.SelectedCells.Col0 = 1) and
+           (FRich.SelectedCells.Col1 = 1) and (FRich.SelectedCells.Row1 = 1) then
+          Inc(n);
+      end;
+    AssertTrue(Format('%d: the column zone %d px (at least %d)', [k, n, need]), n >= need);
+  end;
 end;
 
 { ---- painting ---- }

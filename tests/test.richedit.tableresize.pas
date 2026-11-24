@@ -73,6 +73,9 @@ type
     procedure TestTheLastEdgeChangesTheTable;
     procedure TestTheLeftEdgeMovesTheTablesStart;
     procedure TestOnlySelectedRowsWhenCellsAreSelected;
+    procedure TestAnEdgeOutsideTheSelectedRowsIsItsOwn;
+    procedure TestAShiftDragPassesTheNextCellsLeast;
+    procedure TestARowsBottomAnswersOnlyNearTheTable;
     procedure TestMinimumWidth;
     procedure TestDoubleClickFitsTheColumn;
     procedure TestRowEdgeSetsAtLeast;
@@ -455,6 +458,66 @@ begin
   AssertEquals('row 3 stays', e0[0], e[0]);
 end;
 
+{ Cells of rows 0 and 1 selected: an edge dragged in row 3 - outside them - moves for every row
+  that shares it, as with nothing selected; row 3's bottom dragged sets row 3's height alone. }
+procedure TTyRichTableResizeTest.TestAnEdgeOutsideTheSelectedRowsIsItsOwn;
+var
+  b: TIntArray;
+  e0: TTyRichEdges;
+  r, y: Integer;
+begin
+  MakeTable(4, 3);
+  e0 := EdgesOf(0);
+  Sel(CellStart(0, 0), CellEnd(1, 1));
+  AssertTrue('cells', FRich.SelectedCells.InTable);
+  b := Bands(RowY(3));
+  Drag(b[1], RowY(3), 30, 0);
+  for r := 0 to 3 do
+    AssertTrue(Format('row %d moved', [r]), Abs(EdgesOf(r)[0] - (e0[0] + 450)) <= 15);
+  FRich.Undo;
+  Sel(CellStart(0, 0), CellEnd(1, 1));
+  y := RowBottomY(3);
+  AssertTrue('row 3''s bottom', y > 0);
+  Drag(Bands(RowY(3))[0] + 20, y, 0, 30);
+  AssertTrue('row 3 has a height', RowAt(3).Format.Row.HeightTwips > 0);
+  AssertEquals('row 0 has none', 0, RowAt(0).Format.Row.HeightTwips);
+  AssertEquals('row 1 has none', 0, RowAt(1).Format.Row.HeightTwips);
+end;
+
+{ With Shift the rest of the row follows: the edge goes past where the next cell's least width
+  would stop it without Shift. }
+procedure TTyRichTableResizeTest.TestAShiftDragPassesTheNextCellsLeast;
+var
+  b: TIntArray;
+  e0, e: TTyRichEdges;
+begin
+  MakeTable(2, 3);
+  e0 := EdgesOf(0);
+  b := Bands(RowY(0));
+  // 100 px: 1500 twips, more than the next cell (1440) has
+  Drag(b[1], RowY(0), 100, 0, [ssShift]);
+  e := EdgesOf(0);
+  AssertTrue(Format('past the next cell''s old edge (%d)', [e[0]]), e[0] > e0[1]);
+  AssertTrue('where it was dropped', Abs(e[0] - (e0[0] + 1500)) <= 15);
+  AssertEquals('the next cell kept its width', e0[1] - e0[0], e[1] - e[0]);
+end;
+
+{ A row's bottom answers within the edge band beside the table, not further right. }
+procedure TTyRichTableResizeTest.TestARowsBottomAnswersOnlyNearTheTable;
+var
+  b: TIntArray;
+  y, right: Integer;
+begin
+  MakeTable(2, 3);
+  // the table's last row: below it no row's column edges answer first
+  y := RowBottomY(1);
+  AssertTrue('row 1''s bottom', y > 0);
+  b := Bands(RowY(1));
+  right := b[High(b)];
+  AssertEquals('just right of the table', crSizeNS, FRich.CursorAtPoint(right + 1, y));
+  AssertTrue('well right of it: not', FRich.CursorAtPoint(right + 40, y) <> crSizeNS);
+end;
+
 procedure TTyRichTableResizeTest.TestMinimumWidth;
 var
   b: TIntArray;
@@ -477,8 +540,10 @@ begin
   e := EdgesOf(0);
   lft := RowAt(0).Format.Row.LeftTwips;
   w := e[0] - lft;
-  // its padding (108 twips a side, Word's default) and a character
+  // its padding (108 twips a side, Word's default) and a character: half the default size
   AssertTrue(Format('the narrowest (%d twips)', [w]), (w >= 216 + 20) and (w <= 216 + 300));
+  AssertTrue(Format('the narrowest is the padding and a character (%d twips)', [w]),
+    Abs(w - (216 + Round(FRich.SelAttributes.Size * 2) * 5)) <= 15);
   AssertEquals('drawn where the guide stopped', g1, Bands(y)[1]);
   // the next cell too: the edge goes no further right than its least width
   b := Bands(y);
@@ -741,10 +806,16 @@ begin
     off := ruler.EditOffsetNow;
     y := RowY(1);
     b := Bands(y);
-    // each marker over its edge, to the pixel
+    { each marker over its edge, to the pixel - the table's left edge at the margin has only
+      the right half of its band (the row's zone takes the left half): its middle is a pixel
+      or two right of the line }
     for i := 0 to 3 do
-      AssertTrue(Format('edge %d at %d, the text''s at %d', [i, ruler.EdgeMid(i).X - off, b[i]]),
-        Abs(ruler.EdgeMid(i).X - off - b[i]) <= 1);
+      if i = 0 then
+        AssertTrue(Format('edge %d at %d, the text''s at %d', [i, ruler.EdgeMid(i).X - off, b[i]]),
+          (b[i] - (ruler.EdgeMid(i).X - off) >= -1) and (b[i] - (ruler.EdgeMid(i).X - off) <= 3))
+      else
+        AssertTrue(Format('edge %d at %d, the text''s at %d', [i, ruler.EdgeMid(i).X - off, b[i]]),
+          Abs(ruler.EdgeMid(i).X - off - b[i]) <= 1);
     // a drag of the second edge: the rows' first cells wider, one step
     e0 := EdgesOf(0);
     p := ruler.EdgeMid(1);

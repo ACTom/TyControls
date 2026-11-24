@@ -135,6 +135,8 @@ const
   { What a paragraph laid out counts as against CopyWaitChars (DistributeRows): a layout costs
     about what a hundred characters copied do. }
   CRichLayoutParaChars = 100;
+  // a cell index past any row's last: every cell of the rows (a property edit cuts it to each)
+  CRichAllCells = 1 shl 20;
   { A background find's piece: units of a finder's step at most, and at least (bytes of text
     read, bytes of a file's unparsed paragraph lexed, a picture's bytes passed over at a
     sixteenth: TTyRichFinder.Step - a paragraph larger than a piece is read in pieces) - a
@@ -1902,6 +1904,8 @@ type
     FEdgeDrag: Integer;
     FEdgePara, FEdgeIndex, FEdgeTwips: Integer;
     FEdgeRaster, FEdgeLo, FEdgeHi, FEdgeShiftLo, FEdgeShiftHi, FEdgeNow, FEdgeTop: Int64;
+    // where in the edge's band it was pressed: the edge follows the pointer's moves from there
+    FEdgeGrab: Int64;
     FEdgeShift: Boolean;
     // a command to run after the table edit, in its step (CellsKey: a deleted row's lone marks)
     FTableThen: TTyRichDropLoneMarks;
@@ -1973,6 +1977,14 @@ type
     function MakeCellsPaste(AOffer: TTyRichDropOffer; AHave: TTyRichClipFlavours; AAs: TTyRichPasteAs;
       APos: TTyRichPos; const AName: string; out ATarget: TTyRichPos): TTyRichCellsEdit;
     function TableZoneAt(X, Y: Integer; out AZone, APara: Integer): Boolean;
+    { The zone left of row layout R, in the view's raster units: ALo .. AHi - 1. }
+    procedure RowZoneSpan(R: TTyRowLayout; out ALo, AHi: Int64);
+    function ZoneMinRaster: Int64;
+    { A Shift+press on a row's or a column's zone: the selection grows by whole rows (columns)
+      from the anchor's. }
+    function TableZoneExtend(X, Y: Integer): Boolean;
+    function AreaWholeColumns(const AArea: TTyRichCellArea): Boolean;
+    procedure TableZoneDragTo(APara: Integer);
     function TableZonePress(X, Y: Integer): Boolean;
     procedure TableZoneDrag(X, Y: Integer);
     procedure TableHandleHover(X, Y: Integer);
@@ -6335,6 +6347,7 @@ begin
   if (Button = mbLeft) and EdgePress(X, Y, Shift) then Exit;
   // a table's zones: a cell, a row, a column, the whole table (and a drag over more)
   if (Button = mbLeft) and not (ssShift in Shift) and TableZonePress(X, Y) then Exit;
+  if (Button = mbLeft) and (ssShift in Shift) and TableZoneExtend(X, Y) then Exit;
   // an object under the press: its click on the release, its double click now
   FObjPressAt := ObjectPosAtPoint(X, Y);
   FObjPressButton := Button;
@@ -11653,6 +11666,8 @@ var
 begin
   FCaretParaUnread := False;
   t := FDoc.Text;
+  // cells selected: the table of the selection (see CaretCellPara)
+  if (FCaret <> FSelAnchor) and CellArea.Range.InTable then Exit(CaretCellPara);
   q := Math.Min(FCaret, t.Length);
   Result := t.ParaOfPos(q);
   if (FSelAnchor >= q) or (Result = 0) or (q <> t.ParaStart(Result)) or (q >= t.Length) then
@@ -11887,7 +11902,7 @@ begin
         if FTableKind = CTableInsertRow then
         begin
           area := CellArea;
-          if TyRichCellsEditable(area) and (area.Table = row.Table) then
+          if area.Range.InTable and (area.Table = row.Table) then
           begin
             n := area.Range.Row1 - area.Range.Row0 + 1;
             if FTableAfter then k := area.LastPara else k := area.FirstPara;
@@ -11958,7 +11973,7 @@ begin
           // right of the last
           n := 1;
           area := CellArea;
-          if TyRichCellsEditable(area) and (area.Table = FDoc.CellAt(k).Table) then
+          if area.Range.InTable and (area.Table = FDoc.CellAt(k).Table) then
           begin
             n := area.Range.Col1 - area.Range.Col0 + 1;
             if FTableAfter then FAimCell := area.Range.Col1 + 1 else FAimCell := area.Range.Col0;
@@ -12012,6 +12027,13 @@ begin
           FAimCell := FDoc.CellAt(k).Index;
           FAimFollows := r2 < info.RowCount - 1;
           FAimBefore := r1 > 0;
+          { selected rows: the caret to the start of the row that takes their place, else to
+            the paragraph after the table }
+          if CellArea.Range.InTable then
+          begin
+            FAimCell := 0;
+            FAimBefore := False;
+          end;
           // the rows before and after those that go come to share a line
           FAgreePos := t.ParaStart(info.First);
           FAgreeRow0 := r1 - 1;
@@ -12047,41 +12069,26 @@ begin
         end
         else
         begin
-          { Columns: those of every cell the selection covers, in text order - as it is
-            painted: from its start's cell to the end of that row, the rows between whole, the
-            end's row up to its cell. An end outside the table stands at the table's first
-            cell (before it) or its last (after it). }
+          { Columns: those of the selected cells - the rectangle's (rows reached from outside the
+            table: all of them) - else the caret's cell's; counted by the grid, never in text
+            order. (Rows of different cells the engine refuses for columns.) }
           SetLength(cols, info.CellCount);
-          for m := 0 to High(cols) do cols[m] := False;
-          if GetSelLength = 0 then
-            cols[Math.Min(FDoc.CellAt(k).Index, High(cols))] := True
+          area := CellArea;
+          if area.Range.InTable and (area.Table = FDoc.CellAt(k).Table) then
+          begin
+            c1 := area.Range.Col0;
+            c2 := area.Range.Col1;
+            if area.AllCells then c2 := High(cols);
+            // (the caret to the selection's first row)
+            ri := area.Range.Row0;
+          end
           else
           begin
-            if (ks >= info.First) and (ks <= info.Last) then
-            begin
-              r1 := RowOf(ks);
-              c1 := FDoc.CellAt(ks).Index;
-            end
-            else
-            begin
-              r1 := 0;
-              c1 := 0;
-            end;
-            if (ke >= info.First) and (ke <= info.Last) then
-            begin
-              r2 := RowOf(ke);
-              c2 := FDoc.CellAt(ke).Index;
-            end
-            else
-            begin
-              r2 := info.RowCount - 1;
-              c2 := info.CellCount - 1;
-            end;
-            for m := 0 to High(cols) do
-              if r1 = r2 then cols[m] := (m >= c1) and (m <= c2)
-              else if r2 > r1 + 1 then cols[m] := True
-              else cols[m] := (m >= c1) or (m <= c2);
+            c1 := Math.Min(FDoc.CellAt(k).Index, High(cols));
+            c2 := c1;
+            ri := info.Row;
           end;
+          for m := 0 to High(cols) do cols[m] := (m >= c1) and (m <= c2);
           n := 0;
           c1 := -1;
           for m := High(cols) downto 0 do
@@ -12091,7 +12098,7 @@ begin
               c1 := m;
             end;
           FAimPara := info.First;
-          FAimRow := info.Row;
+          FAimRow := ri;
           FAimCell := c1;
           FAgreePos := t.ParaStart(info.First);
           FAgreeRow0 := 0;
@@ -20890,16 +20897,34 @@ begin
   ATablePos := FDoc.Text.ParaStart(k);
 end;
 
-{ The paragraph the caret's cell is read from: the caret's own, or - a selection running
-  forward to a paragraph's start, as one of whole cells does (after the last cell's end mark) -
-  the paragraph of the last selected character. }
+{ The paragraph the caret's cell is read from - the table of this selection, the one every
+  table door and its Can... answer go by: the caret's own, or - a selection running forward to
+  a paragraph's start, as one of whole cells does (after the last cell's end mark) - the
+  paragraph of the last selected character. When the selection is cells (a rectangle, whole
+  rows, columns, the table, or rows reached from outside the table) a paragraph of those
+  cells' rows: the caret's when it is one, else the last of them (a forward selection) or the
+  first. }
 function TTyCustomRichEdit.CaretCellPara: Integer;
 var
   t: TTyRichText;
+  area: TTyRichCellArea;
+  c: TTyRichCell;
 begin
   t := FDoc.Text;
   Result := t.ParaOfPos(FCaret);
   if (FCaret > FSelAnchor) and (Result > 0) and (t.ParaStart(Result) = FCaret) then Dec(Result);
+  if FCaret = FSelAnchor then Exit;
+  area := CellArea;
+  if not area.Range.InTable or (area.FirstPara < 0) then Exit;
+  FDoc.BeginRead;
+  try
+    c := FDoc.CellAt(Result);
+    if (c = nil) or (c.Table <> area.Table) or (Result < area.FirstPara) or
+       (Result > area.LastPara) then
+      if FCaret >= FSelAnchor then Result := area.LastPara else Result := area.FirstPara;
+  finally
+    FDoc.EndRead;
+  end;
 end;
 
 // AKind: 0 the caret's cell, 1 its row, 2 its column, 3 its table
@@ -21034,11 +21059,14 @@ end;
 type
   TTyCellVisit = procedure(ARowNo, ACol, AFirst, ALast: Integer) of object;
 
-procedure VisitArea(ADoc: TTyRichDocument; const AArea: TTyRichCellArea; AVisit: TTyCellVisit);
+{ Each cell of the area visited, row by row; the result: the rows left as they are because they
+  hold a nested table. }
+function VisitArea(ADoc: TTyRichDocument; const AArea: TTyRichCellArea; AVisit: TTyCellVisit): Integer;
 var
   k, p, q, f, r: Integer;
   c, d: TTyRichCell;
 begin
+  Result := 0;
   k := AArea.FirstPara;
   r := 0;
   ADoc.BeginRead;
@@ -21048,7 +21076,8 @@ begin
       TyRichRowParas(ADoc, k, p, q);
       c := ADoc.CellAt(p);
       // (a row that holds a nested table is its file's bytes: nothing of it changes)
-      if not c.Row.HoldsNestedTable then
+      if c.Row.HoldsNestedTable then Inc(Result)
+      else
       begin
         f := p;
         while f <= q do
@@ -21156,14 +21185,14 @@ procedure TTyCustomRichEdit.ClearCells(const AArea: TTyRichCellArea);
 var
   g: TTyCellGather;
   place: TTyRichEditPlace;
-  f, l: Integer;
+  f, l, nested: Integer;
 begin
   if not FirstAreaCell(AArea, f, l) then Exit;
   g := TTyCellGather.Create;
   try
     g.Doc := FDoc;
     g.Edit := TTyRichCellsEdit.Create(FDoc.Text.ParaStart(AArea.FirstPara), rsRichUndoDelete);
-    VisitArea(FDoc, AArea, @g.Clear);
+    nested := VisitArea(FDoc, AArea, @g.Clear);
     place := Default(TTyRichEditPlace);
     // the first cell's start: nothing before it moves
     place.Anchor := FDoc.Text.ParaStart(f);
@@ -21172,6 +21201,17 @@ begin
   finally
     g.Free;
   end;
+  // (rows that hold a nested table were left as they are: told once, as the format doors tell it)
+  if nested > 0 then EditRefused(rsRichEditRefusedResizeNested);
+end;
+
+{ The area is whole columns: from the table's first row to its last. }
+function TTyCustomRichEdit.AreaWholeColumns(const AArea: TTyRichCellArea): Boolean;
+var
+  info: TTyRichTableInfo;
+begin
+  Result := AArea.Range.InTable and not AArea.AllCells and (AArea.Range.Row0 = 0) and
+    FDoc.TableInfoAt(AArea.FirstPara, info) and (AArea.Range.Row1 = info.RowCount - 1);
 end;
 
 function TTyCustomRichEdit.CellsKey(AForward: Boolean): Boolean;
@@ -21194,6 +21234,12 @@ begin
       finally
         FreeAndNil(FTableThen);
       end;
+      Exit;
+    end;
+    // whole columns - every row of them: they go (Word's)
+    if AreaWholeColumns(area) then
+    begin
+      DeleteColumn;
       Exit;
     end;
   end;
@@ -21484,11 +21530,37 @@ begin
   end;
 end;
 
+// the least width of a row's or a column's zone: 6 device-independent pixels
+function TTyCustomRichEdit.ZoneMinRaster: Int64;
+begin
+  Result := Int64(Math.Max(1, MulDiv(6, ViewPPI, 96))) * Math.Max(1, FScale);
+end;
+
+{ The zone left of a row: the table's left margin, from 3 zone widths and an edge band left of
+  the table (never left of the view) to the band of the table's left edge. Where that leaves
+  less than ZoneMinRaster - a table at the margin, Word's that starts left of it - the zone is
+  that wide from its left end and reaches into the first cell (its left padding, the edge's
+  band): it wins over them there. }
+procedure TTyCustomRichEdit.RowZoneSpan(R: TTyRowLayout; out ALo, AHi: Int64);
+var
+  area: TRect;
+  z, e, viewLo: Int64;
+begin
+  area := TextArea(Rect(0, 0, Width, Height), ViewPPI);
+  viewLo := -Int64(area.Left) * FScale + FScrollX;
+  z := Math.Max(2, MulDiv(4, ViewPPI, 96)) * FScale;
+  e := EdgeBand;
+  ALo := Math.Max(R.Cells[0].Left - 3 * z - e, viewLo);
+  AHi := R.Cells[0].Left - e;
+  if AHi - ALo < ZoneMinRaster then AHi := ALo + ZoneMinRaster;
+end;
+
 { A table's zones under client point X, Y: just inside a cell's left edge (CZoneCell), the
-  table's left margin beside a row (CZoneRow), just above a column of the table's first row
-  (CZoneColumn), the handle at the table's top-left corner (CZoneTable). APara: a paragraph of
-  that cell, row or column (the first row's), or the table's first paragraph. Each zone a
-  few device pixels wide - the text starts further in. }
+  table's left margin beside a row (CZoneRow, RowZoneSpan), just above a column of the table's
+  first row (CZoneColumn: at least ZoneMinRaster high, reaching into the row's top where there
+  is less room above), the handle at the table's top-left corner (CZoneTable). APara: a
+  paragraph of that cell, row or column (the first row's), or the table's first paragraph.
+  Each zone a few device pixels wide - the text starts further in. }
 function TTyCustomRichEdit.TableZoneAt(X, Y: Integer; out AZone, APara: Integer): Boolean;
 var
   area: TRect;
@@ -21498,6 +21570,7 @@ var
   first: Boolean;
   c: TTyRichCell;
   hr: TRect;
+  zlo, zhi, into, cl: Int64;
 begin
   AZone := 0;
   APara := -1;
@@ -21529,25 +21602,39 @@ begin
      (FBlocks[k].Layout is TTyRowLayout) then
   begin
     r := TTyRowLayout(FBlocks[k].Layout);
+    // the row's zone first: where it reaches into the first cell it wins
+    if r.CellCount > 0 then
+    begin
+      RowZoneSpan(r, zlo, zhi);
+      if (rx >= zlo) and (rx < zhi) then
+      begin
+        AZone := CZoneRow;
+        APara := FBlocks[k].FirstPara;
+        Exit(True);
+      end;
+    end
+    else
+      zhi := Low(Int64);
     for i := 0 to r.CellCount - 1 do
-      if not r.Cells[i].Hidden and (rx >= r.Cells[i].Left) and (rx < r.Cells[i].Left + z + e) and
+    begin
+      // (the first cell's zone starts where the row's ends)
+      cl := r.Cells[i].Left;
+      if (i = 0) and (zhi > cl) then cl := zhi;
+      if not r.Cells[i].Hidden and (rx >= cl) and (rx < cl + z + e) and
          (rx < r.Cells[i].Right) and (r.Cells[i].ItemCount > 0) then
       begin
         AZone := CZoneCell;
         APara := FBlocks[k].FirstPara + r.Cells[i].FirstItem;
         Exit(True);
       end;
-    if (rx >= r.Cells[0].Left - 3 * z - e) and (rx < r.Cells[0].Left) then
-    begin
-      AZone := CZoneRow;
-      APara := FBlocks[k].FirstPara;
-      Exit(True);
     end;
   end;
-  // just above the table's first row
+  // just above the table's first row - and into its top, to make the zone's least height
+  into := Math.Max(0, ZoneMinRaster - z);
   kb := 0;
   while (kb < FBlockCount - 1) and (ry + z >= FBlocks[kb].Top + FBlocks[kb].Height) do Inc(kb);
-  if (ry < FBlocks[kb].Top) and (ry + z >= FBlocks[kb].Top) and (FBlocks[kb].Layout is TTyRowLayout) then
+  if (ry < FBlocks[kb].Top + into) and (ry + z >= FBlocks[kb].Top) and
+     (FBlocks[kb].Layout is TTyRowLayout) then
   begin
     FDoc.BeginRead;
     try
@@ -21594,12 +21681,59 @@ begin
   if (zone = CZoneColumn) and FDoc.TableInfoAt(p, info) then FCellDragLast := info.Last;
 end;
 
+function TTyCustomRichEdit.TableZoneExtend(X, Y: Integer): Boolean;
+var
+  zone, p, ka, f, l: Integer;
+  ca, cp: TTyRichCell;
+  info: TTyRichTableInfo;
+begin
+  Result := False;
+  if not TableZoneAt(X, Y, zone, p) or not (zone in [CZoneRow, CZoneColumn]) then Exit;
+  ka := FDoc.Text.ParaOfPos(Math.Min(FSelAnchor, FDoc.Text.Length));
+  FDoc.BeginRead;
+  try
+    ca := FDoc.CellAt(ka);
+    cp := FDoc.CellAt(p);
+    // (an anchor outside that table: the press as without Shift)
+    if (ca = nil) or (cp = nil) or (ca.Table <> cp.Table) then Exit;
+  finally
+    FDoc.EndRead;
+  end;
+  if not FDoc.TableInfoAt(p, info) then Exit;
+  FCellDrag := zone;
+  FCellDragLast := -1;
+  if zone = CZoneRow then
+    FCellDragPara := ka
+  else
+  begin
+    // the anchor's column, from the table's first row
+    if not FDoc.TableCellParas(info.First, 0, ca.Index, f, l) then Exit;
+    FCellDragPara := f;
+    FCellDragLast := info.Last;
+  end;
+  TableZoneDragTo(p);
+  Result := True;
+end;
+
 { A press on a zone dragged to client X, Y: from the pressed row, column or cell to the one
   under the pointer. }
 procedure TTyCustomRichEdit.TableZoneDrag(X, Y: Integer);
 var
-  q, a, b: TTyRichPos;
+  q: TTyRichPos;
   atEnd: Boolean;
+  t: TTyRichText;
+begin
+  if (FCellDrag = 0) or (FCellDrag = CZoneTable) then Exit;
+  t := FDoc.Text;
+  q := HitClient(X, Y, atEnd);
+  if q < 0 then Exit;
+  TableZoneDragTo(t.ParaOfPos(Math.Min(q, t.Length)));
+end;
+
+// the zone drag's selection: from the pressed row, column or cell to those of paragraph APara
+procedure TTyCustomRichEdit.TableZoneDragTo(APara: Integer);
+var
+  a, b: TTyRichPos;
   k, f0, l0, f1, l1, c0, c1: Integer;
   c: TTyRichCell;
   t: TTyRichText;
@@ -21628,9 +21762,7 @@ var
 begin
   if (FCellDrag = 0) or (FCellDrag = CZoneTable) then Exit;
   t := FDoc.Text;
-  q := HitClient(X, Y, atEnd);
-  if q < 0 then Exit;
-  k := t.ParaOfPos(Math.Min(q, t.Length));
+  k := APara;
   FDoc.BeginRead;
   try
     c := FDoc.CellAt(k);
@@ -21854,7 +21986,7 @@ end;
 function TTyCustomRichEdit.EdgeAt(X, Y: Integer; out AKind, ABlock, AIndex: Integer): Boolean;
 var
   area: TRect;
-  rx, ry, e, best, d: Int64;
+  rx, ry, e, best, d, zlo, zhi: Int64;
   k, i, n: Integer;
   r: TTyRowLayout;
 begin
@@ -21876,7 +22008,9 @@ begin
     r := TTyRowLayout(FBlocks[k].Layout);
     n := r.CellCount;
     best := e + 1;
-    if (n > 0) and (Abs(rx - r.Cells[0].Left) < best) then
+    // (the left edge's band gives way to the row's zone where that reaches over it)
+    if n > 0 then RowZoneSpan(r, zlo, zhi);
+    if (n > 0) and (Abs(rx - r.Cells[0].Left) < best) and SelectionAllowed and (rx >= zhi) then
     begin
       best := Abs(rx - r.Cells[0].Left);
       AIndex := -1;
@@ -21927,8 +22061,9 @@ begin
   if (ACell < 0) or (ACell >= Length(edges)) then Exit(1);
   if ACell = 0 then w := edges[0] - ARow.Format.Row.LeftTwips else w := edges[ACell] - edges[ACell - 1];
   p := TyRichEffectiveCellProps(ARow.Format, ACell, w);
+  // (the default font's size as it is shown: the theme's when the document sets none)
   Result := Math.Max(0, p.Pad[rcsLeft]) + Math.Max(0, p.Pad[rcsRight]) +
-    Math.Max(20, FDoc.DefaultCharFormat.SizeHalfPt * 5);
+    Math.Max(20, ResolvedFormat(FDoc.DefaultCharFormat).SizeHalfPt * 5);
 end;
 
 { The limits of row ARow's edge AIndex (-1 its left), in twips: kept as they are (ALo, AHi) and
@@ -21981,7 +22116,10 @@ begin
     c := FDoc.CellAt(APara);
     if c = nil then Exit;
     area := CellArea;
-    if TyRichCellsEditable(area) and (area.Table = c.Table) then
+    { The selected rows when APara's row is one of them (Word's); an edge dragged anywhere
+      else moves for the rows that share it, as with nothing selected }
+    if area.Range.InTable and (area.Table = c.Table) and (APara >= area.FirstPara) and
+       (APara <= area.LastPara) then
     begin
       ATablePos := area.Range.TablePos;
       ARow0 := area.Range.Row0;
@@ -22152,6 +22290,10 @@ begin
     FDoc.EndRead;
   end;
   FEdgeNow := FEdgeRaster;
+  { (pressed beside the line, within its band: a release there moves nothing, a move takes the
+    edge as far as the pointer went) }
+  if kind = CEdgeColumn then FEdgeGrab := (Int64(X) - area.Left) * FScale + FScrollX - FEdgeRaster
+  else FEdgeGrab := (Int64(Y) - area.Top) * FScale - FEdgeRaster;
   ShowEdgeGuide;
 end;
 
@@ -22178,8 +22320,8 @@ begin
   if FEdgeDrag = CEdgeNone then Exit;
   FEdgeShift := ssShift in AShift;
   area := TextArea(Rect(0, 0, Width, Height), ViewPPI);
-  if FEdgeDrag = CEdgeColumn then v := (Int64(X) - area.Left) * FScale + FScrollX
-  else v := (Int64(Y) - area.Top) * FScale;
+  if FEdgeDrag = CEdgeColumn then v := (Int64(X) - area.Left) * FScale + FScrollX - FEdgeGrab
+  else v := (Int64(Y) - area.Top) * FScale - FEdgeGrab;
   if FEdgeShift then
   begin
     lo := FEdgeShiftLo;
@@ -22645,13 +22787,16 @@ begin
   ARow1 := -1;
   ACol1 := -1;
   area := CellArea;
-  if TyRichCellsEditable(area) then
+  { The cells selected - also rows reached from outside the table: what is highlighted, every
+    cell of them, is what the doors take }
+  if area.Range.InTable then
   begin
     ATablePos := area.Range.TablePos;
     ARow0 := area.Range.Row0;
     ARow1 := area.Range.Row1;
     ACol0 := area.Range.Col0;
     ACol1 := area.Range.Col1;
+    if area.AllCells then ACol1 := CRichAllCells;
     Exit(True);
   end;
   if not CaretEdgePara(p, c, ATell) then Exit;
