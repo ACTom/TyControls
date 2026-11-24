@@ -181,7 +181,8 @@ uses
 - **只有 `WantTabs` 为 `True` 时，Tab 才在单元格之间移动。** 在单元格里按 Tab 到下一个单元格(一行的最后一格之后是下一行的第一格，合并掉的单元格跳过),并选中它的内容;Shift+Tab 到前一个单元格，在第一个单元格里什么也不做。在表格的最后一个单元格里按 Tab,会在下面加一行(一步撤销),光标进入新行的第一格。Ctrl+Tab 插入制表符。`WantTabs` 为 `False` 时，在表格里 Tab 也是移动焦点，和 Delphi 的 `TRichEdit` 一样。`ReadOnly` 时 Tab 和 Shift+Tab 照样在单元格之间移动，只是在最后一格按 Tab 不加行。不在表格里时，插入点在列表项文字的最前面(或选区盖住整个的列表项)按 Tab 降一级、Shift+Tab 升一级(和 Word 一样;0 级时 Shift+Tab 不动),只读时什么也不做;列表项文字中间按 Tab 照样输入制表符。
 - **表格方法**:`InsertTable(ARows, ACols)`、`InsertRow` 和 `InsertColumn`(`AAfter` 默认为 `True`:插在下面、右边)、`DeleteRow` 和 `DeleteColumn`(删除选区碰到的每一行、每一列)、`DeleteTable`、`InTable`,以及给动作的 `Update` 用的 `CanInsertTable` …… `CanDeleteTable`。Delphi 的 `TRichEdit` 和 RichMemo 都没有这些方法。它们是用户的操作:`ReadOnly` 时什么也不做，返回 `False`,和剪切、粘贴一样;纯文本文档(`PlainText`)、文件还在载入或正在保存，以及表格不允许时，返回 `False`,什么也不改，并通过 `OnEditRefused` 说明原因(不抛异常)。`InsertColumn` 和 `DeleteColumn` 按选中的单元格所在的列来算，按网格数，和选区画出来的一样——一列、一个矩形、选区从表格外伸进来的那些行的所有列(所有列都删就是删掉表格)——没有选中单元格时是插入点所在的列;`InsertRow` 和 `DeleteRow` 同样按选中单元格所在的行。选中单元格时按键和 Word 一样:Backspace 删除整行、整列或整个表格，其他单元格则清空内容;Delete 总是只清空单元格里的内容，从不删行、删列或删表格。要在只读控件上改表格，代码执行文档的命令:`Document.Execute` 加上 `tyControls.RichEdit.Commands` 里的 `TTyRichInsertTable`、`TTyRichInsertRow` 等。
 - **不能修改的**:有合并单元格、或者单元格里套着表格的表格，它的行和列(按文件原样显示和保存，但不能编辑);各行单元格数不一样的表格，它的列;超过 63 列或 32767 行(Word 的上限)。按需读取的大 RTF 文件里，还有太大而不能整个读入的表格(在文件里超过约 1 MB),以及文件里没有写完整的表格。`DeleteTable` 也能删除有合并单元格的表格。
-- **表格行不能粘贴进表格**:光标在单元格里时，粘贴的行作为这个单元格的文字放进去;选中整行再粘贴行会被拒绝。
+- **可以选中单元格**,Delphi 的 `TRichEdit` 和 RichMemo 都不行：一个格子、一块矩形、几行、几列、整张表——用鼠标(格子的左边缘、行左边的空白、列的上方、表格角上的手柄)、用 Shift+方向键，或者在代码里(`SelectCell`、`SelectRow`、`SelectColumn`、`SelectTable`、`SelectedCells`、`CaretCell`)。Delete 清空选中的格子，打字替换第一个格子的内容，格式作用到每个格子，复制出来的是一张小表加制表符分隔的文字，光标在单元格里粘贴一张表时逐格填入(行不够在末尾加，超出最后一列的丢掉)。
+- **可以改尺寸和外观**:拖列的边线和行的下边线(按住 Shift 让这一行右边的部分跟着边线走；双击边线让列宽适应内容),代码里用 `SetColumnWidth`、`SetRowHeight`、`AutoFitColumn`、`DistributeColumns`、`DistributeRows`、`FitTableToWindow`、`SetCellShading`、`SetCellBorders`(十种预设)、`SetCellPadding`、`SetCellVAlign`、`SetTableAlign` 和 `ApplyTableProperties`——都是用户级操作，各是一步撤销，配 `CanResizeColumns`、`CanResizeRows`、`CanFormatCells`。Delphi 的控件和 RichMemo 都没有这些；见富文本控件页的"表格"一节。
 - **两个表格挨在一起时**(删掉了它们中间的段落),显示成一个表格,Tab 也从一个走进另一个;但行和列的方法只改光标所在的那一个，直到文档保存后再打开。
 - **`CanInsertRow` 这些函数回答得很省**:什么都没变时再问，直接给出上次的答案。按需读取的大 RTF 文件分段给出的表格，除非已经读到的部分就不允许修改，否则回答 `True`;真正执行时再读整个表格，不能修改就说明原因。
 
@@ -265,7 +266,7 @@ uses
 
 - **段落**:`ParaAlign`(含两端对齐)、`NumberingStart`、`SpaceBefore`、`SpaceAfter`、`LineSpacingRule`、`LineSpacing`(单位是磅);每次写入只改每个段落里自己那一项。
 - **选区和编辑**:`CaretIndex`(光标所在的那一端)、`CollapseSelection`、`BeginEdit` / `EndEdit`(多次写入合成一步撤销)、`RangeText`。
-- **表格**:`InsertTable`、`InsertRow`、`InsertColumn`、`DeleteRow`、`DeleteColumn`、`DeleteTable`、`InTable` 和各个 `Can…` 函数;Tab 在单元格之间移动(见上面的"表格")。
+- **表格**:`InsertTable`、`InsertRow`、`InsertColumn`、`DeleteRow`、`DeleteColumn`、`DeleteTable`、`InTable` 和各个 `Can…` 函数;Tab 在单元格之间移动；选中单元格、列宽、行高、底色、边框、内边距和对齐(见上面的"表格")。
 - **图片**:`InsertPictureFromFile`、`InsertPictureFromStream`、`InsertPicture`、`CanInsertPicture`;选中图片的手柄和拖手柄调整大小,`OnObjectResize`(见上面的"图片")。
 - **拖动选区**:用鼠标移动，或按住 Ctrl 复制，也可以拖到另一个 `TTyRichEdit` 里,`DragDropEditing`,接收的一方 `DropEnter` / `DropOver` / `DropLeave` / `DropOn`(见上面的"拖动选区")。
 - **从别的程序拖进来**(Windows):`AcceptDrops`、`OnDropFiles`(见上面的"拖动选区")。

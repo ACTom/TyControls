@@ -124,7 +124,7 @@ Lazarus 里打开 `tycontrols_dt.lpk`,点 **Use → Install**,IDE 重新编译�
 |---|---|
 | `TTyEdit` | 单行文本框:选区、剪贴板、词级导航 |
 | `TTyMemo` | 多行文本框 |
-| `TTyRichEdit` | 富文本编辑：RTF 和纯文本、格式、列表、表格、图片、链接和书签，100 MB 的文件也不卡；也能当展示页用——用 `TTyRichBuilder` 在代码里搭首页、帮助页 |
+| `TTyRichEdit` | 富文本编辑：RTF 和纯文本、格式、列表、表格(选中单元格、拖列宽行高、底色、边框、表格属性)、图片、链接和书签，100 MB 的文件也不卡；也能当展示页用——用 `TTyRichBuilder` 在代码里搭首页、帮助页 |
 | `TTyRichEditRuler` | 富文本的标尺：缩进和制表位，可以拖动 |
 | `TTyTerminalView` | 终端:画程序输出、把按键编码交给宿主,照 xterm.js;可用独立配色方案(读写 Windows Terminal 格式);带内协议钩子与解析器钩子(示例里有 ZModem 收发) |
 | `TTySpinEdit` | 整数微调框 |
@@ -458,7 +458,7 @@ CharImage1.GlyphName := 'house';
 | [labels](examples/labels/) | 链接标签、投影标签、发光标签 |
 | [listbox](examples/listbox/) | `TTyListBox`:多选、排序、行高、程序选择与滚动 |
 | [memo](examples/memo/) | `TTyMemo`:换行、只读、撤销重做、剪贴板、Tab 与回车键处理、长度上限、滚动条 |
-| [richedit](examples/richedit/) | `TTyRichEdit`:一个小写字板——动作做的菜单和工具栏、标尺、状态栏、打开保存 RTF 和纯文本、链接和书签、示例文档，还有一个用代码搭的页面，分别当帮助页和首页显示 |
+| [richedit](examples/richedit/) | `TTyRichEdit`:一个小写字板——动作做的菜单和工具栏、标尺、状态栏、打开保存 RTF 和纯文本、链接和书签、表格工具("表格"菜单、工具栏上的边框和底色、"表格属性"窗体)、示例文档，还有一个用代码搭的页面，分别当帮助页和首页显示 |
 | [menu](examples/menu/) | 菜单栏、增强右键菜单、普通主题菜单,以及双击标题栏卷起窗口 |
 | [panel](examples/panel/) | `TTyPanel`:嵌套、标题对齐、`StyleOverride`、提示与点击 |
 | [progressbar](examples/progressbar/) | `TTyProgressBar`:动画、竖向、任意范围、点击定位、禁用 |

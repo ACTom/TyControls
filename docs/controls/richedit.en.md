@@ -30,7 +30,7 @@ RichEdit1.SelAttributes.Bold := True;   // one undo step
 RichEdit1.SaveToFile('notes.rtf');
 ```
 
-The whole example is `examples/richedit`: a small word processor whose menus, two toolbar rows and the editor's context menu are the actions of §4 - with a font box, a size box (half sizes too) and text and highlight colour buttons that open the package's colour dialog - with the ruler, a status bar and the skins; when the window is narrow a toolbar row wraps; its Samples menu opens a few documents (Chinese text and its formats, a table, pictures, Word's table of contents with its links) and a page built from code (§5) shown as a help page and as a home page (§6); Insert has a link and a bookmark form, and a double click on a picture shows it at its own size (§7).
+The whole example is `examples/richedit`: a small word processor whose menus, two toolbar rows and the editor's context menu are the actions of §4 - with a font box, a size box (half sizes too) and text and highlight colour buttons that open the package's colour dialog - with the ruler, a status bar and the skins; when the window is narrow a toolbar row wraps; its Samples menu opens a few documents (Chinese text and its formats, pictures, Word's table of contents with its links), a table built from code and a page built from code (§5) shown as a help page and as a home page (§6); Insert has a link and a bookmark form, and a double click on a picture shows it at its own size (§7); the Table menu, a borders drop-down, a shading button and a Table Properties form edit tables (§8).
 
 ## 2. Two layers of API
 
@@ -95,6 +95,13 @@ Ready-made actions for a `TActionList` (the IDE's action list editor shows them 
 | `TTyRichEditInsertColumnLeft` / `ColumnRight` | Insert Column Left / Right | — | `CanInsertColumn` | — |
 | `TTyRichEditDeleteRow` / `DeleteColumn` / `DeleteTable` | Delete Row / Column / Table | — | `CanDeleteRow` / `CanDeleteColumn` / `CanDeleteTable` | — |
 | `TTyRichEditSelectCell` / `SelectRow` / `SelectColumn` / `SelectTable` | Select Cell / Row / Column / Table | — | `CanSelectCells` | — |
+| `TTyRichEditCellShading` | Shading | — | `CanFormatCells` | — |
+| `TTyRichEditCellBorders` | Borders | — | `CanFormatCells` | — |
+| `TTyRichEditCellPadding` / `CellVAlign` | Cell Padding / Cell Alignment | — | `CanFormatCells` | — |
+| `TTyRichEditTableAlign` | Table Alignment | — | `CanFormatCells` | — |
+| `TTyRichEditTableProperties` | Table Properties... | — | `CanFormatCells` | — |
+| `TTyRichEditAutoFitColumn` / `FitTableToWindow` / `DistributeColumns` | Fit Column to Contents / Fit Table to Window / Distribute Columns | — | `CanResizeColumns` | — |
+| `TTyRichEditDistributeRows` | Distribute Rows | — | `CanResizeRows` | — |
 | `TTyRichEditFind` | Find... | Ctrl+F | the control is enabled | — |
 | `TTyRichEditReplace` | Replace... | Ctrl+H | may the user edit here | — |
 | `TTyRichEditUndo` / `Redo` | Undo / Redo | Ctrl+Z / Y | `CanUndo` / `CanRedo` | — |
@@ -111,14 +118,15 @@ Ready-made actions for a `TActionList` (the IDE's action list editor shows them 
 - **Clear Formatting** gives the selection's characters the default format back: font, size, styles, position and colours; the paragraph formats stay.
 - **Line Spacing** sets `Spacing` (single, 1.15, 1.5, double), or `Multiple` when it is above 0 (any multiple, 1.08 or 3), on the paragraphs the selection touches; one action per spacing, as with the alignments. **Paragraph Spacing** sets the space `Before` and `After` (points, to the twip - 7.5 as well; -1, the default, leaves that side), either or both - 0, 6 and 12 as in Word's menu; it is checked when the paragraph has exactly those points. Lines are measured as Word measures them: single spacing is the font's own line height (for a Western font its height plus the gap it asks for between lines, the gap above the text; for an East Asian font such as SimSun or Microsoft YaHei 1.3 times its height, the extra split above and below), 1.15, 1.5 and double are multiples of it with the extra below the text, a multiple below 1 shrinks the whole line from above and below alike while the glyphs are drawn whole over the line above (0.1 at the least), an "at least" spacing adds what is missing above the text, and an exact spacing is exact, with the baseline four fifths of the way down. Space before and after a paragraph stays outside its lines. Each line's height is whole device pixels, so a long text can come out about one per cent shorter than in Word.
 - **Links**: `TTyRichEditInsertLink` asks through `OnGetLink` for the address and the text (with no handler it does nothing: the program asks the user); in a link it changes that link (`SetLink`), elsewhere it makes one (`InsertLink`). `TTyRichEditRemoveLink` is `RemoveLink`. See §7.
-- **The table operations** insert a row above or below the caret's, a column left or right of it, or delete the row, the column or the whole table; the caret goes into the new row or column. Each is grey where the control says no (outside a table, in a table with merged cells, in a row that holds a nested table, a column where the rows differ in their cells).
+- **The table operations** insert a row above or below the caret's, a column left or right of it - with cells selected, as many as they cover - or delete the rows, the columns or the whole table; the caret goes into the new row or column. Each is grey where the control says no (outside a table, in a table with merged cells, in a row that holds a nested table, a column where the rows differ in their cells).
+- **A table's formats and sizes** (§8): `TTyRichEditCellShading` gives the selected cells (else the caret's) its `Color` (`clNone`: none); `TTyRichEditCellBorders` its `Preset` with a line of `LineStyle`, `LineWidth` (twips; Word's ½ pt is 10) and `LineColor` (`clDefault`: automatic) - `OnBeforeExecute` comes first, where a program may change the preset and the line or cancel; `TTyRichEditCellPadding` its `PadLeft` … `PadBottom` (twips, -1 a side as it is); `TTyRichEditCellVAlign` its `Align`; `TTyRichEditTableAlign` the table's `Align` and `Indent`. One action per value, as with the alignments: the example has three of `TTyRichEditCellVAlign`, three of `TTyRichEditTableAlign` and one `TTyRichEditCellBorders` per preset. `TTyRichEditTableProperties` does nothing by itself: its `OnBeforeExecute` shows the program's form (the package has none; the example's `utableform.pas` is one to copy) and says what to change, and the action applies that as one undo step. `TTyRichEditAutoFitColumn`, `FitTableToWindow`, `DistributeColumns` and `DistributeRows` are the control's members of the same names. There is no action for selecting a cell, a row, a column or the table: call `SelectCell` … `SelectTable` (the example's Select menu does).
 - **Indent** moves the caret paragraph's first line to the next (previous) half inch, never left of the margin; with several paragraphs selected each goes to that place, keeping its own hanging offset (the ruler's rule). When every paragraph the selection touches is a list item, it changes the list level instead: Increase a level deeper, Decrease a level shallower (levels 0 to 8, the indent half an inch with it, one undo step), and the numbers follow - an inner item starts at 1, the outer list goes on after it. At level 0 Decrease does nothing, as in Word. With cells of a table selected, the paragraphs are those of the selected cells (the rectangle, as the paragraph formats take them); Tab in a table still goes from cell to cell and never changes a list level.
 - **Insert table** inserts `Rows` × `Columns` (3 × 3 by default). `OnChooseSize` comes first: the program can ask the user there, change the size or cancel.
 - **Insert picture** uses the package's own open dialog (`Dialog`, a `TTyOpenPictureDialog`) with a filter of the formats the control reads (`TyRichPictureFilter`: every picture the LCL reads; PNG and JPEG keep their bytes, the others become PNG; no WMF, no EMF).
 - **Find and Replace** show the package's own find and replace dialogs (`Dialog`). Find Next is the control's `FindNext` (match case, whole word, up or down, going on from the other end); Replace replaces the selected match and finds the next; Replace All is `ReplaceAll`, one undo step, and `OnReplaced` says how many it replaced. Nothing found: `OnNotFound`, else the package's message box. The replace methods are the program's layer and do not stop at `ReadOnly`, so the action replaces only where the user may edit.
 - **Shortcuts** are the actions' defaults and can be changed. One key is never handled twice: LCL gives a key to the focused control first; the rich edit handles Ctrl+Z and Ctrl+Y itself (undo, redo), so the actions' Ctrl+Z and Ctrl+Y only act with the focus elsewhere and `RichEdit` set; keys the rich edit leaves, such as Ctrl+B, are the actions'.
 
-**What an update costs.** When the program is idle LCL updates every action, more than once when an action has a menu item and a button. The actions do not ask the control each time: each rich edit has one record (`TTyRichEditActionState`) that asks it once after its selection, content, format, view, read-only or enabled state changed - it hears the notification the ruler hears (`AddHandlerOnParagraphView`), not the program's events - and every action reads that record. So an idle round of updates asks the control nothing, whatever the selection's length or the document's size - except the five clipboard actions, which ask the control's text answers (`TeHasSelection`, `TeHasText`, `TeIsReadOnly`) at every update, as LCL's own edit actions do; Paste asks `CanPaste`, which looks at the formats on the system's clipboard. The one asking after a change asks the format API whether the whole selection is consistent: the control bounds that walk (about 30 ms; what lies beyond counts as "not the same") and remembers the answer for the selection and the content. The figures for a whole 100 MB selection are in §9.
+**What an update costs.** When the program is idle LCL updates every action, more than once when an action has a menu item and a button. The actions do not ask the control each time: each rich edit has one record (`TTyRichEditActionState`) that asks it once after its selection, content, format, view, read-only or enabled state changed - it hears the notification the ruler hears (`AddHandlerOnParagraphView`), not the program's events - and every action reads that record. So an idle round of updates asks the control nothing, whatever the selection's length or the document's size - except the five clipboard actions, which ask the control's text answers (`TeHasSelection`, `TeHasText`, `TeIsReadOnly`) at every update, as LCL's own edit actions do; Paste asks `CanPaste`, which looks at the formats on the system's clipboard. The one asking after a change asks the format API whether the whole selection is consistent: the control bounds that walk (about 30 ms; what lies beyond counts as "not the same") and remembers the answer for the selection and the content. The figures for a whole 100 MB selection are in §10.
 
 ## 5. Building content from code
 
@@ -161,7 +169,7 @@ This procedure is in `examples/richedit/upagesample.pas` word for word, so it is
 - **Tab stops**: `Tab(pos, align, leader)`, for example `Tab(300, rtaRight, rtlDot)` for a contents line.
 - **Links and bookmarks**: `Link(text, url)` - the text first, in the order the page reads, as `Text`; the control's `InsertLink(url, text)` takes the address first, because its text is optional - `Bookmark(name)` (a point), `BookmarkStart` / `BookmarkEnd` (a range). A link to `'#name'` jumps to that bookmark when clicked, with no code of yours (§7).
 - **Pictures**: `Picture` from a `TGraphic`, a file, a stream or an image list and index, `PictureResource` from the application's resources; a size in points, or 0 for its own (its pixels at 96 dpi). PNG and JPEG keep their bytes, anything else becomes PNG.
-- **Tables**: `Table(widths)` (empty: equal columns over the text width), `Cell` before each cell's content, `Row` for the next row, `EndTable`. Each row must have as many cells as the table has columns. A `Paragraph` right after `EndTable` is the paragraph after the table, not one more.
+- **Tables**: `Table(widths)` (empty: equal columns over the text width), `Cell` before each cell's content, `Row` for the next row (its height and its rule too), `EndTable`; inside a cell `Shading`, `CellBorders`, `CellPadding` and `CellVAlign`, and `TableAlign` for the table (§8, with an example). Each row must have as many cells as the table has columns. A `Paragraph` right after `EndTable` is the paragraph after the table, not one more.
 - **Styles**: `DefineStyle(name)` keeps the current character and paragraph format under a name, `Style(name)` applies both. They are a convenience of the build: nothing of them goes into the document.
 - **The document's own values**: `PageSetup(width, left, right)` and `DocumentColor(color)` are taken by `SetContent` only.
 
@@ -178,8 +186,6 @@ A call in the wrong place - a `Cell` outside a table, a table inside a cell, an 
 **What it costs.** The builder only records: formats are kept once each in a pool, nothing is measured or laid out while you build. Putting the content in lays out nothing either; the next paint lays the view out once and paints once. Ten thousand formatted paragraphs (bold words, a link every tenth paragraph) are built and put in with `SetContent` in about 100 ms on the development machine.
 
 **What it cannot make yet.** There are no merged cells, and a table inside a cell is refused.
-
-**One line, one definition.** A line two cells share is written in the file twice: as the one cell's side and as the other's facing side. Word keeps the two alike and shows one line; so does the control for every line it writes. A border given to a cell's side, through `SetCellBorders` (every preset, "none" too) or the builder's `CellBorders`, goes to the facing side of the cell beside it in the same undo step (in the row below or above: a cell whose whole edge lies under the cells given the border; one that only partly does keeps its own); rows and columns inserted or deleted leave both sides alike. Only a file made elsewhere can give one line two definitions: the control then draws the wider of the two (at the same width, the right or lower cell's), and that is the one case where it may show another line than Word.
 
 ## 6. As a display page
 
@@ -239,7 +245,98 @@ They are the user's actions: `ReadOnly` refuses them, each is one undo step, a r
 
 **Objects.** `OnObjectClick` and `OnObjectDblClick` fire for a picture or a block that shows one (an equation, an embedded object): `procedure(Sender: TObject; const AClick: TTyRichObjectClick; var AHandled: Boolean)`. The record holds the object (`RichObject`), its position (`Pos`), the button, the keys (`Shift`), the point in client pixels (`Point`) and the object's box in client pixels (`Bounds`); `PointInPicture(Width, Height)` gives the point inside a picture of that size - an image map on a home page. It is a record so that a member added later breaks no handler. `AHandled := True` stops what the click would do next. `ObjectAtPoint(X, Y, Pos)` finds the object under a point. A picture hands itself to a `TPicture` or a `TBitmap` (`Picture.Assign(TheObject)`) at its own size, and `TTyRichPicture.SaveImageToStream` writes its file's bytes. The example's picture viewer (`uviewerform.pas`) is a double click handled that way.
 
-## 8. Files
+## 8. Tables
+
+A table is made with Insert > Table (`InsertTable(Rows, Cols)`, Word's limits: 32767 rows, 63 columns), pasted from Word, Excel or another rich edit, read from a file, or built in code (below). Its rows, columns, sizes and look can then be changed by the user - with the mouse, the keys, the actions of §4 - and by code through the same doors. The example's Table menu, the borders drop-down and shading button on its second tool bar row, its context menu and its Table Properties form (`examples/richedit/utableform.pas`) reach all of it; Samples > A Table opens a table built with the builder (`utablesample.pas`).
+
+**Selecting.** Inside one cell a selection is text, as anywhere. A selection's cells are counted by its selected characters, and a cell's end mark (the end of its last paragraph) is one of them: from a cell's start to past its end mark is the cell whole, highlighted whole; stopping before the end mark is the cell's text. With the two ends in two cells of one table the cells between them are a rectangle (in each row, the cells under the span of the two corner cells); with one end outside the table its rows are selected whole. Shift+arrows, Shift+click and dragging across a cell's edge grow the rectangle. With the mouse:
+
+- just inside a cell's left edge (the pointer turns to an arrow) a click selects the cell, a drag selects cells;
+- in the margin left of the table a click selects the row, a drag up or down selects rows;
+- just above the first row (a downward arrow) a click selects the column, a drag across selects columns;
+- while the pointer is over the table a small handle shows at its top-left corner; a click on it selects the whole table.
+
+From code: `SelectCell`, `SelectRow`, `SelectColumn` and `SelectTable` (the caret's cell, row, column or table); `SelectedCells` gives the range (`TTyRichCellRange`: `InTable`, the table's position `TablePos`, `Row0`, `Col0`, `Row1`, `Col1`, `WholeTable`), `CaretCell(TablePos, Row, Col)` the caret's cell. Selecting is no edit: with `ReadOnly` the zones still select; there is no handle and nothing can be dragged. With `AllowSelection` False there are no zones and no handle. The package has no action for the four Select methods; the example makes one each (`TAction` with `OnExecute` calling them).
+
+**What the keys do to selected cells.** Delete empties them, the cells stay (one step); Backspace deletes the rows when whole rows are selected and the table when all of it is, otherwise it empties as Delete; typing replaces the first cell's content, the others keep theirs (as in Word); a character or paragraph format reaches every selected cell. A copy is a small table plus the cells' text separated by tabs, a row per line. A paste of a table - the control's own, Word's, or text with tabs from a spreadsheet - with the caret in a cell fills cell by cell from it, adds rows at the bottom when there are too few and leaves out what passes the last column, saying so once.
+
+**Rows and columns by the selection.** Insert Row Above / Below and Insert Column Left / Right insert as many rows (columns) as the selected cells cover - three rows selected, three rows inserted - above the first or below the last (left of the first, right of the last); with nothing selected, one at the caret. Delete Row and Delete Column delete the rows (columns) the selection covers; Delete Table the table. Each is one undo step.
+
+**Sizes.** On a column's edge the pointer becomes ↔: a drag moves that edge; only a guide line follows the pointer, and the release is one undo step. The two cells either side trade width and the table keeps its width; with Shift the cell to its left changes and everything right of it moves with the edge, so the table's width changes. The table's right edge changes the last column and the table's width; its left edge moves the table's start, the first column following. With cells selected only their rows change, as in Word; otherwise every row that has an edge there (edges within 15 twips of each other are one). A cell is never narrower than its padding plus one average character of the document's font (half its size); the guide stops there. A double click on a column's edge makes the column left of it as wide as its widest content (up to the text's width). On a row's bottom the pointer becomes ↕: a drag makes the row - the selected rows - at least that high, never lower than its content. Esc during a drag, or a release where nothing moved, changes nothing. With the caret in a table the ruler (§3) shows the caret row's column edges, which can be dragged there too.
+
+The members: `SetColumnWidth(Twips)` (the caret's column; the columns right of it shift, as Word's Table Properties do), `SetRowHeight(Twips, Exact)` (the caret's row, the selected rows; 0 and not exact: as high as its content), `AutoFitColumn`, `DistributeColumns` (each row's cells equally wide), `DistributeRows` (the rows as high as their average, "at least"), `FitTableToWindow` (the table as wide as the text); `CanResizeColumns` and `CanResizeRows` say whether they would run now. For a ruler of your own: `CaretRowEdges` and `MoveCaretRowEdge`.
+
+**Cell formats.** Each acts on the selected cells (both ends of the selection in one table), else on the caret's cell, and is one undo step: `SetCellShading(Color)` (`clNone`: none), `SetCellBorders(Preset, Border)`, `SetCellPadding(Left, Top, Right, Bottom)` (twips; -1 leaves a side as it is), `SetCellVAlign(rcvTop / rcvCenter / rcvBottom)`, and for the whole table `SetTableAlign(Align, IndentTwips)`; `CanFormatCells` says whether they would run now. `ApplyTableProperties` sets a row height, the caret's column width, the table's alignment and indent, the padding, the alignment and the shading together, as one undo step - what a Table Properties form calls. A border (`TyRichBorder(Style, WidthTwips, Color)`) is a style - `rbsNone`, `rbsSingle`, `rbsDouble`, `rbsDotted`, `rbsDashed` - a width in twips (Word's ½ pt is 10) and a colour (`clDefault`: automatic, the text's colour where it is drawn; on a shaded cell inside the table it takes the colour that stands out from the shading, the table's outline keeps the theme's). The presets set:
+
+| Preset | The lines it sets |
+|---|---|
+| `rbpAll`, `rbpNone` | every side of every selected cell (`rbpNone`: no line) |
+| `rbpOutside` | the outline of the selected rectangle |
+| `rbpInside` | the lines between the selected cells |
+| `rbpInsideH`, `rbpInsideV` | the lines between the selected rows / columns |
+| `rbpTop`, `rbpBottom`, `rbpLeft`, `rbpRight` | that one side of the rectangle |
+
+**One line, one definition.** A line two cells share is written in the file twice: as the one cell's side and as the other's facing side. Word keeps the two alike and shows one line; so does the control for every line it writes. A border given to a cell's side, through `SetCellBorders` (every preset, "none" too) or the builder's `CellBorders`, goes to the facing side of the cell beside it in the same undo step (in the row below or above: a cell whose whole edge lies under the cells given the border; one that only partly does keeps its own); rows and columns inserted or deleted leave both sides alike. Only a file made elsewhere can give one line two definitions: the control then draws the wider of the two (at the same width, the right or lower cell's), and that is the one case where it may show another line than Word.
+
+**Built in code.** The builder's table members (§5): `Table(widths)` - the columns' widths in twips, empty for equal columns over the text width - opens the first row; `Row(height, exact)` the next row, as high as its content (0), at least or exactly that high; `Cell` before each cell's content; inside a cell `Shading(color)` is the cell's shading, `CellBorders(sides, style, width, color)` its lines on those sides, `CellPadding(left, top, right, bottom)` its padding in twips (-1: the row's), `CellVAlign` where its content sits; `TableAlign(align, indent)` the table's alignment and start; `EndTable` closes it. Every row must have as many cells as the table has columns. The price table of the example's Samples > A Table, word for word from `examples/richedit/utablesample.pas`:
+
+```pascal
+procedure AddPriceTable(B: TTyRichBuilder);
+const
+  Outline = 30;                         // 1½ pt, in twips; the lines inside stay ½ pt
+  Shade = TColor($00F7EBDD);            // a light blue ($BBGGRR)
+var
+  r, c: Integer;
+  cells: array[0..4, 0..3] of string;
+
+  // the open cell's sides on the table's edge get the thicker line
+  procedure Edge(ARow, ACol: Integer);
+  var
+    sides: TTyRowCellSides;
+  begin
+    sides := [];
+    if ARow = 0 then Include(sides, rcsTop);
+    if ARow = 4 then Include(sides, rcsBottom);
+    if ACol = 0 then Include(sides, rcsLeft);
+    if ACol = 3 then Include(sides, rcsRight);
+    if sides <> [] then B.CellBorders(sides, rbsSingle, Outline);
+  end;
+
+begin
+  cells[0, 0] := rsTsItem;   cells[0, 1] := rsTsCount; cells[0, 2] := rsTsPrice; cells[0, 3] := rsTsAmount;
+  cells[1, 0] := rsTsPencil; cells[1, 1] := '12';      cells[1, 2] := '1.50';    cells[1, 3] := '18.00';
+  cells[2, 0] := rsTsEraser; cells[2, 1] := '5';       cells[2, 2] := '2.00';    cells[2, 3] := '10.00';
+  cells[3, 0] := rsTsNotes;  cells[3, 1] := '3';       cells[3, 2] := '8.50';    cells[3, 3] := '25.50';
+  cells[4, 0] := rsTsTotal;  cells[4, 1] := '';        cells[4, 2] := '';        cells[4, 3] := '53.50';
+  B.Table([2400, 1300, 1500, 1800]).TableAlign(rraCenter);
+  for r := 0 to 4 do
+  begin
+    if r = 4 then B.Row(24, True)       // exactly 24 points high
+    else if r > 0 then B.Row;
+    for c := 0 to 3 do
+    begin
+      B.Cell;
+      Edge(r, c);
+      if r = 0 then B.Shading(Shade).Bold;
+      if r = 4 then B.CellVAlign(rcvCenter).Bold;
+      if c > 0 then B.Align(paraRight);
+      B.Text(cells[r, c]).Reset;
+    end;
+  end;
+  B.EndTable;
+end;
+```
+
+**What is refused, and why.** Each refusal is told once through `OnEditRefused`, nothing raised, nothing changed.
+
+- A table with merged cells: rows and columns cannot be inserted or deleted, and the columns cannot be distributed (that would pull a merged cell away from its neighbours) - until merged cells are edited as a grid, the next step. Its edges can be dragged, and every cell format works.
+- A row that holds a nested table: the nested table is kept as the file's bytes, so that row's look, widths and height cannot change. A format, a size or the rows' distribution over several rows changes the others and leaves that one, saying so; distributing the columns, and inserting or deleting rows and columns, refuse the whole table.
+- A table in a large RTF file read on demand that is too big to read whole (about a megabyte of the file): what needs the whole table - a column's width, a column inserted or deleted, the table's alignment, a column or the whole table selected - is refused; cells and rows of the part read can be selected and formatted.
+- A plain text document has no tables to edit; a read-only control or one disabled does nothing and says nothing.
+
+**What it costs on a large table.** A cell's format, a row's height and Tab in the last cell are within a keystroke on a table of 10,000 rows; a column's width changed in all 10,000 rows takes about 130 ms; selecting a column highlights only the rows on the screen. `DistributeRows` lays out every row to measure it and is synchronous: about 3 s on 10,000 rows, with the wait cursor.
+
+## 9. Files
 
 - **RTF**: read and written. A document saved without a change is byte for byte the file it came from; a changed one writes the parts that did not change as they were. What the control does not understand is kept on its paragraph, its text or as one object, and written back as it was. Chinese: reading decodes by the font's `\fcharset`, else by `\ansicpgN`; a double-byte `\'xx\'xx` joins into one character; `\uN` and `\ucN` are understood. Writing puts every non-ASCII character as `\uN` with fallback bytes, and Chinese fonts as `\fcharset134`. A large RTF file is parsed on demand: an index first, each paragraph when it is first needed.
 - **Lists** are written as Word's list table (`\listtable`, `\listoverridetable`, `\lsN\ilvlM` on the paragraph), with a `{\*\pn ...}` beside it for programs that know no list table, such as the system's RichEdit; Word shows the numbers the control draws. There is one rule: an item given a start begins a new list at it (the builder's `Numbered(0, 5)`), one without (`Numbered`, start 0) goes on from the item before it on its level; an outer item, a paragraph that is no item or another kind on the level ends a list, and the next item is 1. So `Numbered(0, 5)`, `Numbered`, `Numbered` are 5, 6, 7, and a `Numbered(0, 1)` right after them is 1 again; an inner item after an outer one always starts at 1. Levels are 0 to 8 (RTF and Word have nine).
@@ -247,7 +344,7 @@ They are the user's actions: `ReadOnly` refuses them, each is one undo step, a r
 - **Which format**: `LoadFromFile` asks the file itself; `SaveToFile` without a format asks the extension, then `PlainText`. A document with `PlainText = True` is saved as plain text; its formats do not go into the file.
 - **Pictures** keep their bytes (PNG, JPEG); WordPad's pictures (a WMF holding one bitmap) are drawn too, and a metafile the control cannot draw is shown as a frame, its bytes kept. Tables, merged cells and tables inside cells are read, shown and saved back as they were; in a table with merged cells, and in a row that holds a nested table, rows and columns cannot be inserted or deleted.
 
-## 9. Large files
+## 10. Large files
 
 What is promised: a 100 MB txt and a 100 MB RTF open and edit without lag - the first screen within 1 s, any scroll position within 100 ms, a keystroke within 30 ms, memory at most three times the file's size. The one thing on the user interface's thread that grows with the document is the scan at load time; everything else touches only what is visible, or runs in the background in slices that can be cancelled (`OnLoadProgress`, `CancelLoad`, `FindNextAsync`, `ReplaceAllAsync`, `CancelFind`).
 
@@ -277,7 +374,7 @@ What is slow - what grows with the range it changes:
 - The synchronous `FindText`, `FindNext` and `ReplaceAll` search to the end; for a long document use `FindNextAsync` and `ReplaceAllAsync`, which run in the background in slices.
 - Saving a changed large file writes all of it.
 
-## 10. How it differs from Delphi's TRichEdit and RichMemo
+## 11. How it differs from Delphi's TRichEdit and RichMemo
 
 The full list is the last section of [LCL differences](../lcl-differences.en.md). In short:
 
@@ -288,7 +385,7 @@ The full list is the last section of [LCL differences](../lcl-differences.en.md)
 - `OnProtectChange` and `OnSaveClipboard` are not there, and `OnResizeRequest` is `OnContentSizeChange` with `ContentHeight` (§6); `OnEditRefused`, `OnObjectResize`, `OnDropFiles`, `OnFallbackFont` and the background find's events are added;
 - RichMemo's `Search` goes backward by the rule of RichMemo's back ends; `ZoomFactor` is `Zoom / 100`.
 
-## 11. Extension points
+## 12. Extension points
 
 - **Events**: `OnEditRefused` (a user's action was refused; the reason is a sentence the user can be shown), `OnObjectResize` (before a picture is resized by its handles; change or refuse it), `OnDropFiles` (files dropped on the control: handle them or leave them to it), `OnFallbackFont` (a character was shown in another font), `OnLinkClick` and `OnFollowLink` (a link clicked, a bookmark about to be followed), `OnObjectClick` and `OnObjectDblClick` (a picture clicked), `OnContentSizeChange` (the content's size changed), `OnLoadProgress`, `OnSaveProgress`, `OnFindProgress`, `OnFindDone`, `OnReplaceDone`.
 - **Virtual methods of `TTyCustomRichEdit`**: `CreateDocument`, `CreateDevice`, `CreateLayouter` (another document, measuring and drawing device, layouter); `RunUserEdit` (see every edit of the user); `CommandRefusal`, `EditRefused` (how a refusal is told); `PlainTextDocument`; `ShowTextMenu` (the context menu); `DoChange`, `DoSelectionChange`, `DoZoomChange`; the clipboard's reading and writing.
