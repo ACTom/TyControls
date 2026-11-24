@@ -72,7 +72,7 @@ begin
   B.Table([2400, 1300, 1500, 1800]).TableAlign(rraCenter);
   for r := 0 to 4 do
   begin
-    if r = 4 then B.Row(24, True)       // exactly 24 points high
+    if r = 4 then B.Row(480, True)      // exactly 480 twips (24 points) high
     else if r > 0 then B.Row;
     for c := 0 to 3 do
     begin

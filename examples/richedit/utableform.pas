@@ -5,12 +5,13 @@ unit utableform;
   style, width and colour) and the shading - for the selected cells, else the caret's cell.
 
   The rich edit's TTyRichEditTableProperties asks it through OnBeforeExecute (the package has
-  no such form of its own: this one is yours to copy). The form reads what it shows through the
-  control's public members - SelectedCells, CaretCell, Document.CellProps and RowProps - and a
-  value the selected cells do not share shows empty. On OK it hands back only what the person
-  changed: the record's Valid names those fields, and the action applies them as ONE undo step
-  (ApplyTableProperties). The lines are not in that record: a change of them is applied before
-  it, through SetCellBorders, as an undo step of its own. Cancel changes nothing.
+  no such form of its own: this one is yours to copy). The action hands over the selection's
+  values and the fields alike over all of it (Uniform; the control's GetTableProperties); a
+  value the selected cells do not share shows empty. The lines are no field of that record: the
+  form reads them itself through the control's public members (SelectedCells, CaretCell,
+  Document.CellProps). On OK the form names what the person changed (Changed) and the action
+  applies only that, as ONE undo step; a change of the lines goes through SetCellBorders before
+  it, an undo step of its own. Nothing changed, nothing is done. Cancel changes nothing.
 
   Lengths are shown in centimetres (the control's are twips) through one pair of functions,
   TwipsToCm and CmToTwips; a field counts as changed only when the twips it gives differ from
@@ -88,18 +89,18 @@ type
     function LengthChanged(AEdit: TTyEdit; AShown: Integer; out ATwips: Integer): Boolean;
     procedure Refuse(AEdit: TTyEdit);
   public
-    { Fills the form from ARich's selected cells (else the caret's cell). }
-    procedure Prepare(ARich: TTyCustomRichEdit);
-    { What the person changed: AProps' Valid names those fields (the others are left as
-      they came); ALines True: the lines too, APreset with ALine. }
+    { Fills the form: AProps as the action hands it over (the values, Uniform what is alike),
+      the lines from ARich's selected cells (else the caret's cell). }
+    procedure Prepare(ARich: TTyCustomRichEdit; const AProps: TTyRichTableProperties);
+    { What the person changed: AProps' values and Changed naming them; ALines True: the lines
+      too, APreset with ALine. }
     procedure Collect(var AProps: TTyRichTableProperties; out ALines: Boolean;
       out APreset: TTyRichBorderPreset; out ALine: TTyRichBorder);
   end;
 
 { The table properties of ARich's selection, asked in the form: AProps in is what the action
-  read at the caret (the record TTyRichEditTableProperties hands its OnBeforeExecute); out,
-  Valid names only what was changed. ALines: the lines were changed (APreset, ALine). False:
-  cancelled. }
+  hands its OnBeforeExecute (the values, Uniform); out, Changed names what the person changed.
+  ALines: the lines were changed (APreset, ALine). False: cancelled. }
 function AskTableProperties(ARich: TTyCustomRichEdit; var AProps: TTyRichTableProperties;
   out ALines: Boolean; out APreset: TTyRichBorderPreset; out ALine: TTyRichBorder): Boolean;
 
@@ -303,7 +304,7 @@ begin
   ALine := TyRichBorder(rbsSingle, 10);
   f := TTableForm.Create(Application);
   try
-    f.Prepare(ARich);
+    f.Prepare(ARich, AProps);
     Result := f.ShowModal = mrOk;
     if Result then f.Collect(AProps, ALines, APreset, ALine);
   finally
@@ -387,66 +388,80 @@ begin
   Result := ATwips <> AShown;
 end;
 
-procedure TTableForm.Prepare(ARich: TTyCustomRichEdit);
-const
-  CMixed = Low(Integer);
+procedure TTableForm.Prepare(ARich: TTyCustomRichEdit; const AProps: TTyRichTableProperties);
 var
-  pos, cpos: TTyRichPos;
-  r0, c0, r1, c1, r, c, n, cr, cc: Integer;
-  rp: TTyRichRowProps;
+  pos: TTyRichPos;
+  r0, c0, r1, c1, r, c, n: Integer;
   cp: TTyRichCellProps;
   sd: TTyRowCellSide;
-  tAlign, tLeft, rHeight, valign: Integer;
-  pad: array[TTyRowCellSide] of Integer;
-  shade: TColor;
-  shadeMixed, lineMixed, first, firstLine: Boolean;
+  lineMixed, firstLine: Boolean;
   line: TTyRichBorder;
-  w: Integer;
 
-  procedure Take(var AAt: Integer; AValue: Integer; AFirst: Boolean);
+  function Alike(AField: TTyRichTablePropField): Boolean;
   begin
-    if AFirst then AAt := AValue
-    else if AAt <> AValue then AAt := CMixed;
+    Result := AField in AProps.Uniform;
   end;
 
 begin
   FRich := ARich;
   FFilling := True;
   try
-    tAlign := CMixed;
-    tLeft := CMixed;
-    rHeight := CMixed;
-    valign := CMixed;
-    for sd := Low(sd) to High(sd) do pad[sd] := CMixed;
-    shade := clNone;
-    shadeMixed := True;
+    // the table
+    if Alike(tpfAlign) then FAlign := Ord(AProps.Align) else FAlign := -1;
+    CboTableAlign.ItemIndex := FAlign;
+    if Alike(tpfIndent) then ShowLength(EdtIndent, AProps.Indent, FIndent)
+    else ShowLength(EdtIndent, -1, FIndent);
+    // the row: 0 as high as its content, else at least or exactly
+    if not Alike(tpfRowHeight) then
+    begin
+      FRule := -1;
+      ShowLength(EdtRowHeight, -1, FHeight);
+    end
+    else if AProps.RowHeight = 0 then
+    begin
+      FRule := 0;
+      ShowLength(EdtRowHeight, -1, FHeight);
+    end
+    else
+    begin
+      if AProps.RowExact then FRule := 2 else FRule := 1;
+      ShowLength(EdtRowHeight, AProps.RowHeight, FHeight);
+    end;
+    CboRowRule.ItemIndex := FRule;
+    // the column (the caret's: the one ApplyTableProperties sets)
+    if Alike(tpfColumnWidth) then ShowLength(EdtColWidth, AProps.ColumnWidth, FWidth)
+    else ShowLength(EdtColWidth, -1, FWidth);
+    // the cell
+    if Alike(tpfVAlign) then FVAlign := Ord(AProps.VAlign) else FVAlign := -1;
+    CboVAlign.ItemIndex := FVAlign;
+    for sd := Low(sd) to High(sd) do
+      if Alike(tpfPadding) then ShowLength(PadEdit(sd), AProps.Pad[sd], FPad[sd])
+      else ShowLength(PadEdit(sd), -1, FPad[sd]);
+    // the shading: a colour the list lacks is added under its number
+    FShadingShown := Alike(tpfShading);
+    FShading := AProps.Shading;
+    if not FShadingShown then ClrShading.ItemIndex := -1
+    else
+    begin
+      ClrShading.Selected := FShading;
+      if ClrShading.Selected <> FShading then
+      begin
+        ClrShading.AddColor(Format('#%.6x', [ColorToRGB(FShading)]), FShading);
+        ClrShading.Selected := FShading;
+      end;
+    end;
+    // the lines: what every side of every cell has, else nothing shown
     lineMixed := True;
     line := TyRichBorder(rbsSingle, 10);
-    FWidth := -1;
     if TargetCells(ARich, pos, r0, c0, r1, c1) then
     begin
-      first := True;
-      firstLine := True;
       lineMixed := False;
-      shadeMixed := False;
-      n := 0;
+      firstLine := True;
       for r := r0 to r1 do
-      begin
-        rp := ARich.Document.RowProps(pos, r);
-        if rp.Valid = [] then Continue;
-        Take(tAlign, Ord(rp.Align), r = r0);
-        Take(tLeft, rp.LeftTwips, r = r0);
-        Take(rHeight, rp.HeightTwips, r = r0);
         for c := c0 to c1 do
         begin
           cp := ARich.Document.CellProps(pos, r, c);
           if cp.Valid = [] then Break;
-          Inc(n);
-          Take(valign, Ord(cp.VAlign), first);
-          for sd := Low(sd) to High(sd) do Take(pad[sd], cp.Pad[sd], first);
-          if first then shade := cp.Shading
-          else if shade <> cp.Shading then shadeMixed := True;
-          first := False;
           for sd := Low(sd) to High(sd) do
             if firstLine then
             begin
@@ -455,59 +470,9 @@ begin
             end
             else if not TyRichSameBorder(line, cp.Borders[sd]) then lineMixed := True;
         end;
-      end;
-      if n = 0 then shadeMixed := True;
-      // the column's width: the caret cell's (the column ApplyTableProperties sets)
-      if ARich.CaretCell(cpos, cr, cc) then
-      begin
-        cp := ARich.Document.CellProps(cpos, cr, cc);
-        if cp.Valid <> [] then FWidth := cp.WidthTwips;
-      end;
+      if firstLine then lineMixed := True;
       LblScope.Caption := Format(rsTpApplies, [TableSelectionText(ARich)]);
     end;
-    // the table
-    if tAlign = CMixed then FAlign := -1 else FAlign := tAlign;
-    CboTableAlign.ItemIndex := FAlign;
-    if tLeft = CMixed then tLeft := -1;
-    ShowLength(EdtIndent, tLeft, FIndent);
-    // the row: 0 as high as its content, > 0 at least, < 0 exactly
-    if rHeight = CMixed then
-    begin
-      FRule := -1;
-      ShowLength(EdtRowHeight, -1, FHeight);
-    end
-    else
-    begin
-      if rHeight = 0 then FRule := 0 else if rHeight > 0 then FRule := 1 else FRule := 2;
-      if rHeight = 0 then ShowLength(EdtRowHeight, -1, FHeight)
-      else ShowLength(EdtRowHeight, Abs(rHeight), FHeight);
-    end;
-    CboRowRule.ItemIndex := FRule;
-    // the column
-    w := FWidth;
-    ShowLength(EdtColWidth, w, FWidth);
-    // the cell
-    if valign = CMixed then FVAlign := -1 else FVAlign := valign;
-    CboVAlign.ItemIndex := FVAlign;
-    for sd := Low(sd) to High(sd) do
-    begin
-      if pad[sd] = CMixed then pad[sd] := -1;
-      ShowLength(PadEdit(sd), pad[sd], FPad[sd]);
-    end;
-    // the shading: a colour the list lacks is added under its number
-    FShadingShown := not shadeMixed;
-    FShading := shade;
-    if shadeMixed then ClrShading.ItemIndex := -1
-    else
-    begin
-      ClrShading.Selected := shade;
-      if ClrShading.Selected <> shade then
-      begin
-        ClrShading.AddColor(Format('#%.6x', [ColorToRGB(shade)]), shade);
-        ClrShading.Selected := shade;
-      end;
-    end;
-    // the lines: what every side of every cell has, else nothing shown
     CboLines.ItemIndex := 0;
     if lineMixed then
     begin
@@ -537,7 +502,6 @@ begin
   end;
 end;
 
-{ A line's style, width or colour changed with the lines "as they are": all of them. }
 procedure TTableForm.LineChanged(Sender: TObject);
 begin
   if FFilling then Exit;
@@ -600,20 +564,23 @@ var
   sd: TTyRowCellSide;
   padChanged: Boolean;
 begin
-  AProps.Valid := [];
-  // the table: its alignment and its indent go together (the record's one field pair)
-  if ((CboTableAlign.ItemIndex >= 0) and (CboTableAlign.ItemIndex <> FAlign)) or
-    LengthChanged(EdtIndent, FIndent, t) then
+  AProps.Changed := [];
+  // the table
+  if (CboTableAlign.ItemIndex >= 0) and (CboTableAlign.ItemIndex <> FAlign) then
   begin
-    Include(AProps.Valid, tpfAlign);
-    if CboTableAlign.ItemIndex >= 0 then AProps.Align := TTyRowAlign(CboTableAlign.ItemIndex);
-    if LengthChanged(EdtIndent, FIndent, t) then AProps.Indent := t;
+    Include(AProps.Changed, tpfAlign);
+    AProps.Align := TTyRowAlign(CboTableAlign.ItemIndex);
+  end;
+  if LengthChanged(EdtIndent, FIndent, t) then
+  begin
+    Include(AProps.Changed, tpfIndent);
+    AProps.Indent := t;
   end;
   // the row
   if ((CboRowRule.ItemIndex >= 0) and (CboRowRule.ItemIndex <> FRule)) or
     ((CboRowRule.ItemIndex > 0) and LengthChanged(EdtRowHeight, FHeight, t)) then
   begin
-    Include(AProps.Valid, tpfRowHeight);
+    Include(AProps.Changed, tpfRowHeight);
     if CboRowRule.ItemIndex = 0 then
     begin
       AProps.RowHeight := 0;
@@ -629,13 +596,13 @@ begin
   // the column
   if LengthChanged(EdtColWidth, FWidth, t) and (t > 0) then
   begin
-    Include(AProps.Valid, tpfColumnWidth);
+    Include(AProps.Changed, tpfColumnWidth);
     AProps.ColumnWidth := t;
   end;
   // the cell
   if (CboVAlign.ItemIndex >= 0) and (CboVAlign.ItemIndex <> FVAlign) then
   begin
-    Include(AProps.Valid, tpfVAlign);
+    Include(AProps.Changed, tpfVAlign);
     AProps.VAlign := TTyRowCellVAlign(CboVAlign.ItemIndex);
   end;
   padChanged := False;
@@ -647,12 +614,12 @@ begin
     end
     else
       AProps.Pad[sd] := -1;   // a side as it is
-  if padChanged then Include(AProps.Valid, tpfPadding);
+  if padChanged then Include(AProps.Changed, tpfPadding);
   // the shading
   if (ClrShading.ItemIndex >= 0) and
     (not FShadingShown or (ClrShading.Selected <> FShading)) then
   begin
-    Include(AProps.Valid, tpfShading);
+    Include(AProps.Changed, tpfShading);
     AProps.Shading := ClrShading.Selected;
   end;
   // the lines: their own door

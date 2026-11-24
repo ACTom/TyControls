@@ -923,9 +923,9 @@ begin
   ShowSwatches;
 end;
 
-{ Table Properties: the example's form (utableform) asks; what it hands back is applied by the
-  action as one undo step. The lines are no field of that record: changed, they go through
-  SetCellBorders first, a step of their own. }
+{ Table Properties: the example's form (utableform) asks; what it names as changed is applied
+  by the action as one undo step (nothing changed: nothing). The lines are no field of that
+  record: changed, they go through SetCellBorders first, a step of their own. }
 procedure TMainForm.TablePropertiesBeforeExecute(Sender: TObject;
   var AProps: TTyRichTableProperties; var AAllow: Boolean);
 var
@@ -936,7 +936,6 @@ begin
   AAllow := AskTableProperties(Editor, AProps, lines, preset, line);
   if not AAllow then Exit;
   if lines then Editor.SetCellBorders(preset, line);
-  AAllow := AProps.Valid <> [];
 end;
 
 { ---- links, bookmarks, pictures ---- }
