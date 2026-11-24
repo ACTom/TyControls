@@ -674,8 +674,40 @@ begin
 end;
 
 procedure TTyRichSetParaFormat.DoExecute(ADoc: TTyRichDocument);
+var
+  rest: TTyParaFormatMask;
+  goOn: TTyParaFormat;
+  k, i: Integer;
 begin
-  ApplyParaFormat(ADoc, FFirst, FLast, FMask, FValue);
+  if not (pffListRestart in FMask) then
+  begin
+    ApplyParaFormat(ADoc, FFirst, FLast, FMask, FValue);
+    Exit;
+  end;
+  { A start given to the paragraphs: the first list item among them begins its list there,
+    the others go on - each part with the rest of the mask. The first item: the first
+    paragraph where the mask makes every paragraph an item, else the first that is one. }
+  rest := FMask - [pffListRestart] + [pffListStart];
+  goOn := FValue;
+  goOn.List.StartAt := 0;
+  k := -1;
+  if ((pffList in FMask) or (pffListKind in FMask)) and (FValue.List.Kind <> lkNone) then
+    k := FFirst
+  else if not (((pffList in FMask) or (pffListKind in FMask)) and (FValue.List.Kind = lkNone)) then
+    for i := FFirst to FLast do
+      if ADoc.Formats.ParaFormat(ADoc.ParaFormatOf(i)).List.Kind <> lkNone then
+      begin
+        k := i;
+        Break;
+      end;
+  if (k < 0) or (FValue.List.StartAt <= 0) then
+  begin
+    ApplyParaFormat(ADoc, FFirst, FLast, rest, goOn);
+    Exit;
+  end;
+  if k > FFirst then ApplyParaFormat(ADoc, FFirst, k - 1, rest, goOn);
+  ApplyParaFormat(ADoc, k, k, rest, FValue);
+  if k < FLast then ApplyParaFormat(ADoc, k + 1, FLast, rest, goOn);
 end;
 
 function TTyRichSetParaFormat.CanExecute(ADoc: TTyRichDocument): Boolean;

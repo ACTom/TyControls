@@ -233,7 +233,7 @@ type
     { The list item's level, 0 the outermost (the other parts of each paragraph's list as
       they are; a paragraph that is no item keeps none). }
     property ListLevel: Integer read GetListLevel write SetListLevel;
-    { The number the list starts at: NumberingStart. }
+    { The number a new list begins at: NumberingStart. }
     property ListStart: Integer read GetNumberingStart write SetNumberingStart;
     { A bullet's own text in place of the round bullet - written, it makes each paragraph a
       bullet item (the default hanging indent for one with none, as Numbering); '' the round
@@ -268,7 +268,10 @@ type
       back to 0 and the list record to its default, so a plain paragraph is plain again -
       the rule Enter and Backspace on an empty item follow (CTyListMask). }
     property Numbering: TTyListKind read GetNumbering write SetNumbering;
-    { The number the list starts at. }
+    { A start given to the item: written, the first item of the selection begins a new list
+      at that number (whatever list stands before it) and the selection's other items go on
+      from it; 0 written makes them all go on again. Read: the item's start, 0 when it goes
+      on from the item before it on its level (a first item then is 1). }
     property NumberingStart: Integer read GetNumberingStart write SetNumberingStart;
     { Tab stop AIndex (0-based), points from the left indent's origin. A read past the count
       gives 0 (as Delphi's); a write past the last adds left-aligned stops at 0 up to it, so
@@ -354,9 +357,11 @@ type
   TTyParaNumStyle = (pnNone, pnBullet, pnNumber, pnLowLetter, pnLowRoman, pnUpLetter,
     pnUpRoman, pnCustomChar);
 
-  { RichMemo's TParaNumbering. The engine holds the style and the start: Indent, CustomChar,
-    SepChar and ForceNewNum are not kept (a write ignores them, a read gives 0, #0, #0,
-    False); pnCustomChar is written as a bullet. }
+  { RichMemo's TParaNumbering. The engine holds the style and the start: ForceNewNum with
+    NumberStart is an item given a start (it begins a new list there; written to a range, its
+    first item does and the others go on), no ForceNewNum one that goes on (a read: False and
+    0). Indent, CustomChar and SepChar are not kept (a write ignores them, a read gives 0,
+    #0, #0); pnCustomChar is written as a bullet. }
   TTyParaNumbering = record
     Style: TTyParaNumStyle;
     Indent: Double;
@@ -957,10 +962,11 @@ procedure TTyRichParaAttributes.SetNumberingStart(AValue: Integer);
 var
   f: TTyParaFormat;
 begin
-  // the start only: a plain paragraph stays plain, an item keeps its kind
+  { the start only: a plain paragraph stays plain, an item keeps its kind. The first item of
+    the selection begins a new list at AValue, the others go on from it; 0: they all go on }
   f := TyDefaultParaFormat;
-  f.List.StartAt := AValue;
-  SetFormat([pffListStart], f);
+  if AValue > 0 then f.List.StartAt := AValue else f.List.StartAt := 0;
+  SetFormat([pffListStart, pffListRestart], f);
 end;
 
 function TTyRichParaAttributes.GetTab(AIndex: Byte): Integer;
@@ -1322,6 +1328,7 @@ begin
     Result.Style := pnNone;
   end;
   Result.NumberStart := AList.StartAt;
+  Result.ForceNewNum := AList.StartAt > 0;
 end;
 
 function TyRichListOf(const ANumbering: TTyParaNumbering; const AOld: TTyListFormat): TTyListFormat;
@@ -1338,8 +1345,13 @@ begin
     Result.Kind := lkNone;
   end;
   if Result.Kind = lkNone then Exit(TyDefaultParaFormat.List);
-  Result.StartAt := ANumbering.NumberStart;
-  if Result.StartAt <= 0 then Result.StartAt := 1;
+  // a new list where ForceNewNum says so (at 1 for no start), else the item goes on
+  Result.StartAt := 0;
+  if ANumbering.ForceNewNum then
+  begin
+    Result.StartAt := ANumbering.NumberStart;
+    if Result.StartAt <= 0 then Result.StartAt := 1;
+  end;
 end;
 
 const

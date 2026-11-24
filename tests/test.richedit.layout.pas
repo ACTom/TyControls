@@ -1889,7 +1889,8 @@ begin
   SetPara(d, 0, [pffList, pffLeftIndent, pffFirstIndent], ListFormat(lkBullet, 0, 0));
   SetPara(d, 1, [pffList, pffLeftIndent, pffFirstIndent], ListFormat(lkBullet, 1, 0));
   SetPara(d, 2, [pffList, pffLeftIndent, pffFirstIndent], ListFormat(lkDecimal, 0, 5));
-  pf := ListFormat(lkDecimal, 0, 5);
+  // (no start given: it goes on from the one before)
+  pf := ListFormat(lkDecimal, 0, 0);
   pf.FirstIndent := -150;
   SetPara(d, 3, [pffList, pffLeftIndent, pffFirstIndent], pf);
   f := TyDefaultCharFormat;
@@ -1941,12 +1942,13 @@ end;
 
 { The number is the paragraph's place among the consecutive items of its level and kind: a
   deeper level in between is passed over, a shallower one, another kind on the level or a
-  plain paragraph ends the list; StartAt of the list's first item starts it. Laid out last to
-  first, so that no number comes from one remembered before. }
+  plain paragraph ends the list, whose first item is 1; an item given a start begins a new
+  list at it, wherever it stands. Laid out last to first, so that no number comes from one
+  remembered before. }
 procedure TTyRichLayoutTest.TestListNumbersCountTheItemsOfOneLevel;
 const
-  Want: array[0..16] of string = ('', '1.', '2.', 'a.', 'b.', '3.', 'i.', 'I.', '', '1.',
-    'C.', 'D.', '1.', '1.', '2.', '2.', '1.');
+  Want: array[0..17] of string = ('', '1.', '2.', 'a.', 'b.', '3.', 'i.', 'I.', '', '1.',
+    'C.', 'D.', '1.', '1.', '2.', '2.', '1.', '1.');
 var
   d: TTyRichDocument;
   s: UTF8String;
@@ -1961,25 +1963,27 @@ var
 
 begin
   s := '';
-  for i := 0 to 16 do s := s + 'p' + IntToStr(i) + #10;
+  for i := 0 to 17 do s := s + 'p' + IntToStr(i) + #10;
   d := NewDoc(s);
-  Item(1, lkDecimal, 0, 1);
-  Item(2, lkDecimal, 0, 1);
-  Item(3, lkLowerAlpha, 1, 1);
-  Item(4, lkLowerAlpha, 1, 1);
-  Item(5, lkDecimal, 0, 1);
-  Item(6, lkLowerRoman, 1, 1);
-  Item(7, lkUpperRoman, 0, 1);
-  Item(9, lkDecimal, 0, 1);
+  Item(1, lkDecimal, 0, 0);
+  Item(2, lkDecimal, 0, 0);
+  Item(3, lkLowerAlpha, 1, 0);
+  Item(4, lkLowerAlpha, 1, 0);
+  Item(5, lkDecimal, 0, 0);
+  Item(6, lkLowerRoman, 1, 0);
+  Item(7, lkUpperRoman, 0, 0);
+  Item(9, lkDecimal, 0, 0);
   Item(10, lkUpperAlpha, 0, 3);
-  Item(11, lkUpperAlpha, 0, 9);
+  Item(11, lkUpperAlpha, 0, 0);
   // one kind on two levels: the outer item ends the inner list, the inner ones are passed
-  Item(12, lkDecimal, 0, 1);
-  Item(13, lkDecimal, 1, 1);
-  Item(14, lkDecimal, 1, 1);
-  Item(15, lkDecimal, 0, 1);
-  Item(16, lkDecimal, 1, 1);
-  for i := 16 downto 0 do
+  Item(12, lkDecimal, 0, 0);
+  Item(13, lkDecimal, 1, 0);
+  Item(14, lkDecimal, 1, 0);
+  Item(15, lkDecimal, 0, 0);
+  Item(16, lkDecimal, 1, 0);
+  // a start given right after a list of the same kind and level: a new list
+  Item(17, lkDecimal, 1, 1);
+  for i := 17 downto 0 do
   begin
     L := Lay(d, i, 1000);
     if Want[i] = '' then
@@ -1988,7 +1992,7 @@ begin
       AssertEquals(Format('%d', [i]), Want[i], L.Marker.Text);
   end;
   FLayouter.Clear;
-  for i := 0 to 16 do
+  for i := 0 to 17 do
   begin
     L := Lay(d, i, 1000);
     if Want[i] <> '' then AssertEquals(Format('%d, first to last', [i]), Want[i], L.Marker.Text);
@@ -2062,7 +2066,7 @@ begin
   end;
   d := NewDoc(s);
   ld := TListLoader.Create;
-  ld.ParaFmt := d.Formats.InternPara(ListFormat(lkDecimal, 0, 1));
+  ld.ParaFmt := d.Formats.InternPara(ListFormat(lkDecimal, 0, 0));
   ld.CharFmt := d.DefaultCharFormatId;
   d.InstallLoader(ld, True);
   d.OnChange := @DocChanged;
@@ -4730,8 +4734,8 @@ begin
   d := NewDoc(s);
   SetPara(d, 0, [pffList, pffLeftIndent, pffFirstIndent], ListFormat(lkDecimal, 0, 1));
   AssertTrue('the sublist', d.Execute(TTyRichSetParaFormat.Create(1, N - 2,
-    [pffList, pffLeftIndent, pffFirstIndent], ListFormat(lkDecimal, 1, 1))));
-  SetPara(d, N - 1, [pffList, pffLeftIndent, pffFirstIndent], ListFormat(lkDecimal, 0, 1));
+    [pffList, pffLeftIndent, pffFirstIndent], ListFormat(lkDecimal, 1, 0))));
+  SetPara(d, N - 1, [pffList, pffLeftIndent, pffFirstIndent], ListFormat(lkDecimal, 0, 0));
   lo := NewLayouter;
   try
     L := lo.LayoutPara(d, N - 1, 1000, 96, 1);

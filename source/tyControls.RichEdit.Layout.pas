@@ -970,10 +970,13 @@ type
     function FormatFont(AFormat: TTyCharFormatId; APPI: Integer; AZoom: Single): TTyRichFormatFont;
     function GlyphIn(AFont: TTyRichFontId; ACode: Cardinal): Boolean;
     function FallbackFor(AFont: TTyRichFontId; ACode: Cardinal): TTyRichFontId;
-    { The number list item AIndex (in AList, its own list format) shows: its place among the
-      consecutive items of its level and kind before it - an item of a deeper level is passed
-      over; a shallower one, another kind on the level or a paragraph that is no list item
-      ends the list - counted from the StartAt of the list's first item. Looks back at most
+    { The number list item AIndex (in AList, its own list format) shows: an item given a
+      start (StartAt > 0) that start - it begins a new list; else its place among the
+      consecutive items of its level and kind before it, counted on from the nearest one
+      given a start - an item of a deeper level is passed over; a shallower one, another kind
+      on the level or a paragraph that is no list item ends the list, whose first item is 1.
+      The writer's marker text and Word's reading of the list table follow the same rule
+      (tyControls.RichEdit.RtfWrite). Looks back at most
       CRichListWalkParas paragraphs (see there), inside one read scope, each paragraph's
       value read without a parse when it is parsed already; remembers what it found. 0 for
       a bullet or no list. }
@@ -6645,7 +6648,6 @@ function TTyRichLayouter.ListNumber(ADoc: TTyRichDocument; AIndex: Integer;
 var
   found: array of Integer;
   nFound, j, lo, k, chunk, i, best: Integer;
-  startAt: Int64;
   e: TTyRichListOrdinal;
   lf: TTyListFormat;
   fmt: TTyParaFormatId;
@@ -6660,10 +6662,16 @@ begin
   SetLength(found, 16);
   found[0] := AIndex;
   nFound := 1;
-  startAt := AList.StartAt;
   known := False;
   Result := 0;
   done := False;
+  if AList.StartAt > 0 then
+  begin
+    // a start given: a new list begins here
+    Result := AList.StartAt;
+    known := True;
+    done := True;
+  end;
   j := AIndex - 1;
   chunk := 16;
   ADoc.BeginRead;
@@ -6704,10 +6712,17 @@ begin
           done := True;
           Break;
         end;
+        if lf.StartAt > 0 then
+        begin
+          // the item that began the list: on from its start
+          Result := lf.StartAt + nFound;
+          known := True;
+          done := True;
+          Break;
+        end;
         if nFound = System.Length(found) then SetLength(found, nFound * 2);
         found[nFound] := k;
         Inc(nFound);
-        startAt := lf.StartAt;
       end;
       j := lo - 1;
       chunk := chunk * 2;
@@ -6731,7 +6746,8 @@ begin
       known := True;
     end;
   end;
-  if not known then Result := startAt + nFound - 1;
+  // (the list's first item, given no start: 1)
+  if not known then Result := nFound;
   if FOrdinals.Count + nFound > CRichListOrdinalCache then FOrdinals.Clear;
   e.Kind := AList.Kind;
   e.Level := AList.Level;

@@ -119,10 +119,10 @@ function CWord16Back(AFill: Integer): RawByteString;
 begin
   Result := '{\*\background {\shp{\*\shpinst\shpleft0\shptop0\shpright0\shpbottom0\shpfhdr0' +
     '\shpbxmargin\shpbxignore\shpbymargin\shpbyignore\shpwr0\shpwrk0\shpfblwtxt1\shpz0' +
-    '\shplid1025 {\sp{\sn shapeType}{\sv 1}}{\sp{\sn fFlipH}{\sv 0}}{\sp{\sn fFlipV}{\sv 0}}' +
+    '\shplid1025'#13#10'{\sp{\sn shapeType}{\sv 1}}{\sp{\sn fFlipH}{\sv 0}}{\sp{\sn fFlipV}{\sv 0}}' +
     '{\sp{\sn fillColor}{\sv ' + IntToStr(AFill) + '}}{\sp{\sn fFilled}{\sv 1}}' +
     '{\sp{\sn lineWidth}{\sv 0}}{\sp{\sn fLine}{\sv 0}}{\sp{\sn bWMode}{\sv 9}}' +
-    '{\sp{\sn fBackground}{\sv 1}} {\sp{\sn fLayoutInCell}{\sv 1}}}}}';
+    '{\sp{\sn fBackground}{\sv 1}}'#13#10'{\sp{\sn fLayoutInCell}{\sv 1}}}}}';
 end;
 
 function RawBytes(const S: RawByteString): TBytes;
@@ -418,7 +418,8 @@ begin
   d := ReadBack(Saved);
   AssertEquals('the file: a bullet', Ord(lkBullet), Ord(PF(d, 0).List.Kind));
   AssertEquals('the file: its own text', Arrow, PF(d, 0).List.Bullet);
-  AssertEquals('the file: nothing of it kept as words', 0, PF(d, 0).Extra.Count);
+  // (nothing of its words kept: only the reference to the file's list table)
+  AssertEquals('the file: only the list''s \ls and \ilvl kept', 2, PF(d, 0).Extra.Count);
   // drawn: the marker is the bullet's own text
   L := Lay(FRich.Document, 0, 1000);
   AssertTrue('a marker', L.HasMarker);

@@ -246,7 +246,7 @@ uses
 | `EnableURLs`, `ShowURLHint`, `SelectionStreamMode`, `SpellChecking`, `Transparent`, `Touch` | nothing |
 | `OnResizeRequest` | `OnContentSizeChange`, reading `ContentHeight` / `ContentWidth` (the size the content needs) - or `AutoHeight`, which sets the height itself |
 | `OnProtectChange`, `OnSaveClipboard`, `OnGesture`, `OnMouseActivate`, `OnStartDock`, `OnEndDock` | nothing; the handler stays in the unit, unattached |
-- **RichMemo's `TTyParaNumbering` keeps only `Style` and `NumberStart`**: `pnCustomChar` becomes a bullet, and `Indent`, `CustomChar`, `SepChar` and `ForceNewNum` read 0, `#0` or `False`.
+- **RichMemo's `TTyParaNumbering` keeps only `Style`, `ForceNewNum` and `NumberStart`**: `ForceNewNum` with `NumberStart` is an item given a start (written to a range, its first item begins a new list there and the others go on), no `ForceNewNum` an item that goes on (read: `False` and 0); `pnCustomChar` becomes a bullet, and `Indent`, `CustomChar` and `SepChar` read 0 or `#0`.
 - **A bar tab**: `tabWordBar` is written as a left stop.
 
 ### RichMemo methods that behave differently

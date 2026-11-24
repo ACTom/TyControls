@@ -451,6 +451,43 @@ begin
   Result := Result + ']';
 end;
 
+{ A and B are the same paragraph format, but for a list's \ls and \ilvl: a list the writer
+  made is read back with its reference to the file's list table kept beside the list format
+  (as a list of Word's is). }
+function SameParaFormat(const A, B: TTyParaFormat; AStartFree: Boolean = False): Boolean;
+var
+  a2: TTyParaFormat;
+
+  function Stripped(const F: TTyParaFormat): TTyParaFormat;
+  var
+    i, param: Integer;
+  begin
+    Result := F;
+    Result.Extra.Clear;
+    for i := 0 to F.Extra.Count - 1 do
+      if not (TyRtfParaExtraKind(F.Extra.Item(i), param) in [pekLs, pekIlvl]) then
+        Result.Extra.Add(F.Extra.Item(i));
+  end;
+
+begin
+  { AStartFree: B's paragraph is read with the paragraph before it other than A's was (the
+    first list item of what was written, the one after an edit) - an item of A that went on
+    may be given the start its list's words give it there, and one given a start may go on }
+  a2 := A;
+  if AStartFree and (A.List.Kind <> lkNone) then a2.List.StartAt := B.List.StartAt;
+  Result := a2.Equals(B) or Stripped(a2).Equals(Stripped(B));
+end;
+
+// Paragraph AK of A is the first list item from AFirst on.
+function FirstItemFrom(A: TTyRichDocument; AFirst, AK: Integer): Boolean;
+var
+  i: Integer;
+begin
+  for i := AFirst to AK - 1 do
+    if A.Formats.ParaFormat(A.ParaFormatOf(i)).List.Kind <> lkNone then Exit(False);
+  Result := A.Formats.ParaFormat(A.ParaFormatOf(AK)).List.Kind <> lkNone;
+end;
+
 function DescribePara(const F: TTyParaFormat): string;
 var
   i: Integer;
@@ -483,7 +520,8 @@ end;
 
 // '' when paragraph AI of A and paragraph BI of B are the same: text, paragraph format,
 // runs (formats by value, objects by content) and table cell.
-function ParaDiff(A: TTyRichDocument; AI: Integer; B: TTyRichDocument; BI: Integer): string;
+function ParaDiff(A: TTyRichDocument; AI: Integer; B: TTyRichDocument; BI: Integer;
+  AStartFree: Boolean = False): string;
 var
   ra, rb: TTyRunArray;
   j: Integer;
@@ -491,7 +529,8 @@ var
 begin
   if not SameRaw(ParaText(A, AI), ParaText(B, BI)) then
     Exit(Format('text <%s> / <%s>', [Shown(ParaText(A, AI)), Shown(ParaText(B, BI))]));
-  if not A.Formats.ParaFormat(A.ParaFormatOf(AI)).Equals(B.Formats.ParaFormat(B.ParaFormatOf(BI))) then
+  if not SameParaFormat(A.Formats.ParaFormat(A.ParaFormatOf(AI)), B.Formats.ParaFormat(B.ParaFormatOf(BI)),
+    AStartFree) then
     Exit(Format('paragraph format %s / %s', [DescribePara(A.Formats.ParaFormat(A.ParaFormatOf(AI))),
       DescribePara(B.Formats.ParaFormat(B.ParaFormatOf(BI)))]));
   ra := A.RunsOf(AI);
@@ -866,8 +905,11 @@ begin
   p.LeftIndent := 720;
   d.Execute(TTyRichSetParaFormat.Create(7, 9, AllPara, p));
   p.List.Kind := lkDecimal;
+  // the first item given its start, the next going on
   p.List.StartAt := 3;
-  d.Execute(TTyRichSetParaFormat.Create(10, 11, AllPara, p));
+  d.Execute(TTyRichSetParaFormat.Create(10, 10, AllPara, p));
+  p.List.StartAt := 0;
+  d.Execute(TTyRichSetParaFormat.Create(11, 11, AllPara, p));
   p.List.Kind := lkUpperRoman;
   p.List.Level := 1;
   p.List.StartAt := 1;
@@ -1017,7 +1059,7 @@ begin
       // (a list made by a command is written as RichEdit writes one, and read back it is
       // the list format alone: the reader keeps nothing beside it)
       AssertTrue(Format('%s paragraph format %s / %s', [msg, DescribePara(pd), DescribePara(pr)]),
-        pd.Equals(pr));
+        SameParaFormat(pd, pr));
       rd := d.RunsOf(i);
       rr := r.RunsOf(i);
       AssertEquals(msg + ' runs', Length(rd), Length(rr));
@@ -1314,6 +1356,34 @@ begin
 end;
 
 // ANew is AOld with AAdded put in at one place.
+{ S without its group that begins with AStart (a header's list table the writer added for the
+  list items it wrote from the model), when AOld has none. }
+function WithoutAddedGroup(const AOld, S, AStart: RawByteString): RawByteString;
+var
+  i, j, d: Integer;
+begin
+  Result := S;
+  if PosRaw(AStart, AOld) > 0 then Exit;
+  i := PosRaw(AStart, S);
+  if i = 0 then Exit;
+  d := 0;
+  j := i;
+  while j <= Length(S) do
+  begin
+    case S[j] of
+      '\': Inc(j);
+      '{': Inc(d);
+      '}':
+        begin
+          Dec(d);
+          if d = 0 then Break;
+        end;
+    end;
+    Inc(j);
+  end;
+  Result := Copy(S, 1, i - 1) + Copy(S, j + 1, MaxInt);
+end;
+
 function HeaderAdded(const AOld, ANew: RawByteString; out AAdded: RawByteString): Boolean;
 var
   i, tail: Integer;
@@ -1425,6 +1495,9 @@ begin
   // the entry of the number that text with no font is written in
   header := StrOf(ABytes, 0, load.Header.Stop);
   got := StrOf(AOut, 0, AInfo.HeaderStop);
+  // (and the list tables of the list items written from the model, where the file has none)
+  got := WithoutAddedGroup(header, got, '{\*\listtable');
+  got := WithoutAddedGroup(header, got, '{\*\listoverridetable');
   if not SameRaw(header, got) then
   begin
     AssertTrue(AMsg + ': the header is only added to: ' + Shown(got), HeaderAdded(header, got, added));
@@ -1541,7 +1614,11 @@ begin
     for i := 0 to n - 1 do
     begin
       if (i = APara) or ((AKind = ekJoin) and (i = APara + 1)) then Continue;
-      if i < APara then diff := ParaDiff(AFull, i, w, i) else diff := ParaDiff(AFull, i, w, i + shift);
+      { (the paragraph right after the edit is read after another paragraph than before: a
+        list item's start may be given or go on there - SameParaFormat) }
+      if i < APara then diff := ParaDiff(AFull, i, w, i)
+      else diff := ParaDiff(AFull, i, w, i + shift, (i = APara + 1) or
+        ((AKind = ekJoin) and (i = APara + 2)));
       AssertEquals(Format('%s: paragraph %d is what it was', [msg, i]), '', diff);
     end;
     if AKind = ekSplit then
@@ -1556,9 +1633,11 @@ begin
       so := SpotsOf(AFull, APara);
       for part := 0 to 1 do
       begin
+        // (a list item given a start keeps it in the first part; the second goes on)
+        if (part = 1) and (pe.List.StartAt > 0) then pe.List.StartAt := 0;
         AssertTrue(Format('%s: part %d: its paragraph format %s / %s', [msg, part, DescribePara(pe),
           DescribePara(w.Formats.ParaFormat(w.ParaFormatOf(APara + part)))]),
-          pe.Equals(w.Formats.ParaFormat(w.ParaFormatOf(APara + part))));
+          SameParaFormat(pe, w.Formats.ParaFormat(w.ParaFormatOf(APara + part))));
         AssertEquals(Format('%s: part %d: its cell', [msg, part]), DescribeCell(AFull, APara),
           DescribeCell(w, APara + part));
         if part = 0 then len2 := mid else len2 := len - mid;
@@ -1585,7 +1664,7 @@ begin
       pe := AFull.Formats.ParaFormat(AFull.ParaFormatOf(APara));
       AssertTrue(Format('%s: the first paragraph''s format %s / %s', [msg, DescribePara(pe),
         DescribePara(w.Formats.ParaFormat(w.ParaFormatOf(APara)))]),
-        pe.Equals(w.Formats.ParaFormat(w.ParaFormatOf(APara))));
+        SameParaFormat(pe, w.Formats.ParaFormat(w.ParaFormatOf(APara))));
       sw := SpotsOf(w, APara);
       AssertEquals(msg + ': its characters', len + len2, Length(sw));
       for part := 0 to 1 do
@@ -1622,7 +1701,7 @@ begin
       if (AKind = ekParaFormat) and not AFull.ParaEndsInField(APara) then pe.SpaceBefore := 77;
       AssertTrue(Format('%s: its paragraph format %s / %s', [msg, DescribePara(pe),
         DescribePara(w.Formats.ParaFormat(w.ParaFormatOf(APara)))]),
-        pe.Equals(w.Formats.ParaFormat(w.ParaFormatOf(APara))));
+        SameParaFormat(pe, w.Formats.ParaFormat(w.ParaFormatOf(APara))));
       AssertEquals(msg + ': its cell', DescribeCell(AFull, APara), DescribeCell(w, APara));
       so := SpotsOf(AFull, APara);
       sw := SpotsOf(w, APara);
@@ -2046,7 +2125,7 @@ begin
       r := LoadDoc(o, True);
       gotP := r.Formats.ParaFormat(r.ParaFormatOf(0));
       AssertTrue(Format('paragraph format %d: %s / %s in %s', [i, DescribePara(paras[i]),
-        DescribePara(gotP), Shown(StrOf(o, 0, Length(o)))]), paras[i].Equals(gotP));
+        DescribePara(gotP), Shown(StrOf(o, 0, Length(o)))]), SameParaFormat(paras[i], gotP));
       AssertTrue(Format('paragraph format %d: the next paragraph is plain', [i]),
         TyDefaultParaFormat.Equals(r.Formats.ParaFormat(r.ParaFormatOf(1))));
       AssertTrue(Format('paragraph format %d: characters', [i]),
@@ -2074,12 +2153,15 @@ begin
     // the fonts: \f0 is the default font's and that has no name here; \f1 Arial, \f2 the
     // Chinese one, \f3 Symbol for the bullets
     AssertTrue('Symbol in the font table: ' + Shown(text), PosRaw('\fnil\fcharset2 Symbol;}', text) > 0);
+    // (as RichEdit writes it, with Word's list table's \lsN \ilvlM after it)
     AssertTrue('a bullet as RichEdit writes it: ' + Shown(text),
-      PosRaw('\pard{\pntext\f3\''B7\tab}{\*\pn\pnlvlblt\pnf3\pnindent0{\pntxtb\''B7}}\fi-360\li720', text) > 0);
+      PosRaw('\pard{\pntext\f3\''B7\tab}{\*\pn\pnlvlblt\pnf3\pnindent0{\pntxtb\''B7}}\ls1\ilvl0\fi-360\li720', text) > 0);
     AssertTrue('the next bullets: only their text', PosRaw('\par' + #13#10 + '{\pntext\f3\''B7\tab}bullet b', text) > 0);
     AssertTrue('a numbered list from 3: ' + Shown(text),
-      PosRaw('\pard{\pntext\f1 3.\tab}{\*\pn\pnlvlbody\pnf1\pnindent0\pnstart3\pndec{\pntxta.}}\fi-360\li720', text) > 0);
-    AssertTrue('its second item is 4', PosRaw('{\pntext\f1 4.\tab}fourth', text) > 0);
+      PosRaw('\pard{\pntext\f1 3.\tab}{\*\pn\pnlvlbody\pnf1\pnindent0\pnstart3\pndec{\pntxta.}}\ls2\ilvl0\fi-360\li720', text) > 0);
+    // (it goes on: the same words as the first, RichEdit numbers on through them)
+    AssertTrue('its second item is 4: ' + Shown(text),
+      PosRaw('{\pntext\f1 4.\tab}{\*\pn\pnlvlbody\pnf1\pnindent0\pnstart3\pndec{\pntxta.}}\ls2\ilvl0\fi-360\li720 fourth', text) > 0);
     AssertTrue('upper roman, level 1: ' + Shown(text),
       PosRaw('{\pntext\f1 I.\tab}{\*\pn\pnlvl2\pnf1\pnindent0\pnstart1\pnucrm{\pntxta.}}', text) > 0);
     // a table as RichEdit writes it
@@ -2100,7 +2182,7 @@ begin
     SetChars(d, 0, d.Text.Length, AllChar, Fmt('Arial', 0, 24));
     p := TyDefaultParaFormat;
     p.List.Kind := lkDecimal;
-    p.List.StartAt := 1;
+    p.List.StartAt := 0;
     d.Execute(TTyRichSetParaFormat.Create(0, 1, AllPara, p));
     d.Execute(TTyRichSetParaFormat.Create(3, 4, AllPara, p));
     o := SaveBytes(d);
@@ -2109,7 +2191,7 @@ begin
     AssertTrue('its second item: ' + Shown(text), PosRaw('{\pntext\f1 2.\tab}two', text) > 0);
     AssertTrue('after the paragraph between, the list starts again: ' + Shown(text),
       PosRaw('between\par' + #13#10 +
-        '\pard{\pntext\f1 1.\tab}{\*\pn\pnlvlbody\pnf1\pnindent0\pnstart1\pndec{\pntxta.}}three', text) > 0);
+        '\pard{\pntext\f1 1.\tab}{\*\pn\pnlvlbody\pnf1\pnindent0\pnstart1\pndec{\pntxta.}}\ls2\ilvl0 three', text) > 0);
     AssertTrue('and goes on: ' + Shown(text), PosRaw('{\pntext\f1 2.\tab}four', text) > 0);
   finally
     d.Free;
@@ -3076,8 +3158,9 @@ begin
       o := SaveDocPoisoned(d, info);
       AssertEquals('one paragraph rewritten', 1, info.RewrittenParas);
       text := StretchText(o, info);
+      // (RichEdit's words made here: Word's list table's \ls after them)
       if kind = 0 then
-        words := '{\*\pn\pnlvlbody\pnf0\pnindent0\pnstart1\pndec{\pntxta.}}'
+        words := '{\*\pn\pnlvlbody\pnf0\pnindent0\pnstart1\pndec{\pntxta.}}\ls1\ilvl0'
       else
         words := '{\*\pn\pnlvlbody\pndec\pnstart1\pnf0\pnindent0{\pntxta)}}';
       AssertRaw(Format('kind %d: the item as it is written', [kind]),
@@ -3087,7 +3170,7 @@ begin
       AssertEquals(Format('kind %d: read back', [kind]), 64, r.Text.ParaCount);
       AssertRaw(Format('kind %d: read back: the item', [kind]), 'L3X', ParaText(r, 63));
       AssertTrue(Format('kind %d: read back: its format', [kind]),
-        d.Formats.ParaFormat(d.ParaFormatOf(63)).Equals(r.Formats.ParaFormat(r.ParaFormatOf(63))));
+        SameParaFormat(d.Formats.ParaFormat(d.ParaFormatOf(63)), r.Formats.ParaFormat(r.ParaFormatOf(63))));
     finally
       r.Free;
       d.Free;
@@ -3993,7 +4076,8 @@ begin
       end;
     end;
     if (k < R.LastPara) or R.LastWhole then
-      if not A.Formats.ParaFormat(A.ParaFormatOf(k)).Equals(B.Formats.ParaFormat(B.ParaFormatOf(j))) then
+      if not SameParaFormat(A.Formats.ParaFormat(A.ParaFormatOf(k)), B.Formats.ParaFormat(B.ParaFormatOf(j)),
+        FirstItemFrom(A, R.FirstPara, k)) then
         Exit(Format('paragraph %d: format %s / %s', [k,
           DescribePara(A.Formats.ParaFormat(A.ParaFormatOf(k))),
           DescribePara(B.Formats.ParaFormat(B.ParaFormatOf(j)))]));

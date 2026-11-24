@@ -348,7 +348,11 @@ end;
 { A saved document of its own has no list table of a file: a Word list's \ls and \ilvl
   (references into the source's tables) are not written - the list is written from its kind
   (the writer's rule) - so they are not compared there. }
-function SamePara(const A, B: TTyParaFormat; ASaved: Boolean): Boolean;
+{ AFirstItem: B's paragraph is the first list item of what was pasted - one that went on in A
+  (no start given) begins its list there, at the start its list's words give it. }
+function SamePara(const A, B: TTyParaFormat; ASaved: Boolean; AFirstItem: Boolean = False): Boolean;
+var
+  a2: TTyParaFormat;
 
   function Stripped(const F: TTyParaFormat): TTyParaFormat;
   var
@@ -362,8 +366,12 @@ function SamePara(const A, B: TTyParaFormat; ASaved: Boolean): Boolean;
   end;
 
 begin
-  if not ASaved then Exit(A.Equals(B));
-  Result := Stripped(A).Equals(Stripped(B));
+  a2 := A;
+  if AFirstItem and (A.List.Kind <> lkNone) and (A.List.StartAt = 0) and (B.List.StartAt > 0) then
+    a2.List.StartAt := B.List.StartAt;
+  // (a list item the writer made carries its \ls and \ilvl through the copy's RTF)
+  if not ASaved then Exit(a2.Equals(B) or Stripped(a2).Equals(Stripped(B)));
+  Result := Stripped(a2).Equals(Stripped(B));
 end;
 
 { The cell of A's paragraph AK, unless a row of its table that the copy R takes holds a nested
@@ -399,6 +407,16 @@ begin
   q := ADoc.FieldPartner(APos);
   if TTyRichFieldMark(o).Kind = rfmOpen then Result := (q > APos) and (q < ARangeStop)
   else Result := (q >= ARangeStart) and (q < APos);
+end;
+
+// Paragraph AK of A is the first list item from AFirst on.
+function FirstPastedItem(A: TTyRichDocument; AFirst, AK: Integer): Boolean;
+var
+  i: Integer;
+begin
+  for i := AFirst to AK - 1 do
+    if A.Formats.ParaFormat(A.ParaFormatOf(i)).List.Kind <> lkNone then Exit(False);
+  Result := A.Formats.ParaFormat(A.ParaFormatOf(AK)).List.Kind <> lkNone;
 end;
 
 function PasteDiff(A: TTyRichDocument; AFrom, ALen: TTyRichPos; B: TTyRichDocument; AK: Integer;
@@ -484,8 +502,16 @@ begin
     // paragraph taken whole too: the copy ends it with \par
     if (k < R.LastPara) or R.LastWhole then
       if not SamePara(A.Formats.ParaFormat(A.ParaFormatOf(k)), B.Formats.ParaFormat(B.ParaFormatOf(bk)),
-        ASaved) then
-        Exit(Format('paragraph %d: its format', [k]));
+        ASaved, FirstPastedItem(A, R.FirstPara, k)) then
+        Exit(Format('paragraph %d: its format (list %d/%d/%d, %d words / %d/%d/%d, %d words)',
+          [k, Ord(A.Formats.ParaFormat(A.ParaFormatOf(k)).List.Kind),
+          A.Formats.ParaFormat(A.ParaFormatOf(k)).List.Level,
+          A.Formats.ParaFormat(A.ParaFormatOf(k)).List.StartAt,
+          A.Formats.ParaFormat(A.ParaFormatOf(k)).Extra.Count,
+          Ord(B.Formats.ParaFormat(B.ParaFormatOf(bk)).List.Kind),
+          B.Formats.ParaFormat(B.ParaFormatOf(bk)).List.Level,
+          B.Formats.ParaFormat(B.ParaFormatOf(bk)).List.StartAt,
+          B.Formats.ParaFormat(B.ParaFormatOf(bk)).Extra.Count]));
     ca := PastedCell(A, R, k);
     cb := B.CellAt(bk);
     if R.InOneCell then
@@ -598,10 +624,11 @@ begin
 end;
 
 // Any Extra fragment of ADoc's formats in use (paragraph and runs) names a header table's
-// entry, or a row's definition does.
-function AnyTableNumber(ADoc: TTyRichDocument; out AWhat: string): Boolean;
+// entry, or a row's definition does. AOwnLists: a list's \ls and \ilvl are not counted (a
+// document read from a file this writer wrote: they name its own list table's lists).
+function AnyTableNumber(ADoc: TTyRichDocument; out AWhat: string; AOwnLists: Boolean = False): Boolean;
 var
-  k, i, j: Integer;
+  k, i, j, param: Integer;
   runs: TTyRunArray;
   pf: TTyParaFormat;
   cf: TTyCharFormat;
@@ -612,7 +639,8 @@ begin
   begin
     pf := ADoc.Formats.ParaFormat(ADoc.ParaFormatOf(k));
     for i := 0 to pf.Extra.Count - 1 do
-      if TyRtfNamesTableEntry(pf.Extra.Item(i)) then
+      if TyRtfNamesTableEntry(pf.Extra.Item(i)) and not (AOwnLists and
+         (TyRtfParaExtraKind(pf.Extra.Item(i), param) in [pekLs, pekIlvl])) then
       begin
         AWhat := Format('paragraph %d: %s', [k, Shown(pf.Extra.Item(i))]);
         Exit;
@@ -2484,7 +2512,7 @@ var
       saved := SaveOut(b);
       c := LoadDoc(saved, True);
       try
-        if AnyTableNumber(c, what) or AnyObjectTableNumber(c, what) then
+        if AnyTableNumber(c, what, True) or AnyObjectTableNumber(c, what) then
           Fail(AWhat + ' into another file, saved and read back: ' + what);
         AssertEquals(AWhat + ': read back, its paragraphs', b.Text.ParaCount, c.Text.ParaCount);
       finally

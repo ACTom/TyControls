@@ -14170,8 +14170,10 @@ begin
   EndCompositionForUser;
   ClampRange(FDoc.Text.Length, AStart, ALen);
   ParaFormatAt(AStart, cur);
-  // Paragraph.Numbering's rule: the default hanging indent on, the indents away off
-  ApiParaFormat(AStart, ALen, CTyListMask, TyRichListValue(TyRichListOf(ANumber, cur.List)));
+  { Paragraph.Numbering's rule: the default hanging indent on, the indents away off; with
+    ForceNewNum the range's first item begins a new list at NumberStart, the others go on }
+  ApiParaFormat(AStart, ALen, CTyListMask + [pffListStart, pffListRestart],
+    TyRichListValue(TyRichListOf(ANumber, cur.List)));
 end;
 
 function TTyCustomRichEdit.GetParaTabs(APos: TTyRichPos; var AStopList: TTyTabStopList): Boolean;

@@ -246,7 +246,7 @@ uses
 | `EnableURLs`、`ShowURLHint`、`SelectionStreamMode`、`SpellChecking`、`Transparent`、`Touch` | 没有对应 |
 | `OnResizeRequest` | `OnContentSizeChange`，在里面读 `ContentHeight` / `ContentWidth`(内容需要的尺寸)——或者用 `AutoHeight`，由它自己设高度 |
 | `OnProtectChange`、`OnSaveClipboard`、`OnGesture`、`OnMouseActivate`、`OnStartDock`、`OnEndDock` | 没有对应;处理方法留在单元里，不再挂上 |
-- **RichMemo 的 `TTyParaNumbering` 只保留 `Style` 和 `NumberStart`**:`pnCustomChar` 变成项目符号,`Indent`、`CustomChar`、`SepChar`、`ForceNewNum` 读出 0、`#0` 或 `False`。
+- **RichMemo 的 `TTyParaNumbering` 只保留 `Style`、`ForceNewNum` 和 `NumberStart`**:`ForceNewNum` 加 `NumberStart` 是给了起始号的项(写到一段范围上时，范围里第一项从这个号开始新列表，其余接着编),没有 `ForceNewNum` 就接着前一项编(读出 `False` 和 0);`pnCustomChar` 变成项目符号,`Indent`、`CustomChar`、`SepChar` 读出 0 或 `#0`。
 - **竖线制表位**:`tabWordBar` 按左对齐制表位写入。
 
 ### 行为不同的 RichMemo 方法

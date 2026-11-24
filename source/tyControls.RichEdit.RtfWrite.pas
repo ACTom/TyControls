@@ -197,7 +197,7 @@ function TyRichNextChar(P: PByte; ALeft: PtrInt; out ACode: Cardinal): Integer;
 implementation
 
 uses
-  tyControls.RichEdit.TextIO;
+  Generics.Collections, tyControls.RichEdit.TextIO;
 
 const
   OutBufSize = 64 * 1024;
@@ -205,9 +205,14 @@ const
   // save plans every so many paragraphs (a power of two)
   ProgressBytes = 256 * 1024;
   PlanEvery = 65536;
-  // How far back a numbered paragraph's place in its list is counted (its number is only
-  // text for readers that do not number themselves).
-  MaxListWalk = 10000;
+  // How far back a numbered paragraph's place in its list is counted: as far as the layout
+  // counts it (tyControls.RichEdit.Layout's CRichListWalkParas).
+  MaxListWalk = 4096;
+  // the levels of a list in RTF (and Word): 0 .. 8
+  MaxListLevel = 8;
+  // what the layout draws for a bullet of no text of its own, by level (mod 3): U+2022,
+  // U+25E6, U+25AA (tyControls.RichEdit.Layout's TyRichListMarkerText)
+  LevelBullets: array[0..2] of Cardinal = ($2022, $25E6, $25AA);
   HexDigits: array[0..15] of Char = '0123456789abcdef';
 
 type
@@ -253,9 +258,34 @@ type
     PnFont: Integer;                 // \pnfN among the fragments, -1 none
     PnBefore, PnAfter: RawByteString; // what {\pntxtb ...} and {\pntxta ...} hold
     PnUc: Boolean;                   // a fragment of {\*\pn} holds a \uN
+    { lmLs of a plain list table's list (the model's, as this writer writes it): its words for
+      readers that know no table ({\pntext} and {\*\pn}) are made here as for lmGen }
+    PnGen: Boolean;
     Shade: Integer;                  // the shading's colour index, 0 none
   end;
   PParaInfo = ^TParaInfo;
+
+  { A run of list items the model owns, written as one list of Word's list table (its own
+    \listid, its own \ls): consecutive paragraphs whose numbers, counted as Word counts a
+    list - each level on from its last item, again from its start after an item of a
+    shallower level - are the numbers the control draws. Per level: used yet, its kind, its
+    start as the model has it (the list's \levelstartat) and as Word is to show it (the
+    override's, where it differs), the number of its last item and whether one is counted
+    since the last shallower item, the bullet's own text. }
+  TListRun = record
+    Ls, Id: Integer;
+    Used, Have: array[0..MaxListLevel] of Boolean;
+    Kind: array[0..MaxListLevel] of TTyListKind;
+    ListStart, WordStart, Cnt: array[0..MaxListLevel] of Integer;
+    Bullet: array[0..MaxListLevel] of UTF8String;
+  end;
+
+  TListItem = record
+    Run, Number: Integer;
+  end;
+
+  TListItems = specialize TDictionary<Integer, TListItem>;
+  TListNumbers = specialize TDictionary<Integer, Integer>;
 
   TPlanItem = record
     Stretch: Boolean;
@@ -329,9 +359,19 @@ type
     FWroteRow: Boolean;
     FLastRowDef: RawByteString;
     FStartRowDef: RawByteString;   // the row definition in effect where the stretch began
-    // the paragraph written last: its list and its number in it
-    FNumPara, FNum: Integer;
-    FNumList: TTyListFormat;
+    { The lists the model owns: the runs (one list of the list table each), the run and the
+      number of each such paragraph (by its index), made while the save plans; the number
+      every numbered paragraph looked at shows (the layout's rule, DrawnNumber). }
+    FRuns: array of TListRun;
+    FRunN: Integer;
+    FItems: TListItems;
+    FDrawn: TListNumbers;
+    FHeads: TListNumbers;     // ... and the number its list's first item shows
+    FPnStart: Integer;        // the \pnstart of the item being written (see Props)
+    FLastItem: Integer;       // the paragraph planned last as such an item
+    FListBase: Boolean;
+    FNextLs, FNextListId: Integer;
+    FCurRun: Integer;         // the run of the paragraph format written last, -1 none
     FUc: Integer;            // the \uc the file has in effect where the stretch begins
     // the header's \ansicpg: the code page a bookmark made here writes its name in
     FBkmCp: Integer;
@@ -445,10 +485,19 @@ type
     function FieldWhole(AIndex: Integer; AChar: Int64): Boolean;
     procedure WritePara(AIndex: Integer; AFormat: TTyParaFormatId; const ARuns: TTyRunArray;
       AInCell: Boolean; AText: PByte; ALen: PtrInt);
-    procedure WriteParaFormat(AInfo: PParaInfo; AInCell: Boolean; AFirstFont, ANumber: Integer);
+    procedure WriteParaFormat(AInfo: PParaInfo; AInCell: Boolean; AFirstFont, ANumber,
+      ARun: Integer);
     procedure WritePnWords(const AList: TTyListFormat);
     procedure WritePnText(AInfo: PParaInfo; AFirstFont, ANumber: Integer);
-    function ListNumber(AIndex: Integer; const AList: TTyListFormat): Integer;
+    function ListAt(AIndex: Integer): TTyListFormat;
+    function DrawnNumber(AIndex: Integer; const AList: TTyListFormat): Integer;
+    function NewRun: Integer;
+    procedure PlanListItem(AIndex: Integer; const AList: TTyListFormat);
+    procedure WriteLevelText(const AText: UTF8String; ACode: Cardinal);
+    procedure WriteList(const ARun: TListRun);
+    procedure WriteOverride(const ARun: TListRun);
+    procedure WriteListTable(AWhole: Boolean);
+    procedure WriteOverrideTable(AWhole: Boolean);
     procedure WriteCharFormat(AId: Integer);
     procedure WriteChar(ACode: Cardinal);
     procedure WriteText(const S: UTF8String);
@@ -752,6 +801,11 @@ begin
   FCleanPos := -1;
   FUc := 1;
   SetLength(FBuf, OutBufSize);
+  FItems := TListItems.Create;
+  FDrawn := TListNumbers.Create;
+  FHeads := TListNumbers.Create;
+  FLastItem := -2;
+  FCurRun := -1;
 end;
 
 destructor TRtfWriter.Destroy;
@@ -762,6 +816,9 @@ begin
     if FChars[i] <> nil then Dispose(FChars[i]);
   for i := 0 to High(FParas) do
     if FParas[i] <> nil then Dispose(FParas[i]);
+  FItems.Free;
+  FDrawn.Free;
+  FHeads.Free;
   inherited Destroy;
 end;
 
@@ -1491,12 +1548,22 @@ begin
     // Word's list: still what the file's list table says, or changed since
     resolved := TyDefaultParaFormat.List;
     FLoad.Scan.ResolveListRef(ls, ilvl, resolved);
-    if SameList(resolved, Result^.Fmt.List) then Result^.Mode := lmLs;
+    { (an item that goes on - start 0 - is of the list as one with its start: the reader
+      gives the start to the first item of a list's paragraphs alone) }
+    if (resolved.Kind = Result^.Fmt.List.Kind) and (resolved.Level = Result^.Fmt.List.Level) and
+       ((Result^.Fmt.List.StartAt = 0) or (resolved.StartAt = Result^.Fmt.List.StartAt)) and
+       (resolved.Bullet = Result^.Fmt.List.Bullet) then
+    begin
+      Result^.Mode := lmLs;
+      Result^.PnGen := (Result^.Fmt.List.Kind <> lkNone) and FLoad.Scan.ListRefPlain(ls);
+    end;
   end;
   if (Result^.Mode = lmNone) and (Result^.Fmt.List.Kind <> lkNone) then
     if hasPn then Result^.Mode := lmPn else Result^.Mode := lmGen;
-  // a bullet of its own text is written as this writer writes one (the file's words go)
-  if (Result^.Fmt.List.Kind = lkBullet) and (Result^.Fmt.List.Bullet <> '') then
+  // a bullet of its own text is written as this writer writes one (the file's words go) -
+  // but where the file's list table says it
+  if (Result^.Fmt.List.Kind = lkBullet) and (Result^.Fmt.List.Bullet <> '') and
+     (Result^.Mode <> lmLs) then
     Result^.Mode := lmGen;
   // the paragraph's ground, in the colour table (0: none)
   EnsureTables;
@@ -1580,8 +1647,13 @@ begin
   end;
   pi := ParaInfo(AFormat);
   // a bullet made here is the Symbol font's
-  if (pi^.Mode = lmGen) and (pi^.Fmt.List.Kind = lkBullet) and (pi^.Fmt.List.Bullet = '') then
+  if ((pi^.Mode = lmGen) or pi^.PnGen) and (pi^.Fmt.List.Kind = lkBullet) and
+     (pi^.Fmt.List.Bullet = '') then
     FSymbolNeeded := True;
+  // a list item the model owns: its run of the list table (the notes come in the order of
+  // the paragraphs)
+  if (pi^.Mode = lmGen) and (pi^.Fmt.List.Kind <> lkNone) then
+    PlanListItem(AIndex, pi^.Fmt.List);
 end;
 
 procedure TRtfWriter.NotePara(AIndex: Integer; AData: Pointer);
@@ -1920,13 +1992,16 @@ var
   c: TColor;
 begin
   c := PlainColor(FDoc.DocumentColor);
+  // (where Word breaks the line, a line break: anything else between the groups is text,
+  // which Word puts at the document's start)
   Sym('{\*\background {\shp{\*\shpinst\shpleft0\shptop0\shpright0\shpbottom0\shpfhdr0' +
     '\shpbxmargin\shpbxignore\shpbymargin\shpbyignore\shpwr0\shpwrk0\shpfblwtxt1\shpz0' +
-    '\shplid1025 {\sp{\sn shapeType}{\sv 1}}{\sp{\sn fFlipH}{\sv 0}}{\sp{\sn fFlipV}{\sv 0}}' +
-    '{\sp{\sn fillColor}{\sv ');
+    '\shplid1025'#13#10'{\sp{\sn shapeType}{\sv 1}}{\sp{\sn fFlipH}{\sv 0}}' +
+    '{\sp{\sn fFlipV}{\sv 0}}{\sp{\sn fillColor}{\sv ');
   PutInt(Red(c) or (Green(c) shl 8) or (Blue(c) shl 16));
   Sym('}}{\sp{\sn fFilled}{\sv 1}}{\sp{\sn lineWidth}{\sv 0}}{\sp{\sn fLine}{\sv 0}}' +
-    '{\sp{\sn bWMode}{\sv 9}}{\sp{\sn fBackground}{\sv 1}} {\sp{\sn fLayoutInCell}{\sv 1}}}}}');
+    '{\sp{\sn bWMode}{\sv 9}}{\sp{\sn fBackground}{\sv 1}}'#13#10 +
+    '{\sp{\sn fLayoutInCell}{\sv 1}}}}}');
 end;
 
 // The file's header with the new fonts and colours at the end of their tables (a table the
@@ -1943,11 +2018,15 @@ type
   end;
 var
   bytes: TBytes;
-  p, fAt, cAt, fClose, cClose, q: Int64;
+  p, fAt, cAt, fClose, cClose, q, lAt, oAt, lClose, oClose, base: Int64;
   ansi: Integer;
   edits: array of TEdit;
   ne, ei: Integer;
   scan: TTyRtfParser;
+  acts: array[0..3] of Integer;   // what goes in, in the order of the places: 0 fonts,
+  places: array[0..3] of Int64;   // 1 colours, 2 lists, 3 list overrides
+  na, i, j, ta: Integer;
+  tp: Int64;
 
   procedure Add(const ARange: TTyRtfRange; AKind: Integer; AWanted: Boolean);
   var
@@ -2069,16 +2148,63 @@ begin
       else if fClose >= 0 then cAt := fClose + 1
       else cAt := FHeaderStop;
   end;
-  if (fAt >= 0) and ((cAt < 0) or (fAt <= cAt)) then
+  { The lists the model owns: added to the file's list table and override table, or in
+    tables of their own - the list table after the colour table (or the font table), the
+    override table after the list table. }
+  lAt := -1;
+  oAt := -1;
+  lClose := -1;
+  oClose := -1;
+  if FRunN > 0 then
   begin
-    Fonts;
-    if cAt >= 0 then Colors;
-  end
-  else
-  begin
-    if cAt >= 0 then Colors;
-    if fAt >= 0 then Fonts;
+    lClose := FLoad.Scan.ListTableClose;
+    oClose := FLoad.Scan.OverrideTableClose;
+    if lClose >= 0 then lAt := lClose
+    else
+    begin
+      base := FLoad.Scan.ColorTableClose;
+      if base < 0 then base := FLoad.Scan.FontTableClose;
+      if base >= 0 then lAt := base + 1 else lAt := FHeaderStop;
+    end;
+    if oClose >= 0 then oAt := oClose
+    else if lClose >= 0 then oAt := lClose + 1
+    else oAt := lAt;
   end;
+  na := 0;
+  if fAt >= 0 then begin acts[na] := 0; places[na] := fAt; Inc(na); end;
+  if cAt >= 0 then begin acts[na] := 1; places[na] := cAt; Inc(na); end;
+  if lAt >= 0 then begin acts[na] := 2; places[na] := lAt; Inc(na); end;
+  if oAt >= 0 then begin acts[na] := 3; places[na] := oAt; Inc(na); end;
+  // by place, at one place in that order
+  for i := 1 to na - 1 do
+  begin
+    ta := acts[i];
+    tp := places[i];
+    j := i - 1;
+    while (j >= 0) and ((places[j] > tp) or ((places[j] = tp) and (acts[j] > ta))) do
+    begin
+      acts[j + 1] := acts[j];
+      places[j + 1] := places[j];
+      Dec(j);
+    end;
+    acts[j + 1] := ta;
+    places[j + 1] := tp;
+  end;
+  for i := 0 to na - 1 do
+    case acts[i] of
+      0: Fonts;
+      1: Colors;
+      2:
+        begin
+          UpTo(lAt);
+          WriteListTable(lClose < 0);
+        end;
+      3:
+        begin
+          UpTo(oAt);
+          WriteOverrideTable(oClose < 0);
+        end;
+    end;
   UpTo(FHeaderStop);
   // what the header lacks of the settings, at its end
   while ei < ne do
@@ -2123,6 +2249,14 @@ begin
   if FColorN > 0 then
   begin
     WriteColors(0, True);
+    NewLine;
+  end;
+  // the lists the model owns
+  if FRunN > 0 then
+  begin
+    WriteListTable(True);
+    NewLine;
+    WriteOverrideTable(True);
     NewLine;
   end;
   // defaults the document was given (a new one has the engine's: nothing is written)
@@ -2365,7 +2499,7 @@ begin
   FCurPara := -1;
   FCurInCell := False;
   FWroteRow := False;
-  FNumPara := -2;
+  FCurRun := -1;
   if ACount = 0 then Exit;
   // whatever \uc the file left in effect here: ours is one fallback character
   if FLoad <> nil then Word('uc1');
@@ -2506,35 +2640,44 @@ var
   pi: PParaInfo;
   p, q, stop, n: PtrInt;
   ch, runEnd: Int64;
-  r, firstFont, number: Integer;
+  r, firstFont, number, itemRun: Integer;
   code: Cardinal;
   m: TTyRichFieldMark;
+  it: TListItem;
 
   // the paragraph's own properties (and its list number): before its text, or after a field
   // written as its bytes that ended in it
   procedure Props;
   begin
-    // The item's number - and for every paragraph, which list it is of: the next item's
-    // number goes on from it (ListNumber). A number that is not written (Word's list table
-    // says it) is worked out only when that costs nothing.
+    // The item's number as the control draws it (DrawnNumber), where it is written as text;
+    // a list item the model owns: its run of the list table (planned in Note). A number
+    // Word's list table says alone (the file's list) is not worked out.
     number := 0;
-    if pi^.Fmt.List.Kind in [lkNone, lkBullet] then
+    FPnStart := 0;
+    itemRun := -1;
+    if (pi^.Fmt.List.Kind <> lkNone) and ((pi^.Mode in [lmPn, lmGen]) or pi^.PnGen) then
     begin
-      FNumPara := AIndex;
-      FNumList := pi^.Fmt.List;
-      FNum := 0;
-    end
-    else if (pi^.Mode in [lmPn, lmGen]) or (FNumPara = AIndex - 1) then
-      number := ListNumber(AIndex, pi^.Fmt.List)
-    else
-      FNumPara := -2;
-    if (AFormat <> FCurPara) or (AInCell <> FCurInCell) then
+      number := DrawnNumber(AIndex, pi^.Fmt.List);
+      { The {\*\pn ...} start for readers that number by those words (the system's
+        RichEdit goes on through paragraphs of equal words and takes a marker text it would
+        not have made as text): an item right after the item before it in its list, the
+        list's first number - its words then are those of the items before it, also of
+        the file's own; else its own number. }
+      FPnStart := number;
+      if (number > 0) and (AIndex > 0) and (pi^.Fmt.List.StartAt <= 0) then
+        with ListAt(AIndex - 1) do
+          if (Kind = pi^.Fmt.List.Kind) and (Level = pi^.Fmt.List.Level) then
+            FHeads.TryGetValue(AIndex, FPnStart);
+      if (pi^.Mode = lmGen) and FItems.TryGetValue(AIndex, it) then itemRun := it.Run;
+    end;
+    if (AFormat <> FCurPara) or (AInCell <> FCurInCell) or (itemRun <> FCurRun) then
     begin
-      WriteParaFormat(pi, AInCell, firstFont, number);
+      WriteParaFormat(pi, AInCell, firstFont, number, itemRun);
       FCurPara := AFormat;
       FCurInCell := AInCell;
+      FCurRun := itemRun;
     end
-    else if (pi^.Mode in [lmPn, lmGen]) and (pi^.Fmt.List.Kind <> lkNone) then
+    else if ((pi^.Mode in [lmPn, lmGen]) or pi^.PnGen) and (pi^.Fmt.List.Kind <> lkNone) then
       // the same list goes on: only the item's own text
       WritePnText(pi, firstFont, number);
   end;
@@ -2712,39 +2855,350 @@ begin
       lkUpperRoman: Word('pnucrm');
     end;
   end;
-  if (AList.StartAt <> 0) or (AList.Kind <> lkBullet) then WordN('pnstart', AList.StartAt);
+  // (a number's start: as for the words made here, the item's \pnstart - see Props)
+  if AList.Kind <> lkBullet then
+  begin
+    if FPnStart > 0 then WordN('pnstart', FPnStart) else WordN('pnstart', 1);
+  end
+  else if AList.StartAt <> 0 then
+    WordN('pnstart', AList.StartAt);
 end;
 
-// The paragraph's place in its list: its number counts the paragraphs of the same list
-// right before it. Inside a stretch the paragraph before was written just now, and its
-// list and number are known (WritePara notes them for every paragraph); only a stretch's
-// first paragraph has to look back at the paragraphs before it, each by a lookup - at most
-// MaxListWalk of them (the number is only text for readers that do not number themselves).
-function TRtfWriter.ListNumber(AIndex: Integer; const AList: TTyListFormat): Integer;
-var
-  k, steps: Integer;
+function ListLevelOf(const AList: TTyListFormat): Integer; inline;
 begin
-  Result := AList.StartAt;
-  if Result <= 0 then Result := 1;
-  if FNumPara = AIndex - 1 then
+  Result := AList.Level;
+  if Result < 0 then Result := 0;
+  if Result > MaxListLevel then Result := MaxListLevel;
+end;
+
+function TRtfWriter.ListAt(AIndex: Integer): TTyListFormat;
+begin
+  Result := FPool.ParaFormat(FDoc.ParaFormatOf(AIndex)).List;
+end;
+
+{ The number list item AIndex shows in the control - the layout's rule
+  (TTyRichLayouter.ListNumber): an item given a start, that start; else its place among the
+  consecutive items of its level and kind before it, on from the nearest one given a start -
+  an item of a deeper level is passed over; a shallower one, another kind on the level or a
+  paragraph that is no list item ends the list, whose first item is 1. One rule for every number this writer writes (the marker's text, the
+  list table's starts). Each number found is kept: the items planned or written one after
+  the other look back to the item before them only, and an item after inner items to the
+  last of its level; at most MaxListWalk paragraphs back, as the layout. 0 for a bullet. }
+function TRtfWriter.DrawnNumber(AIndex: Integer; const AList: TTyListFormat): Integer;
+var
+  found: array of Integer;
+  n, k, steps, i, v, head: Integer;
+  lf: TTyListFormat;
+  known: Boolean;
+begin
+  if AList.Kind in [lkNone, lkBullet] then Exit(0);
+  if FDrawn.TryGetValue(AIndex, Result) then Exit;
+  head := 0;
+  found := nil;
+  SetLength(found, 8);
+  found[0] := AIndex;
+  n := 1;
+  known := AList.StartAt > 0;
+  // a start given: a new list begins here
+  if known then Result := AList.StartAt else Result := 0;
+  if known then head := AList.StartAt;
+  k := AIndex - 1;
+  steps := 0;
+  while not known and (k >= 0) and (steps < MaxListWalk) do
   begin
-    if SameList(FNumList, AList) then Result := FNum + 1;
+    Inc(steps);
+    lf := ListAt(k);
+    if (lf.Kind = lkNone) or (lf.Level < AList.Level) then Break;
+    if lf.Level > AList.Level then
+    begin
+      Dec(k);
+      Continue;
+    end;
+    if lf.Kind <> AList.Kind then Break;
+    if FDrawn.TryGetValue(k, v) then
+    begin
+      Result := v + n;
+      if not FHeads.TryGetValue(k, head) then head := v;
+      known := True;
+      Break;
+    end;
+    if lf.StartAt > 0 then
+    begin
+      // the item that began the list: on from its start
+      Result := lf.StartAt + n;
+      head := lf.StartAt;
+      known := True;
+      Break;
+    end;
+    if n = Length(found) then SetLength(found, n * 2);
+    found[n] := k;
+    Inc(n);
+    Dec(k);
+  end;
+  // (the list's first item, given no start: 1)
+  if not known then
+  begin
+    Result := n;
+    head := 1;
+  end;
+  // (bounded as the layout bounds what it remembers)
+  if FDrawn.Count > 1 shl 20 then
+  begin
+    FDrawn.Clear;
+    FHeads.Clear;
+  end;
+  for i := 0 to n - 1 do
+  begin
+    FDrawn.AddOrSetValue(found[i], Result - i);
+    FHeads.AddOrSetValue(found[i], head);
+  end;
+end;
+
+// A new run of the list table: its \ls and \listid above the file's.
+function TRtfWriter.NewRun: Integer;
+begin
+  if not FListBase then
+  begin
+    FListBase := True;
+    FNextLs := 1;
+    FNextListId := 1;
+    if FLoad <> nil then
+    begin
+      FNextLs := FLoad.Scan.ListLsHighest + 1;
+      FNextListId := FLoad.Scan.ListIdHighest + 1;
+    end;
+    if FNextLs <= 0 then FNextLs := 1;
+    if FNextListId <= 0 then FNextListId := 1;
+  end;
+  if FRunN = Length(FRuns) then SetLength(FRuns, FRunN * 2 + 4);
+  FRuns[FRunN] := Default(TListRun);
+  FRuns[FRunN].Ls := FNextLs;
+  FRuns[FRunN].Id := FNextListId;
+  Inc(FNextLs);
+  Inc(FNextListId);
+  Result := FRunN;
+  Inc(FRunN);
+end;
+
+{ A list item the model owns, planned (in the order of the paragraphs): one given a start
+  begins a run (a list of the table) of its own; one that goes on goes on in the run of the
+  item right before it when Word, counting that run, shows the number the control draws (and
+  its level has its kind and its bullet text there), else it begins a run of its own too.
+  Word is to show each run's first item at the number drawn (the override's start where the
+  list's own - the item's start, 0 for none - is not it); the reader takes the start of a
+  run's first item back from the list, and the others as going on. }
+procedure TRtfWriter.PlanListItem(AIndex: Integer; const AList: TTyListFormat);
+var
+  L, n, r, d: Integer;
+  it: TListItem;
+  takes: Boolean;
+begin
+  if FItems.ContainsKey(AIndex) then Exit;
+  L := ListLevelOf(AList);
+  n := DrawnNumber(AIndex, AList);
+  takes := (FRunN > 0) and (FLastItem = AIndex - 1) and (AList.StartAt <= 0);
+  if takes then
+    with FRuns[FRunN - 1] do
+      if Used[L] then
+      begin
+        if Kind[L] <> AList.Kind then takes := False
+        else if AList.Kind = lkBullet then takes := Bullet[L] = AList.Bullet
+        else if Have[L] then takes := n = Cnt[L] + 1
+        else takes := n = WordStart[L];
+      end;
+  if takes then r := FRunN - 1 else r := NewRun;
+  with FRuns[r] do
+  begin
+    // a level goes on from its last item; the deeper ones start again after it
+    for d := L + 1 to MaxListLevel do Have[d] := False;
+    if not Used[L] then
+    begin
+      Used[L] := True;
+      Kind[L] := AList.Kind;
+      ListStart[L] := AList.StartAt;
+      if AList.Kind = lkBullet then WordStart[L] := AList.StartAt else WordStart[L] := n;
+      Bullet[L] := AList.Bullet;
+    end;
+    Cnt[L] := n;
+    Have[L] := True;
+  end;
+  it.Run := r;
+  it.Number := n;
+  FItems.Add(AIndex, it);
+  FLastItem := AIndex;
+end;
+
+{ {\leveltext\uc1\'NN ...;}{\levelnumbers;} of a bullet (AText '': the character ACode): AText's characters - ASCII letters,
+  digits and the space as they are, other ASCII as \'xx, the rest as \uN - after their count
+  in UTF-16 units (at most 255). }
+procedure TRtfWriter.WriteLevelText(const AText: UTF8String; ACode: Cardinal);
+var
+  p, n, units: PtrInt;
+  code: Cardinal;
+  body: string;
+
+  procedure AddUnit(AUnit: Cardinal);
+  begin
+    if AUnit >= $8000 then body := body + '\u' + IntToStr(Integer(AUnit) - $10000) + ' ?'
+    else body := body + '\u' + IntToStr(AUnit) + ' ?';
+  end;
+
+begin
+  body := '';
+  units := 0;
+  if AText = '' then
+  begin
+    // the control's own bullet (a code: no literal of it in this source)
+    AddUnit(ACode);
+    units := 1;
+  end;
+  p := 1;
+  while (p <= Length(AText)) and (units < 254) do
+  begin
+    n := TyRichNextChar(@AText[p], Length(AText) - p + 1, code);
+    Inc(p, n);
+    if code >= $10000 then
+    begin
+      Dec(code, $10000);
+      AddUnit($D800 + (code shr 10));
+      AddUnit($DC00 + (code and $3FF));
+      Inc(units, 2);
+      Continue;
+    end;
+    if code >= $80 then AddUnit(code)
+    else if AnsiChar(code) in ['a'..'z', 'A'..'Z', '0'..'9', ' '] then body := body + Chr(code)
+    else body := body + '\''' + HexDigits[code shr 4] + HexDigits[code and 15];
+    Inc(units);
+  end;
+  Sym('{\leveltext\uc1\''' + HexDigits[units shr 4] + HexDigits[units and 15] + body +
+    ';}{\levelnumbers;}');
+end;
+
+{ {\list ...} of a run: nine levels - a used one in its kind (\levelnfc), from its start as
+  the model has it, its text its own number and a full stop, or the bullet (the Symbol
+  font's on levels 1, 4, 7 as Word has it, the control's own on the others, or the item's
+  own text); no indent of its own (the paragraphs say theirs); left aligned, a tab after the
+  number (Word's defaults). }
+procedure TRtfWriter.WriteList(const ARun: TListRun);
+var
+  l, nfc, start: Integer;
+  text: UTF8String;
+begin
+  Sym('{\list');
+  WordN('listtemplateid', ARun.Id);
+  for l := 0 to MaxListLevel do
+  begin
+    nfc := 0;
+    start := 1;
+    if ARun.Used[l] then
+    begin
+      start := ARun.ListStart[l];
+      case ARun.Kind[l] of
+        lkBullet: nfc := 23;
+        lkUpperRoman: nfc := 1;
+        lkLowerRoman: nfc := 2;
+        lkUpperAlpha: nfc := 3;
+        lkLowerAlpha: nfc := 4;
+      end;
+    end;
+    Sym('{\listlevel');
+    WordN('levelnfc', nfc);
+    WordN('levelnfcn', nfc);
+    Word('leveljc0');
+    Word('leveljcn0');
+    Word('levelfollow0');
+    WordN('levelstartat', start);
+    if nfc = 23 then
+    begin
+      text := ARun.Bullet[l];
+      if (text = '') and (l mod 3 = 0) and (FSymbol >= 0) then
+      begin
+        Sym('{\leveltext\''01\u-3913 ?;}{\levelnumbers;}');
+        WordN('f', FFonts[FSymbol].Num);
+      end
+      else
+      begin
+        WriteLevelText(text, LevelBullets[l mod 3]);
+      end;
+    end
+    else
+      Sym('{\leveltext\''02\''0' + Chr(Ord('0') + l) + '.;}{\levelnumbers\''01;}');
+    Sym('}');
+  end;
+  Sym('{\listname ;}');
+  WordN('listid', ARun.Id);
+  Sym('}');
+end;
+
+{ {\listoverride ...} of a run: its \ls, and where Word is to show another start than the
+  list's (an item that goes on the control's count of a list made of items of other starts)
+  that start - for the first level alone (one \lfolevel), else for all nine. }
+procedure TRtfWriter.WriteOverride(const ARun: TListRun);
+var
+  l, v: Integer;
+  any, deep: Boolean;
+begin
+  any := False;
+  deep := False;
+  for l := 0 to MaxListLevel do
+    if ARun.Used[l] and (ARun.Kind[l] <> lkBullet) and (ARun.WordStart[l] <> ARun.ListStart[l]) then
+    begin
+      any := True;
+      if l > 0 then deep := True;
+    end;
+  Sym('{\listoverride');
+  WordN('listid', ARun.Id);
+  if not any then
+    WordN('listoverridecount', 0)
+  else if not deep then
+  begin
+    WordN('listoverridecount', 1);
+    Sym('{\lfolevel\listoverridestartat');
+    WordN('levelstartat', ARun.WordStart[0]);
+    Sym('}');
   end
   else
   begin
-    k := AIndex - 1;
-    steps := 0;
-    while (k >= 0) and (steps < MaxListWalk) and
-      SameList(ParaInfo(FDoc.ParaFormatOf(k))^.Fmt.List, AList) do
+    WordN('listoverridecount', 9);
+    for l := 0 to MaxListLevel do
     begin
-      Inc(Result);
-      Dec(k);
-      Inc(steps);
+      if not ARun.Used[l] then v := 1
+      else if ARun.Kind[l] = lkBullet then v := ARun.ListStart[l]
+      else v := ARun.WordStart[l];
+      Sym('{\lfolevel\listoverridestartat');
+      WordN('levelstartat', v);
+      Sym('}');
     end;
   end;
-  FNumPara := AIndex;
-  FNumList := AList;
-  FNum := Result;
+  WordN('ls', ARun.Ls);
+  Sym('}');
+end;
+
+// AWhole: {\*\listtable ...} around the runs' lists, else the lists alone (added to a file's).
+procedure TRtfWriter.WriteListTable(AWhole: Boolean);
+var
+  r: Integer;
+begin
+  if AWhole then Sym('{\*\listtable');
+  for r := 0 to FRunN - 1 do
+  begin
+    NewLine;
+    WriteList(FRuns[r]);
+  end;
+  if AWhole then Sym('}');
+end;
+
+procedure TRtfWriter.WriteOverrideTable(AWhole: Boolean);
+var
+  r: Integer;
+begin
+  if AWhole then Sym('{\*\listoverridetable');
+  for r := 0 to FRunN - 1 do
+  begin
+    NewLine;
+    WriteOverride(FRuns[r]);
+  end;
+  if AWhole then Sym('}');
 end;
 
 // {\pntext\f1\'B7\tab} or {\pntext\f0 1.\tab}: the bullet or number as text, for readers
@@ -2753,17 +3207,19 @@ procedure TRtfWriter.WritePnText(AInfo: PParaInfo; AFirstFont, ANumber: Integer)
 var
   font, i: Integer;
   s: string;
+  gen: Boolean;
 begin
+  gen := (AInfo^.Mode = lmGen) or AInfo^.PnGen;
   Sym('{');
   Word('pntext');
   // the bullet's or number's text as the file has it may hold \uN (see Fragment)
-  if (AInfo^.Mode <> lmGen) and AInfo^.PnUc and (FUc <> 1) then WordN('uc', FUc);
+  if not gen and AInfo^.PnUc and (FUc <> 1) then WordN('uc', FUc);
   if AInfo^.Fmt.List.Kind = lkBullet then
   begin
     if AInfo^.Fmt.List.Bullet <> '' then
       // its own text, in the paragraph's font (the font the text after it is in)
       WriteText(AInfo^.Fmt.List.Bullet)
-    else if AInfo^.Mode = lmGen then
+    else if gen then
     begin
       if FSymbol >= 0 then WordN('f', FFonts[FSymbol].Num);
       Sym('\''B7');
@@ -2776,12 +3232,12 @@ begin
   end
   else
   begin
-    if AInfo^.Mode = lmGen then font := AFirstFont else font := AInfo^.PnFont;
+    if gen then font := AFirstFont else font := AInfo^.PnFont;
     if font >= 0 then WordN('f', font);
-    if AInfo^.Mode = lmPn then RawText(AInfo^.PnBefore);
+    if not gen then RawText(AInfo^.PnBefore);
     s := ListNumberText(AInfo^.Fmt.List.Kind, ANumber);
     for i := 1 to Length(s) do Lit(Ord(s[i]));
-    if AInfo^.Mode = lmGen then Lit(Ord('.')) else RawText(AInfo^.PnAfter);
+    if gen then Lit(Ord('.')) else RawText(AInfo^.PnAfter);
   end;
   Word('tab');
   Sym('}');
@@ -2791,13 +3247,13 @@ end;
 // reader finds them again, then the properties the model has (after the fragments, so that
 // the model's value is the one that holds).
 procedure TRtfWriter.WriteParaFormat(AInfo: PParaInfo; AInCell: Boolean; AFirstFont,
-  ANumber: Integer);
+  ANumber, ARun: Integer);
 const
   TabAlignWord: array[TTyTabAlign] of string = ('', 'tqc', 'tqr', 'tqdec');
   TabLeaderWord: array[TTyTabLeader] of string = ('', 'tldot', 'tlhyph', 'tlul', 'tlth', 'tleq');
 var
   i, j, n: Integer;
-  inPn, pnDone, pnUc: Boolean;
+  inPn, pnDone, pnUc, gen: Boolean;
   list: TTyListFormat;
   stops: TTyTabStops;
   t: TTyTabStop;
@@ -2813,13 +3269,16 @@ begin
   Word('pard');
   if AInCell then Word('intbl');
   list := AInfo^.Fmt.List;
-  if (AInfo^.Mode in [lmPn, lmGen]) and (list.Kind <> lkNone) then
+  gen := ((AInfo^.Mode = lmGen) or AInfo^.PnGen) and (list.Kind <> lkNone);
+  if ((AInfo^.Mode in [lmPn, lmGen]) or gen) and (list.Kind <> lkNone) then
     WritePnText(AInfo, AFirstFont, ANumber);
   pnDone := False;
-  if AInfo^.Mode = lmGen then
+  if gen then
   begin
-    // as RichEdit writes a list: {\*\pn\pnlvlblt\pnf1\pnindent0{\pntxtb\'B7}} and
-    // {\*\pn\pnlvlbody\pnf0\pnindent0\pnstart1\pndec{\pntxta.}}
+    { as RichEdit writes a list: {\*\pn\pnlvlblt\pnf1\pnindent0{\pntxtb\'B7}} and
+      {\*\pn\pnlvlbody\pnf0\pnindent0\pnstart1\pndec{\pntxta.}} - its start the number the
+      item shows (a reader that numbers by these words counts on from it). Beside the list
+      table's \ls: Word takes the table, the system's RichEdit these words. }
     Sym('{\*');
     Word('pn');
     if (list.Kind = lkBullet) and (list.Bullet <> '') then
@@ -2845,7 +3304,7 @@ begin
       if list.Level > 0 then WordN('pnlvl', list.Level + 1) else Word('pnlvlbody');
       if AFirstFont >= 0 then WordN('pnf', AFirstFont);
       Word('pnindent0');
-      WordN('pnstart', list.StartAt);
+      if FPnStart > 0 then WordN('pnstart', FPnStart) else WordN('pnstart', 1);
       case list.Kind of
         lkDecimal: Word('pndec');
         lkLowerAlpha: Word('pnlcltr');
@@ -2857,6 +3316,12 @@ begin
     end;
     Sym('}');
     pnDone := True;
+    // the list table's list of the item's run, and its level
+    if ARun >= 0 then
+    begin
+      WordN('ls', FRuns[ARun].Ls);
+      WordN('ilvl', ListLevelOf(list));
+    end;
   end;
   inPn := False;
   // a {\pntxtb ...} with a \uN in it: the whole {\*\pn} goes between the file's \uc and ours

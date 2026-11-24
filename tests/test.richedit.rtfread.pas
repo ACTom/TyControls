@@ -1304,7 +1304,9 @@ begin
           begin
             AssertTrue(Format('%d decimal', [i]), l.Kind = lkDecimal);
             AssertEquals(Format('%d level', [i]), 0, l.Level);
-            AssertEquals(Format('%d start', [i]), 1, l.StartAt);
+            // the first item is given its start; the items after it (the same words) go on
+            if i = 5 then AssertEquals(Format('%d start', [i]), 1, l.StartAt)
+            else AssertEquals(Format('%d goes on', [i]), 0, l.StartAt);
           end;
       else
         AssertTrue(Format('%d no list', [i]), l.Kind = lkNone);

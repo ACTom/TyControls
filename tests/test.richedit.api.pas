@@ -894,9 +894,12 @@ begin
   AssertTrue('read', FRich.Paragraph.ParaAlign = paraRight);
   FRich.Paragraph.Numbering := lkUpperRoman;
   AssertTrue('a list', PFmt(0).List.Kind = lkUpperRoman);
-  AssertEquals('it starts at 1', 1, FRich.Paragraph.NumberingStart);
+  AssertEquals('no start given: it goes on (a first item is 1)', 0,
+    FRich.Paragraph.NumberingStart);
   FRich.Paragraph.NumberingStart := 4;
-  AssertEquals('from 4', 4, PFmt(1).List.StartAt);
+  // (the selection's first item begins a new list there, the others go on)
+  AssertEquals('from 4', 4, PFmt(0).List.StartAt);
+  AssertEquals('the next goes on', 0, PFmt(1).List.StartAt);
   AssertTrue('the kind kept', FRich.Paragraph.Numbering = lkUpperRoman);
   // tabs
   AssertEquals('no tabs', 0, FRich.Paragraph.TabCount);
@@ -971,9 +974,11 @@ begin
   n := Default(TTyParaNumbering);
   n.Style := pnLowLetter;
   n.NumberStart := 3;
+  n.ForceNewNum := True;
   FRich.SetParaNumbering(0, 100, n);
   AssertTrue('lettered', PFmt(2).List.Kind = lkLowerAlpha);
-  AssertEquals('from 3', 3, PFmt(2).List.StartAt);
+  AssertEquals('ForceNewNum: the first item from 3', 3, PFmt(0).List.StartAt);
+  AssertEquals('the others go on', 0, PFmt(2).List.StartAt);
   n := Default(TTyParaNumbering);
   AssertTrue('read', FRich.GetParaNumbering(0, n));
   AssertTrue('its style', n.Style = pnLowLetter);

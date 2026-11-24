@@ -39,7 +39,7 @@ RichEdit1.SaveToFile('说明.rtf');
 从 Delphi 的 `TRichEdit` 或 Lazarus 的 RichMemo 搬过来的代码，大多能照原样编译：
 
 - 文字和选区：`Lines`、`Text`、`SelStart`、`SelLength`、`SelText`、`CaretPos`、`SelectAll`、`Clear`。位置按字符(Unicode 码点)数，段落结束符算一个字符，类型是 `TTyRichPos`(`Int64`)。
-- 格式：`SelAttributes`(选区的字符格式)、`DefAttributes`(没有自己格式的文字用什么显示)、`Paragraph`(选区碰到的段落的格式)，还有 RichMemo 的 `SetTextAttributes`、`GetTextAttributes`、`SetRangeParams`、`SetParaAlignment`、`SetParaMetric`、`SetParaNumbering`、`GetParaRange`、`SetParaTabs`。读的时候 `ConsistentAttributes` 说哪些属性整个选区都一样。Delphi 之外还有：`SelAttributes.SizeF`(半磅)、`Paragraph.ListLevel`、`ListStart`、`BulletText`(列表的级别、起始编号、项目符号)、带对齐方式和前导符的 `SetTab`(目录行用点状前导符)、`LineSpacingMultiple`(任意倍数：1.08、3)、`SpaceBefore` / `SpaceAfter`、`Shading`(段落底色)；控件上还有 `ApplyParagraphSpacing`(用户的段前段后间距)、`SetPageSetup`(纸宽和页边距)、`SetDefaultFormats` 和 `DocumentColor`(文档自己的底色)。
+- 格式：`SelAttributes`(选区的字符格式)、`DefAttributes`(没有自己格式的文字用什么显示)、`Paragraph`(选区碰到的段落的格式)，还有 RichMemo 的 `SetTextAttributes`、`GetTextAttributes`、`SetRangeParams`、`SetParaAlignment`、`SetParaMetric`、`SetParaNumbering`、`GetParaRange`、`SetParaTabs`。读的时候 `ConsistentAttributes` 说哪些属性整个选区都一样。Delphi 之外还有：`SelAttributes.SizeF`(半磅)、`Paragraph.ListLevel`、`ListStart`、`BulletText`(列表的级别、起始编号、项目符号)、带对齐方式和前导符的 `SetTab`(目录行用点状前导符)、`LineSpacingMultiple`(任意倍数：1.08、3)、`SpaceBefore` / `SpaceAfter`、`Shading`(段落底色)；控件上还有 `ApplyParagraphSpacing`(用户的段前段后间距)、`SetPageSetup`(纸宽和页边距)、`SetDefaultFormats` 和 `DocumentColor`(文档自己的底色)。编号的起始号:给 `Paragraph.NumberingStart`(`ListStart`)写一个数，选区里第一个列表项就从这个数开始一个新列表，其余的项接着往下编;写 0 让它们重新接着编，读到 0 表示这一项接着前一项编。
 - 查找和替换：`FindText`、RichMemo 的 `Search`，还有自己的 `FindNext`、`ReplaceAll` 和它们在后台跑的版本 `FindNextAsync`、`ReplaceAllAsync`。
 - 文件：`LoadFromFile`、`LoadFromStream`、`SaveToFile`、`SaveToStream`、`PlainText`。
 - 其他：`Zoom`、`ReadOnly`、`Modified`、`Undo`、`Redo`、`CanUndo`、`CanPaste`、剪贴板的几个方法。
@@ -237,6 +237,7 @@ end;
 ## 8. 文件
 
 - **RTF**：读，写。没改过的文档保存出来和原文件逐字节一样；改过的，没改的部分原样写回。控件不认识的内容挂在它所在的段落、文字或一个对象上保留，保存时原样写回。中文：读的时候按字体的 `\fcharset` 解码，没有就按 `\ansicpgN`；双字节的 `\'xx\'xx` 拼成一个字；`\uN` 和 `\ucN` 都认。写的时候每个非 ASCII 字符写成 `\uN` 加后备字节，中文字体写 `\fcharset134`。大的 RTF 文件是按需解析的：先建索引，用到哪段才解析哪段。
+- **列表**:写成 Word 的列表表(`\listtable`、`\listoverridetable`,段落上 `\lsN\ilvlM`),旁边留一份 `{\*\pn …}` 给系统的 RichEdit 这类不认列表表的程序;Word 里显示的编号和控件画的一样。规则只有一条：给了起始号的项从这个号开始一个新列表(构建器的 `Numbered(0, 5)`),没给的(`Numbered`,起始号 0)接着同一级的前一项编;遇到更外层的项、不是列表项的段落或同一级换了种类，列表就断开，下一项从 1 开始。所以 `Numbered(0, 5)`、`Numbered`、`Numbered` 是 5、6、7,紧接着的 `Numbered(0, 1)` 又是 1;内层的项跟在外层的项后面总是从 1 开始。
 - **纯文本**：编码先看 BOM，再看是不是合法的 UTF-8，最后用系统的 ANSI 代码页(`TextEncoding`、`TextCodePage` 可以指定)。保存时保持原来的编码、BOM 和换行符。
 - **怎么选格式**：`LoadFromFile` 看文件本身；`SaveToFile` 不给格式时看扩展名，再看 `PlainText`。`PlainText = True` 的文档按纯文本存，格式不进文件。
 - **图片**按原来的字节保存(PNG、JPEG)；写字板存的图片(一个只装着一张位图的 WMF)也能画出来，画不了的图元文件显示成一个框，字节照样保留。表格、合并单元格、表格里的表格都能读、显示、原样存回；合并单元格的表格、含嵌套表格的行不能增删行列。

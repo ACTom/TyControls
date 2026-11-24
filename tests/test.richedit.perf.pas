@@ -68,6 +68,7 @@ type
     procedure TestAutoHeightOfAThousandParagraphsAfterAWidthChange;
     procedure TestABuilderOfTenThousandFormattedParagraphs;
     procedure TestABookmarkAmong200000In100MB;
+    procedure TestListItemsMadeInA100MBRtfSaveAsAKeyDoes;
   private
     procedure SaveBesideFields(ABytes: Int64; ANest: Integer);
   end;
@@ -2100,6 +2101,77 @@ end;
   to one far into the file and its paint within the line of any place (100 ms); what the
   load's index of them holds, and a name that is not there (every entry and every changed
   paragraph looked at), reported. }
+{ Three paragraphs in the middle of a 100 MB RTF made a list of two levels: the save writes
+  their list table and their numbers from the paragraph before them on - it costs what a key
+  typed there costs (within 1.5 times and 100 ms, and two parses more at most), not a walk of
+  the file's paragraphs. }
+procedure TTyRichEditPerfTest.TestListItemsMadeInA100MBRtfSaveAsAKeyDoes;
+var
+  path: string;
+  times: array[0..1] of Double;
+  parses: array[0..1] of Int64;
+  w, mid: Integer;
+  d: TTyRichDocument;
+  s: TFileStream;
+  o: TMemoryStream;
+  p: TTyParaFormat;
+  load: TTyRtfLoad;
+  head: RawByteString;
+  t0: Double;
+  n0: Int64;
+begin
+  CheckRoom;
+  path := NewFile('.rtf');
+  MakeRtf(path, CFileBytes);
+  for w := 0 to 1 do
+  begin
+    d := TTyRichDocument.Create;
+    o := TMemoryStream.Create;
+    try
+      s := TFileStream.Create(path, fmOpenRead or fmShareDenyWrite);
+      try
+        TyRichLoadRtf(d, s);
+      finally
+        s.Free;
+      end;
+      load := TyRichRtfLoadOf(d);
+      mid := d.Text.ParaCount div 2;
+      if w = 0 then
+        AssertTrue('the key', d.Execute(TTyRichInsertText.Create(d.Text.ParaStart(mid), 'Z')))
+      else
+      begin
+        p := TyDefaultParaFormat;
+        p.List.Kind := lkDecimal;
+        AssertTrue('the list', d.Execute(TTyRichSetParaFormat.Create(mid, mid + 2, [pffList], p)));
+        p.List.Level := 1;
+        AssertTrue('its inner item', d.Execute(TTyRichSetParaFormat.Create(mid + 1, mid + 1,
+          [pffList], p)));
+      end;
+      n0 := load.ParseCount;
+      t0 := Clock;
+      TyRichSaveRtf(d, o);
+      times[w] := Clock - t0;
+      parses[w] := load.ParseCount - n0;
+      if w = 1 then
+      begin
+        SetLength(head, 4096);
+        Move(o.Memory^, head[1], 4096);
+        AssertTrue('its list table in the header', Pos('{\*\listtable', head) > 0);
+      end;
+    finally
+      o.Free;
+      d.Free;
+    end;
+  end;
+  Report(Format('%d MB: three paragraphs made a list of two levels, the save (a key there: ' +
+    '%.1f ms, %d parses; the list: %d parses)', [CFileBytes div (1024 * 1024), times[0],
+    parses[0], parses[1]]), times[1]);
+  AssertTrue(Format('the save in %.0f ms, %.0f ms with a key', [times[1], times[0]]),
+    times[1] <= 1.5 * times[0] + 100);
+  AssertTrue(Format('%d parses, %d with a key', [parses[1], parses[0]]),
+    parses[1] <= parses[0] + 2);
+end;
+
 procedure TTyRichEditPerfTest.TestABookmarkAmong200000In100MB;
 const
   CMarks = 200000;

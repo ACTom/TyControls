@@ -18,10 +18,22 @@ uses
 type
   TReRawArray = array of RawByteString;
 
+  // What the system's RichEdit says of one paragraph's list (PARAFORMAT2): its text, the
+  // numbering (0 none, 1 bullet, 2 Arabic, 3 lower letters, 4 upper letters, 5 lower roman,
+  // 6 upper roman), the number it starts at, its style.
+  TReListPara = record
+    Text: RawByteString;
+    Numbering, Start, Style: Integer;
+  end;
+  TReListParas = array of TReListPara;
+
 {$IFDEF WINDOWS}
 // The text the system's RichEdit holds after reading ARtf, as UTF-8 (objects U+FFFC, the
 // table marks as they are). False: msftedit.dll or its window class is not there.
 function RichEditText(const ARtf: TBytes; out AText: RawByteString): Boolean;
+// Its paragraphs after reading ARtf, each with its list (a paragraph's text without the
+// number the control makes; a marker it took as text stays in the text).
+function RichEditLists(const ARtf: TBytes; out AParas: TReListParas): Boolean;
 {$ENDIF}
 // The model's text as that control reports a document: CR after a paragraph (none after the
 // last), in a table U+FFF9 CR before a row, U+0007 after a cell, U+FFFB CR after a row; a
@@ -115,6 +127,32 @@ type
     flags: DWORD;
     codepage: UINT;
   end;
+  TReParaFormat2 = record
+    cbSize: UINT;
+    dwMask: DWORD;
+    wNumbering: WORD;
+    wEffects: WORD;
+    dxStartIndent: LONG;
+    dxRightIndent: LONG;
+    dxOffset: LONG;
+    wAlignment: WORD;
+    cTabCount: SHORT;
+    rgxTabs: array[0..31] of LONG;
+    dySpaceBefore: LONG;
+    dySpaceAfter: LONG;
+    dyLineSpacing: LONG;
+    sStyle: SHORT;
+    bLineSpacingRule: BYTE;
+    bOutlineLevel: BYTE;
+    wShadingWeight: WORD;
+    wShadingStyle: WORD;
+    wNumberingStart: WORD;
+    wNumberingStyle: WORD;
+    wNumberingTab: WORD;
+    wBorderSpace: WORD;
+    wBorderWidth: WORD;
+    wBorders: WORD;
+  end;
   {$POP}
 
   TReSource = record
@@ -130,6 +168,8 @@ const
   ReEmGetTextLengthEx = WM_USER + 95;
   ReSfRtf = 2;
   ReGtRawText = 4;
+  ReEmSetSel = $B1;
+  ReEmGetParaFormat = WM_USER + 61;
 
 function ReStreamIn(dwCookie: PtrUInt; pbBuff: PByte; cb: LongInt; pcb: PLongInt): DWORD; stdcall;
 var
@@ -187,6 +227,70 @@ begin
     u8 := UTF8Encode(buf);
     AText := u8;
     SetCodePage(AText, CP_NONE, False);
+    Result := True;
+  finally
+    DestroyWindow(h);
+  end;
+end;
+
+function RichEditLists(const ARtf: TBytes; out AParas: TReListParas): Boolean;
+var
+  h: HWND;
+  es: TReEditStream;
+  src: TReSource;
+  gl: TReGetTextLengthEx;
+  gt: TReGetTextEx;
+  n, got, i, from, k: PtrInt;
+  buf: UnicodeString;
+  pf: TReParaFormat2;
+  u8: UTF8String;
+begin
+  AParas := nil;
+  if LoadLibraryW('msftedit.dll') = 0 then Exit(False);
+  h := CreateWindowExW(0, 'RICHEDIT50W', '', ES_MULTILINE, 0, 0, 800, 600, HWND(PtrInt(-3)), 0,
+    HInstance, nil);
+  if h = 0 then Exit(False);
+  try
+    SendMessageW(h, ReEmExLimitText, 0, $7FFFFFF);
+    src.Data := nil;
+    if Length(ARtf) > 0 then src.Data := @ARtf[0];
+    src.Left := Length(ARtf);
+    es.dwCookie := PtrUInt(@src);
+    es.dwError := 0;
+    es.pfnCallback := @ReStreamIn;
+    SendMessageW(h, ReEmStreamIn, ReSfRtf, LPARAM(@es));
+    gl.flags := 0;
+    gl.codepage := 1200;
+    n := SendMessageW(h, ReEmGetTextLengthEx, WPARAM(@gl), 0);
+    buf := '';
+    SetLength(buf, n + 1);
+    gt.cb := (n + 1) * 2;
+    gt.flags := ReGtRawText;
+    gt.codepage := 1200;
+    gt.lpDefaultChar := nil;
+    gt.lpUsedDefChar := nil;
+    got := SendMessageW(h, ReEmGetTextEx, WPARAM(@gt), LPARAM(PWideChar(buf)));
+    SetLength(buf, got);
+    // a paragraph ends with CR; its format is asked at its first character
+    k := 0;
+    from := 1;
+    for i := 1 to Length(buf) + 1 do
+      if (i > Length(buf)) or (buf[i] = #13) then
+      begin
+        SetLength(AParas, k + 1);
+        u8 := UTF8Encode(Copy(buf, from, i - from));
+        AParas[k].Text := u8;
+        SetCodePage(AParas[k].Text, CP_NONE, False);
+        SendMessageW(h, ReEmSetSel, from - 1, from - 1);
+        FillChar(pf, SizeOf(pf), 0);
+        pf.cbSize := SizeOf(pf);
+        SendMessageW(h, ReEmGetParaFormat, 0, LPARAM(@pf));
+        AParas[k].Numbering := pf.wNumbering;
+        AParas[k].Start := pf.wNumberingStart;
+        AParas[k].Style := pf.wNumberingStyle;
+        Inc(k);
+        from := i + 1;
+      end;
     Result := True;
   finally
     DestroyWindow(h);

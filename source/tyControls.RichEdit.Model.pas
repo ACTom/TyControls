@@ -118,6 +118,9 @@ type
   TTyListFormat = record
     Kind: TTyListKind;
     Level: Integer;
+    { The number an item given a start begins a new list at (whatever stands before it);
+      0: no start given - the item goes on from the item before it on its level (a first
+      item, after a shallower item or a paragraph that is no item, at 1). A bullet: 0. }
     StartAt: Integer;
     { A bullet's own text in place of the round bullet ('' for that one); nothing for a
       numbered kind. One nil pointer when empty. }
@@ -165,8 +168,11 @@ type
     They are applied after the absolute fields, in this order. Four more set one part of a
     record each paragraph keeps the rest of, applied with the absolute fields:
     pffListKind     the list kind (lkNone: the list record at its default; another kind:
-                    the paragraph's own start, 1 where it has none);
-    pffListStart    the list's start number, the kind staying;
+                    the paragraph's own start, which may be none - it goes on);
+    pffListStart    the list's start number, the kind staying (0: it goes on);
+    pffListRestart  with pffListStart, for a command over paragraphs (TTyRichSetParaFormat):
+                    the first list item among them gets AValue's start, the others go on
+                    (0) - a start given to a selection begins one list there;
     pffSpacingRule  the line spacing rule; a height stays where the rule is exactly or at
                     least (a paragraph without one takes AValue's), else it is 0;
     pffSpacingHeight the height (LineSpacingValue), the rule staying where it is exactly or
@@ -177,7 +183,7 @@ type
     pffSpaceBefore, pffSpaceAfter, pffLineSpacing, pffTabs, pffList, pffRtlPar, pffExtra,
     pffStartIndent, pffOffset, pffFirstLine, pffHeadIndent, pffListIndents,
     pffListKind, pffListStart, pffSpacingRule, pffSpacingHeight, pffShading, pffListLevel,
-    pffListBullet);
+    pffListBullet, pffListRestart);
   TTyParaFormatMask = set of TTyParaFormatField;
 
   { Equal formats get the same id; ids are never reused, so an id an undo record keeps stays
@@ -2470,11 +2476,10 @@ begin
     if AValue.List.Kind = lkNone then
       Result.List := TyDefaultParaFormat.List
     else
-    begin
       Result.List.Kind := AValue.List.Kind;
-      if Result.List.StartAt <= 0 then Result.List.StartAt := 1;
-    end;
-  if pffListStart in AMask then Result.List.StartAt := AValue.List.StartAt;
+  if pffListStart in AMask then
+    if AValue.List.StartAt > 0 then Result.List.StartAt := AValue.List.StartAt
+    else Result.List.StartAt := 0;
   if pffSpacingRule in AMask then
   begin
     Result.LineSpacing := AValue.LineSpacing;
@@ -5966,7 +5971,8 @@ var
   r, runs1, runs2, one: TTyRunArray;
   ps, o, len, len1, lenLast, added, oldChars: Int64;
   f: TTyCharFormatId;
-  fmt: TTyParaFormatId;
+  fmt, fmtNext: TTyParaFormatId;
+  pfv: TTyParaFormat;
   cell: TTyRichCell;
   oldCount: Integer;
   txt: UTF8String;
@@ -6035,6 +6041,15 @@ begin
       AppendSlice(runs2, n2, r, len, o, len, lenLast - o);
       if n2 = 0 then AppendRun(runs2, n2, 0, f, nil);
       SetLength(runs2, n2);
+      // a list item given a start begins its list in the first part; the parts after it
+      // go on from it (an item split by Enter is the next number)
+      fmtNext := fmt;
+      pfv := FFormats.ParaFormat(fmt);
+      if pfv.List.StartAt > 0 then
+      begin
+        pfv.List.StartAt := 0;
+        fmtNext := FFormats.InternPara(pfv);
+      end;
       if s > 1 then
       begin
         // the paragraphs in between are alike: one shared value
@@ -6043,7 +6058,7 @@ begin
         one[0].Start := 0;
         one[0].Format := f;
         one[0].Obj := nil;
-        mid := MakeData(fmt, one, cell);
+        mid := MakeData(fmtNext, one, cell);
         if mid <> nil then
         begin
           AcquireData(mid);
@@ -6052,7 +6067,7 @@ begin
         end;
       end;
       PutData(k, d, MakeDataLike(fmt, runs1, cell, d));
-      PutData(k + s, nil, MakeData(fmt, runs2, cell));
+      PutData(k + s, nil, MakeData(fmtNext, runs2, cell));
       { (a split is outside every field - RaiseRefused - and the text has no mark: the new
         paragraphs start at 0, MakeData's; the first keeps its depth, MakeDataLike's) }
     end;

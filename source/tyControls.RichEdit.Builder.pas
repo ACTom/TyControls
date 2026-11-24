@@ -177,8 +177,12 @@ type
     { A bullet item at ALevel (0 the outermost), its bullet AText ('' the round one); the
       default hanging indent of its level. }
     function Bullet(ALevel: Integer = 0; const AText: string = ''): TTyRichBuilder;
-    { A numbered item (1, 2, 3 ...) at ALevel, its list starting at AStart. }
-    function Numbered(ALevel: Integer = 0; AStart: Integer = 1): TTyRichBuilder;
+    { A numbered item (1, 2, 3 ...) at ALevel. AStart given (1 or more):
+      the item begins a new list at that number, whatever stands before it; 0: it goes on
+      from the item before it on its level - Numbered(0, 5), Numbered, Numbered are 5, 6, 7,
+      and a Numbered(0, 1) after them is 1 again. A list's first item with no start is 1; an
+      inner item after an outer one starts at 1 again. }
+    function Numbered(ALevel: Integer = 0; AStart: Integer = 0): TTyRichBuilder;
     { The paragraph's ground (clNone: none). Inside a table cell: the cell's shading -
       recorded for the cell properties to come; until they come it shows nothing (a
       paragraph's shading is not put in its place). }
@@ -663,7 +667,8 @@ function TTyRichBuilder.Numbered(ALevel: Integer; AStart: Integer): TTyRichBuild
 begin
   Result := Self;
   if ALevel < 0 then ALevel := 0;
-  if AStart < 1 then AStart := 1;
+  // 0: the item goes on from the item before it
+  if AStart < 0 then AStart := 0;
   FCurPara.List.Kind := lkDecimal;
   FCurPara.List.Level := ALevel;
   FCurPara.List.StartAt := AStart;

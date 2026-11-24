@@ -255,6 +255,11 @@ type
     ParaFields: Integer;         // ... open where the current paragraph began
     ParaLow: Integer;            // ... the fewest open anywhere in it so far
     ParaMarked: Boolean;         // ... a field's mark is in it
+    { The list words the paragraph before ended with (its \lsN, or its {\*\pn} kind, level
+      and start): an item with the same goes on from it - its start is not given again. }
+    PrevLs: Integer;
+    PrevListKind: TTyListKind;
+    PrevListLevel, PrevListStart: Integer;
   end;
 
   // A snapshot: everything the parse depends on at a point between two tokens (with the
@@ -289,11 +294,26 @@ type
   TTyRtfListLevel = record
     Nfc: Integer;
     Start: Integer;
+    Font: Integer;        // its \fN, -1 none
+    { {\leveltext ...}: what it says, read (TextRead) when it is in \uN escapes, ASCII and the
+      numbers' places alone - Text the characters (UTF-8), Places the levels whose numbers
+      stand in it, in order, PlaceAt where the first of them is (a character index). }
+    TextRead: Boolean;
+    Text: UTF8String;
+    Places: array of Integer;
+    PlaceAt: Integer;
+    Other: Boolean;       // a word the list format cannot say (an indent, a font size, ...)
+    Bullet: UTF8String;   // nfc 23: the bullet's own text ('' the round one of its level)
   end;
 
   TTyRtfList = record
     Id: Integer;
     Levels: array of TTyRtfListLevel;
+    Other: Boolean;
+    { Every level is one the list format says all of: a number's text its own level's
+      number and a full stop, a bullet's its text alone (the Symbol font's bullet, or no font)
+      - as the writer here writes the lists the model owns. }
+    Plain: Boolean;
   end;
 
   TTyRtfParaKind = (rpkPar, rpkCell, rpkNestCell);
@@ -375,6 +395,7 @@ type
     FColorR, FColorG, FColorB: Integer;
     FColorAny: Boolean;
     FFontTblClose, FColorTblClose: PtrInt;   // the header's tables' closing braces, -1 none
+    FListTblClose, FOverTblClose: PtrInt;    // ... of its list and list override tables
     FFontTblOpen: PtrInt;                    // the font table's opening brace, -1 none
     FFontNumMax: Integer;                    // the highest \fN / \afN read, -1 none
     FLastOpen: Boolean;          // the last paragraph ended without a terminator
@@ -536,6 +557,10 @@ type
     procedure BodyWord(AKw: Integer);
     procedure FontWord(AKw: Integer);
     procedure ListWord(AKw: Integer);
+    function TokNameIs(const AName: string): Boolean;
+    procedure ReadLevelText(AStart, AStop: PtrInt);
+    procedure FinishListLevel;
+    procedure FinishList;
     procedure PictWord(AKw: Integer);
     procedure AddCharExtra(AStart, AStop: PtrInt);
     procedure AddParaExtra(AStart, AStop: PtrInt);
@@ -646,6 +671,16 @@ type
     function ColorCount: Integer;
     function Color(AIndex: Integer; out AAuto: Boolean): TColor;
     procedure ResolveListRef(ALs, AIlvl: Integer; var AList: TTyListFormat);
+    { The list \lsN names is plain (TTyRtfList.Plain): the paragraph's list format says all
+      of it, and a {\*\pn ...} beside it is only its words for readers that know no table. }
+    function ListRefPlain(ALs: Integer): Boolean;
+    // The highest \listid of the list table and \ls of the override table, 0 none.
+    function ListIdHighest: Integer;
+    function ListLsHighest: Integer;
+    // Where the first list table and list override table before the body close (the
+    // position of their closing brace), -1 when the header has none.
+    property ListTableClose: PtrInt read FListTblClose;
+    property OverrideTableClose: PtrInt read FOverTblClose;
     property AnsiCodePage: Integer read FAnsiCp;
     property DefaultFont: Integer read FDeff;     // \deff, -1 none
     // Where the first font table and the first colour table before the body close (the
@@ -1162,6 +1197,7 @@ const
   kwDBackground = 191;      // {\*\background ...}: the page colour's shape
   kwDDefChp = 192;          // {\*\defchp ...}: the default character format
   kwDDefPap = 193;          // {\*\defpap ...}: the default paragraph format
+  kwDLevelText = 194;       // {\leveltext ...}: a list level's text (read in a list level)
 
 type
   TWordDef = record
@@ -1274,7 +1310,7 @@ const
     (N: 'aftnsepc'; K: kwDDocSkip), (N: 'aftncn'; K: kwDDocSkip),
     (N: 'pnseclvl'; K: kwDDocSkip), (N: 'private'; K: kwDDocSkip), (N: 'falt'; K: kwDDocSkip),
     (N: 'panose'; K: kwDDocSkip), (N: 'fname'; K: kwDDocSkip), (N: 'listname'; K: kwDDocSkip),
-    (N: 'leveltext'; K: kwDDocSkip), (N: 'levelnumbers'; K: kwDDocSkip),
+    (N: 'leveltext'; K: kwDLevelText), (N: 'levelnumbers'; K: kwDDocSkip),
     (N: 'picprop'; K: kwDDocSkip), (N: 'blipuid'; K: kwDDocSkip),
     (N: 'passwordhash'; K: kwDDocSkip), (N: 'background'; K: kwDBackground),
     (N: 'header'; K: kwDHeaderFooter), (N: 'headerl'; K: kwDHeaderFooter),
@@ -1816,6 +1852,8 @@ begin
   FFontTblOpen := -1;
   FFontNumMax := -1;
   FColorTblClose := -1;
+  FListTblClose := -1;
+  FOverTblClose := -1;
   FAnsiCp := 1252;
   FDeff := -1;
   FFirstFont := -1;
@@ -2846,9 +2884,19 @@ begin
         SkipAndPop;
         Exit;
       end;
-    rdFontEntry, rdColorTable, rdPict, rdListLevel, rdOverride, rdListText:
+    rdFontEntry, rdColorTable, rdPict, rdOverride, rdListText:
       begin
         SkipAndPop;
+        Exit;
+      end;
+    rdListLevel:
+      begin
+        // its text is read; its numbers' places are in the text too; anything else is more
+        // than the list format says
+        if not ((AKw = kwDLevelText) or ((AKw = kwDDocSkip) and TokNameIs('levelnumbers'))) then
+          FCurLevel.Other := True;
+        SkipAndPop;
+        if AKw = kwDLevelText then ReadLevelText(start, FTokStop);
         Exit;
       end;
     rdPn:
@@ -2874,11 +2922,16 @@ begin
         if AKw = kwDListLevel then
         begin
           BeginDest(rdListLevel);
+          FCurLevel := Default(TTyRtfListLevel);
           FCurLevel.Nfc := 0;
           FCurLevel.Start := 1;
+          FCurLevel.Font := -1;
         end
         else
+        begin
+          if not ((AKw = kwDDocSkip) and TokNameIs('listname')) then FCurList.Other := True;
           SkipAndPop;
+        end;
         Exit;
       end;
     rdOverrideTable:
@@ -2949,7 +3002,7 @@ begin
       end;
     kwDListTable: BeginDest(rdListTable);
     kwDOverrideTable: BeginDest(rdOverrideTable);
-    kwDDocSkip, kwDFldInst, kwDFldRslt, kwDPnText, kwDUd: SkipAndPop;
+    kwDDocSkip, kwDLevelText, kwDFldInst, kwDFldRslt, kwDPnText, kwDUd: SkipAndPop;
     kwDBackground, kwDDefChp, kwDDefPap:
       begin
         // the header's bytes as the other document-level groups; read for the settings
@@ -3254,18 +3307,13 @@ begin
         if FColorAny then AddColor;
         if not FS.BodyStarted and (FColorTblClose < 0) then FColorTblClose := FTok.Start;
       end;
-    rdListLevel:
-      begin
-        SetLength(FCurList.Levels, Length(FCurList.Levels) + 1);
-        FCurList.Levels[High(FCurList.Levels)] := FCurLevel;
-      end;
-    rdList:
-      begin
-        if FListCount = Length(FLists) then SetLength(FLists, FListCount * 2 + 4);
-        FLists[FListCount] := FCurList;
-        Inc(FListCount);
-        TablesChanged;
-      end;
+    rdListLevel: FinishListLevel;
+    rdList: FinishList;
+    rdListTable:
+      // (a writer adds the lists a changed paragraph needs before this brace)
+      if not FS.BodyStarted and (FListTblClose < 0) then FListTblClose := FTok.Start;
+    rdOverrideTable:
+      if not FS.BodyStarted and (FOverTblClose < 0) then FOverTblClose := FTok.Start;
     rdOverride:
       begin
         if FOverrideCount = Length(FOverrideLs) then
@@ -3586,14 +3634,249 @@ begin
   Result := FColors[AIndex];
 end;
 
+function CodeUtf8(ACode: Cardinal): UTF8String; forward;
+
+// The word just read (FTok) is \AName.
+function TTyRtfParser.TokNameIs(const AName: string): Boolean;
+begin
+  Result := (FTok.NameLen = Length(AName)) and (AName <> '') and
+    CompareMem(@FBuf[FTok.NameStart], PChar(AName), FTok.NameLen);
+end;
+
+{ {\leveltext ...;} of the list level being read, at [AStart, AStop): its length byte, then
+  its characters - \uN (its \uc fallback passed over), \'xx and ASCII - where a code below 9
+  is the place of that level's number. A word other than \uN, \ucN and Word's
+  \leveltemplateidN, or a byte of 80 or more not after \uN (a code page's, or the Symbol
+  font's, decided by the level's font): not read as text (TextRead stays False, or the
+  byte is kept as U+F0xx for a Symbol font to claim). }
+procedure TTyRtfParser.ReadLevelText(AStart, AStop: PtrInt);
+var
+  lex: TTyRtfLexer;
+  t: TTyRtfToken;
+  codes: array of Cardinal;
+  n, uc, skip, k: Integer;
+  pending, code: Cardinal;
+  first, ok, ended: Boolean;
+
+  procedure Add(ACode: Cardinal);
+  begin
+    if ended then Exit;
+    if skip > 0 then
+    begin
+      Dec(skip);
+      Exit;
+    end;
+    if first then
+    begin
+      // the text's length
+      first := False;
+      Exit;
+    end;
+    if (ACode >= $D800) and (ACode < $DC00) then
+    begin
+      pending := ACode;
+      Exit;
+    end;
+    if (ACode >= $DC00) and (ACode < $E000) and (pending <> 0) then
+      ACode := $10000 + ((pending - $D800) shl 10) + (ACode - $DC00);
+    pending := 0;
+    if n = Length(codes) then SetLength(codes, n * 2 + 4);
+    codes[n] := ACode;
+    Inc(n);
+  end;
+
+begin
+  codes := nil;
+  n := 0;
+  uc := 1;
+  skip := 0;
+  pending := 0;
+  first := True;
+  ok := True;
+  ended := False;
+  lex.Init(FBuf, AStart, AStop);
+  // {\leveltext
+  if not lex.Next(t) or (t.Kind <> rtkGroupStart) then Exit;
+  if not lex.Next(t) or (t.Kind <> rtkWord) then Exit;
+  while ok and lex.Next(t) do
+    case t.Kind of
+      rtkGroupEnd: Break;
+      rtkWord:
+        if (t.NameLen = 1) and (FBuf[t.NameStart] = Ord('u')) and t.HasParam then
+        begin
+          Add(Cardinal(t.Param and $FFFF));
+          skip := uc;
+        end
+        else if (t.NameLen = 2) and CompareMem(@FBuf[t.NameStart], PChar('uc'), 2) then
+          uc := t.Param
+        else if not ((t.NameLen = 15) and
+          CompareMem(@FBuf[t.NameStart], PChar('leveltemplateid'), 15)) then
+          ok := False;
+      rtkHex:
+        if t.Value < 0 then ok := False
+        else if t.Value >= $80 then
+        begin
+          if skip > 0 then Dec(skip) else Add($F000 + Cardinal(t.Value));
+        end
+        else
+          Add(Cardinal(t.Value));
+      rtkSymbol:
+        if t.Value in [Ord('\'), Ord('{'), Ord('}')] then Add(Cardinal(t.Value)) else ok := False;
+      rtkText:
+        for k := t.Start to t.Stop - 1 do
+          if FBuf[k] = Ord(';') then
+          begin
+            if skip > 0 then Dec(skip)
+            else
+            begin
+              // the end of the text
+              ended := True;
+              Break;
+            end;
+          end
+          else if not (FBuf[k] in [10, 13]) then
+            Add(FBuf[k]);
+    else
+      ok := False;
+    end;
+  if not ok then Exit;
+  FCurLevel.TextRead := True;
+  FCurLevel.Text := '';
+  FCurLevel.Places := nil;
+  FCurLevel.PlaceAt := -1;
+  for k := 0 to n - 1 do
+    if codes[k] < 9 then
+    begin
+      if FCurLevel.PlaceAt < 0 then FCurLevel.PlaceAt := k;
+      SetLength(FCurLevel.Places, Length(FCurLevel.Places) + 1);
+      FCurLevel.Places[High(FCurLevel.Places)] := codes[k];
+    end
+    else
+    begin
+      code := codes[k];
+      FCurLevel.Text := FCurLevel.Text + CodeUtf8(code);
+    end;
+end;
+
+{ The list level read: whether the list format says all of it (else Other), and a bullet's
+  own text. A number's text is its own level's number and a full stop; a bullet's its text
+  alone - in no font of its own (its text is then the bullet's, but for the round, white and
+  square bullets a level of the control draws anyway: those are no text of its own), or the
+  Symbol font's bullet (U+F0B7). }
+procedure TTyRtfParser.FinishListLevel;
+const
+  // what the layout draws for a bullet of no text of its own, by level (mod 3): U+2022,
+  // U+25E6, U+25AA (tyControls.RichEdit.Layout's TyRichListMarkerText)
+  LevelBullets: array[0..2] of Cardinal = ($2022, $25E6, $25AA);
+var
+  lvl, k: Integer;
+  symbol, privateUse, plain: Boolean;
+  p: PByte;
+begin
+  lvl := Length(FCurList.Levels);
+  symbol := False;
+  if FCurLevel.Font >= 0 then
+  begin
+    k := FontIndex(FCurLevel.Font);
+    symbol := (k >= 0) and (FFonts[k].Charset = 2);
+  end;
+  // a character of the Symbol font's own range (U+F0xx), or a byte of 80 or more kept so
+  privateUse := False;
+  p := PByte(PAnsiChar(FCurLevel.Text));
+  for k := 0 to Length(FCurLevel.Text) - 3 do
+    if (p[k] = $EF) and (p[k + 1] in [$80..$83]) then privateUse := True;
+  plain := not FCurLevel.Other and FCurLevel.TextRead;
+  case FCurLevel.Nfc of
+    0..4:
+      plain := plain and (Length(FCurLevel.Places) = 1) and (FCurLevel.Places[0] = lvl) and
+        (FCurLevel.PlaceAt = 0) and (FCurLevel.Text = '.') and (FCurLevel.Font < 0);
+    23:
+      begin
+        plain := plain and (FCurLevel.Places = nil) and (FCurLevel.Text <> '') and
+          ((FCurLevel.Font < 0) and not privateUse or
+           symbol and (FCurLevel.Text = CodeUtf8($F0B7)));
+        if FCurLevel.TextRead and (FCurLevel.Places = nil) and (FCurLevel.Font < 0) and
+           not privateUse and (FCurLevel.Text <> '') and
+           (FCurLevel.Text <> CodeUtf8(LevelBullets[lvl mod 3])) then
+          FCurLevel.Bullet := FCurLevel.Text;
+      end;
+  else
+    plain := False;
+  end;
+  FCurLevel.Other := not plain;
+  SetLength(FCurList.Levels, lvl + 1);
+  FCurList.Levels[lvl] := FCurLevel;
+end;
+
+procedure TTyRtfParser.FinishList;
+var
+  k: Integer;
+begin
+  FCurList.Plain := not FCurList.Other and (Length(FCurList.Levels) > 0);
+  for k := 0 to High(FCurList.Levels) do
+    if FCurList.Levels[k].Other then FCurList.Plain := False;
+  if FListCount = Length(FLists) then SetLength(FLists, FListCount * 2 + 4);
+  FLists[FListCount] := FCurList;
+  Inc(FListCount);
+  TablesChanged;
+end;
+
+function TTyRtfParser.ListRefPlain(ALs: Integer): Boolean;
+var
+  i, id: Integer;
+begin
+  Result := False;
+  id := -1;
+  for i := 0 to FOverrideCount - 1 do
+    if FOverrideLs[i] = ALs then
+    begin
+      id := FOverrideId[i];
+      Break;
+    end;
+  if id < 0 then Exit;
+  for i := 0 to FListCount - 1 do
+    if FLists[i].Id = id then Exit(FLists[i].Plain);
+end;
+
+function TTyRtfParser.ListIdHighest: Integer;
+var
+  i: Integer;
+begin
+  Result := 0;
+  for i := 0 to FListCount - 1 do
+    if FLists[i].Id > Result then Result := FLists[i].Id;
+  for i := 0 to FOverrideCount - 1 do
+    if FOverrideId[i] > Result then Result := FOverrideId[i];
+end;
+
+function TTyRtfParser.ListLsHighest: Integer;
+var
+  i: Integer;
+begin
+  Result := 0;
+  for i := 0 to FOverrideCount - 1 do
+    if FOverrideLs[i] > Result then Result := FOverrideLs[i];
+end;
+
 procedure TTyRtfParser.ListWord(AKw: Integer);
 begin
   case FS.Props.Dest of
-    rdList: if AKw = kwListId then FCurList.Id := FTok.Param;
+    rdList:
+      if AKw = kwListId then FCurList.Id := FTok.Param
+      else if not (TokNameIs('listtemplateid') or TokNameIs('listhybrid') or
+        TokNameIs('listsimple')) then
+        FCurList.Other := True;
     rdListLevel:
       case AKw of
         kwLevelNfc: FCurLevel.Nfc := FTok.Param;
         kwLevelStartAt: FCurLevel.Start := FTok.Param;
+        kwF: FCurLevel.Font := FTok.Param;
+      else
+        // the alignment and what follows the number as Word's defaults (left, a tab), or
+        // another word: more than the list format says
+        if not ((TokNameIs('leveljc') or TokNameIs('leveljcn') or TokNameIs('levelfollow')) and
+           (FTok.Param = 0)) then
+          FCurLevel.Other := True;
       end;
     rdOverride:
       case AKw of
@@ -5125,7 +5408,7 @@ begin
                 else
                   Silence;
               // what the reader passes over, or reads as tables and properties
-              kwDFontTbl, kwDColorTbl, kwDListTable, kwDOverrideTable, kwDDocSkip,
+              kwDFontTbl, kwDColorTbl, kwDListTable, kwDOverrideTable, kwDDocSkip, kwDLevelText,
               kwDBackground, kwDDefChp, kwDDefPap, kwDFldInst,
               kwDPnText, kwDNestSkip, kwDListText, kwDCharExtra, kwDParaExtra, kwDPn:
                 Silence;
@@ -5326,6 +5609,17 @@ begin
   end
   else if rec^.Runs <> nil then
     rec^.Runs := nil;
+  // the list words this paragraph ends with: the next one's start depends on them
+  with FS.Props do
+    if (Ls <> FS.PrevLs) or (ListKind <> FS.PrevListKind) or (ListLevel <> FS.PrevListLevel) or
+       (ListStart <> FS.PrevListStart) then
+    begin
+      FS.PrevLs := Ls;
+      FS.PrevListKind := ListKind;
+      FS.PrevListLevel := ListLevel;
+      FS.PrevListStart := ListStart;
+      ParaChanged;
+    end;
   inTable := (AKind <> rpkPar) or FS.Props.InTable or (FS.Props.Itap > 0);
   if inTable then
   begin
@@ -5591,6 +5885,7 @@ begin
         AList.Kind := lkNone;
       end;
       if AList.Kind <> lkNone then AList.StartAt := FLists[i].Levels[lvl].Start;
+      if AList.Kind = lkBullet then AList.Bullet := FLists[i].Levels[lvl].Bullet;
       Exit;
     end;
 end;
@@ -5835,14 +6130,23 @@ begin
         Result.LineSpacing := lsAtLeast;
         Result.LineSpacingValue := Sl;
       end;
+    { An item's start is given where a list begins: an item right after one of the same
+      list (the same \ls; for {\*\pn ...} the same kind, level and start, as RichEdit and
+      earlier writers here leave them on the items after the first) goes on from it. }
     if Ls > 0 then
-      ResolveListRef(Ls, Ilvl, Result.List)
+    begin
+      ResolveListRef(Ls, Ilvl, Result.List);
+      if FS.PrevLs = Ls then Result.List.StartAt := 0;
+    end
     else if ListKind <> lkNone then
     begin
       Result.List.Kind := ListKind;
       Result.List.Level := ListLevel;
       Result.List.StartAt := ListStart;
       if (ListKind <> lkBullet) and (ListStart = 0) then Result.List.StartAt := 1;
+      if (FS.PrevLs = 0) and (FS.PrevListKind = ListKind) and (FS.PrevListLevel = ListLevel) and
+         (FS.PrevListStart = ListStart) then
+        Result.List.StartAt := 0;
     end;
     nodes := ListNodes(ParaExtra);
     plain := PlainListWords(nodes);
@@ -5852,6 +6156,9 @@ begin
       plain := True;
       Result.List.Bullet := bullet;
     end;
+    // a list of a plain table (as the writer here writes the model's): its {\*\pn ...}
+    // beside it is only the list's words for readers that know no table
+    if (Ls > 0) and ListRefPlain(Ls) then plain := True;
     shade := ParaShading(nodes);
     for i := 0 to High(nodes) do
     begin
