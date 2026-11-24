@@ -847,7 +847,7 @@ var
       r.UpdateView;
       shotBmp := r.Shot(APPI);
       try
-        shotBmp.SaveToFile(dir + AName);
+        if dir <> '' then shotBmp.SaveToFile(dir + AName);
       finally
         shotBmp.Free;
       end;
@@ -860,9 +860,9 @@ var
 
 begin
   dir := GetEnvironmentVariable('TY_RICH_SHOTS');
-  if dir = '' then Ignore('no folder for the pictures (TY_RICH_SHOTS)');
-  dir := IncludeTrailingPathDelimiter(dir);
-  ForceDirectories(dir);
+  if dir <> '' then dir := IncludeTrailingPathDelimiter(dir);
+  // no folder named: the pages are drawn and checked all the same, nothing is saved
+  if dir <> '' then ForceDirectories(dir);
   TyRegisterBuiltinThemes;
   // the first built-in theme whose dark mode has light text (the default one may have none)
   FDarkTheme := '';
