@@ -609,6 +609,9 @@ type
     FBoundaries: array of Integer;
     FRawFormat: RawByteString;
     FHoldsNestedTable: Boolean;
+    { Its edges are not what RawFormat says (an edit moved them): written from the model
+      (Edited) - the \cellx and Word's preferred widths made again from CellEdges. }
+    FEdgesMoved: Boolean;
     // (see Format, BaseFormat; nil until asked: decoded from FRawFormat then)
     FFormat, FBase: TTyRichRowFormat;
     function GetCell(AIndex: Integer): TTyRichCell;
@@ -624,7 +627,8 @@ type
     { What RawFormat says (the reader decodes it with its file's colours; a row made here
       without them has the colour words as automatic). }
     function BaseFormat: TTyRichRowFormat;
-    // Format is not BaseFormat: RawFormat no longer says how the row looks
+    { RawFormat no longer says how the row looks: Format is not BaseFormat, or its edges
+      moved (a width's edit). }
     function Edited: Boolean;
     { What the row is shown with: TyRtfRowDisplay of RawFormat (TyDefaultRowDisplay without
       one) while it is not Edited, else the display of its Format. }
@@ -3995,7 +3999,7 @@ end;
 
 function TTyRichRow.Edited: Boolean;
 begin
-  Result := (FFormat <> nil) and (FFormat <> FBase);
+  Result := (FFormat <> nil) and ((FFormat <> FBase) or FEdgesMoved);
 end;
 
 function TTyRichRow.Display: TTyRowDisplay;
@@ -9015,6 +9019,8 @@ begin
             else
               nr := NewRowIn(row.FTable, Length(row.FCells), row.FRawFormat, row.FBoundaries,
                 row.FHoldsNestedTable, row.BaseFormat, f);
+            // (its bytes' \cellx no longer its edges: the row is written from the model)
+            nr.FEdgesMoved := moved or row.FEdgesMoved;
           finally
             f.Release;
           end;
@@ -9467,6 +9473,7 @@ begin
         begin
           nt.AddRow(Length(r.FCells), r.FRawFormat, r.FBoundaries, r.FHoldsNestedTable);
           nt.FRows[i].SetFormats(r.BaseFormat, r.Format);
+          nt.FRows[i].FEdgesMoved := r.FEdgesMoved;
         end
         else
         begin
@@ -9479,6 +9486,7 @@ begin
           try
             if r.Edited then nt.FRows[i].SetFormats(fmt, r.Format)
             else nt.FRows[i].SetFormats(fmt, fmt);
+            nt.FRows[i].FEdgesMoved := r.FEdgesMoved;
           finally
             fmt.Release;
           end;
@@ -10199,6 +10207,7 @@ begin
       r := src.FRows[j];
       nt.AddRow(Length(r.FCells), r.FRawFormat, r.FBoundaries, False);
       nt.FRows[j - lo].SetFormats(r.BaseFormat, r.Format);
+      nt.FRows[j - lo].FEdgesMoved := r.FEdgesMoved;
     end;
     nt.FRowsValid := src.FRowsValid;
   end;

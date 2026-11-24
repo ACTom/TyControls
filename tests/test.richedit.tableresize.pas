@@ -74,6 +74,7 @@ type
     procedure TestTheLeftEdgeMovesTheTablesStart;
     procedure TestOnlySelectedRowsWhenCellsAreSelected;
     procedure TestAnEdgeOutsideTheSelectedRowsIsItsOwn;
+    procedure TestAWidthOfAFilesRowIsSaved;
     procedure TestAShiftDragPassesTheNextCellsLeast;
     procedure TestARowsBottomAnswersOnlyNearTheTable;
     procedure TestMinimumWidth;
@@ -516,6 +517,130 @@ begin
   right := b[High(b)];
   AssertEquals('just right of the table', crSizeNS, FRich.CursorAtPoint(right + 1, y));
   AssertTrue('well right of it: not', FRich.CursorAtPoint(right + 40, y) <> crSizeNS);
+end;
+
+{ Every width door on a row a file wrote - Word's and WordPad's: the drag, SetColumnWidth, the
+  ruler's door, AutoFitColumn, DistributeColumns, FitTableToWindow - reaches the saved file:
+  loaded again in a fresh document every row has the model's edges, the row's \cellx say
+  them and Word's preferred widths (\clwWidth with \clftsWidth3) agree; a row the door did not
+  touch keeps its bytes. }
+procedure TTyRichTableResizeTest.TestAWidthOfAFilesRowIsSaved;
+const
+  Files: array[0..1] of string = ('word-table-styled.rtf', 'wp-zh-table.rtf');
+  Doors: array[0..6] of string = ('SetColumnWidth', 'the ruler', 'AutoFitColumn',
+    'DistributeColumns', 'FitTableToWindow', 'a drag', 'SetColumnWidth on one selected row');
+var
+  fx, dk, first, r, c, rows, k, cut: Integer;
+  bytes, before, saved, what, def: RawByteString;
+  d: TTyRichDocument;
+  st: TStringStream;
+  model: array of TTyRichEdges;
+  e: TTyRichEdges;
+  ce: TTyRichColumnEdges;
+  info: TTyRichTableInfo;
+  changed: Boolean;
+  b: TIntArray;
+
+  function FirstTable(ADoc: TTyRichDocument): Integer;
+  begin
+    Result := 0;
+    while (Result < ADoc.Text.ParaCount) and (ADoc.CellAt(Result) = nil) do Inc(Result);
+  end;
+
+  function Cell0(ARow, ACol: Integer): TTyRichPos;
+  var
+    f, l: Integer;
+  begin
+    AssertTrue('the cell', FRich.Document.TableCellParas(first, ARow, ACol, f, l));
+    Result := FRich.Document.Text.ParaStart(f);
+  end;
+
+  function EdgesIn(ADoc: TTyRichDocument; AFirst, ARow: Integer): TTyRichEdges;
+  var
+    f, l: Integer;
+  begin
+    AssertTrue('a row', ADoc.TableCellParas(AFirst, ARow, 0, f, l));
+    ADoc.BeginRead;
+    try
+      Result := ADoc.CellAt(f).Row.CellEdges;
+    finally
+      ADoc.EndRead;
+    end;
+  end;
+
+begin
+  for fx := 0 to High(Files) do
+    for dk := 0 to High(Doors) do
+    begin
+      what := Files[fx] + ', ' + Doors[dk];
+      bytes := FixtureBytes(Files[fx]);
+      LoadRtf(bytes);
+      first := FirstTable(FRich.Document);
+      AssertTrue(what + ': a table', FRich.Document.TableInfoAt(first, info));
+      rows := info.RowCount;
+      before := SaveRtf;
+      FRich.SelStart := Cell0(1, 1) + 1;
+      e := EdgesIn(FRich.Document, first, 1);
+      case dk of
+        0: FRich.SetColumnWidth(e[1] - e[0] + 600);
+        1:
+          begin
+            AssertTrue(what + ': edges', FRich.CaretRowEdges(ce));
+            FRich.MoveCaretRowEdge(ce[2].Index, ce[2].Offset - 300, False);
+          end;
+        2: FRich.AutoFitColumn;
+        3: FRich.DistributeColumns;
+        4: FRich.FitTableToWindow;
+        5:
+          begin
+            FRich.UpdateView;
+            b := Bands(RowY(1));
+            Drag(b[2], RowY(1), -20, 0);
+          end;
+      else
+        begin
+          Sel(Cell0(1, 0), Cell0(1, 1) + 1);
+          FRich.SetColumnWidth(e[0] - RowAt(1).Format.Row.LeftTwips + 500);
+        end;
+      end;
+      changed := FRich.Document.UndoDepth > 0;
+      if not changed then Continue;
+      model := nil;
+      SetLength(model, rows);
+      for r := 0 to rows - 1 do model[r] := EdgesIn(FRich.Document, first, r);
+      saved := SaveRtf;
+      // loaded again, in a fresh document
+      d := TTyRichDocument.Create;
+      st := TStringStream.Create(saved);
+      try
+        TyRichLoadRtfFull(d, st);
+        for r := 0 to rows - 1 do
+        begin
+          e := EdgesIn(d, FirstTable(d), r);
+          AssertEquals(Format('%s: row %d, its cells', [what, r]), Length(model[r]), Length(e));
+          for c := 0 to High(e) do
+            AssertEquals(Format('%s: row %d, edge %d', [what, r, c]), model[r][c], e[c]);
+        end;
+      finally
+        st.Free;
+        d.Free;
+      end;
+      // the row's words: its \cellx, and Word's preferred widths where the file has them
+      // (row 1's: the first definition after row 0's \row)
+      k := Pos('\row', saved);
+      cut := Pos('\trowd', Copy(saved, k, MaxInt)) + k - 1;
+      def := Copy(saved, cut, Pos('\pard', Copy(saved, cut, MaxInt)));
+      for c := 0 to High(model[1]) do
+        AssertTrue(Format('%s: \cellx%d in row 1''s definition', [what, model[1][c]]),
+          Pos('\cellx' + IntToStr(model[1][c]), def) > 0);
+      if Pos('\clftsWidth3', def) > 0 then
+        AssertTrue(what + ': Word''s preferred width of the second cell',
+          Pos('\clwWidth' + IntToStr(model[1][1] - model[1][0]), def) > 0);
+      // a door on one selected row: the other rows keep their bytes
+      if dk = 6 then
+        AssertTrue(what + ': row 0 as the file had it',
+          Copy(saved, 1, Pos('\row', saved)) = Copy(before, 1, Pos('\row', before)));
+    end;
 end;
 
 procedure TTyRichTableResizeTest.TestMinimumWidth;

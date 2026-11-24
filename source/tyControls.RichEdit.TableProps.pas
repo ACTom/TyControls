@@ -1103,9 +1103,59 @@ begin
   SetCodePage(Result, CP_NONE, False);
 end;
 
+{ AWords has \AName with the parameter AParam. }
+function HasWord(const AWords: RawByteString; const AName: string; AParam: Integer): Boolean;
+var
+  w: RawByteString;
+  k, e: Integer;
+begin
+  w := RawByteString('\' + AName + IntToStr(AParam));
+  for k := 1 to Length(AWords) - Length(w) + 1 do
+    if (AWords[k] = '\') and (Copy(AWords, k, Length(w)) = w) then
+    begin
+      e := k + Length(w);
+      // (not the start of a longer number or word)
+      if (e > Length(AWords)) or not (AWords[e] in ['0'..'9', 'a'..'z', 'A'..'Z']) then Exit(True);
+    end;
+  Result := False;
+end;
+
+{ AWords with the parameter of every \AName word made AValue (the word where it stood); none:
+  as it is. }
+function WithWordParam(const AWords: RawByteString; const AName: string; AValue: Integer): RawByteString;
+var
+  i, n, s, q: Integer;
+  w: RawByteString;
+begin
+  Result := '';
+  w := RawByteString('\' + AName);
+  n := Length(AWords);
+  i := 1;
+  while i <= n do
+  begin
+    if (AWords[i] = '\') and (Copy(AWords, i, Length(w)) = w) and
+       (i + Length(w) <= n) and (AWords[i + Length(w)] in ['-', '0'..'9']) then
+    begin
+      s := i + Length(w);
+      q := s;
+      if AWords[q] = '-' then Inc(q);
+      while (q <= n) and (AWords[q] in ['0'..'9']) do Inc(q);
+      Result := Result + w + RawByteString(IntToStr(AValue));
+      i := q;
+      Continue;
+    end;
+    Result := Result + AWords[i];
+    Inc(i);
+  end;
+  SetCodePage(Result, CP_NONE, False);
+end;
+
 function TyRichRowFormatBytes(const ARaw: RawByteString; ABase, AFormat: TTyRichRowFormat;
   const AEdges: array of Integer; AColorIndex: TTyRichColorIndexFunc): RawByteString;
 var
+  disp: TTyRowDisplay;
+  oldW, newW: Integer;
+  wide: Boolean;
   rowWords: RawByteString;
   cells, newCells: TTyRtfCellWords;
   drop: TWords;
@@ -1139,6 +1189,13 @@ begin
   end;
   newCells := nil;
   SetLength(newCells, Length(cells));
+  { The widths the bytes say (their \cellx, from their row's left) and the new ones: a cell
+    whose width changed has Word's preferred width (\clwWidth, when \clftsWidth3 says it is in
+    twips) made the new one, and so has the row's (\trwWidth with \trftsWidth3) - Word would
+    otherwise lay the old widths out again. \trautofit stays as the file has it: it says how
+    Word lays out text typed later, not the widths it reads. }
+  disp := TyRtfRowDisplay(ARaw);
+  wide := False;
   for i := 0 to High(cells) do
   begin
     extra := CellWordsFor(ABase.Cells[i], AFormat.Cells[i], False, drop, sides, AColorIndex);
@@ -1149,7 +1206,28 @@ begin
       newCells[i] := DropCellWords(cells[i], drop, sides);
       Add(newCells[i], extra);
     end;
+    if (i <= High(AEdges)) and (i <= High(disp.Cells)) then
+    begin
+      if i = 0 then
+      begin
+        oldW := disp.Cells[0].Right - disp.Left;
+        newW := AEdges[0] - AFormat.Row.LeftTwips;
+      end
+      else
+      begin
+        oldW := disp.Cells[i].Right - disp.Cells[i - 1].Right;
+        newW := AEdges[i] - AEdges[i - 1];
+      end;
+      if oldW <> newW then
+      begin
+        wide := True;
+        if HasWord(newCells[i], 'clftsWidth', 3) then
+          newCells[i] := WithWordParam(newCells[i], 'clwWidth', newW);
+      end;
+    end;
   end;
+  if wide and (Length(AEdges) > 0) and HasWord(rowWords, 'trftsWidth', 3) then
+    rowWords := WithWordParam(rowWords, 'trwWidth', AEdges[High(AEdges)] - AFormat.Row.LeftTwips);
   Result := TyRtfJoinRowFormat(rowWords, newCells, AEdges);
 end;
 
