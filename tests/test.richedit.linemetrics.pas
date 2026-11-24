@@ -20,9 +20,9 @@ unit test.richedit.linemetrics;
 interface
 
 uses
-  Classes, SysUtils, Math, fpcunit, testregistry,
+  Classes, SysUtils, Types, Math, fpcunit, testregistry, BGRABitmap, BGRABitmapTypes,
   tyControls.RichEdit.Text, tyControls.RichEdit.Model, tyControls.RichEdit.Commands,
-  tyControls.RichEdit.RtfRead, tyControls.RichEdit.Layout;
+  tyControls.RichEdit.RtfRead, tyControls.RichEdit.Layout, test.richedit.layoutdevice;
 
 type
   TTyRichLineMetricsTest = class(TTestCase)
@@ -30,6 +30,7 @@ type
     FDocs: TFPList;
     FLayouter: TTyRichLayouter;
     FHeight, FBaseline, FParaHeight, FDescent: Integer;
+    FLines: TTyParaLayout;   // the last paragraph Measure laid out
     procedure Need(const AFonts: array of string);
     function NewDoc(const AText: UTF8String): TTyRichDocument;
     { Lays out one line of Chinese in AFont at AHalfPt with the spacing given; the line's
@@ -37,7 +38,14 @@ type
     procedure Measure(const AFont: string; AHalfPt: Integer; ASpacing: TTyLineSpacing;
       AValueTwips: Integer = 0; ASpaceAfter: Integer = 0; APPI: Integer = 96;
       AZoom: Single = 1; const AText: UTF8String = '');
+    { The line of SimSun and Arial with the spacing given, as Measure gives it. }
+    procedure MeasureTwoFonts(ASpacing: TTyLineSpacing; AValue: Integer);
     procedure Near(const AWhat: string; AExpected: Double; AActual: Integer);
+    { FLines painted at (0, AY) into a 200 x 120 bitmap, only AClip of it: the pixels it
+      inked; the bitmap handed out in ABmp when AKeep (else nil). }
+    function InkOf(const AClip: TRect; AY: Integer; AKeep: Boolean;
+      out ABmp: TBGRABitmap): Integer;
+    function InkIn(ABmp: TBGRABitmap; AFromY, AToY: Integer): Integer;
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -52,6 +60,12 @@ type
     procedure TestScalesWithPpiAndZoom;
     procedure TestTextAboveATableKeepsItsGap;
     procedure TestALineOfTwoFontsTakesTheEastAsianShareOfTheLargest;
+    procedure TestAMultipleBelowOneScalesTheWholeLine;
+    procedure TestFourLinesAtHalfStandHalfALineApart;
+    procedure TestALineOfTwoFontsBelowOneIsItsSingleLineScaled;
+    procedure TestAMultipleBelowATenthIsATenth;
+    procedure TestTheGlyphsOfALowLineAreDrawnWhole;
+    procedure TestTheNoticeOfACutParagraphIsAFontsOwnLine;
   end;
 
 implementation
@@ -59,6 +73,21 @@ implementation
 const
   CHan = #$E6#$B1#$89#$E5#$AD#$97;   // two Han characters
   CLatin = 'Abg';
+  // a ground no text is painted in (a text pixel is told by differing from it)
+  CGround: TBGRAPixel = (blue: 3; green: 2; red: 1; alpha: 255);
+
+type
+  { The test device with a line gap of 5 px a font (TTyRichTestDevice has none). }
+  TGapDevice = class(TTyRichTestDevice)
+  protected
+    function DoMetrics(AFont: TTyRichFontId): TTyRichFontMetrics; override;
+  end;
+
+function TGapDevice.DoMetrics(AFont: TTyRichFontId): TTyRichFontMetrics;
+begin
+  Result := inherited DoMetrics(AFont);
+  Result.Leading := 5;
+end;
 
 {$IFDEF MSWINDOWS}
 type
@@ -116,6 +145,8 @@ procedure TTyRichLineMetricsTest.TearDown;
 var
   i: Integer;
 begin
+  if FLines <> nil then FLines.Release;
+  FLines := nil;
   FLayouter.Free;
   FLayouter := nil;
   for i := 0 to FDocs.Count - 1 do TObject(FDocs[i]).Free;
@@ -172,15 +203,13 @@ begin
     [pffLineSpacing, pffSpaceAfter], pf)));
   FLayouter.Clear;
   L := FLayouter.LayoutPara(d, 0, 4000, APPI, AZoom);
-  try
-    AssertEquals(AFont + ': one line', 1, L.LineCount);
-    FHeight := L.Lines[0].Height;
-    FBaseline := L.Lines[0].Baseline - L.Lines[0].Top;
-    FParaHeight := L.Height;
-    FDescent := L.Fragments[0].Descent;
-  finally
-    L.Release;
-  end;
+  if FLines <> nil then FLines.Release;
+  FLines := L;
+  AssertTrue(AFont + ': a line', L.LineCount >= 1);
+  FHeight := L.Lines[0].Height;
+  FBaseline := L.Lines[0].Baseline - L.Lines[0].Top;
+  FParaHeight := L.Height;
+  FDescent := L.Fragments[0].Descent;
 end;
 
 procedure TTyRichLineMetricsTest.Near(const AWhat: string; AExpected: Double; AActual: Integer);
@@ -236,8 +265,7 @@ begin
   Near('Segoe UI 12 pt', 21.3, FHeight);
 end;
 
-{ m x H0 (not m x the font size); the text stays where single spacing puts it. The model has
-  no 3 x spacing (a multiple it has no name for is kept as written, not shown). }
+{ m x H0 (not m x the font size); the text stays where single spacing puts it. }
 procedure TTyRichLineMetricsTest.TestMultipleSpacingPutsTheRestBelow;
 begin
   Need(['SimSun']);
@@ -250,6 +278,153 @@ begin
   Measure('SimSun', 24, lsDouble);
   Near('double', 41.6, FHeight);
   Near('double: the text where single puts it', 16.2, FBaseline);
+  Measure('SimSun', 24, lsMultiple, 720);
+  Near('3 x', 62.4, FHeight);
+  Near('3 x: the text where single puts it', 16.2, FBaseline);
+end;
+
+{ Word 16 (12 pt = 100 units): below 1 the single line is scaled whole, its height and its
+  baseline both m times single's - SimSun 130 / 101 at single, 65 / 50 at 0.5, 104 / 81 at
+  0.8, 117 / 91 at 0.9; Arial 115 / 93.8, 57.5 / 47 at 0.5, 92 / 74.7 at 0.8. }
+procedure TTyRichLineMetricsTest.TestAMultipleBelowOneScalesTheWholeLine;
+begin
+  Need(['SimSun', 'Arial']);
+  Measure('SimSun', 24, lsMultiple, 120);
+  Near('SimSun 0.5', 10.4, FHeight);
+  Near('SimSun 0.5: its baseline', 8.0, FBaseline);
+  Measure('SimSun', 24, lsMultiple, 192);
+  Near('SimSun 0.8', 16.6, FHeight);
+  Near('SimSun 0.8: its baseline', 13.0, FBaseline);
+  Measure('SimSun', 24, lsMultiple, 216);
+  Near('SimSun 0.9', 18.7, FHeight);
+  Near('SimSun 0.9: its baseline', 14.6, FBaseline);
+  Measure('Arial', 24, lsMultiple, 120, 0, 96, 1, CLatin);
+  Near('Arial 0.5', 9.2, FHeight);
+  Near('Arial 0.5: its baseline', 7.5, FBaseline);
+  Measure('Arial', 24, lsMultiple, 192, 0, 96, 1, CLatin);
+  Near('Arial 0.8', 14.7, FHeight);
+  Near('Arial 0.8: its baseline', 12.0, FBaseline);
+end;
+
+{ Four lines of SimSun at 0.5: their baselines 65 units (10.4 px) apart. }
+procedure TTyRichLineMetricsTest.TestFourLinesAtHalfStandHalfALineApart;
+var
+  i: Integer;
+begin
+  Need(['SimSun']);
+  Measure('SimSun', 24, lsMultiple, 120, 0, 96, 1, CHan + #11 + CHan + #11 + CHan + #11 + CHan);
+  AssertEquals('four lines', 4, FLines.LineCount);
+  for i := 1 to 3 do
+  begin
+    Near(Format('line %d''s top', [i]), 10.4, FLines.Lines[i].Top - FLines.Lines[i - 1].Top);
+    Near(Format('line %d''s baseline', [i]), 10.4,
+      FLines.Lines[i].Baseline - FLines.Lines[i - 1].Baseline);
+  end;
+end;
+
+{ The line of SimSun and Arial (23.2, its baseline 17.4) at 0.5: its single line first, then
+  scaled. }
+procedure TTyRichLineMetricsTest.TestALineOfTwoFontsBelowOneIsItsSingleLineScaled;
+begin
+  Need(['SimSun', 'Arial']);
+  MeasureTwoFonts(lsMultiple, 120);
+  Near('the line', 11.6, FHeight);
+  Near('its baseline', 8.7, FBaseline);
+end;
+
+{ A multiple below a tenth is laid out as a tenth (a file may say 1/240); 0 or less is
+  single. }
+procedure TTyRichLineMetricsTest.TestAMultipleBelowATenthIsATenth;
+var
+  tenth: Integer;
+begin
+  Need(['SimSun']);
+  Measure('SimSun', 24, lsMultiple, 24);
+  tenth := FHeight;
+  Near('a tenth', 2.1, tenth);
+  Measure('SimSun', 24, lsMultiple, 1);
+  AssertEquals('1/240: a tenth', tenth, FHeight);
+  Measure('SimSun', 24, lsMultiple, 0);
+  Near('0: single', 20.8, FHeight);
+  Measure('SimSun', 24, lsMultiple, -240);
+  Near('a negative multiple: single', 20.8, FHeight);
+end;
+
+{ A line lower than its glyphs: they are drawn whole, reaching above the line's top (over the
+  line above, and above the paragraph), and a paint of only the line above draws them too. }
+procedure TTyRichLineMetricsTest.TestTheGlyphsOfALowLineAreDrawnWhole;
+var
+  bmp: TBGRABitmap;
+  y0, y1, whole: Integer;
+begin
+  Need(['SimSun']);
+  // the ink of one line of two characters at single spacing
+  Measure('SimSun', 24, lsSingle);
+  whole := InkOf(Rect(0, 0, 200, 120), 40, False, bmp);
+  AssertTrue('single: some ink', whole > 0);
+  // at 0.5 the same ink, though the line is half as high, some of it above the paragraph
+  Measure('SimSun', 24, lsMultiple, 120);
+  AssertEquals('0.5: the glyphs whole', whole, InkOf(Rect(0, 0, 200, 120), 40, False, bmp));
+  InkOf(Rect(0, 0, 200, 120), 40, True, bmp);
+  try
+    AssertTrue('ink above the paragraph''s top', InkIn(bmp, 0, 40) > 0);
+  finally
+    bmp.Free;
+  end;
+  // a space, then the two characters: the second line's glyphs reach into the first line
+  Measure('SimSun', 24, lsMultiple, 120, 0, 96, 1, ' '#11 + CHan);
+  AssertEquals('two lines', 2, FLines.LineCount);
+  y0 := 40 + FLines.Lines[0].Top;
+  y1 := 40 + FLines.Lines[1].Top;
+  InkOf(Rect(0, 0, 200, 120), 40, True, bmp);
+  try
+    AssertTrue('the second line inks the first line''s box', InkIn(bmp, y0, y1) > 0);
+  finally
+    bmp.Free;
+  end;
+  // a paint of only the first line's box: the second line is drawn into it too
+  AssertTrue('a paint of the first line only draws the second''s glyphs in it',
+    InkOf(Rect(0, y0, 200, y1), 40, False, bmp) > 0);
+  // at a tenth the first line's descent hangs into the second line: a paint of that one only
+  Measure('SimSun', 24, lsMultiple, 24, 0, 96, 1, CHan + #11' ');
+  AssertEquals('two lines at a tenth', 2, FLines.LineCount);
+  y0 := 40 + FLines.Lines[1].Top;
+  y1 := y0 + FLines.Lines[1].Height;
+  AssertTrue('a paint of the second line only draws the first''s descent in it',
+    InkOf(Rect(0, y0, 200, y1), 40, False, bmp) > 0);
+end;
+
+{ The line under a cut paragraph is one line of the paragraph's font, as tall as the font's
+  own line: on a device whose font asks for a gap of 5 px over its 16 + 4, 25 px, the notice's
+  baseline under the gap. }
+procedure TTyRichLineMetricsTest.TestTheNoticeOfACutParagraphIsAFontsOwnLine;
+var
+  lo: TTyRichLayouter;
+  d: TTyRichDocument;
+  L: TTyParaLayout;
+  s: UTF8String;
+  last: TTyRichLine;
+begin
+  s := '';
+  while Length(s) <= CRichMaxParaLayoutChars do s := s + 'abcd ';
+  d := NewDoc(s);
+  lo := TTyRichLayouter.Create(TGapDevice.Create, True);
+  try
+    lo.BaseFontName := 'Test';
+    lo.BaseFontSizeHalfPt := 30;
+    L := lo.LayoutPara(d, 0, 400, 96, 1);
+    try
+      AssertTrue('cut', L.Truncated);
+      last := L.Lines[L.LineCount - 1];
+      AssertEquals('a text line: 16 + 4 + its gap', 25, last.Height);
+      AssertEquals('the notice: the font''s own line', 25, L.Height - (last.Top + last.Height));
+      AssertEquals('its baseline under the gap', 5 + 16, L.NoticeBaseline - (last.Top + last.Height));
+    finally
+      L.Release;
+    end;
+  finally
+    lo.Free;
+  end;
 end;
 
 procedure TTyRichLineMetricsTest.TestAtLeastPutsTheRestAbove;
@@ -345,12 +520,20 @@ end;
 { A line of SimSun and Arial: the larger ascent and descent, Arial's gap, and the East Asian
   0.3 of SimSun's 16 px: 0.5 + 14.5 + 3.4 + 4.8 = 23.2, the baseline at 0.5 + 2.4 + 14.5. }
 procedure TTyRichLineMetricsTest.TestALineOfTwoFontsTakesTheEastAsianShareOfTheLargest;
+begin
+  Need(['SimSun', 'Arial']);
+  MeasureTwoFonts(lsSingle, 0);
+  Near('the line', 23.2, FHeight);
+  Near('its baseline', 17.4, FBaseline);
+end;
+
+procedure TTyRichLineMetricsTest.MeasureTwoFonts(ASpacing: TTyLineSpacing; AValue: Integer);
 var
   d: TTyRichDocument;
   f: TTyCharFormat;
+  pf: TTyParaFormat;
   L: TTyParaLayout;
 begin
-  Need(['SimSun', 'Arial']);
   d := NewDoc(CHan + 'Ab');
   f := TyDefaultCharFormat;
   f.FontName := 'SimSun';
@@ -360,13 +543,54 @@ begin
   f.FontName := 'Arial';
   AssertTrue('Arial', d.Execute(TTyRichSetCharFormat.Create(TyRichRange(2, 2),
     [cffFontName, cffSize], f)));
+  pf := TyDefaultParaFormat;
+  pf.LineSpacing := ASpacing;
+  pf.LineSpacingValue := AValue;
+  AssertTrue('para format', d.Execute(TTyRichSetParaFormat.Create(0, 0, [pffLineSpacing], pf)));
+  FLayouter.Clear;
   L := FLayouter.LayoutPara(d, 0, 4000, 96, 1);
   try
-    Near('the line', 23.2, L.Lines[0].Height);
-    Near('its baseline', 17.4, L.Lines[0].Baseline - L.Lines[0].Top);
+    FHeight := L.Lines[0].Height;
+    FBaseline := L.Lines[0].Baseline - L.Lines[0].Top;
   finally
     L.Release;
   end;
+end;
+
+function TTyRichLineMetricsTest.InkOf(const AClip: TRect; AY: Integer; AKeep: Boolean;
+  out ABmp: TBGRABitmap): Integer;
+var
+  bmp: TBGRABitmap;
+begin
+  bmp := TBGRABitmap.Create(200, 120, CGround);
+  try
+    FLines.Paint(bmp, 0, AY, AClip, TyRichDefaultPaintStyle, 0, 0);
+    Result := InkIn(bmp, 0, 120);
+  except
+    bmp.Free;
+    raise;
+  end;
+  if AKeep then ABmp := bmp
+  else
+  begin
+    ABmp := nil;
+    bmp.Free;
+  end;
+end;
+
+function TTyRichLineMetricsTest.InkIn(ABmp: TBGRABitmap; AFromY, AToY: Integer): Integer;
+var
+  x, y: Integer;
+  c: TBGRAPixel;
+begin
+  Result := 0;
+  for y := Max(0, AFromY) to Min(ABmp.Height, AToY) - 1 do
+    for x := 0 to ABmp.Width - 1 do
+    begin
+      c := ABmp.GetPixel(x, y);
+      if (c.red <> CGround.red) or (c.green <> CGround.green) or (c.blue <> CGround.blue) then
+        Inc(Result);
+    end;
 end;
 
 initialization
