@@ -1064,17 +1064,22 @@ end;
 
 { A table deleted whose cell holds one end of a bookmark, its other end outside: no lone mark
   is left - the end in the cell comes back at the deletion's place, as the others there keep
-  theirs. Both ways round: the start in the cell, the end in it. Undone to the bytes. }
+  theirs. Both ways round: the start in the cell, the end in it; and a row deleted of two, its
+  cell's start coming to the next row's first cell. Undone to the bytes. }
 procedure TTyRichBookmarksTest.TestDeletingATableLeavesNoLoneMark;
 var
   before: RawByteString;
   s, e: TTyRichPos;
-  i: Integer;
+  i, r2: Integer;
 begin
-  for i := 0 to 1 do
+  for i := 0 to 2 do
   begin
     if i = 0 then
       Load(Rtf(Head + 'x|par|trowd|cellx2000|cellx4000 |pard|intbl {|*|bkmkstart m}A|cell B|cell|row' +
+        '|pard af{|*|bkmkend m}ter|par}'))
+    else if i = 2 then
+      // (in the middle of the cell's text)
+      Load(Rtf(Head + 'x|par|trowd|cellx2000|cellx4000 |pard|intbl one {|*|bkmkstart m}two|cell B|cell|row' +
         '|pard af{|*|bkmkend m}ter|par}'))
     else
       Load(Rtf(Head + 'x{|*|bkmkstart m}y|par|trowd|cellx2000|cellx4000 |pard|intbl A{|*|bkmkend m}' +
@@ -1091,6 +1096,22 @@ begin
     FRich.Undo;
     AssertTrue(Format('%d: undone: the bytes', [i]), SaveRtf = before);
   end;
+  // the first row of two
+  Load(Rtf(Head + 'x|par|trowd|cellx2000|cellx4000 |pard|intbl {|*|bkmkstart m}A|cell B|cell|row' +
+    '|trowd|cellx2000|cellx4000 |pard|intbl C|cell D|cell|row|pard af{|*|bkmkend m}ter|par}'));
+  before := SaveRtf;
+  r2 := 1;
+  while (r2 < Doc.Text.ParaCount) and (ParaText(r2) <> 'C') do Inc(r2);
+  AssertTrue('the second row', (r2 < Doc.Text.ParaCount) and (Doc.CellAt(r2) <> nil));
+  AssertTrue('the first row deleted', Doc.Execute(TTyRichDelete.Create(Doc.Text.ParaStart(1),
+    Doc.Text.ParaStart(r2) - Doc.Text.ParaStart(1))));
+  AssertTrue('a table still', Doc.CellAt(1) <> nil);
+  AssertTrue('its cell C first', Pos(Raw('C'), ParaText(1)) > 0);
+  AssertTrue('the bookmark stays', FRich.FindBookmark('m', s, e));
+  AssertEquals('its start where the row was', Doc.Text.ParaStart(1), s);
+  CheckAgree('a row deleted');
+  FRich.Undo;
+  AssertTrue('undone: the bytes', SaveRtf = before);
 end;
 
 { A file read on demand with a bookmark a paragraph: a deletion decides the bookmarks from the
