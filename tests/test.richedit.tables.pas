@@ -1268,10 +1268,18 @@ const
     end;
   end;
 
+var
+  dm: TTyRichDocument;
 begin
   Check('hand-word-table-merged.rtf', FixtureBytes('hand-word-table-merged.rtf'), rtrNestedTable);
   Check('word-table-merged.rtf', FixtureBytes('word-table-merged.rtf'), rtrNestedTable);
-  Check('merged cells', BytesOf(Merged), rtrMergedCells);
+  // (merged cells forbid no structure edit: the edits go by the grid - TTyRichMergeTest)
+  dm := LoadDoc(BytesOf(Merged));
+  try
+    AssertTrue('merged cells: a row', Refusal(dm, rtkInsertRow, dm.Text.ParaStart(FirstTablePara(dm)), 0) = rtrNone);
+  finally
+    dm.Free;
+  end;
 end;
 
 { RTF of tables one after another, each of ARows rows (three cells), at least ATarget bytes;

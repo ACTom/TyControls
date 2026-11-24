@@ -142,6 +142,14 @@ function TyRichFormatDisplay(AFormat: TTyRichRowFormat; const AEdges: array of I
 function TyRichRowFormatBytes(const ARaw: RawByteString; ABase, AFormat: TTyRichRowFormat;
   const AEdges: array of Integer; AColorIndex: TTyRichColorIndexFunc): RawByteString;
 
+{ A cell's words (one item of TyRtfSplitRowFormat's cells) with Word's preferred width made
+  AWidthTwips where it is given in twips (\clftsWidth3 \clwWidthN): what a row the model
+  writes says of a cell whose edges an edit moved - Word lays a row out by these widths, not
+  by \cellx. A percentage or an automatic width stays as it is. }
+function TyRichCellWordsWidth(const AWords: RawByteString; AWidthTwips: Integer): RawByteString;
+{ ... and a row's words with its preferred width (\trftsWidth3 \trwWidthN) made AWidthTwips. }
+function TyRichRowWordsWidth(const AWords: RawByteString; AWidthTwips: Integer): RawByteString;
+
 { The colours AFormat's words would name where it differs from ABase (what a writer needs
   in its colour table before it writes the row): AColorIndex is called for each. }
 procedure TyRichNoteRowColors(ABase, AFormat: TTyRichRowFormat; AColorIndex: TTyRichColorIndexFunc);
@@ -1180,6 +1188,20 @@ end;
 
 { AWords with the parameter of every \AName word made AValue (the word where it stood); none:
   as it is. }
+function WithWordParam(const AWords: RawByteString; const AName: string; AValue: Integer): RawByteString; forward;
+
+function TyRichCellWordsWidth(const AWords: RawByteString; AWidthTwips: Integer): RawByteString;
+begin
+  if HasWord(AWords, 'clftsWidth', 3) then Result := WithWordParam(AWords, 'clwWidth', AWidthTwips)
+  else Result := AWords;
+end;
+
+function TyRichRowWordsWidth(const AWords: RawByteString; AWidthTwips: Integer): RawByteString;
+begin
+  if HasWord(AWords, 'trftsWidth', 3) then Result := WithWordParam(AWords, 'trwWidth', AWidthTwips)
+  else Result := AWords;
+end;
+
 function WithWordParam(const AWords: RawByteString; const AName: string; AValue: Integer): RawByteString;
 var
   i, n, s, q: Integer;

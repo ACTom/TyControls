@@ -1220,19 +1220,23 @@ begin
   AssertEquals('five columns', 5, ColCount);
   AssertEquals('the new one empty', '', CellText(0, 2));
   AssertEquals('the next moved right', 'r0c2', CellText(0, 3));
-  // rows of different cells: refused, told once, the table as it was
+  { rows of different cells: by the grid - a2 (2880 .. 4320) goes, b1 (2160 .. 4320) keeps
+    its content, narrower }
   st := TStringStream.Create(Rtf);
   try
     FRich.LoadFromStream(st);
   finally
     st.Free;
   end;
-  Sel(FRich.Document.Text.ParaStart(2) + 1, FRich.Document.Text.ParaStart(4) + 1);
-  AssertTrue('cells', FRich.SelectedCells.InTable);
+  Sel(FRich.Document.Text.ParaStart(3), FRich.Document.Text.ParaStart(3) + 3);
+  AssertTrue('a cell', FRich.SelectedCells.InTable);
   FRich.Refusals.Clear;
-  AssertFalse('refused', FRich.DeleteColumn);
-  AssertEquals('told once', 1, FRich.Refusals.Count);
-  AssertTrue('the table as it was', HasTable and (FRich.Document.Text.ParaCount = 7));
+  AssertTrue('deleted', FRich.DeleteColumn);
+  AssertEquals('nothing told', 0, FRich.Refusals.Count);
+  AssertEquals('a1 stays', 'a1', CellText(0, 1));
+  AssertEquals('the first row: two cells', 2, FRich.Document.CellAt(FRich.Document.Text.ParaOfPos(CellStart(0, 0))).Row.CellCount);
+  AssertEquals('b1 kept', 'b1', CellText(1, 1));
+  AssertEquals('b1 narrower', 2880, FRich.Document.CellAt(FRich.Document.Text.ParaOfPos(CellStart(1, 1))).Row.CellEdges[1]);
 end;
 
 { Every insert and delete of rows, columns and the table, with its Can... answer, on every kind

@@ -741,7 +741,7 @@ type
     (a table object does not outlive a change of its structure); rows are counted over the
     rows that have paragraphs, in text order, from 0; cells by their index in the row. }
   TTyRichTableEditKind = (rtkInsertTable, rtkInsertRow, rtkDeleteRow, rtkInsertColumn,
-    rtkDeleteColumn, rtkMergeCells, rtkSplitCell);
+    rtkDeleteColumn, rtkMergeCells, rtkSplitCell, rtkInsertGridColumn, rtkDeleteGridColumns);
 
   TTyRichTableEdit = record
     Kind: TTyRichTableEditKind;
@@ -769,6 +769,14 @@ type
       their inner lines its left (between columns) and its top (between rows). }
     SpanRows: Integer;
     SplitEdges: TTyRichEdges;
+    { rtkInsertGridColumn: a column Width twips wide at X0 (twips; a grid edge): in a row with
+      an edge there, a new cell (empty, as the cell beside it looks, merged with nothing); in a
+      row whose cell reaches over X0 (a merged cell, a wide one), that cell Width wider; every
+      edge after it Width further right.
+      rtkDeleteGridColumns: the grid's columns from X0 to X1 (twips): a cell wholly inside
+      goes, one that reaches out of it keeps its content and is what is left of it wide;
+      every edge after them that much further left. Both by the grid, for any table that holds
+      no nested table - merged cells, rows of different cells. }
   end;
 
   { Why a table edit cannot be made (rtrNone: it can):
@@ -7311,6 +7319,7 @@ type
     procedure PlanColumns;
     procedure PlanMerge;
     procedure PlanSplit;
+    procedure PlanGridColumns;
     procedure InsertTable(U: TTyRichUndoData);
     procedure EditShape(U: TTyRichUndoData);
   public
@@ -7439,7 +7448,7 @@ var
   f, l, k, r, ci, i: Integer;
   c: TTyRichCell;
   row: TTyRichRow;
-  nested, merged: Boolean;
+  nested: Boolean;
 begin
   f := AFirst;
   l := ALast;
@@ -7449,12 +7458,10 @@ begin
   row := nil;
   r := -1;
   nested := False;
-  merged := False;
   S.Ordered := True;
   for k := f to l do
   begin
     c := S.Cells[k - f];
-    if c.FRow.FTable.FContentLocked then merged := True;
     if c.FRow.FHoldsNestedTable then nested := True;
     if c.FRow <> row then
     begin
@@ -7482,8 +7489,8 @@ begin
   end;
   S.RowCount := r + 1;
   SetLength(S.Rows, S.RowCount);
-  if nested then S.Locked := rtrNestedTable
-  else if merged then S.Locked := rtrMergedCells;
+  // (merged cells forbid no structure edit: they go by the grid)
+  if nested then S.Locked := rtrNestedTable;
   S.Regular := True;
   for r := 1 to S.RowCount - 1 do
     if Length(S.Rows[r].Row.FCells) <> Length(S.Rows[0].Row.FCells) then S.Regular := False;
@@ -7603,19 +7610,27 @@ begin
   Result := False;
 end;
 
+// a cell of the row begins or continues a merge down
+function RowMergedDown(R: TTyRichRow): Boolean;
+var
+  f: TTyRichRowFormat;
+  i: Integer;
+begin
+  f := R.Format;
+  for i := 0 to f.CellCount - 1 do
+    if f.Cells[i].VMerge <> rcmNone then Exit(True);
+  Result := False;
+end;
+
+{ What a table's content forbids of every structure edit: a nested table (its rows are their
+  file's bytes). Merged cells forbid nothing: the edits go by the grid. }
 function TableLock(T: TTyRichTable): TTyRichTableRefusal;
 var
   i: Integer;
-  merged: Boolean;
 begin
-  merged := T.FContentLocked;
   for i := 0 to High(T.FRows) do
-  begin
     if T.FRows[i].FHoldsNestedTable then Exit(rtrNestedTable);
-    // (cells an edit merged: as merged as a file's)
-    if not merged and RowMerged(T.FRows[i]) then merged := True;
-  end;
-  if merged then Result := rtrMergedCells else Result := rtrNone;
+  Result := rtrNone;
 end;
 
 destructor TTyRichTableEditor.Destroy;
@@ -7883,11 +7898,133 @@ end;
 
 { The rows of an edit of rows: the shape's rows, each again with its own format, cells and
   edges, a new one put in (the row beside it again) or one left out. }
+{ Every cell's words with Word's preferred width (in twips) the width its edges now give. }
+procedure FitPreferredWidths(var ACells: TTyRtfCellWords; const AEdges: array of Integer; ALeft: Integer);
+var
+  i, l: Integer;
+begin
+  for i := 0 to High(ACells) do
+  begin
+    if i > High(AEdges) then Break;
+    if i = 0 then l := ALeft else l := AEdges[i - 1];
+    ACells[i] := TyRichCellWordsWidth(ACells[i], AEdges[i] - l);
+  end;
+end;
+
+{ ARow's format for a row put in above ABelow (nil: none below): each cell's merge down - it
+  continues one where ABelow's cell there continues one, else none. nil: nothing to change
+  (no cell of ARow is merged down). Pooled, one reference for the caller. }
+function MergedDownInto(ARow, ABelow: TTyRichRow): TTyRichRowFormat;
+var
+  f, c: TTyRichRowFormat;
+  i, o: Integer;
+  e, be: TTyRichEdges;
+  any: Boolean;
+begin
+  Result := nil;
+  f := ARow.Format;
+  any := False;
+  for i := 0 to f.CellCount - 1 do
+    if f.Cells[i].VMerge <> rcmNone then any := True;
+  if not any then Exit;
+  c := f.Clone;
+  e := ARow.CellEdges;
+  if ABelow <> nil then be := ABelow.CellEdges else be := nil;
+  for i := 0 to c.CellCount - 1 do
+  begin
+    o := -1;
+    if ABelow <> nil then
+      o := TyRichFacingCell(e, f.Row.LeftTwips, i, be, ABelow.Format.Row.LeftTwips);
+    if (o >= 0) and (o < ABelow.Format.CellCount) and (ABelow.Format.Cells[o].VMerge = rcmContinue) then
+      c.Cells[i].VMerge := rcmContinue
+    else
+      c.Cells[i].VMerge := rcmNone;
+  end;
+  Result := TyRichInternRowFormat(c);
+end;
+
+function TyRichCellHMergeOf(R: TTyRichRow; AI: Integer): Integer;
+begin
+  if (AI < 0) or (AI >= R.Format.CellCount) then Exit(0);
+  Result := Ord(R.Format.Cells[AI].HMerge);
+end;
+
+// cell AI of row A: the cell of row B with its edges (-1: none)
+function FacingIn(A: TTyRichRow; AI: Integer; B: TTyRichRow): Integer;
+begin
+  Result := -1;
+  if (A = nil) or (B = nil) then Exit;
+  Result := TyRichFacingCell(A.CellEdges, A.Format.Row.LeftTwips, AI, B.CellEdges, B.Format.Row.LeftTwips);
+  if Result >= B.Format.CellCount then Result := -1;
+end;
+
+function VMergeOf(R: TTyRichRow; AI: Integer): TTyRowCellMerge;
+begin
+  if (R = nil) or (AI < 0) or (AI >= R.Format.CellCount) then Exit(rcmNone);
+  Result := R.Format.Cells[AI].VMerge;
+end;
+
 procedure TTyRichTableEditor.PlanRows;
 var
   n, r, k, b, ci: Integer;
   src: TTyRichShapeRow;
   para: Integer;
+  fmt: TTyRichRowFormat;
+
+  { Row ARow of the shape (its plan row) with the merge down of cell AI made AMerge: the row
+    is made again (its format a new one). }
+  procedure SetMerge(ARow, AI: Integer; AMerge: TTyRowCellMerge);
+  var
+    pr: Integer;
+    c: TTyRichRowFormat;
+  begin
+    for pr := 0 to High(Plan) do
+      if Plan[pr].Shape = ARow then
+      begin
+        if Plan[pr].Format = nil then Plan[pr].Format := Self.Shape.Rows[ARow].Row.Format;
+        if Plan[pr].Format.Cells[AI].VMerge = AMerge then Exit;
+        c := Plan[pr].Format.Clone;
+        c.Cells[AI].VMerge := AMerge;
+        Plan[pr].Format := Hold(TyRichInternRowFormat(c));
+        Plan[pr].Same := False;
+        Exit;
+      end;
+  end;
+
+  { A row deleted (RowAt): a merge down that began in the row above and ended in it is one
+    cell again; one that began in it and goes on begins in the row below (its content moved
+    there first: DeleteRowRefusal), and is one cell when it ends there. }
+  procedure SpansAroundTheDeleted;
+  var
+    d, i, o, o2: Integer;
+    ra, rd, rb, rbb: TTyRichRow;
+  begin
+    d := RowAt;
+    rd := Self.Shape.Rows[d].Row;
+    if d > 0 then ra := Self.Shape.Rows[d - 1].Row else ra := nil;
+    if d + 1 < Self.Shape.RowCount then rb := Self.Shape.Rows[d + 1].Row else rb := nil;
+    if d + 2 < Self.Shape.RowCount then rbb := Self.Shape.Rows[d + 2].Row else rbb := nil;
+    if ra <> nil then
+      for i := 0 to ra.Format.CellCount - 1 do
+        if VMergeOf(ra, i) = rcmFirst then
+        begin
+          o := FacingIn(ra, i, rd);
+          if VMergeOf(rd, o) <> rcmContinue then Continue;
+          o2 := FacingIn(ra, i, rb);
+          if VMergeOf(rb, o2) <> rcmContinue then SetMerge(d - 1, i, rcmNone);
+        end;
+    if rb <> nil then
+      for i := 0 to rb.Format.CellCount - 1 do
+        if VMergeOf(rb, i) = rcmContinue then
+        begin
+          o := FacingIn(rb, i, rd);
+          if VMergeOf(rd, o) <> rcmFirst then Continue;
+          o2 := FacingIn(rb, i, rbb);
+          if VMergeOf(rbb, o2) = rcmContinue then SetMerge(d + 1, i, rcmFirst)
+          else SetMerge(d + 1, i, rcmNone);
+        end;
+  end;
+
 begin
   Plan := nil;
   n := 0;
@@ -7908,6 +8045,11 @@ begin
         Format := src.Row.Format;
         // (Word numbers its rows in their formats: the new one is no copy of that number)
         Raw := TyRtfRowFormatUnnumbered(src.Row.FRawFormat);
+        { A merge down: the new row's cell continues it where the row below continues one
+          (the new row is inside it), else it is a cell of its own. }
+        if r < Self.Shape.RowCount then fmt := MergedDownInto(src.Row, Self.Shape.Rows[r].Row)
+        else fmt := MergedDownInto(src.Row, nil);
+        if fmt <> nil then Format := Hold(fmt);
         Edges := Copy(src.Row.FBoundaries);
         Nested := False;
         SetLength(CellFrom, Length(src.Cells));
@@ -7945,12 +8087,15 @@ begin
     Inc(n);
   end;
   SetLength(Plan, n);
+  if (Edit.Kind = rtkDeleteRow) and (RowAt >= 0) and (RowAt < Shape.RowCount) then
+    SpansAroundTheDeleted;
 end;
 
 { The rows of an edit of columns: every row with a cell more or less, the edges after it
   moved by its width, the format's words kept with their cells. }
 procedure TTyRichTableEditor.PlanColumns;
 var
+  fmt: TTyRichRowFormat;
   r, i, j, b, n, w, left, para: Integer;
   src: TTyRichShapeRow;
   oldEdges, newEdges: TTyIntArray;
@@ -8050,6 +8195,8 @@ begin
           for i := 0 to High(CellFrom) do
             if CellFrom[i] >= 0 then newCells[i] := cells[CellFrom[i]]
             else newCells[i] := cells[b];
+          FitPreferredWidths(newCells, newEdges, left);
+          rowWords := TyRichRowWordsWidth(rowWords, newEdges[High(newEdges)] - left);
           Raw := TyRtfJoinRowFormat(rowWords, newCells, newEdges, tail);
           joined := True;
         end
@@ -8065,6 +8212,15 @@ begin
       for i := 0 to High(CellFrom) do
         if CellFrom[i] >= 0 then perm[i] := CellFrom[i] else perm[i] := b;
       Format := Hold(src.Row.Format.Permuted(perm));
+      // (a new cell merges with nothing)
+      for i := 0 to High(CellFrom) do
+        if (CellFrom[i] < 0) and ((Format.Cells[i].HMerge <> rcmNone) or (Format.Cells[i].VMerge <> rcmNone)) then
+        begin
+          fmt := Format.Clone;
+          fmt.Cells[i].HMerge := rcmNone;
+          fmt.Cells[i].VMerge := rcmNone;
+          Format := Hold(TyRichInternRowFormat(fmt));
+        end;
       if joined then Base := Hold(src.Row.BaseFormat.Permuted(perm))
       else Base := Hold(TyRichDecodeRowFormat(Raw, Length(CellFrom), []));
     end;
@@ -8072,6 +8228,7 @@ begin
 end;
 
 function MergeRun(ARow: TTyRichRow; AX0, AX1: Integer; out AFirst, ALast: Integer): Boolean; forward;
+
 function CellAtExtent(ARow: TTyRichRow; ALeft, ARight: Integer): Integer; forward;
 
 { The rows of the merge: in rows Row0 .. Row1 the cells meeting X0 .. X1 become the first of
@@ -8163,6 +8320,7 @@ begin
           newCells := nil;
           SetLength(newCells, Length(CellFrom));
           for i := 0 to High(CellFrom) do newCells[i] := cells[CellFrom[i]];
+          FitPreferredWidths(newCells, newEdges, src.Row.Format.Row.LeftTwips);
           Raw := TyRtfJoinRowFormat(rowWords, newCells, newEdges, tail);
           joined := True;
         end
@@ -8325,6 +8483,7 @@ begin
           SetLength(newCells, Length(CellFrom));
           for i := 0 to High(CellFrom) do
             if CellFrom[i] >= 0 then newCells[i] := cells[CellFrom[i]] else newCells[i] := cells[j];
+          FitPreferredWidths(newCells, newEdges, src.Row.Format.Row.LeftTwips);
           Raw := TyRtfJoinRowFormat(rowWords, newCells, newEdges, tail);
           joined := True;
         end
@@ -8392,6 +8551,218 @@ begin
       end;
   end;
   SetLength(Plan, pr);
+end;
+
+{ The rows of a column by the grid (TTyRichTableEdit says what each does). The words of a cell
+  go with it (a new one takes those of the cell beside it), Word's preferred widths follow the
+  new edges; a merge across that loses its first cell begins at the next. }
+procedure TTyRichTableEditor.PlanGridColumns;
+var
+  r, n, i, j, k, b, left, w, x, a, bb, d, nn: Integer;
+  src: TTyRichShapeRow;
+  oldEdges, newEdges: TTyIntArray;
+  rowWords, tail: RawByteString;
+  cells, newCells: TTyRtfCellWords;
+  joined: Boolean;
+  perm: array of Integer;
+  p, c: TTyRichRowFormat;
+  changed, isNew: Boolean;
+  newAt: Integer;
+
+  function Map(AX: Integer): Integer;
+  begin
+    if AX <= a then Result := AX
+    else if AX >= bb then Result := AX - d
+    else Result := a;
+  end;
+
+begin
+  SetLength(Plan, Shape.RowCount);
+  x := Edit.X0;
+  w := Edit.Width;
+  a := Edit.X0;
+  bb := Edit.X1;
+  d := bb - a;
+  for r := 0 to Shape.RowCount - 1 do
+  begin
+    src := Shape.Rows[r];
+    n := Length(src.Cells);
+    oldEdges := src.Row.CellEdges;
+    left := src.Row.Format.Row.LeftTwips;
+    newEdges := nil;
+    changed := False;
+    newAt := -1;
+    b := 0;
+    with Plan[r] do
+    begin
+      Shape := r;
+      Nested := src.Row.FHoldsNestedTable;
+      CellFrom := nil;
+      if Edit.Kind = rtkInsertGridColumn then
+      begin
+        // where X0 falls: the row's left, an edge (after cell k), or inside cell k
+        k := -2;
+        if Abs(x - left) <= CRichSharedEdgeTwips then k := -1
+        else
+          for i := 0 to n - 1 do
+          begin
+            if i = 0 then j := left else j := oldEdges[i - 1];
+            if Abs(oldEdges[i] - x) <= CRichSharedEdgeTwips then
+            begin
+              k := i;
+              // (between the cells of a merge across: inside it)
+              if (i + 1 < n) and (TyRichCellHMergeOf(src.Row, i + 1) = Ord(rcmContinue)) then k := -3 - i;
+              Break;
+            end;
+            if (j < x) and (x < oldEdges[i]) then
+            begin
+              k := -3 - i;
+              Break;
+            end;
+          end;
+        if k = -2 then
+        begin
+          // (past the row's end: the row as it is)
+          SetLength(newEdges, n);
+          SetLength(CellFrom, n);
+          for i := 0 to n - 1 do
+          begin
+            newEdges[i] := oldEdges[i];
+            CellFrom[i] := i;
+          end;
+        end
+        else if k <= -3 then
+        begin
+          // inside cell -3 - k: it grows, the edges after it move
+          j := -3 - k;
+          SetLength(newEdges, n);
+          SetLength(CellFrom, n);
+          for i := 0 to n - 1 do
+          begin
+            CellFrom[i] := i;
+            if i >= j then newEdges[i] := oldEdges[i] + w else newEdges[i] := oldEdges[i];
+          end;
+          changed := True;
+        end
+        else
+        begin
+          // a new cell after cell k (-1: before the first)
+          newAt := k + 1;
+          if k >= 0 then b := k else b := 0;
+          SetLength(newEdges, n + 1);
+          SetLength(CellFrom, n + 1);
+          for i := 0 to n do
+          begin
+            if i < newAt then
+            begin
+              CellFrom[i] := i;
+              newEdges[i] := oldEdges[i];
+            end
+            else if i = newAt then
+            begin
+              CellFrom[i] := -1;
+              if newAt > 0 then newEdges[i] := oldEdges[newAt - 1] + w else newEdges[i] := left + w;
+            end
+            else
+            begin
+              CellFrom[i] := i - 1;
+              newEdges[i] := oldEdges[i - 1] + w;
+            end;
+          end;
+          changed := True;
+        end;
+      end
+      else
+      begin
+        // the columns X0 .. X1 out: a cell wholly inside goes, the others shrink or move
+        nn := 0;
+        SetLength(newEdges, n);
+        SetLength(CellFrom, n);
+        for i := 0 to n - 1 do
+        begin
+          if i = 0 then j := left else j := oldEdges[i - 1];
+          if (j >= a - CRichSharedEdgeTwips) and (oldEdges[i] <= bb + CRichSharedEdgeTwips) and
+             (oldEdges[i] > j) then
+          begin
+            changed := True;
+            Continue;
+          end;
+          CellFrom[nn] := i;
+          newEdges[nn] := Map(oldEdges[i]);
+          if newEdges[nn] <> oldEdges[i] then changed := True;
+          Inc(nn);
+        end;
+        SetLength(newEdges, nn);
+        SetLength(CellFrom, nn);
+      end;
+      Edges := newEdges;
+      SetLength(NewFormat, Length(CellFrom));
+      for i := 0 to High(CellFrom) do
+      begin
+        Inc(Doc.FTableEditSteps);
+        if (CellFrom[i] < 0) and (src.Cells[b].First >= 0) then NewFormat[i] := FormatOf(src.Cells[b].First)
+        else NewFormat[i] := FormatOf(src.First);
+      end;
+      if not changed then
+      begin
+        Same := True;
+        Raw := src.Row.FRawFormat;
+        Continue;
+      end;
+      Same := False;
+      Raw := '';
+      joined := False;
+      if SameBytes(src.Row.FRawFormat, TyRtfGridRowFormat(oldEdges)) then
+        Raw := TyRtfGridRowFormat(newEdges)
+      else if src.Row.FRawFormat <> '' then
+      begin
+        if TyRtfSplitRowFormat(src.Row.FRawFormat, n, rowWords, cells, tail) then
+        begin
+          newCells := nil;
+          SetLength(newCells, Length(CellFrom));
+          for i := 0 to High(CellFrom) do
+            if CellFrom[i] >= 0 then newCells[i] := cells[CellFrom[i]] else newCells[i] := cells[b];
+          FitPreferredWidths(newCells, newEdges, left);
+          if Length(newEdges) > 0 then
+            rowWords := TyRichRowWordsWidth(rowWords, newEdges[High(newEdges)] - left);
+          Raw := TyRtfJoinRowFormat(rowWords, newCells, newEdges, tail);
+          joined := True;
+        end
+        else
+          Raw := TyRtfGridRowFormat(newEdges);
+      end;
+      perm := nil;
+      SetLength(perm, Length(CellFrom));
+      for i := 0 to High(CellFrom) do
+        if CellFrom[i] >= 0 then perm[i] := CellFrom[i] else perm[i] := b;
+      p := src.Row.Format.Permuted(perm);
+      c := p.Clone;
+      p.Release;
+      // a new cell merges with nothing; a merge across keeps a first cell
+      for i := 0 to High(CellFrom) do
+        if CellFrom[i] < 0 then
+        begin
+          c.Cells[i].HMerge := rcmNone;
+          c.Cells[i].VMerge := rcmNone;
+        end;
+      for i := 0 to c.CellCount - 1 do
+        if c.Cells[i].HMerge = rcmContinue then
+          if (i = 0) or (c.Cells[i - 1].HMerge = rcmNone) then
+          begin
+            if (i + 1 < c.CellCount) and (c.Cells[i + 1].HMerge = rcmContinue) then
+              c.Cells[i].HMerge := rcmFirst
+            else
+              c.Cells[i].HMerge := rcmNone;
+          end;
+      for i := 0 to c.CellCount - 1 do
+        if (c.Cells[i].HMerge = rcmFirst) and
+           ((i + 1 >= c.CellCount) or (c.Cells[i + 1].HMerge <> rcmContinue)) then
+          c.Cells[i].HMerge := rcmNone;
+      Format := Hold(TyRichInternRowFormat(c));
+      if joined then Base := Hold(src.Row.BaseFormat.Permuted(perm))
+      else Base := Hold(TyRichDecodeRowFormat(Raw, Length(CellFrom), []));
+    end;
+  end;
 end;
 
 procedure TTyRichTableEditor.InsertTable(U: TTyRichUndoData);
@@ -8510,6 +8881,7 @@ begin
   if Edit.Kind in [rtkInsertRow, rtkDeleteRow] then PlanRows
   else if Edit.Kind = rtkMergeCells then PlanMerge
   else if Edit.Kind = rtkSplitCell then PlanSplit
+  else if Edit.Kind in [rtkInsertGridColumn, rtkDeleteGridColumns] then PlanGridColumns
   else PlanColumns;
   // the shape row each plan row is, and the new cell of each old one
   rowOf := nil;
@@ -8551,7 +8923,8 @@ begin
   else if Length(Plan) > 0 then
   begin
     // the parts a loader gave of a table: one table made of them
-    if Edit.Kind in [rtkInsertRow, rtkDeleteRow, rtkMergeCells, rtkSplitCell] then
+    if Edit.Kind in [rtkInsertRow, rtkDeleteRow, rtkMergeCells, rtkSplitCell,
+      rtkInsertGridColumn, rtkDeleteGridColumns] then
       colBounds := Copy(Shape.Rows[0].Row.FTable.FColBoundaries)
     else
       colBounds := Plan[0].Edges;
@@ -8702,6 +9075,68 @@ begin
   Result := AFirst >= 0;
 end;
 
+{ A row whose cell begins a merge down that goes on past it (into the next row of S) and holds
+  something: rtrNotEmpty - its content would go with the row (the control's DeleteRow moves it
+  to the row below first, in the same step); else rtrNone. ARow counts as S.Base does. }
+function DeleteRowRefusal(ADoc: TTyRichDocument; const S: TTyRichShape; ARow: Integer): TTyRichTableRefusal;
+var
+  d, i, o: Integer;
+  rd, rb: TTyRichRow;
+  c: TTyRichShapeCell;
+begin
+  Result := rtrNone;
+  d := ARow - S.Base;
+  if (d < 0) or (d + 1 >= S.RowCount) then Exit;
+  rd := S.Rows[d].Row;
+  rb := S.Rows[d + 1].Row;
+  for i := 0 to High(S.Rows[d].Cells) do
+  begin
+    if (i >= rd.Format.CellCount) or (rd.Format.Cells[i].VMerge <> rcmFirst) then Continue;
+    o := TyRichFacingCell(rd.CellEdges, rd.Format.Row.LeftTwips, i, rb.CellEdges, rb.Format.Row.LeftTwips);
+    if (o < 0) or (o >= rb.Format.CellCount) or (rb.Format.Cells[o].VMerge <> rcmContinue) then Continue;
+    c := S.Rows[d].Cells[i];
+    if (c.First >= 0) and ((c.First <> c.Last) or (ADoc.FText.ParaLength(c.First) > 0)) then
+      Exit(rtrNotEmpty);
+  end;
+end;
+
+{ A column by the grid against S (every row): a width of a twip at least, an edge inside the
+  rows' extent, no row with more cells than a table may have, no row left without a cell -
+  rtrOutOfRange; else rtrNone. }
+function GridColumnsRefusal(const S: TTyRichShape; const AEdit: TTyRichTableEdit): TTyRichTableRefusal;
+var
+  r, i, l, kept: Integer;
+  e: TTyRichEdges;
+  row: TTyRichRow;
+begin
+  Result := rtrOutOfRange;
+  if AEdit.Kind = rtkInsertGridColumn then
+  begin
+    if AEdit.Width < 1 then Exit;
+    for r := 0 to S.RowCount - 1 do
+      if Length(S.Rows[r].Row.FCells) + 1 > CRichMaxTableCols then Exit;
+  end
+  else
+  begin
+    if AEdit.X1 <= AEdit.X0 then Exit;
+    for r := 0 to S.RowCount - 1 do
+    begin
+      row := S.Rows[r].Row;
+      e := row.CellEdges;
+      kept := 0;
+      for i := 0 to High(e) do
+      begin
+        if i = 0 then l := row.Format.Row.LeftTwips else l := e[i - 1];
+        if not ((l >= AEdit.X0 - CRichSharedEdgeTwips) and (e[i] <= AEdit.X1 + CRichSharedEdgeTwips)) then
+          Inc(kept);
+      end;
+      // (a row that would lose every cell: the whole table goes, not this edit)
+      if kept = 0 then Exit;
+    end;
+  end;
+  Result := rtrNone;
+end;
+
 { A split's numbers against a table of ARowCount rows: rtrOutOfRange or rtrNone. }
 function SplitArgsRefusal(const AEdit: TTyRichTableEdit; ARowCount: Integer): TTyRichTableRefusal;
 var
@@ -8815,9 +9250,6 @@ begin
   ik := c.FRow.FIndex;
   if (ik < 0) or (ik >= n) or (t.FRows[ik] <> c.FRow) then Exit;
   Result := TableLock(t);
-  // (cells are merged or split in a table that has merged cells: only a nested table stops it)
-  if (Result = rtrMergedCells) and (AEdit.Kind in [rtkMergeCells, rtkSplitCell]) then
-    Result := rtrNone;
   if Result <> rtrNone then
   begin
     // (refused: no row is read, but the answer is the window's)
@@ -8853,6 +9285,8 @@ begin
         if (idx < 0) or (idx > n) then Exit(rtrOutOfRange);
         if idx > 0 then w0 := idx - 1 else w0 := 0;
         w1 := w0;
+        // (the row below too, when a merge down goes on into it: past the new row, it takes it)
+        if (idx < n) and RowMergedDown(t.FRows[idx]) then w1 := idx;
       end;
     rtkDeleteRow:
       begin
@@ -8861,6 +9295,14 @@ begin
         if (idx < 0) or (idx >= n) then Exit(rtrOutOfRange);
         w0 := idx;
         w1 := idx;
+        { (a merge down in it or beside it: the row above and two below - the merge the row is
+          part of starts or ends again) }
+        if RowMergedDown(t.FRows[idx]) or ((idx > 0) and RowMergedDown(t.FRows[idx - 1])) or
+           ((idx + 1 < n) and RowMergedDown(t.FRows[idx + 1])) then
+        begin
+          if idx > 0 then w0 := idx - 1;
+          if idx + 2 < n then w1 := idx + 2 else w1 := n - 1;
+        end;
       end;
   else
     begin
@@ -8882,9 +9324,19 @@ begin
     Result := MergeRefusal(ADoc, S, AEdit);
     if Result <> rtrNone then Exit;
   end;
+  if AEdit.Kind = rtkDeleteRow then
+  begin
+    Result := DeleteRowRefusal(ADoc, S, idx);
+    if Result <> rtrNone then Exit;
+  end;
   if AEdit.Kind = rtkSplitCell then
   begin
     Result := SplitRefusal(S, AEdit);
+    if Result <> rtrNone then Exit;
+  end;
+  if AEdit.Kind in [rtkInsertGridColumn, rtkDeleteGridColumns] then
+  begin
+    Result := GridColumnsRefusal(S, AEdit);
     if Result <> rtrNone then Exit;
   end;
   if AEdit.Kind in [rtkInsertColumn, rtkDeleteColumn] then
@@ -8929,12 +9381,13 @@ begin
   if S.Window or (Result <> rtrNone) then Exit;
   Result := ReadTableShape(ADoc, k, S);
   if Result <> rtrNone then Exit;
-  if (S.Locked = rtrMergedCells) and (AEdit.Kind in [rtkMergeCells, rtkSplitCell]) then
-  else if S.Locked <> rtrNone then Exit(S.Locked);
-  if (S.Locked = rtrNone) and not (AEdit.Kind in [rtkMergeCells, rtkSplitCell]) then
-    for k := 0 to S.RowCount - 1 do
-      if RowMerged(S.Rows[k].Row) then Exit(rtrMergedCells);
+  if S.Locked <> rtrNone then Exit(S.Locked);
   case AEdit.Kind of
+    rtkInsertGridColumn, rtkDeleteGridColumns:
+      begin
+        Result := GridColumnsRefusal(S, AEdit);
+        if Result <> rtrNone then Exit;
+      end;
     rtkSplitCell:
       begin
         Result := SplitArgsRefusal(AEdit, S.RowCount);
@@ -8955,7 +9408,11 @@ begin
          ((AEdit.Index < 0) or (AEdit.Index > S.RowCount)) then
         Exit(rtrOutOfRange);
     rtkDeleteRow:
-      if (AEdit.Index < 0) or (AEdit.Index >= S.RowCount) then Exit(rtrOutOfRange);
+      begin
+        if (AEdit.Index < 0) or (AEdit.Index >= S.RowCount) then Exit(rtrOutOfRange);
+        Result := DeleteRowRefusal(ADoc, S, AEdit.Index);
+        if Result <> rtrNone then Exit;
+      end;
   else
     begin
       if not S.Regular or not S.Ordered then Exit(rtrIrregularRows);

@@ -1767,6 +1767,16 @@ type
       as it is now, FAim... set for TableEditCaret; nil and told when the table or the place
       refuses it. }
     function MakeTableEdit(var APlace: TTyRichEditPlace): TTyRichCommand;
+    { Rows AR1 .. AR2 of the table at ATablePos deleted where a merge down meets them: from the
+      last up, each row's content of a merge that goes on below them moved first into the row
+      that then follows (one step). nil: no merge down in them or beside them - the plain way. }
+    function SpanRowsDelete(ATablePos: TTyRichPos; AR1, AR2, AFirstPara: Integer): TTyRichCommand;
+    { The columns of the table at ATablePos by the grid (merged cells, rows of different cells):
+      AInsert, as many as AX0 .. AX1 covers at its right (AAfter) or left edge, each as wide as
+      the grid's column beside it; else those AX0 .. AX1 covers deleted. nil: the table is a
+      plain grid (the edits by index do it) - or, with AWhole set, the columns are all of it. }
+    function GridColumnsEdit(ATablePos: TTyRichPos; AX0, AX1: Integer; AInsert, AAfter: Boolean;
+      out AWhole: Boolean): TTyRichCommand;
     function MakeTableEditThen(var APlace: TTyRichEditPlace): TTyRichCommand;
     { Where the table action that just ran leaves the caret (FAim...), in the text as it is
       now. }
@@ -12080,6 +12090,32 @@ var
   comp: TTyRichCompositeCommand;
   row: TTyRichRow;
   area: TTyRichCellArea;
+  gx0, gx1: Integer;
+  whole: Boolean;
+
+  // the selection's extent in twips (the area's, else the caret's cell's)
+  procedure GridSpanOf(const AArea: TTyRichCellArea; APara: Integer; out AX0, AX1: Integer);
+  var
+    l, r: Int64;
+    c: TTyRichCell;
+  begin
+    if AArea.Range.InTable and not AArea.AllCells and (AArea.Table = FDoc.CellAt(APara).Table) then
+    begin
+      AX0 := Integer(AArea.X0);
+      AX1 := Integer(AArea.X1);
+      Exit;
+    end;
+    c := FDoc.CellAt(APara);
+    TyRichCellExtent(c.Row, c.Index, l, r);
+    AX0 := Integer(l);
+    AX1 := Integer(r);
+    if AArea.Range.InTable and AArea.AllCells then
+    begin
+      // (rows reached from outside: every column)
+      AX0 := -MaxInt div 2;
+      AX1 := MaxInt div 2;
+    end;
+  end;
 
   // the row of table paragraph AP, counted from the caret's row (rows never cross objects)
   function RowOf(AP: Integer): Integer;
@@ -12274,6 +12310,17 @@ begin
           FAgreePos := t.ParaStart(info.First);
           FAgreeRow0 := 0;
           FAgreeRow1 := MaxInt;
+          GridSpanOf(area, k, gx0, gx1);
+          // (what forbids every column - a nested table, a part not read whole - says so first)
+          why := FDoc.TableEditRefusal(TyRichTableEdit(rtkInsertColumn, pos, 0));
+          // (told below, once the read scope is closed)
+          if not (why in [rtrNone, rtrIrregularRows, rtrOutOfRange]) then
+            reason := TableRefusalText(why, TyRichTableEdit(rtkInsertColumn, pos, 0))
+          else
+          begin
+            Result := GridColumnsEdit(t.ParaStart(info.First), gx0, gx1, True, FTableAfter, whole);
+            if Result <> nil then Exit;
+          end;
           Result := TTyRichInsertColumn.Create(pos, FAimCell);
           if n > 1 then
           begin
@@ -12331,7 +12378,11 @@ begin
           FAgreePos := t.ParaStart(info.First);
           FAgreeRow0 := r1 - 1;
           FAgreeRow1 := r1;
-          if r1 = r2 then
+          // (a merge down in or beside them: row by row, its content kept)
+          if not ((r1 = 0) and (r2 = info.RowCount - 1)) then
+            Result := SpanRowsDelete(t.ParaStart(info.First), r1, r2, p1);
+          if Result <> nil then
+          else if r1 = r2 then
             Result := TTyRichDeleteRow.Create(pos, r1)
           else
           begin
@@ -12396,7 +12447,22 @@ begin
           FAgreePos := t.ParaStart(info.First);
           FAgreeRow0 := 0;
           FAgreeRow1 := MaxInt;
-          if n = 1 then
+          // (no plain grid: by the grid's columns under the selection)
+          GridSpanOf(area, k, gx0, gx1);
+          why := FDoc.TableEditRefusal(TyRichTableEdit(rtkDeleteColumn, pos, 0));
+          if not (why in [rtrNone, rtrIrregularRows, rtrOutOfRange]) then
+            whole := False
+          else
+            Result := GridColumnsEdit(t.ParaStart(info.First), gx0, gx1, False, False, whole);
+          if not (why in [rtrNone, rtrIrregularRows, rtrOutOfRange]) then
+            reason := TableRefusalText(why, TyRichTableEdit(rtkDeleteColumn, pos, 0))
+          else if whole then
+          begin
+            FreeAndNil(Result);
+            Result := WholeTable(rtrNone);
+          end
+          else if Result <> nil then
+          else if n = 1 then
             Result := TTyRichDeleteColumn.Create(pos, c1)
           else
           begin
@@ -12671,8 +12737,9 @@ begin
       end;
       FAskTblState := FDoc.ContentState;
       FAskTblRows := rr = rtrNone;
-      FAskTblColIns := cr = rtrNone;
-      FAskTblColDel := cr in [rtrNone, rtrOutOfRange];
+      // (rows of different cells: their columns by the grid)
+      FAskTblColIns := cr in [rtrNone, rtrIrregularRows];
+      FAskTblColDel := cr in [rtrNone, rtrOutOfRange, rtrIrregularRows];
       FAskTblDelete := rr in [rtrNone, rtrMergedCells, rtrNestedTable, rtrIrregularRows];
     end;
     FAskRows := FAskTblRows;
@@ -21960,6 +22027,161 @@ begin
     ed.Rows, ed.SplitEdges), place, True);
 end;
 
+function TTyCustomRichEdit.SpanRowsDelete(ATablePos: TTyRichPos; AR1, AR2,
+  AFirstPara: Integer): TTyRichCommand;
+var
+  rows: TTyRichRowList;
+  first, count, r, i, o, f, l, rf, k: Integer;
+  starts: array of Integer;
+  row: TTyRichRow;
+  any: Boolean;
+  below: TTyRichRow;
+  comp: TTyRichCompositeCommand;
+  edit: TTyRichCellsEdit;
+  part: TTyRichDocument;
+  t: TTyRichText;
+
+  // the paragraphs of cell ACell of row ARow (one of AR1 .. AR2: read from its first paragraph)
+  function CellParas(ARow, ACell: Integer; out AF, AL: Integer): Boolean;
+  var
+    m: Integer;
+    c: TTyRichCell;
+  begin
+    AF := -1;
+    AL := -1;
+    m := starts[ARow - AR1];
+    row := FDoc.CellAt(m).Row;
+    while m < t.ParaCount do
+    begin
+      c := FDoc.CellAt(m);
+      if (c = nil) or (c.Row <> row) then Break;
+      if c.Index = ACell then
+      begin
+        if AF < 0 then AF := m;
+        AL := m;
+      end;
+      Inc(m);
+    end;
+    Result := AF >= 0;
+  end;
+
+begin
+  Result := nil;
+  t := FDoc.Text;
+  FDoc.BeginRead;
+  try
+    if not FDoc.TableRowsAt(ATablePos, AR1 - 1, AR2 + 1, rows, first, count) then Exit;
+    any := False;
+    for r := 0 to High(rows) do
+      for i := 0 to rows[r].Format.CellCount - 1 do
+        if rows[r].Format.Cells[i].VMerge <> rcmNone then any := True;
+    if not any then Exit;
+    if AR2 + 1 < count then below := rows[AR2 + 1 - first] else below := nil;
+    // (the rows' first paragraphs, from the first one's: the rows that go, and no others)
+    SetLength(starts, AR2 - AR1 + 1);
+    k := AFirstPara;
+    for r := AR1 to AR2 do
+    begin
+      starts[r - AR1] := k;
+      row := FDoc.CellAt(k).Row;
+      while (k < t.ParaCount) and (FDoc.CellAt(k) <> nil) and (FDoc.CellAt(k).Row = row) do Inc(k);
+    end;
+    comp := TTyRichCompositeCommand.Create(rsRichUndoDeleteRow);
+    try
+      for r := AR2 downto AR1 do
+      begin
+        { a merge that begins here and goes on below the rows that go: its content to the row
+          that follows them then (row 1, counted from this one, when the rows below it went) }
+        edit := nil;
+        for i := 0 to rows[r - first].Format.CellCount - 1 do
+        begin
+          if rows[r - first].Format.Cells[i].VMerge <> rcmFirst then Continue;
+          if below = nil then Continue;
+          o := TyRichFacingCell(rows[r - first].CellEdges, rows[r - first].Format.Row.LeftTwips, i,
+            below.CellEdges, below.Format.Row.LeftTwips);
+          if (o < 0) or (o >= below.Format.CellCount) or (below.Format.Cells[o].VMerge <> rcmContinue) then
+            Continue;
+          if not CellParas(r, i, f, l) then Continue;
+          if (f = l) and (t.ParaLength(f) = 0) then Continue;
+          rf := starts[r - AR1];
+          part := DocOfRange(FDoc, t.ParaStart(f), t.ParaStart(l) + t.ParaLength(l) - t.ParaStart(f));
+          if edit = nil then edit := TTyRichCellsEdit.Create(t.ParaStart(rf), rsRichUndoDeleteRow);
+          edit.AddContent(1, o, part);
+          edit.AddClear(0, i);
+        end;
+        if edit <> nil then comp.Add(edit);
+        comp.Add(TTyRichDeleteRow.Create(ATablePos, r));
+      end;
+      Result := comp;
+      comp := nil;
+    finally
+      comp.Free;
+    end;
+  finally
+    FDoc.EndRead;
+  end;
+end;
+
+function TTyCustomRichEdit.GridColumnsEdit(ATablePos: TTyRichPos; AX0, AX1: Integer; AInsert,
+  AAfter: Boolean; out AWhole: Boolean): TTyRichCommand;
+var
+  g: TTyRichGrid;
+  r, i, c, n, x, w: Integer;
+  plain: Boolean;
+  gc: TTyRichGridCell;
+  comp: TTyRichCompositeCommand;
+begin
+  Result := nil;
+  AWhole := False;
+  g := TableGrid(ATablePos);
+  if g = nil then Exit;
+  try
+    // a plain grid: every row a cell a column, nothing merged
+    plain := True;
+    for r := 0 to g.RowCount - 1 do
+    begin
+      if g.CellCountOfRow(r) <> g.ColCount then plain := False;
+      for i := 0 to g.CellCountOfRow(r) - 1 do
+      begin
+        gc := g.CellOf(r, i);
+        if gc.Covered or (gc.ColSpan <> 1) or (gc.RowSpan <> 1) then plain := False;
+      end;
+      if not plain then Break;
+    end;
+    // the grid's columns AX0 .. AX1 covers
+    n := 0;
+    for c := 0 to g.ColCount - 1 do
+      if (g.Edge(c) >= AX0 - CRichEdgeSlackTwips) and (g.Edge(c + 1) <= AX1 + CRichEdgeSlackTwips) then
+        Inc(n);
+    if n = 0 then n := 1;
+    if not AInsert and (AX0 <= g.Edge(0) + CRichEdgeSlackTwips) and
+       (AX1 >= g.Edge(g.ColCount) - CRichEdgeSlackTwips) then
+    begin
+      AWhole := True;
+      Exit;
+    end;
+    if plain then Exit;
+    if not AInsert then
+    begin
+      Result := TTyRichDeleteGridColumns.Create(ATablePos, Math.Max(AX0, g.Edge(0)),
+        Math.Min(AX1, g.Edge(g.ColCount)));
+      Exit;
+    end;
+    // at the right edge (after) or the left; as wide as the grid's column beside it
+    if AAfter then x := Math.Min(AX1, g.Edge(g.ColCount)) else x := Math.Max(AX0, g.Edge(0));
+    w := 0;
+    for c := 0 to g.ColCount - 1 do
+      if AAfter and (Abs(g.Edge(c + 1) - x) <= CRichEdgeSlackTwips) then w := g.ColWidth(c)
+      else if not AAfter and (Abs(g.Edge(c) - x) <= CRichEdgeSlackTwips) then w := g.ColWidth(c);
+    if w <= 0 then w := 1440;
+    comp := TTyRichCompositeCommand.Create(rsRichUndoInsertColumn);
+    for i := 1 to n do comp.Add(TTyRichInsertGridColumn.Create(ATablePos, x, w));
+    Result := comp;
+  finally
+    g.Free;
+  end;
+end;
+
 procedure TTyCustomRichEdit.CopyCells(const AArea: TTyRichCellArea);
 var
   rtf: RawByteString;
@@ -21990,10 +22212,20 @@ var
   txt, cellTxt: string;
   colOf: array of Integer;
   firstOfRow: array of Integer;
+  gr: TTyRichGrid;
+  gc: TTyRichGridCell;
+  plain: Boolean;
+  rowBase, colStart, c, rr, cc, rs, cs: Integer;
+  placeRow, placeCol, spanRows, spanCols: array of Integer;
+  drows: TTyRichRowList;
+  dfirst, dcount: Integer;
+  de: TTyRichEdges;
+  dedges: array of Integer;
 begin
   Result := False;
   ARtf := '';
   AText := '';
+  gr := nil;
   // (each cell's content is written and read back: its text in the view's font and size)
   NameDocBase;
   g := TTyCellGather.Create;
@@ -22015,13 +22247,63 @@ begin
       Inc(k);
       if k > cols then cols := k;
     end;
+    { Cells merged in the source: the copy is a table of the grid's columns under the area,
+      each cell where the grid has it, merged as it is there (clipped to the area) - Word
+      reads it merged the same way. }
+    SetLength(placeRow, Length(g.Cells));
+    SetLength(placeCol, Length(g.Cells));
+    SetLength(spanRows, Length(g.Cells));
+    SetLength(spanCols, Length(g.Cells));
+    for i := 0 to High(g.Cells) do
+    begin
+      placeRow[i] := g.Cells[i].Row;
+      placeCol[i] := colOf[i];
+      spanRows[i] := 1;
+      spanCols[i] := 1;
+    end;
+    gr := TableGrid(FDoc.Text.ParaStart(AArea.FirstPara));
+    plain := True;
+    if gr <> nil then
+    begin
+      rowBase := AArea.Range.Row0;
+      for i := 0 to High(g.Cells) do
+      begin
+        gc := gr.CellOf(rowBase + g.Cells[i].Row, g.Cells[i].Col);
+        if gc.Covered or (gc.RowSpan <> 1) or (gc.ColSpan <> 1) then plain := False;
+      end;
+      if not plain then
+      begin
+        colStart := 0;
+        if not AArea.AllCells then
+          while (colStart < gr.ColCount - 1) and (gr.Edge(colStart) < AArea.X0 - CRichEdgeSlackTwips) do
+            Inc(colStart);
+        cols := 0;
+        for c := colStart to gr.ColCount - 1 do
+          if AArea.AllCells or (gr.Edge(c + 1) <= AArea.X1 + CRichEdgeSlackTwips) then cols := c - colStart + 1;
+        if cols < 1 then cols := 1;
+        for i := 0 to High(g.Cells) do
+        begin
+          gc := gr.CellOf(rowBase + g.Cells[i].Row, g.Cells[i].Col);
+          if gc.Covered then
+          begin
+            placeRow[i] := -1;
+            Continue;
+          end;
+          placeRow[i] := gc.Row - rowBase;
+          placeCol[i] := gc.Col - colStart;
+          spanRows[i] := Math.Min(gc.RowSpan, rows - placeRow[i]);
+          spanCols[i] := Math.Min(gc.ColSpan, cols - placeCol[i]);
+          if (placeRow[i] < 0) or (placeCol[i] < 0) or (placeCol[i] >= cols) then placeRow[i] := -1;
+        end;
+      end;
+    end;
     d.Execute(TTyRichInsertTable.Create(0, rows, cols));
     edit := TTyRichCellsEdit.Create(0, rsRichUndoPaste);
     txt := '';
     for i := 0 to High(g.Cells) do
     begin
-      if g.Cells[i].E > g.Cells[i].S then
-        edit.AddContent(g.Cells[i].Row, colOf[i], DocOfRange(FDoc, g.Cells[i].S,
+      if (g.Cells[i].E > g.Cells[i].S) and (placeRow[i] >= 0) then
+        edit.AddContent(placeRow[i], placeCol[i], DocOfRange(FDoc, g.Cells[i].S,
           g.Cells[i].E - g.Cells[i].S));
       // the text: a row a line, its cells parted by tabs (a cell's own breaks are spaces)
       if (i > 0) and (g.Cells[i].Row <> g.Cells[i - 1].Row) then txt := txt + LineEnding
@@ -22032,6 +22314,24 @@ begin
       txt := txt + cellTxt;
     end;
     d.Execute(edit);
+    if not plain and d.TableRowsAt(0, 0, 0, drows, dfirst, dcount) and (Length(drows) > 0) then
+    begin
+      de := drows[0].CellEdges;
+      SetLength(dedges, Length(de) + 1);
+      dedges[0] := drows[0].Format.Row.LeftTwips;
+      for c := 0 to High(de) do dedges[c + 1] := de[c];
+      for i := 0 to High(g.Cells) do
+      begin
+        if placeRow[i] < 0 then Continue;
+        rr := placeRow[i];
+        cc := placeCol[i];
+        rs := spanRows[i];
+        cs := spanCols[i];
+        if (rs <= 1) and (cs <= 1) then Continue;
+        if cc + cs > High(dedges) then Continue;
+        d.Execute(TTyRichMergeCells.Create(0, rr, rr + rs - 1, dedges[cc], dedges[cc + cs]));
+      end;
+    end;
     st := TBytesStream.Create;
     try
       TyRichSaveRtf(d, st);
@@ -22045,6 +22345,7 @@ begin
     AText := txt;
     Result := True;
   finally
+    gr.Free;
     d.Free;
     g.Free;
   end;
@@ -22089,6 +22390,59 @@ var
   lns, cells: TStringList;
   st: TBytesStream;
   anyTable: Boolean;
+  ri0, rn, sk: Integer;
+  x0: Int64;
+  xr: Int64;
+
+  { The cell of the target's row ARow (counted from row0) that the source row's AK-th cell goes
+    into, by the grid: the AK-th one, from the rectangle's left, that no merge covers (-1:
+    none, past the row's end). A row past the table's last: as the rows added below are. }
+  function TargetOf(ARow, AK: Integer): Integer;
+  var
+    rows: TTyRichRowList;
+    first, count, i, n: Integer;
+    row: TTyRichRow;
+    l, r: Int64;
+  begin
+    Result := col + AK;
+    FDoc.BeginRead;
+    try
+      if not FDoc.TableRowsAt(t.ParaStart(row0), ri0 + ARow, ri0 + ARow, rows, first, count) or
+         (Length(rows) = 0) or (first <> ri0 + ARow) then
+        Exit;
+      row := rows[0];
+      n := 0;
+      for i := 0 to row.CellCount - 1 do
+      begin
+        TyRichCellExtent(row, i, l, r);
+        if l < x0 - CRichEdgeSlackTwips then Continue;
+        // (a covered place: the cell above, or the one before across, reaches over it)
+        if (TyRichCellVMerge(row, i) = Ord(rcmContinue)) or (TyRichCellHMerge(row, i) = Ord(rcmContinue)) then
+          Continue;
+        if n = AK then Exit(i);
+        Inc(n);
+      end;
+      Result := -1;
+    finally
+      FDoc.EndRead;
+    end;
+  end;
+
+  procedure Fill(ARow, AK: Integer; ADoc: TTyRichDocument; const AText: string);
+  var
+    j: Integer;
+  begin
+    j := TargetOf(ARow, AK);
+    if j < 0 then
+    begin
+      // (past the row's end: left out, as past the last column; told once)
+      ADoc.Free;
+      edit.AddClear(ARow, MaxInt div 2);
+      Exit;
+    end;
+    if ADoc <> nil then edit.AddContent(ARow, j, ADoc) else edit.AddText(ARow, j, AText);
+  end;
+
 begin
   Result := nil;
   ATarget := -1;
@@ -22119,6 +22473,8 @@ begin
     col := c.Index;
     TyRichRowParas(FDoc, k, p, q);
     row0 := p;
+    TyRichCellExtent(c.Row, col, x0, xr);
+    if not FDoc.TableRowIndex(row0, ri0, rn) then ri0 := 0;
   finally
     FDoc.EndRead;
   end;
@@ -22156,14 +22512,25 @@ begin
                 anyTable := True;
                 r := -1;
                 d := nil;
+                sk := 0;
                 while (k < src.Text.ParaCount) and (src.CellAt(k) <> nil) do
                 begin
                   c := src.CellAt(k);
-                  if (d = nil) or (c.Row <> d.Row) then Inc(r);
+                  if (d = nil) or (c.Row <> d.Row) then
+                  begin
+                    Inc(r);
+                    sk := 0;
+                  end;
                   f := k;
                   while (k + 1 < src.Text.ParaCount) and (src.CellAt(k + 1) = c) do Inc(k);
-                  edit.AddContent(r, col + c.Index, DocOfRange(src, src.Text.ParaStart(f),
-                    src.Text.ParaStart(k) + src.Text.ParaLength(k) - src.Text.ParaStart(f)));
+                  // (the source's covered places are no cells to paste: the grid's k-th cell)
+                  if (TyRichCellVMerge(c.Row, c.Index) <> Ord(rcmContinue)) and
+                     (TyRichCellHMerge(c.Row, c.Index) <> Ord(rcmContinue)) then
+                  begin
+                    Fill(r, sk, DocOfRange(src, src.Text.ParaStart(f),
+                      src.Text.ParaStart(k) + src.Text.ParaLength(k) - src.Text.ParaStart(f)), '');
+                    Inc(sk);
+                  end;
                   d := c;
                   Inc(k);
                 end;
@@ -22194,7 +22561,7 @@ begin
           begin
             if (r = lns.Count - 1) and (lns[r] = '') then Break;
             cells.DelimitedText := lns[r];
-            for i := 0 to cells.Count - 1 do edit.AddText(r, col + i, cells[i]);
+            for i := 0 to cells.Count - 1 do Fill(r, i, nil, cells[i]);
           end;
         finally
           cells.Free;
@@ -23419,14 +23786,87 @@ end;
 
 function TTyCustomRichEdit.DistributeColumns: Boolean;
 var
-  p, c, r0, r1: Integer;
+  p, c, r0, r1, i, ca, cb, n: Integer;
   pos: TTyRichPos;
+  g: TTyRichGrid;
+  gc: TTyRichGridCell;
+  plain: Boolean;
+  area: TTyRichCellArea;
+  newE: array of Integer;
+  comp: TTyRichCompositeCommand;
+  place: TTyRichEditPlace;
+  keep: Boolean;
+  x0, x1: Int64;
 begin
   Result := False;
   if not UserTableDoorOpen then Exit;
   if not CaretEdgePara(p, c, True) then Exit;
   if not EdgeRows(p, True, pos, r0, r1) then Exit;
-  Result := RunEdgeCommand(TTyRichSetRowWidths.CreateDistribute(pos, r0, r1));
+  { A table that is no plain grid (merged cells, rows of different cells): by the grid - its
+    columns under the selection (else all) as wide as each other, each edge moved in the rows
+    that have it, so every cell keeps the grid's columns it covered. }
+  g := TableGrid(pos);
+  try
+    plain := g = nil;
+    if g <> nil then
+    begin
+      plain := True;
+      for i := 0 to g.RowCount - 1 do
+      begin
+        if g.CellCountOfRow(i) <> g.ColCount then plain := False;
+        for c := 0 to g.CellCountOfRow(i) - 1 do
+        begin
+          gc := g.CellOf(i, c);
+          if gc.Covered or (gc.ColSpan <> 1) or (gc.RowSpan <> 1) then plain := False;
+        end;
+      end;
+    end;
+    if plain then
+    begin
+      Result := RunEdgeCommand(TTyRichSetRowWidths.CreateDistribute(pos, r0, r1));
+      Exit;
+    end;
+    area := CellArea;
+    ca := 0;
+    cb := g.ColCount - 1;
+    if TyRichCellsEditable(area) and not area.AllCells then
+    begin
+      x0 := area.X0;
+      x1 := area.X1;
+      while (ca < cb) and (g.Edge(ca) < x0 - CRichEdgeSlackTwips) do Inc(ca);
+      while (cb > ca) and (g.Edge(cb + 1) > x1 + CRichEdgeSlackTwips) do Dec(cb);
+    end;
+    n := cb - ca + 1;
+    if n < 2 then Exit;
+    SetLength(newE, g.ColCount + 1);
+    for i := 0 to g.ColCount do newE[i] := g.Edge(i);
+    for i := ca + 1 to cb do
+      newE[i] := g.Edge(ca) + Int64(g.Edge(cb + 1) - g.Edge(ca)) * (i - ca) div n;
+    comp := TTyRichCompositeCommand.Create(rsRichUndoColumnWidth);
+    // (those that go right from the right, then those that go left from the left: none crosses)
+    for i := cb downto ca + 1 do
+      if newE[i] > g.Edge(i) then comp.Add(TTyRichSetColumnEdge.Create(pos, g.Edge(i), newE[i], r0, r1, False));
+    for i := ca + 1 to cb do
+      if newE[i] < g.Edge(i) then comp.Add(TTyRichSetColumnEdge.Create(pos, g.Edge(i), newE[i], r0, r1, False));
+  finally
+    g.Free;
+  end;
+  if comp.Count = 0 then
+  begin
+    comp.Free;
+    Exit;
+  end;
+  comp.Add(TTyRichAgreeEdges.Create(pos, r0 - 1, r1 + 1));
+  place := Default(TTyRichEditPlace);
+  place.Anchor := CRichPlaceStays;
+  place.Caret := CRichPlaceStays;
+  keep := FNoEditScroll;
+  FNoEditScroll := True;
+  try
+    Result := RunMade(comp, place, True);
+  finally
+    FNoEditScroll := keep;
+  end;
 end;
 
 { The rows (selected, else the table's) as high as their average now, each at least that.

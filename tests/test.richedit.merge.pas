@@ -10,7 +10,7 @@ unit test.richedit.merge;
 interface
 
 uses
-  Classes, SysUtils, Graphics, LCLType, fpcunit, testregistry, tyControls.Controller,
+  Classes, SysUtils, Math, Graphics, LCLType, fpcunit, testregistry, tyControls.Controller,
   tyControls.RichEdit.Text, tyControls.RichEdit.Model, tyControls.RichEdit.Commands,
   tyControls.RichEdit.RtfRead, tyControls.RichEdit.RtfWrite, tyControls.RichEdit.Layout,
   tyControls.RichEdit.TableProps, tyControls.RichEdit.TableSel, tyControls.RichEdit,
@@ -21,7 +21,14 @@ type
   TMergeRich = class(TTyRichEdit)
   protected
     function CreateDevice: TTyRichTextDevice; override;
+    // (the clipboard is the control's own here: never the system's)
+    procedure WriteClipboard(const ARtf: RawByteString; const AText: string); override;
+    function ClipboardFlavours: TTyRichClipFlavours; override;
+    function ReadClipboardRtf: RawByteString; override;
+    function ReadClipboardText: string; override;
   public
+    ClipRtf: RawByteString;
+    ClipText: string;
     Refusals: TStringList;
     procedure Refused(Sender: TObject; const AReason: string);
     destructor Destroy; override;
@@ -56,7 +63,19 @@ type
     procedure TestWordReadsWhatWeWrite;
     procedure TestTheCommandRefusesCellsNotEmpty;
     procedure TestASpanSplitIntoPartsOfItsRows;
-    procedure TestAMergeHereLocksRowsAndColumnsAsAFilesDoes;
+    procedure TestTheTableStillLocksOnlyForNestedTables;
+    procedure TestARowInsertedInsideAVerticalSpanWidensIt;
+    procedure TestDeleteTheFirstRowOfAVerticalSpanMovesContentDown;
+    procedure TestARowDeletedInsideOrAtTheEndOfASpanShrinksIt;
+    procedure TestInsertColumnThroughAHorizontalSpanWidensIt;
+    procedure TestAColumnDeletedThroughASpanShrinksIt;
+    procedure TestDistributeColumnsGoesByTheGrid;
+    procedure TestACopyOfCellsKeepsItsSpans;
+    procedure TestAPasteIntoCellsGoesByTheGrid;
+    procedure TestABookmarkIsNeverThereTwice;
+    procedure TestSelectColumnTakesASpanWhole;
+    procedure TestEveryRewrittenCellSaysItsOwnWidth;
+    procedure TestARandomWalkKeepsTheGridWhole;
   end;
 
 implementation
@@ -66,6 +85,29 @@ implementation
 function TMergeRich.CreateDevice: TTyRichTextDevice;
 begin
   Result := TTyRichTestDevice.Create;
+end;
+
+procedure TMergeRich.WriteClipboard(const ARtf: RawByteString; const AText: string);
+begin
+  ClipRtf := ARtf;
+  ClipText := AText;
+end;
+
+function TMergeRich.ClipboardFlavours: TTyRichClipFlavours;
+begin
+  Result := [];
+  if ClipRtf <> '' then Include(Result, rcfRtf);
+  if ClipText <> '' then Include(Result, rcfText);
+end;
+
+function TMergeRich.ReadClipboardRtf: RawByteString;
+begin
+  Result := ClipRtf;
+end;
+
+function TMergeRich.ReadClipboardText: string;
+begin
+  Result := ClipText;
 end;
 
 procedure TMergeRich.Refused(Sender: TObject; const AReason: string);
@@ -173,6 +215,33 @@ begin
   begin
     if k > f then Result := Result + '|';
     Result := Result + t.GetText(t.ParaStart(k), t.ParaLength(k));
+  end;
+end;
+
+{ A grid listing's row without the cells' widths (span/vMerge/text). }
+function StripWidths(const ALine: string): string;
+var
+  parts: TStringList;
+  i: Integer;
+  p: TStringList;
+begin
+  Result := '';
+  parts := TStringList.Create;
+  p := TStringList.Create;
+  try
+    parts.Delimiter := ' ';
+    parts.StrictDelimiter := False;
+    parts.DelimitedText := ALine;
+    for i := 1 to parts.Count - 1 do
+    begin
+      p.Delimiter := '/';
+      p.StrictDelimiter := True;
+      p.DelimitedText := parts[i];
+      if p.Count >= 4 then Result := Result + ' ' + p[0] + '/' + p[1] + '/' + p[3];
+    end;
+  finally
+    p.Free;
+    parts.Free;
   end;
 end;
 
@@ -810,6 +879,40 @@ begin
   Sel2(0, 0, 0, 1);
   AssertTrue('Word''s first-row span with the cell beside it', FRich.MergeCells);
   Keep('word-first-row-merged-on', 1);
+  LoadFixture;
+  FRich.SelStart := Cell2(0, 1);
+  AssertTrue('Word''s: a column deleted through its spans', FRich.DeleteColumn);
+  Keep('word-column-deleted-through-spans', 1);
+  // the edits of rows and columns through spans, on a new 5 x 5 table
+  MakeTable(5, 5);
+  SelCells(1, 1, 1, 2);
+  AssertTrue(FRich.MergeCells);
+  FRich.SelStart := CellStart(0, 1);
+  AssertTrue(FRich.InsertColumn(True));
+  Keep('doors-column-inserted-through-a-span', 0);
+  MakeTable(5, 5);
+  SelCells(1, 1, 3, 1);
+  AssertTrue(FRich.MergeCells);
+  FRich.SelStart := CellStart(1, 0);
+  AssertTrue(FRich.DeleteRow);
+  Keep('doors-first-row-of-a-span-deleted', 0);
+  MakeTable(5, 5);
+  SelCells(1, 1, 3, 1);
+  AssertTrue(FRich.MergeCells);
+  FRich.SelStart := CellStart(1, 0);
+  AssertTrue(FRich.InsertRow(True));
+  Keep('doors-row-inserted-inside-a-span', 0);
+  // a copy of cells with their spans, pasted as a table of its own
+  MakeTable(4, 4);
+  SelCells(1, 1, 2, 2);
+  AssertTrue(FRich.MergeCells);
+  SelCells(0, 1, 1, 0);
+  SelCells(0, 0, 3, 3);
+  FRich.CopyToClipboard;
+  FRich.Lines.Text := '';
+  FRich.ClipText := '';
+  FRich.PasteFromClipboard;
+  Keep('copy-of-cells-with-spans', 0);
   // the builder's spans: the same files as the doors' merges over the builder's cells
   BuildFive(FRich, [Span(1, 1, 2, 2)], True);
   Keep('builder-2x2-merged', 0);
@@ -817,7 +920,7 @@ begin
   Keep('builder-row-of-three', 0);
   BuildFive(FRich, [Span(1, 0, 3, 1)], True);
   Keep('builder-column-of-three', 0);
-  AssertEquals('every case', 11, n);
+  AssertEquals('every case', 16, n);
 end;
 
 { The command alone merges only cells that are empty but the first (the door moves their
@@ -858,24 +961,617 @@ begin
   end;
 end;
 
-{ Cells merged down here (every row keeps its number of cells): rows and columns are not
-  inserted or deleted, as on a file's merged table - told with the reason; the cells can still
-  be split. }
-procedure TTyRichMergeTest.TestAMergeHereLocksRowsAndColumnsAsAFilesDoes;
+{ Merged cells - a file's or merged here - forbid no structure edit; a nested table forbids
+  them all, told with its reason. }
+procedure TTyRichMergeTest.TestTheTableStillLocksOnlyForNestedTables;
+var
+  st: TFileStream;
 begin
   MakeTable(4, 3);
   SelCells(1, 1, 2, 1);
   AssertTrue('merged down', FRich.MergeCells);
   FRich.SelStart := CellStart(0, 0);
-  AssertFalse('no row inserted', FRich.CanInsertRow);
-  AssertFalse('no row deleted', FRich.CanDeleteRow);
-  AssertFalse('no column inserted', FRich.CanInsertColumn);
-  AssertFalse('no column deleted', FRich.CanDeleteColumn);
-  FRich.Refusals.Clear;
-  AssertFalse('the door', FRich.InsertColumn(True));
-  AssertEquals('told once', 1, FRich.Refusals.Count);
+  AssertTrue('a row inserted', FRich.CanInsertRow);
+  AssertTrue('a row deleted', FRich.CanDeleteRow);
+  AssertTrue('a column inserted', FRich.CanInsertColumn);
+  AssertTrue('a column deleted', FRich.CanDeleteColumn);
   FRich.SelStart := CellStart(1, 1);
   AssertTrue('split: yes', FRich.CanSplitCell);
+  st := TFileStream.Create(FixtureDir + 'word-table-merged.rtf', fmOpenRead or fmShareDenyWrite);
+  try
+    FRich.LoadFromStream(st, rfRtf);
+  finally
+    st.Free;
+  end;
+  FRich.FinishLoading;
+  FRich.SelStart := FRich.Document.Text.ParaStart(1);
+  AssertFalse('nested: no row', FRich.CanInsertRow);
+  AssertFalse('nested: no column', FRich.CanInsertColumn);
+  FRich.Refusals.Clear;
+  AssertFalse('nested: the door', FRich.InsertRow(True));
+  AssertEquals('told once', 1, FRich.Refusals.Count);
+end;
+
+{ A table with a cell over three rows: a row put in inside the span makes it four rows (the new
+  row's cell there covered); one below the span's last row or above its first is a row of its
+  own cells. One undo step each, the bytes back. }
+procedure TTyRichMergeTest.TestARowInsertedInsideAVerticalSpanWidensIt;
+var
+  g: TTyRichGrid;
+  before: RawByteString;
+begin
+  MakeTable(5, 3);
+  SelCells(1, 1, 3, 1);
+  AssertTrue('a span over rows 1 .. 3', FRich.MergeCells);
+  FRich.Document.ClearUndo;
+  before := SaveRtf;
+  FRich.SelStart := CellStart(1, 0);
+  AssertTrue('may insert', FRich.CanInsertRow);
+  AssertTrue('a row below row 1: inside', FRich.InsertRow(True));
+  g := Grid;
+  try
+    AssertTrue('consistent', g.Consistent);
+    AssertEquals('6 rows', 6, g.RowCount);
+    AssertEquals('the span over four rows', 4, g.Cell(1, 1).RowSpan);
+    AssertTrue('the new row''s place covered', g.Cell(2, 1).Covered);
+    AssertFalse('its other cells its own', g.Cell(2, 0).Covered);
+  finally
+    g.Free;
+  end;
+  FRich.Undo;
+  AssertTrue('undone: the bytes', SaveRtf = before);
+  // below the span's last row: outside it
+  FRich.SelStart := CellStart(3, 0);
+  AssertTrue('a row below row 3', FRich.InsertRow(True));
+  g := Grid;
+  try
+    AssertEquals('the span as it was', 3, g.Cell(1, 1).RowSpan);
+    AssertFalse('the new row''s cell its own', g.Cell(4, 1).Covered);
+    AssertTrue('consistent', g.Consistent);
+  finally
+    g.Free;
+  end;
+  FRich.Undo;
+  // above the span's first row
+  FRich.SelStart := CellStart(1, 0);
+  AssertTrue('a row above row 1', FRich.InsertRow(False));
+  g := Grid;
+  try
+    AssertEquals('the span moved down, as it was', 3, g.Cell(2, 1).RowSpan);
+    AssertFalse('the new row''s cell its own', g.Cell(1, 1).Covered);
+    AssertEquals('... over one row', 1, g.Cell(1, 1).RowSpan);
+  finally
+    g.Free;
+  end;
+  FRich.Undo;
+  AssertTrue('all undone: the bytes', SaveRtf = before);
+end;
+
+{ The first row of a span over three rows deleted: the span's content goes down to the next
+  row, which begins the span now (over two rows). Undone: the bytes back. }
+procedure TTyRichMergeTest.TestDeleteTheFirstRowOfAVerticalSpanMovesContentDown;
+var
+  g: TTyRichGrid;
+  before: RawByteString;
+begin
+  MakeTable(4, 3);
+  SelCells(0, 1, 2, 1);
+  AssertTrue('a span over rows 0 .. 2', FRich.MergeCells);
+  FRich.Document.ClearUndo;
+  before := SaveRtf;
+  FRich.SelStart := CellStart(0, 0);
+  AssertTrue('may delete', FRich.CanDeleteRow);
+  AssertTrue('the first row deleted', FRich.DeleteRow);
+  AssertEquals('one step', 1, FRich.Document.UndoDepth);
+  AssertEquals('the content moved down', 'r0c1|r1c1|r2c1', CellParas(0, 1));
+  AssertEquals('the row''s own cell went', 'r1c0', CellParas(0, 0));
+  g := Grid;
+  try
+    AssertTrue('consistent', g.Consistent);
+    AssertEquals('3 rows', 3, g.RowCount);
+    AssertEquals('the span over two rows', 2, g.Cell(0, 1).RowSpan);
+    AssertTrue('covered below', g.Cell(1, 1).Covered);
+  finally
+    g.Free;
+  end;
+  FRich.Undo;
+  AssertTrue('undone: the bytes', SaveRtf = before);
+end;
+
+{ A row inside a span deleted: the span shrinks; the last row of a span over two: the first is
+  an ordinary cell again (no mark written). }
+procedure TTyRichMergeTest.TestARowDeletedInsideOrAtTheEndOfASpanShrinksIt;
+var
+  g: TTyRichGrid;
+begin
+  MakeTable(5, 3);
+  SelCells(1, 1, 3, 1);
+  AssertTrue('a span over rows 1 .. 3', FRich.MergeCells);
+  FRich.SelStart := CellStart(2, 0);
+  AssertTrue('a row inside deleted', FRich.DeleteRow);
+  g := Grid;
+  try
+    AssertTrue('consistent', g.Consistent);
+    AssertEquals('the span over two rows', 2, g.Cell(1, 1).RowSpan);
+  finally
+    g.Free;
+  end;
+  FRich.SelStart := CellStart(2, 0);
+  AssertTrue('its last row deleted', FRich.DeleteRow);
+  g := Grid;
+  try
+    AssertTrue('consistent', g.Consistent);
+    AssertEquals('one row', 1, g.Cell(1, 1).RowSpan);
+  finally
+    g.Free;
+  end;
+  AssertEquals('no mark left (rcmNone)', 0, TyRichCellVMerge(FRich.Document.CellAt(
+    FRich.Document.Text.ParaOfPos(CellStart(1, 1))).Row, 1));
+  AssertTrue('none written', Pos('\clvmgf', SaveRtf) = 0);
+end;
+
+{ A column put in at an edge a span crosses: the span grows by it, the other rows get a cell. }
+procedure TTyRichMergeTest.TestInsertColumnThroughAHorizontalSpanWidensIt;
+var
+  g: TTyRichGrid;
+  before: RawByteString;
+begin
+  MakeTable(4, 4);
+  SelCells(1, 1, 1, 2);
+  AssertTrue('a wide cell in row 1', FRich.MergeCells);
+  FRich.Document.ClearUndo;
+  before := SaveRtf;
+  FRich.SelStart := CellStart(0, 1);
+  AssertTrue('may insert', FRich.CanInsertColumn);
+  AssertTrue('a column right of column 1', FRich.InsertColumn(True));
+  g := Grid;
+  try
+    AssertTrue('consistent', g.Consistent);
+    AssertEquals('5 columns', 5, g.ColCount);
+    AssertEquals('the span over three', 3, g.CellOf(1, 1).ColSpan);
+    AssertEquals('its content', 'r1c1|r1c2', CellParas(1, 1));
+    AssertEquals('row 0: a new cell', '', CellParas(0, 2));
+    AssertEquals('row 0: the next moved', 'r0c2', CellParas(0, 3));
+  finally
+    g.Free;
+  end;
+  FRich.Undo;
+  AssertTrue('undone: the bytes', SaveRtf = before);
+end;
+
+{ A column deleted through a span: the cells wholly inside go, the span keeps its content,
+  one column narrower. }
+procedure TTyRichMergeTest.TestAColumnDeletedThroughASpanShrinksIt;
+var
+  g: TTyRichGrid;
+  before: RawByteString;
+begin
+  MakeTable(4, 4);
+  SelCells(1, 1, 2, 2);
+  AssertTrue('a 2 x 2 span', FRich.MergeCells);
+  FRich.Document.ClearUndo;
+  before := SaveRtf;
+  FRich.SelStart := CellStart(0, 2);
+  AssertTrue('may delete', FRich.CanDeleteColumn);
+  AssertTrue('column 2 deleted', FRich.DeleteColumn);
+  g := Grid;
+  try
+    AssertTrue('consistent', g.Consistent);
+    AssertEquals('3 columns', 3, g.ColCount);
+    AssertEquals('the span one column', 1, g.Cell(1, 1).ColSpan);
+    AssertEquals('... over two rows still', 2, g.Cell(1, 1).RowSpan);
+    AssertEquals('its content', 'r1c1|r1c2|r2c1|r2c2', CellParas(1, 1));
+    AssertEquals('row 0: column 3 came left', 'r0c3', CellParas(0, 2));
+  finally
+    g.Free;
+  end;
+  FRich.Undo;
+  AssertTrue('undone: the bytes', SaveRtf = before);
+end;
+
+{ A table that is no plain grid: its grid's columns made as wide as each other, every cell
+  keeping the grid's columns it covered. }
+procedure TTyRichMergeTest.TestDistributeColumnsGoesByTheGrid;
+const
+  Wide = '{\rtf1\ansi{\fonttbl{\f0 Arial;}}\pard x\par' +
+    '\trowd\cellx1000\cellx3000\cellx6000\pard\intbl A\cell B\cell C\cell\row' +
+    '\trowd\cellx1000\cellx6000\pard\intbl D\cell E\cell\row' +
+    '\pard\par}';
+var
+  st: TStringStream;
+  e: TTyRichEdges;
+begin
+  st := TStringStream.Create(Wide);
+  try
+    FRich.LoadFromStream(st, rfRtf);
+  finally
+    st.Free;
+  end;
+  FRich.SelStart := FRich.Document.Text.ParaStart(1);
+  AssertTrue('distributed', FRich.DistributeColumns);
+  e := FRich.Document.CellAt(1).Row.CellEdges;
+  AssertEquals('the first row: 2000', 2000, e[0]);
+  AssertEquals('... 4000', 4000, e[1]);
+  AssertEquals('... 6000', 6000, e[2]);
+  e := FRich.Document.CellAt(4).Row.CellEdges;
+  AssertEquals('the wide cell''s row: 2000', 2000, e[0]);
+  AssertEquals('... the wide cell still over two', 6000, e[1]);
+  AssertEquals('one step', 1, FRich.Document.UndoDepth);
+end;
+
+{ A copy of cells with a span holds the span: read back, the same grid. }
+procedure TTyRichMergeTest.TestACopyOfCellsKeepsItsSpans;
+var
+  a, b: TStringList;
+  d: TTyRichDocument;
+  st: TBytesStream;
+  k: Integer;
+begin
+  MakeTable(4, 4);
+  SelCells(1, 1, 2, 2);
+  AssertTrue('merged', FRich.MergeCells);
+  SelCells(0, 0, 3, 3);
+  FRich.CopyToClipboard;
+  d := TTyRichDocument.Create;
+  st := TBytesStream.Create;
+  try
+    st.WriteBuffer(FRich.ClipRtf[1], Length(FRich.ClipRtf));
+    st.Position := 0;
+    TyRichLoadRtfFull(d, st);
+    k := 0;
+    while (k < d.Text.ParaCount) and (d.CellAt(k) = nil) do Inc(k);
+    a := TyRichGridListing(FRich.Document, FRich.Document.Text.ParaStart(1));
+    b := TyRichGridListing(d, d.Text.ParaStart(k));
+    try
+      // (the copy's columns are equal: the spans and texts are what is compared)
+      AssertEquals('as many rows', a.Count, b.Count);
+      AssertEquals('row 1', StripWidths(a[2]), StripWidths(b[2]));
+      AssertEquals('row 2', StripWidths(a[3]), StripWidths(b[3]));
+    finally
+      a.Free;
+      b.Free;
+    end;
+  finally
+    st.Free;
+    d.Free;
+  end;
+end;
+
+{ A paste into cells: row by row, the k-th cell of the source row into the k-th cell of the
+  row that no merge covers, from the rectangle's left; a covered place is never filled. }
+procedure TTyRichMergeTest.TestAPasteIntoCellsGoesByTheGrid;
+var
+  g: TTyRichGrid;
+begin
+  MakeTable(4, 4);
+  SelCells(1, 1, 2, 1);
+  AssertTrue('a span over rows 1 .. 2', FRich.MergeCells);
+  FRich.ClipRtf := '';
+  FRich.ClipText := 'x1' + #9 + 'x2' + #9 + 'x3' + #13#10 + 'y1' + #9 + 'y2' + #9 + 'y3' + #13#10;
+  FRich.SelStart := CellStart(1, 0);
+  FRich.PasteFromClipboard;
+  AssertEquals('row 1: x1', 'x1', CellParas(1, 0));
+  AssertEquals('row 1: x2 in the span', 'x2', CellParas(1, 1));
+  AssertEquals('row 1: x3', 'x3', CellParas(1, 2));
+  AssertEquals('row 2: y1', 'y1', CellParas(2, 0));
+  AssertEquals('row 2: the covered place stays empty', '', CellParas(2, 1));
+  AssertEquals('row 2: y2 past it', 'y2', CellParas(2, 2));
+  AssertEquals('row 2: y3', 'y3', CellParas(2, 3));
+  g := Grid;
+  try
+    AssertTrue('consistent', g.Consistent);
+    AssertEquals('the span as it was', 2, g.Cell(1, 1).RowSpan);
+  finally
+    g.Free;
+  end;
+end;
+
+{ After a merge and a row deleted out of a span, every bookmark there is once, at its text. }
+procedure TTyRichMergeTest.TestABookmarkIsNeverThereTwice;
+var
+  a, z: TTyRichPos;
+
+  procedure Mark(ARow, ACol: Integer; const AName: string);
+  begin
+    FRich.SelStart := CellStart(ARow, ACol);
+    FRich.SelLength := 4;
+    AssertTrue(AName, FRich.AddBookmark(AName));
+  end;
+
+begin
+  MakeTable(4, 3);
+  Mark(0, 1, 'emptied');
+  Mark(1, 0, 'covered');
+  Mark(1, 1, 'kept');
+  // a merge across that empties (0, 1) and down over row 1, whose first cell stays covered
+  SelCells(0, 0, 1, 1);
+  AssertTrue('merged', FRich.MergeCells);
+  AssertEquals('three bookmarks, once each', 3, FRich.BookmarkCount);
+  AssertTrue('emptied: at its text', FRich.FindBookmark('emptied', a, z) and
+    (Pos('r0c1', FRich.Document.Text.GetText(a, z - a)) > 0) and (z - a <= 6));
+  AssertTrue('covered: at its text', FRich.FindBookmark('covered', a, z) and
+    (Pos('r1c0', FRich.Document.Text.GetText(a, z - a)) > 0) and (z - a <= 6));
+  // the span's first row deleted: its content - and the bookmarks - go down
+  // (row 0: the merged cell and the one after it)
+  FRich.SelStart := CellStart(0, 1);
+  AssertTrue('the first row deleted', FRich.DeleteRow);
+  AssertEquals('still once each', 3, FRich.BookmarkCount);
+  AssertTrue('kept: at its text', FRich.FindBookmark('kept', a, z) and
+    (Pos('r1c1', FRich.Document.Text.GetText(a, z - a)) > 0) and (z - a <= 6));
+  FRich.Undo;
+  FRich.Undo;
+  AssertEquals('undone: once each', 3, FRich.BookmarkCount);
+end;
+
+{ SelectColumn in a table with a span: the grid's column, grown to hold the span whole. }
+procedure TTyRichMergeTest.TestSelectColumnTakesASpanWhole;
+begin
+  MakeTable(4, 4);
+  SelCells(1, 1, 1, 2);
+  AssertTrue('a wide cell in row 1', FRich.MergeCells);
+  FRich.SelStart := CellStart(0, 1);
+  AssertTrue('a column', FRich.SelectColumn);
+  AssertEquals('every row', 0, FRich.SelectedCells.Row0);
+  AssertEquals('every row: the last', 3, FRich.SelectedCells.Row1);
+  AssertTrue('cleared', FRich.ClearCells);
+  AssertEquals('column 1 cleared', '', CellParas(0, 1));
+  AssertEquals('the span''s other column too (grown)', '', CellParas(0, 2));
+  AssertEquals('column 3 not', 'r0c3', CellParas(0, 3));
+end;
+
+{ Every cell of a row the model writes says its own width in Word's preferred width (in
+  twips): after a merge, a split back, a column put in through a span and one deleted, on Word's
+  merged table. }
+procedure TTyRichMergeTest.TestEveryRewrittenCellSaysItsOwnWidth;
+
+  procedure CheckWidths(const AWhat: string);
+  var
+    f: RawByteString;
+    i, k, left, prev, w, x, fts: Integer;
+    word: string;
+    num: Integer;
+    neg: Boolean;
+  begin
+    f := SaveRtf;
+    i := 1;
+    left := 0;
+    prev := 0;
+    w := -1;
+    fts := -1;
+    while i <= Length(f) do
+    begin
+      if f[i] <> '\' then
+      begin
+        Inc(i);
+        Continue;
+      end;
+      k := i + 1;
+      while (k <= Length(f)) and (f[k] in ['a'..'z']) do Inc(k);
+      word := Copy(f, i + 1, k - i - 1);
+      neg := (k <= Length(f)) and (f[k] = '-');
+      if neg then Inc(k);
+      num := 0;
+      x := k;
+      while (k <= Length(f)) and (f[k] in ['0'..'9']) do
+      begin
+        num := num * 10 + Ord(f[k]) - Ord('0');
+        Inc(k);
+      end;
+      if neg then num := -num;
+      if word = 'trowd' then
+      begin
+        left := 0;
+        prev := 0;
+        w := -1;
+        fts := -1;
+      end
+      else if (word = 'trleft') and (k > x) then
+      begin
+        left := num;
+        prev := num;
+      end
+      else if word = 'clftsWidth' then fts := num
+      else if (word = 'clwWidth') and (k > x) then w := num
+      else if (word = 'cellx') and (k > x) then
+      begin
+        if (fts = 3) and (w >= 0) then
+          AssertEquals(Format('%s: a cell at %d says its width', [AWhat, num]), num - prev, w);
+        prev := num;
+        w := -1;
+        fts := -1;
+      end;
+      i := k;
+    end;
+  end;
+
+  procedure LoadWord;
+  var
+    st: TFileStream;
+  begin
+    st := TFileStream.Create(FixtureDir + 'word-table-styled.rtf', fmOpenRead or fmShareDenyWrite);
+    try
+      FRich.LoadFromStream(st, rfRtf);
+    finally
+      st.Free;
+    end;
+    FRich.FinishLoading;
+  end;
+
+  function SecondTablePara: Integer;
+  var
+    k, seen: Integer;
+    t: TTyRichTable;
+  begin
+    k := 0;
+    seen := 0;
+    t := nil;
+    while k < FRich.Document.Text.ParaCount do
+    begin
+      if (FRich.Document.TableAt(k) <> nil) and (FRich.Document.TableAt(k) <> t) and
+         ((k = 0) or (FRich.Document.CellAt(k - 1) = nil)) then
+      begin
+        Inc(seen);
+        if seen = 2 then Exit(k);
+      end;
+      t := FRich.Document.TableAt(k);
+      Inc(k);
+    end;
+    Result := -1;
+  end;
+
+  function C2(ARow, ACell: Integer): TTyRichPos;
+  var
+    f, l: Integer;
+  begin
+    AssertTrue('the cell', FRich.Document.TableCellParas(SecondTablePara, ARow, ACell, f, l));
+    Result := FRich.Document.Text.ParaStart(f);
+  end;
+
+  procedure Sel2(AR0, AC0, AR1, AC1: Integer);
+  var
+    f, l: Integer;
+  begin
+    FRich.SelStart := C2(AR0, AC0);
+    AssertTrue('the cell', FRich.Document.TableCellParas(SecondTablePara, AR1, AC1, f, l));
+    FRich.SelLength := FRich.Document.Text.ParaStart(l) + FRich.Document.Text.ParaLength(l) + 1 -
+      FRich.SelStart;
+  end;
+
+begin
+  LoadWord;
+  CheckWidths('as read');
+  Sel2(0, 0, 0, 1);
+  AssertTrue('merged', FRich.MergeCells);
+  CheckWidths('merge');
+  LoadWord;
+  FRich.SelStart := C2(2, 2);
+  AssertTrue('split back', FRich.SplitCell(2, 2));
+  CheckWidths('split back');
+  LoadWord;
+  FRich.SelStart := C2(1, 1);
+  AssertTrue('split in three', FRich.SplitCell(3, 1));
+  CheckWidths('split in equal parts');
+  LoadWord;
+  FRich.SelStart := C2(1, 0);
+  AssertTrue('a column put in', FRich.InsertColumn(True));
+  CheckWidths('a column put in');
+  LoadWord;
+  FRich.SelStart := C2(1, 1);
+  AssertTrue('a column deleted', FRich.DeleteColumn);
+  CheckWidths('a column deleted');
+end;
+
+{ Merges, splits, rows and columns in and out, undo and redo, at random (a fixed seed): the
+  grid whole after every step, the file read back as the same grid every few steps, and every
+  step undone: the first bytes. }
+procedure TTyRichMergeTest.TestARandomWalkKeepsTheGridWhole;
+var
+  first, saved: RawByteString;
+  step, op, r0, r1, c0, c1, n: Integer;
+  g: TTyRichGrid;
+  d: TTyRichDocument;
+  st: TBytesStream;
+  a, b: TStringList;
+  info: TTyRichTableInfo;
+
+  function Rows: Integer;
+  begin
+    AssertTrue('the table', FRich.Document.TableInfoAt(1, info));
+    Result := info.RowCount;
+  end;
+
+  function CellsOf(ARow: Integer): Integer;
+  var
+    f, l: Integer;
+  begin
+    Result := 0;
+    while FRich.Document.TableCellParas(1, ARow, Result, f, l) do Inc(Result);
+  end;
+
+begin
+  MakeTable(6, 5);
+  first := SaveRtf;
+  RandSeed := 20261125;
+  for step := 1 to 60 do
+  begin
+    op := Random(9);
+    r0 := Random(Rows);
+    c0 := Random(Math.Max(1, CellsOf(r0)));
+    case op of
+      0, 1:
+        begin
+          r1 := Math.Min(Rows - 1, r0 + Random(2));
+          c1 := Math.Min(CellsOf(r1) - 1, c0 + Random(2));
+          if c1 < 0 then c1 := 0;
+          SelCells(r0, c0, r1, c1);
+          FRich.MergeCells;
+        end;
+      2:
+        begin
+          FRich.SelStart := CellStart(r0, c0);
+          FRich.SplitCell(1 + Random(2), 1 + Random(2));
+        end;
+      3:
+        begin
+          FRich.SelStart := CellStart(r0, c0);
+          FRich.InsertRow(Random(2) = 0);
+        end;
+      4:
+        if Rows > 2 then
+        begin
+          FRich.SelStart := CellStart(r0, c0);
+          FRich.DeleteRow;
+        end;
+      5:
+        begin
+          FRich.SelStart := CellStart(r0, c0);
+          FRich.InsertColumn(Random(2) = 0);
+        end;
+      6:
+        begin
+          FRich.SelStart := CellStart(r0, c0);
+          if CellsOf(r0) > 2 then FRich.DeleteColumn;
+        end;
+      7: FRich.Undo;
+    else
+      FRich.Redo;
+    end;
+    g := Grid;
+    try
+      AssertTrue(Format('step %d (%d): the grid whole', [step, op]), g.Consistent);
+    finally
+      g.Free;
+    end;
+    if step mod 6 = 0 then
+    begin
+      saved := SaveRtf;
+      d := TTyRichDocument.Create;
+      st := TBytesStream.Create;
+      try
+        st.WriteBuffer(saved[1], Length(saved));
+        st.Position := 0;
+        TyRichLoadRtfFull(d, st);
+        a := TyRichGridListing(FRich.Document, FRich.Document.Text.ParaStart(1));
+        b := TyRichGridListing(d, d.Text.ParaStart(1));
+        try
+          AssertEquals(Format('step %d: read back, the same grid', [step]), a.Text, b.Text);
+        finally
+          a.Free;
+          b.Free;
+        end;
+      finally
+        st.Free;
+        d.Free;
+      end;
+    end;
+  end;
+  n := 0;
+  while FRich.Document.CanUndo and (n < 1000) do
+  begin
+    FRich.Undo;
+    Inc(n);
+  end;
+  AssertTrue('every step undone: the first bytes', SaveRtf = first);
 end;
 
 initialization

@@ -2139,7 +2139,8 @@ begin
   Select(0, 0);
   AssertTrue('in the table', FRich.InTable);
   AssertTrue('a row may go in', UpdatedOn(Make(TTyRichEditInsertRowBelow)).Enabled);
-  AssertFalse('a column may not', UpdatedOn(Make(TTyRichEditInsertColumnRight)).Enabled);
+  // (rows of different cells: a column by the grid)
+  AssertTrue('a column may, by the grid', UpdatedOn(Make(TTyRichEditInsertColumnRight)).Enabled);
 end;
 
 initialization

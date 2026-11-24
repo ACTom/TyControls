@@ -52,7 +52,7 @@ type
   published
     // Tab
     procedure TestTabMovesBetweenCellsAndAddsARowAtTheEnd;
-    procedure TestTabPassesOverMergedCellsAndRefusesARowThere;
+    procedure TestTabPassesOverMergedCellsAndAddsARowThere;
     procedure TestTabGoesOnIntoTablesThatTouch;
     procedure TestTabOutsideATableAndWithoutWantTabs;
     procedure TestTabWithReadOnlyMovesAndAddsNothing;
@@ -761,7 +761,7 @@ begin
   AssertEquals('Ctrl+Tab: the caret behind it', t.ParaStart(f) + 1, FRich.CaretIndex);
 end;
 
-procedure TTyRichTableEditTest.TestTabPassesOverMergedCellsAndRefusesARowThere;
+procedure TTyRichTableEditTest.TestTabPassesOverMergedCellsAndAddsARowThere;
 var
   d: TTyRichDocument;
   t: TTyRichText;
@@ -773,7 +773,7 @@ begin
   t := d.Text;
   f := FirstTablePara(d);
   AssertEquals('the table', 'a||c/d|e|f', Shape(d, f));
-  AssertTrue('merged cells', d.TableAt(f).ContentLocked);
+  AssertTrue('merged cells (read from the file)', d.TableAt(f).ContentLocked);
   FRich.SelStart := t.ParaStart(f);
   Press(VK_TAB);
   CheckSel('the cell merged away passed over', t.ParaStart(f + 2), 1);
@@ -787,14 +787,14 @@ begin
   CheckSel('the last cell', t.ParaStart(f + 5), 1);
   d.ClearUndo;
   ResetEvents;
-  // its structure cannot change: the row is refused, told, and nothing moves
+  // merged cells forbid no row: a row below, as in any table
   Press(VK_TAB);
-  AssertEquals('refused: told once', 1, FRich.Refused);
-  AssertEquals('refused: why', rsRichEditRefusedMergedCells, FRich.LastReason);
-  CheckSel('refused: the selection stays', t.ParaStart(f + 5), 1);
-  AssertEquals('refused: the table as it was', 'a||c/d|e|f', Shape(d, f));
-  AssertFalse('refused: no step', d.CanUndo);
-  AssertEquals('refused: no move reported', 0, FSelChanges);
+  AssertEquals('nothing told', 0, FRich.Refused);
+  AssertEquals('a row below', 'a||c/d|e|f/||', Shape(d, f));
+  CheckSel('its first cell', t.ParaStart(f + 6), 0);
+  AssertTrue('one step', d.CanUndo);
+  FRich.Undo;
+  AssertEquals('undone', 'a||c/d|e|f', Shape(d, f));
 end;
 
 procedure TTyRichTableEditTest.TestTabGoesOnIntoTablesThatTouch;
@@ -1377,21 +1377,21 @@ begin
   t := d.Text;
   f := FirstTablePara(d);
   before := Shape(d, f);
-  FRich.SelStart := t.ParaStart(f + 4);
+  // (merged cells refuse nothing: every edit made, nothing told, and undone)
   for i := 0 to 3 do
+  begin
+    FRich.SelStart := t.ParaStart(f + 4);
     case i of
-      0: CheckRefused('merged: a row', FRich.InsertRow, rsRichEditRefusedMergedCells);
-      1: CheckRefused('merged: a column', FRich.InsertColumn, rsRichEditRefusedMergedCells);
-      2: CheckRefused('merged: delete a row', FRich.DeleteRow, rsRichEditRefusedMergedCells);
+      0: AssertTrue('merged: a row', FRich.InsertRow);
+      1: AssertTrue('merged: a column', FRich.InsertColumn);
+      2: AssertTrue('merged: delete a row', FRich.DeleteRow);
     else
-      CheckRefused('merged: delete a column', FRich.DeleteColumn, rsRichEditRefusedMergedCells);
+      AssertTrue('merged: delete a column', FRich.DeleteColumn);
     end;
-  // several rows and columns: the same reason
-  FRich.SelStart := t.ParaStart(f);
-  FRich.SelLength := t.ParaStart(f + 4) - t.ParaStart(f);
-  CheckRefused('merged: two rows', FRich.DeleteRow, rsRichEditRefusedMergedCells);
-  CheckRefused('merged: two columns', FRich.DeleteColumn, rsRichEditRefusedMergedCells);
-  AssertEquals('merged: nothing changed', before, Shape(d, f));
+    AssertEquals('merged: nothing told', 0, FRich.Refused);
+    FRich.Undo;
+    AssertEquals('merged: undone', before, Shape(d, f));
+  end;
   // a table inside a cell
   LoadInto(FRich, FixtureFile('word-table-merged.rtf'));
   t := d.Text;
@@ -1405,10 +1405,15 @@ begin
   t := d.Text;
   f := FirstTablePara(d);
   FRich.SelStart := t.ParaStart(f);
-  CheckRefused('irregular: a column', FRich.InsertColumn, rsRichEditRefusedIrregularRows);
-  CheckRefused('irregular: delete a column', FRich.DeleteColumn, rsRichEditRefusedIrregularRows);
+  // (by the grid: a column of rows of different cells)
+  AssertTrue('irregular: a column', FRich.InsertColumn);
+  FRich.Undo;
+  FRich.SelStart := t.ParaStart(f);
+  AssertTrue('irregular: delete a column', FRich.DeleteColumn);
+  FRich.Undo;
+  FRich.SelStart := t.ParaStart(f);
   AssertTrue('irregular: a row', FRich.InsertRow);
-  AssertEquals('irregular: nothing told for a row', 0, FRich.Refused);
+  AssertEquals('irregular: nothing told', 0, FRich.Refused);
   // as many columns as a table can have
   FRich.Lines.Text := 'x';
   t := d.Text;
@@ -1522,11 +1527,11 @@ begin
   LoadRtf(MergedRtf);
   t := d.Text;
   FRich.SelStart := t.ParaStart(FirstTablePara(d) + 4);
-  Check('merged', True, False, False, False, False, True, False, True);
+  Check('merged', True, False, True, True, True, True, False, True);
   LoadRtf(IrregularRtf);
   t := d.Text;
   FRich.SelStart := t.ParaStart(FirstTablePara(d));
-  Check('irregular', True, False, True, False, False, True, False, True);
+  Check('irregular', True, False, True, True, True, True, False, True);
   FRich.Lines.Text := 'x';
   t := d.Text;
   FRich.SelStart := 0;

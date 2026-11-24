@@ -663,8 +663,8 @@ begin
   try
     // the second table: a wide cell and a cell over two rows
     pos := TablePos(d, 1);
-    AssertTrue('its structure stays locked', TTyRichInsertRow.Create(pos, 0).Refusal(d) =
-      rtrMergedCells);
+    AssertTrue('its structure takes edits (by the grid)', TTyRichInsertRow.Create(pos, 0).Refusal(d) =
+      rtrNone);
     AssertTrue('a shading', Exec(d, TTyRichSetCellProps.Create(pos, 1, 0, 2, 3, Shading(clAqua))));
     AssertEquals('the merged cell''s first row', Integer(clAqua), Integer(d.CellProps(pos, 1, 0).Shading));
     AssertEquals('the merged cell''s second row', Integer(clAqua), Integer(d.CellProps(pos, 2, 0).Shading));

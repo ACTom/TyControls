@@ -395,6 +395,24 @@ type
     function Description: string; override;
   end;
 
+  { A column of the grid AWidth twips wide at AX (twips, an edge of the grid) of the table
+    ATablePos is in: a new cell in a row with an edge there, the cell that reaches over it
+    wider in another (TTyRichTableEdit says what it does). For any table without a nested
+    one: merged cells, rows of different cells. }
+  TTyRichInsertGridColumn = class(TTyRichTableCommand)
+  public
+    constructor Create(ATablePos: TTyRichPos; AX, AWidth: Integer);
+    function Description: string; override;
+  end;
+
+  { The grid's columns from AX0 to AX1 (twips) of the table ATablePos is in: the cells wholly
+    inside go, a cell reaching out of them keeps its content, narrower. }
+  TTyRichDeleteGridColumns = class(TTyRichTableCommand)
+  public
+    constructor Create(ATablePos: TTyRichPos; AX0, AX1: Integer);
+    function Description: string; override;
+  end;
+
   { Cells merged: in rows ARow0 .. ARow1 of the table ATablePos is in (counted as the table
     edits count them), the cells that meet AX0 .. AX1 (twips) become one - the first of them
     in each row, as wide as they were; over more than one row the first row's begins a
@@ -1682,6 +1700,33 @@ begin
 end;
 
 function TTyRichDeleteColumn.Description: string;
+begin
+  Result := rsRichUndoDeleteColumn;
+end;
+
+constructor TTyRichInsertGridColumn.Create(ATablePos: TTyRichPos; AX, AWidth: Integer);
+begin
+  inherited Create;
+  FEdit := TyRichTableEdit(rtkInsertGridColumn, ATablePos, 0);
+  FEdit.X0 := AX;
+  FEdit.X1 := AX;
+  FEdit.Width := AWidth;
+end;
+
+function TTyRichInsertGridColumn.Description: string;
+begin
+  Result := rsRichUndoInsertColumn;
+end;
+
+constructor TTyRichDeleteGridColumns.Create(ATablePos: TTyRichPos; AX0, AX1: Integer);
+begin
+  inherited Create;
+  FEdit := TyRichTableEdit(rtkDeleteGridColumns, ATablePos, 0);
+  FEdit.X0 := AX0;
+  FEdit.X1 := AX1;
+end;
+
+function TTyRichDeleteGridColumns.Description: string;
 begin
   Result := rsRichUndoDeleteColumn;
 end;

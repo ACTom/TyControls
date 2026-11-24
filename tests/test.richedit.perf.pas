@@ -75,6 +75,8 @@ type
     procedure TestAColumnEdgeOfALongTable;
     procedure TestMergeAndSplitInALongTable;
     procedure TestKeysThroughALongTableWithSpans;
+    procedure TestRowsThroughASpanInALongTable;
+    procedure TestColumnsOfALongTableWithAndWithoutSpans;
   private
     procedure SaveBesideFields(ABytes: Int64; ANest: Integer);
   end;
@@ -2706,6 +2708,118 @@ begin
     AssertTrue(Format('a key in it in %.1f ms', [key]), key <= CScrollMs);
   finally
     B.Free;
+    bmp.Free;
+  end;
+end;
+
+{ A table of 10,000 rows of three cells with a cell over three rows in its middle: a row put in
+  inside the span and the span's first row deleted (its content moved down), each to the end of
+  its paint - the rows they touch, no grid made. }
+procedure TTyRichEditPerfTest.TestRowsThroughASpanInALongTable;
+const
+  Rows = 10000;
+var
+  bmp: TBitmap;
+  d: TTyRichDocument;
+  t: TTyRichText;
+  k: Integer;
+  t0, ins, del: Double;
+  n: Int64;
+begin
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf32bit;
+    bmp.SetSize(FRich.Width, FRich.Height);
+    FRich.Lines.Text := 'before' + LineEnding + 'after';
+    d := FRich.Document;
+    t := d.Text;
+    AssertTrue('a long table', d.Execute(TTyRichInsertTable.Create(t.ParaStart(1), Rows, 3)));
+    k := 1 + 3 * (Rows div 2);
+    d.Execute(TTyRichInsertText.Create(t.ParaStart(k + 1), 'span'));
+    FRich.SelStart := t.ParaStart(k + 1);
+    FRich.SelLength := t.ParaStart(k + 7) + 1 - t.ParaStart(k + 1);
+    AssertTrue('a span over three rows', FRich.MergeCells);
+    FRich.SelStart := t.ParaStart(k);
+    TPerfRich(FRich).PaintInto(bmp);
+    n := TyRichGridBuildCount;
+    t0 := Clock;
+    AssertTrue('a row inside', FRich.InsertRow(True));
+    TPerfRich(FRich).PaintInto(bmp);
+    ins := Clock - t0;
+    Report(Format('table of %d rows: a row put in inside a span, to the end of its paint', [Rows]), ins);
+    FRich.Undo;
+    FRich.SelStart := t.ParaStart(k);
+    TPerfRich(FRich).PaintInto(bmp);
+    t0 := Clock;
+    AssertTrue('the span''s first row deleted', FRich.DeleteRow);
+    TPerfRich(FRich).PaintInto(bmp);
+    del := Clock - t0;
+    Report('table: the span''s first row deleted, its content moved down, to the end of its paint', del);
+    AssertEquals('no grid made for a row', n, TyRichGridBuildCount);
+    AssertTrue(Format('the row in in %.1f ms', [ins]), ins <= CKeystrokeMs);
+    AssertTrue(Format('the row out in %.1f ms', [del]), del <= CKeystrokeMs);
+  finally
+    bmp.Free;
+  end;
+end;
+
+{ A column put in and one deleted on a table of 10,000 rows of three cells: plain (by index),
+  then with a span (by the grid) - each to the end of its paint; both linear in the rows. }
+procedure TTyRichEditPerfTest.TestColumnsOfALongTableWithAndWithoutSpans;
+const
+  Rows = 10000;
+var
+  bmp: TBitmap;
+  d: TTyRichDocument;
+  t: TTyRichText;
+  k: Integer;
+  t0, plainIns, plainDel, spanIns, spanDel: Double;
+begin
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf32bit;
+    bmp.SetSize(FRich.Width, FRich.Height);
+    FRich.Lines.Text := 'before' + LineEnding + 'after';
+    d := FRich.Document;
+    t := d.Text;
+    AssertTrue('a long table', d.Execute(TTyRichInsertTable.Create(t.ParaStart(1), Rows, 3)));
+    k := 1 + 3 * (Rows div 2);
+    FRich.SelStart := t.ParaStart(k);
+    TPerfRich(FRich).PaintInto(bmp);
+    t0 := Clock;
+    AssertTrue('plain: a column', FRich.InsertColumn(True));
+    TPerfRich(FRich).PaintInto(bmp);
+    plainIns := Clock - t0;
+    FRich.Undo;
+    FRich.SelStart := t.ParaStart(k);
+    t0 := Clock;
+    AssertTrue('plain: a column out', FRich.DeleteColumn);
+    TPerfRich(FRich).PaintInto(bmp);
+    plainDel := Clock - t0;
+    FRich.Undo;
+    Report(Format('table of %d rows, no span: a column put in, to the end of its paint', [Rows]), plainIns);
+    Report('table, no span: a column deleted, to the end of its paint', plainDel);
+    // a cell over two columns in the first row: no plain grid now
+    FRich.SelStart := t.ParaStart(1);
+    FRich.SelLength := t.ParaStart(2) + 1 - t.ParaStart(1);
+    AssertTrue('a span', FRich.MergeCells);
+    FRich.SelStart := t.ParaStart(k - 1);
+    TPerfRich(FRich).PaintInto(bmp);
+    t0 := Clock;
+    AssertTrue('spans: a column', FRich.InsertColumn(True));
+    TPerfRich(FRich).PaintInto(bmp);
+    spanIns := Clock - t0;
+    FRich.Undo;
+    FRich.SelStart := t.ParaStart(k - 1);
+    t0 := Clock;
+    AssertTrue('spans: a column out', FRich.DeleteColumn);
+    TPerfRich(FRich).PaintInto(bmp);
+    spanDel := Clock - t0;
+    Report('table, with a span: a column put in (by the grid), to the end of its paint', spanIns);
+    Report('table, with a span: a column deleted (by the grid), to the end of its paint', spanDel);
+    AssertTrue(Format('by the grid in %.0f ms', [spanIns]), spanIns <= CFirstScreenMs);
+    AssertTrue(Format('by the grid out in %.0f ms', [spanDel]), spanDel <= CFirstScreenMs);
+  finally
     bmp.Free;
   end;
 end;
