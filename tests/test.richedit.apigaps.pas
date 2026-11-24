@@ -80,6 +80,7 @@ type
     procedure TestAnyMultipleIsLaidOutAsWordLaysItOut;
     procedure TestALazyFileKeepsItsLookWhenTheDefaultsChange;
     procedure TestNewDefaultsReplaceEveryDefaultsGroup;
+    procedure TestShadingWithoutAFillIsMixedOverWhite;
   end;
 
 implementation
@@ -1175,6 +1176,23 @@ begin
   p := d.Formats.ParaFormat(d.DefaultParaFormatId);
   AssertEquals('read back: the new space after', 40, p.SpaceAfter);
   AssertEquals('read back: not centred', Ord(paraLeft), Ord(p.Align));
+end;
+
+{ \shading without \cbpat: the pattern's colour mixed over white (a paragraph with no fill of
+  its own shows the page), a half of red over white the light red Word shows. }
+procedure TTyRichApiGapsTest.TestShadingWithoutAFillIsMixedOverWhite;
+var
+  d: TTyRichDocument;
+begin
+  Load('{' + BS + 'rtf1' + BS + 'ansi' + BS + 'deff0{' + BS + 'fonttbl{' + BS + 'f0 Arial;}}' +
+    '{' + BS + 'colortbl ;' + BS + 'red255' + BS + 'green0' + BS + 'blue0;}' + BS + 'viewkind4' +
+    BS + 'uc1' + BS + 'pard' + BS + 'cfpat1' + BS + 'shading5000 half' + BS + 'par' + BS +
+    'pard' + BS + 'shading2500 black' + BS + 'par}');
+  d := FRich.Document;
+  AssertEquals('a half of red over white', Integer(RGBToColor(255, 128, 128)),
+    Integer(PF(d, 0).Shading));
+  AssertEquals('a quarter of black (no pattern colour) over white', Integer(RGBToColor(191, 191, 191)),
+    Integer(PF(d, 1).Shading));
 end;
 
 initialization
