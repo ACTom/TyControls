@@ -12752,15 +12752,21 @@ begin
   // a user's action in an application's hands (EndCompositionForUser's list)
   EndCompositionForUser;
   if FReadOnly or not IsEnabled or ViewBehind then Exit;
-  { Cells (Word's way): copied, then what Backspace does to them - whole rows, columns or the
-    table go, other cells are cleared, their rows and columns stay. }
+  { Cells (Word's way): copied, then what Backspace does to them - whole columns go, other
+    cells are cleared, their rows and columns stay. Whole rows and the table are cut as the
+    file's rows, as before (a copy of them is the file's rows, not a small table). }
   area := CellArea;
-  if TyRichCellsEditable(area) then
+  if TyRichCellsEditable(area) and not area.Range.WholeTable and
+     not TyRichAreaWholeRows(FDoc, area) then
   begin
     CopyCells(area);
     CellsKey(False);
     Exit;
   end;
+  // whole rows, the table: their paragraphs, from the first row's start to the last's end
+  if TyRichCellsEditable(area) then
+    Select(FDoc.Text.ParaStart(area.FirstPara), Math.Min(FDoc.Text.ParaStart(area.LastPara) +
+      FDoc.Text.ParaLength(area.LastPara) + 1, FDoc.Text.Length), False);
   CutSelection(True);
 end;
 
