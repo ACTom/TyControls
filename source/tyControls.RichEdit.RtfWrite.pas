@@ -194,6 +194,10 @@ procedure TyRichSaveRtfRange(ADoc: TTyRichDocument; AStream: TStream; AFrom, ALe
 // (the copy's plain text does, so that both flavours cut at the same characters).
 function TyRichNextChar(P: PByte; ALeft: PtrInt; out ACode: Cardinal): Integer;
 
+// A list item's number as the writer writes it in its marker text (without the full stop):
+// as the layout draws it (tyControls.RichEdit.Layout's TyRichListMarkerText).
+function TyRtfListNumberText(AKind: TTyListKind; AValue: Integer): string;
+
 implementation
 
 uses
@@ -676,20 +680,15 @@ begin
     end;
 end;
 
-// a, b, ... z, aa, ab, ...
+// a, b, ... z, aa, bb, ... zz, aaa, ... as Word writes them (up to 780: thirty letters; past
+// that, and below 1, digits - as the layout draws them)
 function AlphaNumber(AValue: Integer): string;
 begin
-  Result := '';
-  if AValue <= 0 then Exit(IntToStr(AValue));
-  while AValue > 0 do
-  begin
-    Dec(AValue);
-    Result := Chr(Ord('a') + AValue mod 26) + Result;
-    AValue := AValue div 26;
-  end;
+  if (AValue <= 0) or (AValue > 780) then Exit(IntToStr(AValue));
+  Result := StringOfChar(Chr(Ord('a') + (AValue - 1) mod 26), (AValue - 1) div 26 + 1);
 end;
 
-function ListNumberText(AKind: TTyListKind; AValue: Integer): string;
+function TyRtfListNumberText(AKind: TTyListKind; AValue: Integer): string;
 begin
   case AKind of
     lkLowerAlpha: Result := AlphaNumber(AValue);
@@ -3244,7 +3243,7 @@ begin
     if gen then font := AFirstFont else font := AInfo^.PnFont;
     if font >= 0 then WordN('f', font);
     if not gen then RawText(AInfo^.PnBefore);
-    s := ListNumberText(AInfo^.Fmt.List.Kind, ANumber);
+    s := TyRtfListNumberText(AInfo^.Fmt.List.Kind, ANumber);
     for i := 1 to Length(s) do Lit(Ord(s[i]));
     if gen then Lit(Ord('.')) else RawText(AInfo^.PnAfter);
   end;

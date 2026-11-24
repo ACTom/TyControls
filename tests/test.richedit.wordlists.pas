@@ -74,6 +74,7 @@ type
     procedure TestAnOlderPnRunGoesOnAsBefore;
     procedure TestListLevelsAreZeroToEight;
     procedure TestEveryCaseInOneFile;
+    procedure TestThePageSamplesStepsAreOneOneTwoThree;
   end;
 
   // Word's reading of the list items of an RTF file. ATexts: the text of every paragraph of
@@ -1503,6 +1504,31 @@ begin
   AssertEquals('D3', '1.', string(Drawn(FRich, 26)));
   CheckWordShowsWhatIsDrawn(Saved, 'builder-every-case');
   CheckReadsBackTheSame(Saved);
+end;
+
+// The page sample's steps (examples/richedit/upagesample.pas): after a plain paragraph,
+// Numbered(0), Numbered(1), Numbered(0), Numbered(0) - no start given - are 1, 1, 2, 3.
+procedure TTyRichWordListTest.TestThePageSamplesStepsAreOneOneTwoThree;
+var
+  B: TTyRichBuilder;
+begin
+  B := FRich.NewBuilder;
+  try
+    B.Bullet(0).Text('a bullet before');
+    B.Paragraph.SpaceBefore(6).Text('a plain paragraph');
+    B.Paragraph.Numbered(0).Text('step one');
+    B.Paragraph.Numbered(1).Text('step one a');
+    B.Paragraph.Numbered(0).Text('step two');
+    B.Paragraph.Numbered(0).Text('step three');
+    FRich.SetContent(B);
+  finally
+    B.Free;
+  end;
+  AssertEquals('1', '1.', string(Drawn(FRich, 2)));
+  AssertEquals('1 (inner)', '1.', string(Drawn(FRich, 3)));
+  AssertEquals('2', '2.', string(Drawn(FRich, 4)));
+  AssertEquals('3', '3.', string(Drawn(FRich, 5)));
+  CheckWordShowsWhatIsDrawn(Saved, 'page-sample-steps');
 end;
 
 initialization

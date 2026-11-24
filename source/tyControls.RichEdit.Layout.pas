@@ -1195,9 +1195,10 @@ procedure TyRichDefaultFallbackFonts(AList: TStrings);
 function TyRichReadCmapTable(const ATable: TBytes; out ASymbol: Boolean;
   out ASteps: Int64): TTyRichCodeRanges;
 { What a list item's marker reads: a bullet by level (U+2022, U+25E6, U+25AA, over again from
-  level 3), or ANumber followed by a full stop - 1, 2, 3; a, b, ... z, aa, ab (letters go on
-  in base 26 with no zero); i, ii, ... (roman up to 3999). A number the kind cannot write
-  (below 1, or past 3999 in roman) is written in digits. '' for no list. }
+  level 3), or ANumber followed by a full stop - 1, 2, 3; a, b, ... z, aa, bb, ... zz, aaa
+  (Word's letters: the letter of the number's place, once more each time round the alphabet,
+  up to 780 - thirty letters); i, ii, ... (roman up to 3999). A number the kind cannot write
+  (below 1, past 780 in letters, past 3999 in roman) is written in digits. '' for no list. }
 function TyRichListMarkerText(AKind: TTyListKind; ALevel: Integer; ANumber: Int64): UTF8String;
 { Black text, a blue selection with white text, grey placeholders and table lines: what a
   test or a probe paints with when it has no theme. }
@@ -1535,16 +1536,11 @@ begin
     lkBullet: Exit(Bullets[((ALevel mod 3) + 3) mod 3]);
   end;
   s := '';
-  if (ANumber >= 1) and (AKind in [lkLowerAlpha, lkUpperAlpha]) then
+  if (ANumber >= 1) and (ANumber <= 780) and (AKind in [lkLowerAlpha, lkUpperAlpha]) then
   begin
-    // base 26 with no zero: 26 is z, 27 aa - at most 14 letters for the largest Int64
-    n := QWord(ANumber);
-    while n > 0 do
-    begin
-      Dec(n);
-      s := Chr(Ord('a') + Integer(n mod 26)) + s;
-      n := n div 26;
-    end;
+    // Word's: 26 is z, 27 aa, 28 bb, 52 zz, 53 aaa
+    n := QWord(ANumber - 1);
+    s := StringOfChar(Chr(Ord('a') + Integer(n mod 26)), Integer(n div 26) + 1);
   end
   else if (ANumber >= 1) and (ANumber <= 3999) and (AKind in [lkLowerRoman, lkUpperRoman]) then
   begin

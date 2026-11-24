@@ -161,7 +161,7 @@ type
 implementation
 
 uses
-  Math, FPWriteJPEG, tyControls.StrConsts, test.danglingrefs;
+  Math, FPWriteJPEG, tyControls.StrConsts, tyControls.RichEdit.RtfWrite, test.danglingrefs;
 
 type
   { The layouter with its decoder and resampler counted, and made to raise on request. }
@@ -1999,10 +1999,13 @@ begin
   end;
 end;
 
-{ Letters go on past z as aa, ab, ... (bijective base 26), roman numerals stop at 3999 and
-  a number past them, or one below 1, is written as a decimal; nothing loops or raises,
-  whatever the number. }
+{ Letters go on past z as Word's do: aa, bb, ... zz, aaa, ... (the letter of the number's
+  place in the alphabet, once more each time round), up to 780 (thirty letters); roman
+  numerals stop at 3999; a number past them, or one below 1, is written as a decimal;
+  nothing loops or raises, whatever the number. }
 procedure TTyRichLayoutTest.TestAlphaAndRomanNumbersPastTheirRanges;
+const
+  Nums: array[0..7] of Integer = (1, 26, 27, 52, 53, 78, 780, 781);
 var
   s: UTF8String;
   i: Integer;
@@ -2010,16 +2013,23 @@ begin
   AssertEquals('a.', TyRichListMarkerText(lkLowerAlpha, 0, 1));
   AssertEquals('z.', TyRichListMarkerText(lkLowerAlpha, 0, 26));
   AssertEquals('aa.', TyRichListMarkerText(lkLowerAlpha, 0, 27));
-  AssertEquals('ab.', TyRichListMarkerText(lkLowerAlpha, 0, 28));
-  AssertEquals('az.', TyRichListMarkerText(lkLowerAlpha, 0, 52));
-  AssertEquals('ba.', TyRichListMarkerText(lkLowerAlpha, 0, 53));
-  AssertEquals('zz.', TyRichListMarkerText(lkLowerAlpha, 0, 702));
-  AssertEquals('aaa.', TyRichListMarkerText(lkLowerAlpha, 0, 703));
-  AssertEquals('AB.', TyRichListMarkerText(lkUpperAlpha, 0, 28));
+  AssertEquals('bb.', TyRichListMarkerText(lkLowerAlpha, 0, 28));
+  AssertEquals('zz.', TyRichListMarkerText(lkLowerAlpha, 0, 52));
+  AssertEquals('aaa.', TyRichListMarkerText(lkLowerAlpha, 0, 53));
+  AssertEquals('zzz.', TyRichListMarkerText(lkLowerAlpha, 0, 78));
+  AssertEquals('BB.', TyRichListMarkerText(lkUpperAlpha, 0, 28));
+  AssertEquals('ZZZ.', TyRichListMarkerText(lkUpperAlpha, 0, 78));
+  AssertEquals('780: thirty letters', StringOfChar('z', 30) + '.',
+    TyRichListMarkerText(lkLowerAlpha, 0, 780));
+  AssertEquals('past them: digits', '781.', TyRichListMarkerText(lkLowerAlpha, 0, 781));
   AssertEquals('alpha 0', '0.', TyRichListMarkerText(lkLowerAlpha, 0, 0));
   s := TyRichListMarkerText(lkUpperAlpha, 0, High(Int64));
-  AssertTrue('the largest: ' + s, (Length(s) >= 2) and (Length(s) <= 15));
-  for i := 1 to Length(s) - 1 do AssertTrue('letters', s[i] in ['A'..'Z']);
+  AssertEquals('the largest: digits', IntToStr(High(Int64)) + '.', s);
+  // the writer's marker text is the same (TyRtfListNumberText)
+  for i := 0 to High(Nums) do
+    AssertEquals(Format('written %d', [Nums[i]]), TyRichListMarkerText(lkLowerAlpha, 0, Nums[i]),
+      TyRtfListNumberText(lkLowerAlpha, Nums[i]) + '.');
+  AssertEquals('written upper 53', 'AAA', TyRtfListNumberText(lkUpperAlpha, 53));
   AssertEquals('i.', TyRichListMarkerText(lkLowerRoman, 0, 1));
   AssertEquals('iv.', TyRichListMarkerText(lkLowerRoman, 0, 4));
   AssertEquals('ix.', TyRichListMarkerText(lkLowerRoman, 0, 9));
