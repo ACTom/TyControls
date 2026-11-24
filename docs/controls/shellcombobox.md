@@ -51,6 +51,10 @@ function TyLookInPlaces(const ADir: string; const AFolders: TTyFsRootArray): TTy
 给定 `ADir`:先 `TyFsBreadcrumb(ADir)` 的每个累积路径(`Depth = 0..N`,`Display` = 匹配的根 Display 否则叶名),
 再追加每个 `TyFsRoots` 里 Path 不等于链首的根(`Depth 0`,不重复当前盘符)。`ADir=''` → 只有根。无头可测。
 
+> **根目录保留分隔符(#247,3.0.5)。** `Directory` 存下来时去掉末尾分隔符,但根目录除外:`C:\`、`/` 原样保留。
+> 以前一律去掉,`C:\` 变成 `C:`(那是 C 盘的**当前目录**,不是根),当前路径那一行就和任何一个根都对不上,
+> 停在盘符根目录时这个盘会在下拉里出现两次。
+
 ## 关键设计
 
 - **锁 `csDropDownList`** + **每行模型索引存 `Objects[]`**(同 [[filtercombobox]] / ColorBox);读侧 `SelectedPath`/`DoSelect`

@@ -117,6 +117,7 @@ type
     procedure TheFieldDrawsThePlacesName;
     procedure TheSwitchIsOffUntilItIsAskedFor;
     procedure TheFileDialogsTurnBothSwitchesOn;
+    procedure AtTheRootOfADriveTheDriveIsListedOnce;
   end;
 
 implementation
@@ -892,6 +893,35 @@ begin
   finally
     d.Free;
   end;
+end;
+
+procedure TLookInPlacesTest.AtTheRootOfADriveTheDriveIsListedOnce;
+var
+  c: TTyShellComboBox;
+  roots: TTyFsRootArray;
+  root: string;
+  i, seen: Integer;
+begin
+  { The root keeps its delimiter: 'C:' is not the root of drive C (it is the current directory
+    on it), and '/' without its slash is no directory at all. Stripped, the row of the current
+    path matched none of the roots, and the drive was listed a second time. }
+  roots := TyFsRoots;
+  root := roots[0].Path;
+  c := TTyShellComboBox.Create(FForm);
+  c.Parent := FForm;
+  c.Directory := root;
+  AssertTrue('the box is at the root, as it was given', c.Directory = root);
+  AssertEquals('every root once, and nothing else', Length(roots), c.Items.Count);
+  seen := 0;
+  for i := 0 to c.Items.Count - 1 do
+    if c.Items[i] = roots[0].Display then Inc(seen);
+  AssertEquals('this root under its one label', 1, seen);
+  AssertTrue('its row is the selected one', c.ItemIndex >= 0);
+  AssertEquals('and shows the root''s label', roots[0].Display, c.Items[c.ItemIndex]);
+  AssertTrue('and hands out the root', SameFileName(root, c.SelectedPath));
+  { any other directory is still kept without a delimiter }
+  c.Directory := AppendPathDelim(FTemp);
+  AssertTrue('a folder given with a delimiter is kept without it', c.Directory = FTemp);
 end;
 
 initialization
