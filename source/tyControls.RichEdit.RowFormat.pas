@@ -84,17 +84,19 @@ function TyRtfGridRowFormat(const AEdges: array of Integer): RawByteString;
 function TyRtfRowFormatUnnumbered(const ARaw: RawByteString): RawByteString;
 { A row's format cut into the row's words and each cell's, so that cells can come and go
   while every word stays with what it belongs to: ARowWords is \trowd with the row's own
-  words (\trgaph, \trleft, \trbrdr* and their line words, ...) in their order; ACells[i] the
-  words of cell i in their order (each word that starts with \cl, and the line words after a
-  \clbrdr*), without its \cellx. False - nothing to go by - when a word cannot be told whose
-  it is: a group, \bin, a control symbol, text, a second \trowd, a \cellx without a number,
-  words after the last \cellx, or another number of cells than ACellCount. }
+  words (\trgaph, \trleft, \trbrdr* and their line words, ...) in their order, and words
+  this reader does not know before the first cell's; ACells[i] the words of cell i in their
+  order (each word that starts with \cl, the line words after a \clbrdr*, and a word not
+  known that stands among them or between two cells), without its \cellx; ATail what stands
+  after the last \cellx. False - nothing to go by - when a word cannot be told whose it is: a
+  group, \bin, a control symbol, text, a second \trowd, a \cellx without a number, or
+  another number of cells than ACellCount. }
 function TyRtfSplitRowFormat(const ARaw: RawByteString; ACellCount: Integer;
-  out ARowWords: RawByteString; out ACells: TTyRtfCellWords): Boolean;
+  out ARowWords: RawByteString; out ACells: TTyRtfCellWords; out ATail: RawByteString): Boolean;
 { A row's format put together again: ARowWords, then each cell's words and its \cellx at
-  AEdges[i] (as many edges as cells). }
+  AEdges[i] (as many edges as cells), then ATail. }
 function TyRtfJoinRowFormat(const ARowWords: RawByteString; const ACells: TTyRtfCellWords;
-  const AEdges: array of Integer): RawByteString;
+  const AEdges: array of Integer; const ATail: RawByteString): RawByteString;
 
 implementation
 
@@ -385,8 +387,17 @@ begin
   SetCodePage(Result, CP_NONE, False);
 end;
 
+// a row's own word (as the reader tells them: tr..., \irow, \lastrow, \ltrrow, \rtlrow, ts, tbl, tp ...)
+function RowOwnWord(const AWord: string): Boolean;
+begin
+  Result := (Copy(AWord, 1, 2) = 'tr') or (Copy(AWord, 1, 4) = 'irow') or
+    (Copy(AWord, 1, 7) = 'lastrow') or (AWord = 'ltrrow') or (AWord = 'rtlrow') or
+    (Copy(AWord, 1, 2) = 'ts') or (Copy(AWord, 1, 3) = 'tbl') or (Copy(AWord, 1, 2) = 'tp') or
+    (AWord = 'tdfrmtxt') or (AWord = 'tabsnoovrlp') or (AWord = 'taprtl');
+end;
+
 function TyRtfSplitRowFormat(const ARaw: RawByteString; ACellCount: Integer;
-  out ARowWords: RawByteString; out ACells: TTyRtfCellWords): Boolean;
+  out ARowWords: RawByteString; out ACells: TTyRtfCellWords; out ATail: RawByteString): Boolean;
 var
   i, n, start, wordStart, count: Integer;
   word: string;
@@ -395,6 +406,7 @@ var
 begin
   ARowWords := '';
   ACells := nil;
+  ATail := '';
   Result := False;
   n := Length(ARaw);
   SetLength(ACells, ACellCount);
@@ -434,6 +446,13 @@ begin
       Continue;
     end;
     if not rowd then Exit;
+    // after the last \cellx: the tail, in its order
+    if count = ACellCount then
+    begin
+      if word = 'cellx' then Exit;
+      AddRaw(ATail, Copy(ARaw, wordStart, i - wordStart));
+      Continue;
+    end;
     if word = 'cellx' then
     begin
       if not hasParam or (count >= ACellCount) then Exit;
@@ -452,6 +471,10 @@ begin
     end
     else if ((Copy(word, 1, 4) = 'brdr') or (word = 'brsp')) and cellLine then
       AddRaw(cur, Copy(ARaw, wordStart, i - wordStart))
+    else if not RowOwnWord(word) and (Copy(word, 1, 4) <> 'brdr') and (word <> 'brsp') and
+      ((count > 0) or (cur <> '')) then
+      // a word not known among a cell's words or between two cells: the next cell's, in place
+      AddRaw(cur, Copy(ARaw, wordStart, i - wordStart))
     else
     begin
       // the row's (\trbrdr* takes its line words along with it)
@@ -465,11 +488,12 @@ begin
   begin
     ARowWords := '';
     ACells := nil;
+    ATail := '';
   end;
 end;
 
 function TyRtfJoinRowFormat(const ARowWords: RawByteString; const ACells: TTyRtfCellWords;
-  const AEdges: array of Integer): RawByteString;
+  const AEdges: array of Integer; const ATail: RawByteString): RawByteString;
 var
   i: Integer;
 begin
@@ -480,6 +504,7 @@ begin
     AddRaw(Result, ACells[i]);
     if i <= High(AEdges) then AddRaw(Result, AsRaw('\cellx' + IntToStr(AEdges[i])));
   end;
+  AddRaw(Result, ATail);
   SetCodePage(Result, CP_NONE, False);
 end;
 

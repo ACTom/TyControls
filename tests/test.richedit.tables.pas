@@ -1112,7 +1112,7 @@ end;
 procedure TTyRichTablesTest.TestARowFormatKeepsItsCellWords;
 var
   d, back: TTyRichDocument;
-  oldRaw, newRaw, rowWords, newRowWords: RawByteString;
+  oldRaw, newRaw, rowWords, newRowWords, tail, newTail: RawByteString;
   cells, newCells: TTyRtfCellWords;
   i, k: Integer;
   t: TTyRichTable;
@@ -1121,7 +1121,7 @@ begin
   try
     k := FirstTablePara(d);
     oldRaw := d.CellAt(k).Row.RawFormat;
-    AssertTrue('WordPad''s row splits', TyRtfSplitRowFormat(oldRaw, 3, rowWords, cells));
+    AssertTrue('WordPad''s row splits', TyRtfSplitRowFormat(oldRaw, 3, rowWords, cells, tail));
     AssertTrue('it has cell borders', Pos('\clbrdrl\brdrw10\brdrs', cells[1]) = 1);
     AssertTrue('and row borders', Pos('\trbrdrl\brdrs\brdrw10 ', rowWords) > 0);
     AssertTrue('insert column', Exec(d, TTyRichInsertColumn.Create(TablePos(d), 1)));
@@ -1129,7 +1129,7 @@ begin
     for i := 0 to t.RowCount - 1 do
     begin
       newRaw := t.Rows[i].RawFormat;
-      AssertTrue('the new row splits', TyRtfSplitRowFormat(newRaw, 4, newRowWords, newCells));
+      AssertTrue('the new row splits', TyRtfSplitRowFormat(newRaw, 4, newRowWords, newCells, newTail));
       AssertTrue('the row''s words as they were', SameRaw(rowWords, newRowWords));
       AssertTrue('cell 0''s words', SameRaw(cells[0], newCells[0]));
       AssertTrue('the new cell has the words of the one beside it', SameRaw(cells[0], newCells[1]));
@@ -1163,13 +1163,13 @@ const
     '\brdrs\brdrw10 \clbrdrl\brdrs\brdrw10 \cltxlrtb\clftsWidth3\clwWidth4261\clshdrawnil ' +
     '\cellx4153\clvertalc\clbrdrb\brdrdb\brdrw15 \clcbpat2\cltxlrtb\clftsWidth3\clwWidth4261 \cellx8414';
 var
-  rowWords, joined: RawByteString;
+  rowWords, joined, tail: RawByteString;
   cells: TTyRtfCellWords;
   disp, grid: TTyRowDisplay;
   i: Integer;
   s: TTyRowCellSide;
 begin
-  AssertTrue('Word''s row', TyRtfSplitRowFormat(Word2007, 2, rowWords, cells));
+  AssertTrue('Word''s row', TyRtfSplitRowFormat(Word2007, 2, rowWords, cells, tail));
   AssertEquals('the row''s words', '\trowd \irow0\irowband0\ltrrow\ts11\trgaph108\trleft-108' +
     '\trbrdrt\brdrs\brdrw10 \trbrdrl\brdrs\brdrw10 \trftsWidth1\trautofit1\tblind0\tblindtype3 ',
     rowWords);
@@ -1177,24 +1177,26 @@ begin
     '\clftsWidth3\clwWidth4261\clshdrawnil ', cells[0]);
   AssertEquals('cell 1', '\clvertalc\clbrdrb\brdrdb\brdrw15 \clcbpat2\cltxlrtb\clftsWidth3' +
     '\clwWidth4261 ', cells[1]);
-  joined := TyRtfJoinRowFormat(rowWords, cells, [4153, 8414]);
+  joined := TyRtfJoinRowFormat(rowWords, cells, [4153, 8414], tail);
   AssertTrue('put together again: the same', SameRaw(Word2007, joined));
-  AssertFalse('a cell more than it has', TyRtfSplitRowFormat(Word2007, 3, rowWords, cells));
-  AssertFalse('a group', TyRtfSplitRowFormat('\trowd{\*\tblind 0}\cellx100', 1, rowWords, cells));
-  AssertFalse('text', TyRtfSplitRowFormat('\trowd x\cellx100', 1, rowWords, cells));
-  AssertFalse('a cell edge with no number', TyRtfSplitRowFormat('\trowd\cellx', 1, rowWords, cells));
-  AssertFalse('words after the last edge', TyRtfSplitRowFormat('\trowd\cellx100\clvertalc', 1,
-    rowWords, cells));
-  AssertFalse('no \trowd', TyRtfSplitRowFormat('\cellx100', 1, rowWords, cells));
+  AssertFalse('a cell more than it has', TyRtfSplitRowFormat(Word2007, 3, rowWords, cells, tail));
+  AssertFalse('a group', TyRtfSplitRowFormat('\trowd{\*\tblind 0}\cellx100', 1, rowWords, cells, tail));
+  AssertFalse('text', TyRtfSplitRowFormat('\trowd x\cellx100', 1, rowWords, cells, tail));
+  AssertFalse('a cell edge with no number', TyRtfSplitRowFormat('\trowd\cellx', 1, rowWords, cells, tail));
+  // words after the last edge: the tail, in their place
+  AssertTrue('words after the last edge', TyRtfSplitRowFormat('\trowd\cellx100\clvertalc', 1,
+    rowWords, cells, tail));
+  AssertEquals('they are the tail', '\clvertalc', tail);
+  AssertFalse('no \trowd', TyRtfSplitRowFormat('\cellx100', 1, rowWords, cells, tail));
   AssertTrue('line breaks between words', TyRtfSplitRowFormat('\trowd' + #13#10 + '\cellx100', 1,
-    rowWords, cells));
+    rowWords, cells, tail));
   // a diagonal's line words are its cell's
   AssertTrue('a diagonal', TyRtfSplitRowFormat('\trowd\cldglu\brdrs\brdrw10 \cellx1000', 1,
-    rowWords, cells));
+    rowWords, cells, tail));
   AssertEquals('the diagonal and its line', '\cldglu\brdrs\brdrw10 ', cells[0]);
   AssertEquals('nothing of it the row''s', '\trowd', rowWords);
   AssertTrue('the other diagonal', TyRtfSplitRowFormat('\trowd\trgaph108\cldgll\brdrdb\brdrcf2' +
-    '\clbrdrt\brdrs\cellx1000', 1, rowWords, cells));
+    '\clbrdrt\brdrs\cellx1000', 1, rowWords, cells, tail));
   AssertEquals('its line words', '\cldgll\brdrdb\brdrcf2\clbrdrt\brdrs', cells[0]);
   // the numbering words of Word's rows go, and only they
   AssertEquals('numbering left out', '\trowd \ltrrow\trgaph108\cellx1000',

@@ -216,6 +216,11 @@ type
     Cellx: Integer;              // a node list, the last \cellx first
     Merged: Boolean;
     Raw: TTyRtfRange;
+    { Words this reader does not know met inside the definition: kept as the paragraph's
+      (their old place) unless a \cellx or a row's word follows - then they are the
+      definition's, and the properties go back to what they were before them (PendingProps). }
+    Pending: Boolean;
+    PendingProps: TTyRtfProps;
   end;
 
   // Everything the parse depends on at a point between two tokens, but the group stack and
@@ -539,6 +544,8 @@ type
     procedure CloseTable;
     procedure MarkNested; inline;
     procedure EndRowDef;
+    procedure ExtendRowDef;
+    procedure PendRowDefWord;
     procedure Finish;
     // characters
     procedure Flush;
@@ -2299,19 +2306,24 @@ begin
       // DoWord: (not a destination) then BodyWord
       FS.GroupOpen := False;
       FS.UcSkip := 0;
+      // (a word this reader does not know does not end a row's definition: PendRowDefWord)
       if FS.InRowDef and (kw <> kwTrowd) and (kw <> kwCellx) and (kw <> kwClMerge) and
-         not IsRowWord(@buf[FTok.NameStart], nameLen, True) then
+         (kw <> kwUnknown) and not IsRowWord(@buf[FTok.NameStart], nameLen, True) then
         EndRowDef;
       if kw = kwUnknown then
       begin
         if IsRowWord(@buf[FTok.NameStart], nameLen, FS.InRowDef) then
         begin
-          if FS.InRowDef then FS.RowDef.Raw.Stop := FTok.Stop;
+          if FS.InRowDef then ExtendRowDef;
         end
-        else if IsParaPrefixWord(@buf[FTok.NameStart], nameLen) then
-          AddParaExtra(FTok.Start, FTok.Stop)
         else
-          AddCharExtra(FTok.Start, FTok.Stop);
+        begin
+          PendRowDefWord;
+          if IsParaPrefixWord(@buf[FTok.NameStart], nameLen) then
+            AddParaExtra(FTok.Start, FTok.Stop)
+          else
+            AddCharExtra(FTok.Start, FTok.Stop);
+        end;
       end
       else if kw = kwParaExtra then
         AddParaExtra(FTok.Start, FTok.Stop)
@@ -2823,8 +2835,9 @@ begin
     if HandleDestination(kw) then Exit;
   end;
   FS.UcSkip := 0;
+  // (a word this reader does not know does not end a row's definition: PendRowDefWord)
   if FS.InRowDef and (kw <> kwTrowd) and (kw <> kwCellx) and (kw <> kwClMerge) and
-     not IsRowWord(@FBuf[FTok.NameStart], FTok.NameLen, True) then
+     (kw <> kwUnknown) and not IsRowWord(@FBuf[FTok.NameStart], FTok.NameLen, True) then
     EndRowDef;
   case FS.Props.Dest of
     rdNormal, rdFieldResult, rdPn: BodyWord(kw);
@@ -4461,6 +4474,29 @@ end;
 procedure TTyRtfParser.EndRowDef;
 begin
   FS.InRowDef := False;
+  FS.RowDef.Pending := False;
+end;
+
+{ The row's definition runs on to the word just read (a \cellx, a row's word): what stood
+  between since its last word - words this reader does not know - is the definition's too. }
+procedure TTyRtfParser.ExtendRowDef;
+begin
+  FS.RowDef.Raw.Stop := FTok.Stop;
+  if FS.RowDef.Pending then
+  begin
+    FS.RowDef.Pending := False;
+    FS.Props := FS.RowDef.PendingProps;
+    CharChanged;
+    ParaChanged;
+  end;
+end;
+
+// a word this reader does not know, inside a row's definition: its place told later
+procedure TTyRtfParser.PendRowDefWord;
+begin
+  if not FS.InRowDef or FS.RowDef.Pending then Exit;
+  FS.RowDef.Pending := True;
+  FS.RowDef.PendingProps := FS.Props;
 end;
 
 // A sign of a table inside a cell (\itap of 2 or more, \nestcell, \nestrow, the nested
@@ -4773,17 +4809,18 @@ begin
         FS.InRowDef := True;
         FS.RowDef.Cellx := -1;
         FS.RowDef.Merged := False;
+        FS.RowDef.Pending := False;
         FS.RowDef.Raw := Range(FTok.Start, FTok.Stop);
       end;
     kwCellx:
       begin
         FS.RowDef.Cellx := Push(FS.RowDef.Cellx, p, 0);
-        if FS.InRowDef then FS.RowDef.Raw.Stop := FTok.Stop;
+        if FS.InRowDef then ExtendRowDef;
       end;
     kwClMerge:
       begin
         FS.RowDef.Merged := True;
-        if FS.InRowDef then FS.RowDef.Raw.Stop := FTok.Stop;
+        if FS.InRowDef then ExtendRowDef;
       end;
     kwCell: if normal then EndParagraph(rpkCell);
     kwNestCell:
@@ -4807,7 +4844,15 @@ begin
     // a word of a table row, or one this reader does not know
     if IsRowWord(@FBuf[FTok.NameStart], FTok.NameLen, FS.InRowDef) then
     begin
-      if FS.InRowDef then FS.RowDef.Raw.Stop := FTok.Stop;
+      if FS.InRowDef then ExtendRowDef;
+    end
+    else if FS.InRowDef and (AKw = kwUnknown) and ((normal and FS.BodyStarted) or inPn) then
+    begin
+      PendRowDefWord;
+      if inPn or IsParaPrefixWord(@FBuf[FTok.NameStart], FTok.NameLen) then
+        AddParaExtra(FTok.Start, FTok.Stop)
+      else
+        AddCharExtra(FTok.Start, FTok.Stop);
     end
     else if (FS.Fields > 0) and IsSectionWord(@FBuf[FTok.NameStart], FTok.NameLen) then
       { A section's properties restated inside a field's result (Word writes \sectd and the

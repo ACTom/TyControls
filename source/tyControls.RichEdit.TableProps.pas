@@ -1156,7 +1156,7 @@ var
   disp: TTyRowDisplay;
   oldW, newW: Integer;
   wide: Boolean;
-  rowWords: RawByteString;
+  rowWords, tail: RawByteString;
   cells, newCells: TTyRtfCellWords;
   drop: TWords;
   sides: array[0..3] of Boolean;
@@ -1166,7 +1166,7 @@ var
   plain: TTyRichCellFormat;
 begin
   whole := (ARaw = '') or (ABase.CellCount <> AFormat.CellCount) or
-    not TyRtfSplitRowFormat(ARaw, AFormat.CellCount, rowWords, cells);
+    not TyRtfSplitRowFormat(ARaw, AFormat.CellCount, rowWords, cells, tail);
   if whole then
   begin
     // nothing to go by: every word from the format
@@ -1228,7 +1228,7 @@ begin
   end;
   if wide and (Length(AEdges) > 0) and HasWord(rowWords, 'trftsWidth', 3) then
     rowWords := WithWordParam(rowWords, 'trwWidth', AEdges[High(AEdges)] - AFormat.Row.LeftTwips);
-  Result := TyRtfJoinRowFormat(rowWords, newCells, AEdges);
+  Result := TyRtfJoinRowFormat(rowWords, newCells, AEdges, tail);
 end;
 
 procedure TyRichNoteRowColors(ABase, AFormat: TTyRichRowFormat; AColorIndex: TTyRichColorIndexFunc);

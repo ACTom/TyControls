@@ -35,6 +35,7 @@ type
     procedure TestARowEditLeavesTheOtherRowsAsTheyAre;
     procedure TestTheLayoutShowsWhatWasSet;
     procedure TestALineStyleNotDrawnHereIsKept;
+    procedure TestUnknownWordsKeepTheirPlace;
   end;
 
 implementation
@@ -1109,6 +1110,69 @@ begin
     AssertTrue('\brdrth kept', Pos('\brdrth', got) > 0);
     AssertTrue('\brdrtriple kept', Pos('\brdrtriple', got) > 0);
     AssertEquals('still reported as itself', Ord(rbsOther), Ord(d.CellProps(tp, 0, 0).Borders[rcsTop].Style));
+  finally
+    d.Free;
+  end;
+end;
+
+{ Words this reader does not know in a row's definition - before the first cell, between
+  cells, after the last \cellx - keep their place and order: the definition runs to its last
+  \cellx whatever stands between; a copy of the row (a row inserted below) has a \cellx for
+  each cell; an edit of another property of a cell keeps every word. }
+procedure TTyRichTablePropsTest.TestUnknownWordsKeepTheirPlace;
+const
+  Rtf = '{\rtf1\ansi{\fonttbl{\f0 Arial;}}' +
+    '\trowd\trgaph108\trfoo5\clbar1\clbrdrb\brdrs\brdrw10\clzed\cellx2000\xyzzy3\clqq9' +
+    '\clbrdrt\brdrnone\cellx4000\trqux7\zork2 \pard\intbl a\cell b\cell\row\pard after\par}';
+  Order: array[0..6] of string = ('\trfoo5', '\clbar1', '\clzed', '\cellx2000', '\xyzzy3',
+    '\clqq9', '\cellx4000');
+var
+  d: TTyRichDocument;
+  tp: TTyRichPos;
+  got, def: RawByteString;
+  k, at, prev, n: Integer;
+  row: TTyRichRow;
+begin
+  d := LoadDoc(BytesOf(Rtf));
+  try
+    tp := TablePos(d);
+    d.BeginRead;
+    try
+      row := d.CellAt(d.Text.ParaOfPos(tp)).Row;
+      AssertTrue('the definition runs to the last \cellx', Pos('\cellx4000', row.RawFormat) > 0);
+      AssertTrue('the word between the cells in it', Pos('\xyzzy3', row.RawFormat) > 0);
+    finally
+      d.EndRead;
+    end;
+    AssertTrue('read and written as it was', StrOf(SaveBytes(d)) = Rtf);
+    // another property of the first cell: every word in its place
+    AssertTrue('shaded', Exec(d, TTyRichSetCellProps.Create(tp, 0, 0, 0, 0, Shading(clYellow))));
+    got := StrOf(SaveBytes(d));
+    prev := 0;
+    for k := 0 to High(Order) do
+    begin
+      at := Pos(Order[k], got);
+      AssertTrue(Format('%s kept', [Order[k]]), at > 0);
+      AssertTrue(Format('%s in its place', [Order[k]]), at > prev);
+      prev := at;
+    end;
+    AssertTrue('\trqux7 after the last \cellx', Pos('\trqux7', got) > Pos('\cellx4000', got));
+    AssertTrue('\zork2 kept', Pos('\zork2', got) > 0);
+    d.Undo;
+    // a row below: its definition has a \cellx for each of its cells
+    AssertTrue('a row', Exec(d, TTyRichInsertRow.Create(tp, CRichRowBelow)));
+    got := StrOf(SaveBytes(d));
+    at := Pos('\row', got);
+    def := Copy(got, at, Pos('\pard', Copy(got, at + 4, MaxInt)) + 4);
+    n := 0;
+    k := Pos('\cellx', def);
+    while k > 0 do
+    begin
+      Inc(n);
+      def := Copy(def, k + 6, MaxInt);
+      k := Pos('\cellx', def);
+    end;
+    AssertEquals('the new row: two \cellx', 2, n);
   finally
     d.Free;
   end;

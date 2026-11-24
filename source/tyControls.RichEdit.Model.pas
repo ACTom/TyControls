@@ -7846,7 +7846,7 @@ var
   r, i, j, b, n, w, left, para: Integer;
   src: TTyRichShapeRow;
   oldEdges, newEdges: TTyIntArray;
-  rowWords: RawByteString;
+  rowWords, tail: RawByteString;
   cells, newCells: TTyRtfCellWords;
   split: Boolean;
   perm: array of Integer;
@@ -7934,7 +7934,7 @@ begin
         Raw := TyRtfGridRowFormat(newEdges)
       else if src.Row.FRawFormat <> '' then
       begin
-        split := TyRtfSplitRowFormat(src.Row.FRawFormat, n, rowWords, cells);
+        split := TyRtfSplitRowFormat(src.Row.FRawFormat, n, rowWords, cells, tail);
         if split then
         begin
           newCells := nil;
@@ -7942,7 +7942,7 @@ begin
           for i := 0 to High(CellFrom) do
             if CellFrom[i] >= 0 then newCells[i] := cells[CellFrom[i]]
             else newCells[i] := cells[b];
-          Raw := TyRtfJoinRowFormat(rowWords, newCells, newEdges);
+          Raw := TyRtfJoinRowFormat(rowWords, newCells, newEdges, tail);
           joined := True;
         end
         else
