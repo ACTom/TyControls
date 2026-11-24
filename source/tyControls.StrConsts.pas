@@ -191,6 +191,14 @@ resourcestring
   rsFdViewSmallIcon  = 'Small icons';
   rsFdViewLargeIcon  = 'Large icons';
   rsFdViewTile       = 'Tiles';
+  // --- File dialogs: the user's common folders, listed as places (#245) ---
+  // The names shown for them, whatever each folder is called on disk.
+  rsFdPlaceDesktop   = 'Desktop';
+  rsFdPlaceDocuments = 'Documents';
+  rsFdPlaceDownloads = 'Downloads';
+  rsFdPlacePictures  = 'Pictures';
+  rsFdPlaceMusic     = 'Music';
+  rsFdPlaceVideos    = 'Videos';
   rsFdOverwritePrompt = 'The file "%s" already exists.'#10'Do you want to replace it?';
   rsFdMustExist      = 'The file "%s" does not exist.';
   rsFdPathMustExist  = 'The path "%s" does not exist.';

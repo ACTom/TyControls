@@ -147,6 +147,8 @@ type
     // test seams: the file-name box and the file list, as the user types into and picks from them
     function NameEdit: TTyEdit;
     function ShellList: TTyShellListView;
+    function ShellTree: TTyShellTreeView;
+    function LookInBox: TTyShellComboBox;
     { Two-flag configuration (write = mode; read = current). SaveMode drives the OK
       caption/validation + New-Folder visibility; PreviewMode adds the preview pane. }
     property SaveMode: Boolean read FSaveMode write SetSaveMode;
@@ -347,6 +349,9 @@ begin
 
   FLookIn := TTyShellComboBox.Create(Self);
   FLookIn.Parent := Self;
+  { #245: Desktop, Documents, Downloads ... one click away, here and at the top of the tree.
+    The dialog knew no folder but the drives. }
+  FLookIn.ShowPlaces := True;
   FLookIn.OnSelectPath := @LookInSelectPath;
 
   { The tree | list | preview band lives inside an invisible host panel so LCL alignment
@@ -363,6 +368,7 @@ begin
   FTree.Align := alLeft;
   FTree.Width := Px(190);         { narrow-ish -> more room for the file list }
   FTree.Left := 0;
+  FTree.ShowPlaces := True;       { #245; before the event is wired: this rebuilds the top level }
   FTree.OnPathChange := @TreePathChange;
 
   FSplitTree := TTySplitter.Create(Self);
@@ -861,6 +867,16 @@ end;
 function TTyFileDialogForm.ShellList: TTyShellListView;
 begin
   Result := FList;
+end;
+
+function TTyFileDialogForm.ShellTree: TTyShellTreeView;
+begin
+  Result := FTree;
+end;
+
+function TTyFileDialogForm.LookInBox: TTyShellComboBox;
+begin
+  Result := FLookIn;
 end;
 
 { ---------------------------------------------------------------------------

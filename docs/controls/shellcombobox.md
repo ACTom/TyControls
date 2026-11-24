@@ -32,16 +32,21 @@ end;
 |---|---|
 | `Directory: string` | 当前目录。写它=重建下拉并选中当前目录行;**不触发** `OnSelectPath`。同一路径(含/不含尾分隔符)early-exit,防重入循环。留空时下拉里是各个根(盘符)。下拉的行由它生成,`Items` 不写进 `.lfm`,对象查看器里也不显示。 |
 | `SelectedPath: string` | 当前选中行的可导航路径(经 `Objects[]` 取模型),否则 `Directory`。 |
+| `ShowPlaces: Boolean` | **public(非 published)**,默认 `False`。打开后,下拉里在当前路径的各级之后、其他根之前,列出用户的常用文件夹(桌面、文档、下载、图片、音乐、视频),用文件夹图标;当前目录正好是其中一个时,字段显示它的名字(「文档」)。文件对话框会打开它。3.0.5 新增。 |
 | `OnSelectPath` | 用户点了某个 place(祖先目录或其它盘符)时触发;宿主据此 `List.LoadDirectory(SelectedPath)`。 |
 
 ## 纯函数 `TyLookInPlaces`
 
 ```pascal
 type
-  TTyLookInPlace = record Path, Display: string; Depth: Integer; end;
+  TTyLookInPlace = record Path, Display: string; Depth: Integer; Folder: Boolean; end;
   TTyLookInPlaceArray = array of TTyLookInPlace;
 function TyLookInPlaces(const ADir: string): TTyLookInPlaceArray;
+function TyLookInPlaces(const ADir: string; const AFolders: TTyFsRootArray): TTyLookInPlaceArray;
 ```
+
+第二个重载(3.0.5)在链和其他根之间插入 `AFolders`(常用文件夹):每个一行,`Depth = 0`、`Folder = True`、
+`Display` 是它的名字。即使某个文件夹已经在链上也照列——位置列表不随当前目录变,同一个位置总在固定的行上。
 
 给定 `ADir`:先 `TyFsBreadcrumb(ADir)` 的每个累积路径(`Depth = 0..N`,`Display` = 匹配的根 Display 否则叶名),
 再追加每个 `TyFsRoots` 里 Path 不等于链首的根(`Depth 0`,不重复当前盘符)。`ADir=''` → 只有根。无头可测。

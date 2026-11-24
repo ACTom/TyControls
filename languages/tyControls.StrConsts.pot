@@ -421,6 +421,30 @@ msgstr ""
 msgid "Images (*.png;*.jpg;*.jpeg;*.bmp;*.gif)|*.png;*.jpg;*.jpeg;*.bmp;*.gif|All Files (*.*)|*.*"
 msgstr ""
 
+#: tycontrols.strconsts.rsfdplacedesktop
+msgid "Desktop"
+msgstr ""
+
+#: tycontrols.strconsts.rsfdplacedocuments
+msgid "Documents"
+msgstr ""
+
+#: tycontrols.strconsts.rsfdplacedownloads
+msgid "Downloads"
+msgstr ""
+
+#: tycontrols.strconsts.rsfdplacemusic
+msgid "Music"
+msgstr ""
+
+#: tycontrols.strconsts.rsfdplacepictures
+msgid "Pictures"
+msgstr ""
+
+#: tycontrols.strconsts.rsfdplacevideos
+msgid "Videos"
+msgstr ""
+
 #: tycontrols.strconsts.rsfdsavetitle
 msgid "Save As"
 msgstr ""

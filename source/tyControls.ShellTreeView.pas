@@ -120,6 +120,7 @@ type
     FNodes:        array of TTyShellNodeInfo;   { node-data index -> path + kind }
     FRoots:        TTyFsRootArray;    { the places seeded by PopulateRoots (for their Display) }
     FRoot:         string;            { '' = the machine places; else the one scoped directory }
+    FShowPlaces:   Boolean;           { #245: the user's common folders above the roots }
     FStreamedDirectory: string;       { #152: a form file's Directory, selected in Loaded }
     FObjectTypes:  TTyFsObjectTypes;  { what an enumeration keeps; default [fotFolders] }
     FShowHidden:   Boolean;           { a view of the fotHidden bit in FObjectTypes }
@@ -180,6 +181,7 @@ type
     function  GetPath: string;
     procedure SetPath(const AValue: string);
     procedure SetRoot(const AValue: string);
+    procedure SetShowPlaces(AValue: Boolean);
     procedure SetObjectTypes(AValue: TTyFsObjectTypes);
     procedure SetShowHidden(AValue: Boolean);
     procedure SetFileSortType(AValue: TTyFsFileSortType);
@@ -225,6 +227,11 @@ type
       GetPathFromNode is the public, LCL-shaped one. Protected so a subclass/test
       can observe the node<->path mapping. }
     function  NodePath(Node: PTyTreeNode): string;
+    { #245. What an unscoped tree seeds its top level with, in order: TyFsRoots, and with
+      ShowPlaces the user's common folders before them (TyFsPlaces). Virtual so a descendant
+      can list places of its own; an entry of Kind rkPlace is shown as a folder under its
+      Display name, any other as a drive. }
+    function  TopLevelPlaces: TTyFsRootArray; virtual;
   public
     constructor Create(AOwner: TComponent); override;
     destructor  Destroy; override;
@@ -319,6 +326,14 @@ type
       Object Inspector two rows that overwrite each other. This exists so ported
       code that says `Tree.Path := X` compiles and means what LCL means. }
     property Path: string read GetPath write SetPath;
+    { #245. List the user's common folders -- Desktop, Documents, Downloads, Pictures,
+      Music, Videos, those that exist -- at the top, above the drives. Each is a root like
+      a drive: it expands into its subfolders, and a path inside one is shown under it,
+      not under its drive. Off by default, so a tree on an application's form lists what it
+      always listed; the file dialogs turn it on. Has no effect while Root scopes the tree.
+
+      PUBLIC, not published: the 3.0 line adds no published properties. Set it in code. }
+    property ShowPlaces: Boolean read FShowPlaces write SetShowPlaces;
   published
     { #108: the value the constructor sets, so the designer can store the other ones. }
     property NodeDataSize default 4;
@@ -702,12 +717,16 @@ begin
     scoped root falls through to its own folder name, which reads better than an
     absolute path in a one-node header. }
   AText := '';
-  for i := 0 to High(FRoots) do
-    if SameFileName(ExcludeTrailingPathDelimiter(FRoots[i].Path), p) then
-    begin
-      AText := FRoots[i].Display;
-      Break;
-    end;
+  { Top-level nodes only (#245). It used not to matter -- no folder further down could have
+    a drive's path -- but a common folder listed as a place is ALSO a folder somewhere under
+    its drive, and down there it keeps its own name. }
+  if (Node <> nil) and (Node^.Parent = RootNode) then
+    for i := 0 to High(FRoots) do
+      if SameFileName(ExcludeTrailingPathDelimiter(FRoots[i].Path), p) then
+      begin
+        AText := FRoots[i].Display;
+        Break;
+      end;
   if AText = '' then
   begin
     AText := ExtractFileName(ExcludeTrailingPathDelimiter(p));
@@ -784,6 +803,9 @@ end;
 
 procedure TTyShellTreeView.DoGetImageIndex(Node: PTyTreeNode; AKind: TTyVTImageKind;
   AColumn: Integer; var AGhosted: Boolean; var AIndex: Integer);
+var
+  i: Integer;
+  p: string;
 begin
   { A file leaf gets the page glyph; a top-level node of an UNSCOPED tree is one of
     the TyFsRoots places and gets the drive glyph; everything else is a folder.
@@ -791,7 +813,18 @@ begin
   if not NodeIsDir(Node) then
     AIndex := TyShellTreeFileGlyph
   else if (Node <> nil) and (Node^.Parent = RootNode) and (FRoot = '') then
-    AIndex := TyShellTreeDriveGlyph
+  begin
+    AIndex := TyShellTreeDriveGlyph;
+    { #245: except a common folder listed as a place, which is a folder up here too. }
+    p := NodePath(Node);
+    for i := 0 to High(FRoots) do
+      if (FRoots[i].Kind = rkPlace)
+         and SameFileName(ExcludeTrailingPathDelimiter(FRoots[i].Path), p) then
+      begin
+        AIndex := TyShellTreeFolderGlyph;
+        Break;
+      end;
+  end
   else
     AIndex := TyShellTreeFolderGlyph;
   inherited DoGetImageIndex(Node, AKind, AColumn, AGhosted, AIndex);
@@ -924,7 +957,7 @@ begin
   SetLength(FNodes, 0);
   if FRoot = '' then
   begin
-    FRoots := TyFsRoots;
+    FRoots := TopLevelPlaces;   { TyFsRoots, with the user's common folders before them if asked (#245) }
     for i := 0 to High(FRoots) do
       AddPathNode(nil, FRoots[i].Path, True);
   end
@@ -1303,6 +1336,28 @@ begin
   FRoot := wanted;
   FSelectedPath := '';   { the node it named is about to be freed }
   PopulateRoots;
+end;
+
+function TTyShellTreeView.TopLevelPlaces: TTyFsRootArray;
+begin
+  if FShowPlaces then
+    Result := TyFsPlaces
+  else
+    Result := TyFsRoots;
+end;
+
+procedure TTyShellTreeView.SetShowPlaces(AValue: Boolean);
+var
+  keep: string;
+begin
+  if FShowPlaces = AValue then Exit;
+  FShowPlaces := AValue;
+  if FRoot <> '' then Exit;   { a scoped tree has its one directory, whatever this says }
+  { The top level is made again, as writing Root makes it again -- and the tree is put back
+    in the folder it was in, which a rebuild would otherwise leave it out of. }
+  keep := FSelectedPath;
+  PopulateRoots;
+  if keep <> '' then SelectPath(keep);
 end;
 
 procedure TTyShellTreeView.SetObjectTypes(AValue: TTyFsObjectTypes);

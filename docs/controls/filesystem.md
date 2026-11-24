@@ -52,6 +52,10 @@ TTyFsFilterSpecArray = array of TTyFsFilterSpec;
 | `TyFsCompareEntries(a, b, key, asc, foldersFirst)` | 比较两条目:目录永远排文件前(与升降序无关);再按 `key` 比**原始值**(Name 走 OS 大小写、Size:Int64、Modified:TDateTime、TypeName)。视图的 `OnCompare` 委托给它。 |
 | `TyFsSortEntries(var entries, key, asc, foldersFirst)` | 就地稳定排序。 |
 | `TyFsRoots` | 可移植"位置"列表(Windows 盘符 / Unix `/`+home+挂载点)。至少一个根,不崩。 |
+| `TyFsKnownFolders` | 用户的**常用文件夹**:桌面、文档、下载、图片、音乐、视频,固定按这个顺序,只列存在的、每个只列一次。`Kind = rkPlace`,`Display` 是库自己的翻译名(`rsFdPlace*`),和磁盘上叫什么无关。可能为空,不抛异常。3.0.5 新增。 |
+| `TyFsPlaces` | `TyFsKnownFolders` 加 `TyFsRoots`:文件对话框提供的全部位置。 |
+| `TyFsParseUserDirs(text, home)` | 纯函数:解析 XDG 的 `user-dirs.dirs`(`XDG_DESKTOP_DIR="$HOME/桌面"` 这种行)。只认六个键、带引号的 `"$HOME/…"` 或绝对路径;指回主目录本身(`"$HOME/"`)表示这个文件夹被关掉,不列。路径一律用 `/` 拼,不查磁盘。 |
+| `TyFsExistingPlaces(candidates)` | 从候选里去掉不存在的文件夹和重复的,顺序不变,去掉末尾分隔符。 |
 | `TyFsParent(path)` | 父目录;根处稳定。 |
 | `TyFsBreadcrumb(path)` | **累积可导航路径,根在前**:`/home/tom` → `['/','/home','/home/tom']`;`C:\Users\Tom` → `['C:\','C:\Users','C:\Users\Tom']`。盘符根保留尾分隔符,其余不带。保留输入路径自身的分隔符(主机无关)。 |
 | `TyFsResolveSaveName(dir, typed, defaultExt)` | Save 名解析:裸名对 `dir` 展开;无扩展名补 `defaultExt`;已有扩展名不动。 |
@@ -62,6 +66,10 @@ TTyFsFilterSpecArray = array of TTyFsFilterSpec;
 - `TypeName` 是扩展名启发式标签,不是 OS 注册的文件类型描述(那是 Win-only)。
 - 原生 shell 图标、PIDL 特殊文件夹、剩余空间、实时文件监视 —— 均非跨平台,搁置(见 Phase 7 设计稿的搁置清单)。
 - `TyFsRoots` 在 Unix 是启发式扫固定挂载点(`/media/$USER`,`/run/media/$USER`,`/mnt`,`/Volumes`),挂别处的卷会漏;Windows 盘符稳。
+- **常用文件夹在各平台的取法**(`TyFsKnownFolders`):
+  - Windows:问系统的特殊文件夹,所以被挪到别的盘或 OneDrive 里的「文档」也能在它实际的位置找到。「下载」没有旧式编号,用 Vista 起才有的已知文件夹接口(运行时查找,没有这个接口的系统上退回用户目录下的 `Downloads`)。
+  - Linux / BSD:读 `$XDG_CONFIG_HOME/user-dirs.dirs`(默认 `~/.config/`),那里的文件夹名是本地化的;没有这个文件就用主目录下的常见英文名。
+  - macOS:主目录下固定的 `Desktop`、`Documents`、`Downloads`、`Pictures`、`Music`、`Movies`(访达里显示的本地化名字只是显示名)。
 
 ## 消费者
 
