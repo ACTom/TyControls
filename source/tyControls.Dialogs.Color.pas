@@ -490,6 +490,9 @@ begin
   // preview swatch bottom.
   AutoSizeToContent(contentRight - x0, (FPreviewRect.Bottom + Px(TyDlgPad)) - r.Top);
   SetColorValue(FColor);   // seed all views from the model
+  { #243: the dialog opens in the hex field -- the one place a colour can be typed or pasted
+    whole -- with its text selected (TTyEdit.AutoSelect). Tab still starts at the picker. }
+  ActiveControl := FHex;
 end;
 
 procedure TTyColorForm.DoAutoAdjustLayout(const AMode: TLayoutAdjustmentPolicy;

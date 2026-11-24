@@ -423,6 +423,19 @@ begin
   FViewCombo.OnSelect := @ViewComboSelect;
 
   UpdateNavButtons;   { Back+Forward start disabled -> no history yet }
+
+  { #243. Tab walks the content as it is laid out -- the folder box and the view box of the
+    top row, the tree and the list, then the file name and the file type -- not as the lines
+    above happen to create it (the type box before the name box left of it, the view box last
+    of all). The button strip follows by itself (TTyDialog.InsertControl).
+    And the dialog opens in the file name box, the open dialog as the save one: that is where
+    one types. It opened on its Open button. }
+  FLookIn.TabOrder := 0;
+  FViewCombo.TabOrder := 1;
+  FMidPanel.TabOrder := 2;
+  FNameEdit.TabOrder := 3;
+  FFilter.TabOrder := 4;
+  ActiveControl := FNameEdit;
 end;
 
 destructor TTyFileDialogForm.Destroy;

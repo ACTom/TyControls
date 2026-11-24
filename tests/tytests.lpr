@@ -163,6 +163,7 @@ uses
   test.combobox,
   test.combobox.simple,
   test.combobox.editfield,
+  test.dialogs.focus,
   test.tabset,
   test.columns.compat,
   test.listview.layout,
