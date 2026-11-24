@@ -3710,7 +3710,16 @@ begin
   table := (ANext < FParaCount) and (FDoc.CellAt(ANext) <> nil);
   if table then
   begin
-    // the row definition in effect: only when it is not the one the output already left
+    { The row definition in effect: only when it is not the one the output already left.
+      After a row written from the model it is written again - the file's definition as the
+      reader had it where the copied bytes resume, which is often the rebuilt row's old one:
+      \cell\row \trowd<old definition> ... \trowd<the next row's own>. It cannot disagree
+      with the rebuilt row: it stands after that row's \row, and a definition applies only to
+      the cells before the \row that ends them - the rebuilt row is made whole with its own
+      new definition and has no second one before its \row. It is what the copied bytes that
+      follow were read with: a row of them with no \trowd of its own (a file may write its
+      rows so) takes it as the file meant, and a nested row's bytes assume it; such a row is
+      never an edited one (an edited row is written from the model, not resumed). }
     if FWroteRow then cur := FLastRowDef else cur := FStartRowDef;
     def := BytesOfRange(FLoad.Bytes, st.Core.RowDef.Raw);
     if (def <> '') and not SameBytes(def, cur) then PutRaw(def);

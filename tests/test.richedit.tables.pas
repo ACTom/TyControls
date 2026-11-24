@@ -1806,11 +1806,11 @@ begin
     d.TableParaVisits := 0;
     AssertTrue('one row', Exec(d, TTyRichInsertRow.Create(d.Text.ParaStart(500), Rows div 2)));
     visits := d.TableParaVisits;
-    { the check (CanExecute) and the edit each read at most the table and the paragraph on
-      either side once, and nothing is given cells again: a row named by its index from the
-      table's first paragraph - the paragraphs up to it, twice }
+    { the check (CanExecute) and the edit each walk from the table's first paragraph to the
+      row named by its index (a table of one cell a row: a paragraph a row), and read the
+      paragraph on either side; nothing is given cells again }
     AssertTrue(Format('%d paragraph visits for one row in 10000', [visits]),
-      visits <= 3 * Rows + 4);
+      visits <= 2 * (Rows div 2) + 8);
   finally
     d.Free;
   end;

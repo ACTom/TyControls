@@ -17,7 +17,7 @@ uses
   tyControls.RichEdit.Text, tyControls.RichEdit.Model, tyControls.RichEdit.Commands,
   tyControls.RichEdit.RowFormat, tyControls.RichEdit.TableProps,
   tyControls.RichEdit.RtfRead, tyControls.RichEdit.RtfWrite, tyControls.RichEdit.Layout,
-  test.richedit.layoutdevice;
+  tyControls.RichEdit.TableSel, test.richedit.layoutdevice;
 
 type
   TTyRichTablePropsTest = class(TTestCase)
@@ -37,6 +37,10 @@ type
     procedure TestALineStyleNotDrawnHereIsKept;
     procedure TestUnknownWordsKeepTheirPlace;
     procedure TestOldRowVersionsGoWithWhatHeldThem;
+    procedure TestWordsAroundAChangedPropertyStay;
+    procedure TestTheAgreementKeepsTheDrawnLineAndLeavesNestedRows;
+    procedure TestTheDecodedFormatFollowsTheCellCount;
+    procedure TestAPaddingWithNoUnitIsNotThere;
   end;
 
 implementation
@@ -1236,6 +1240,123 @@ begin
     finally
       d.EndRead;
     end;
+  finally
+    d.Free;
+  end;
+end;
+
+{ In a row Word wrote: a shading change drops Word's own copy of the old one (\clcbpatraw) with
+  the old \clcbpat; a border side changed keeps every word after that side in its cell. }
+procedure TTyRichTablePropsTest.TestWordsAroundAChangedPropertyStay;
+var
+  d: TTyRichDocument;
+  tp: TTyRichPos;
+  got, def: RawByteString;
+  p: TTyRichCellProps;
+  k: Integer;
+begin
+  d := LoadDoc(FixtureBytes('word-table-styled.rtf'));
+  try
+    tp := TablePos(d);
+    AssertTrue('shaded', Exec(d, TTyRichSetCellProps.Create(tp, 0, 0, 0, 0, Shading(clLime))));
+    got := StrOf(SaveBytes(d));
+    k := Pos('\trowd', got);
+    def := Copy(got, k, Pos('\cellx', Copy(got, k, MaxInt)) + 10);
+    AssertEquals('Word''s old copy gone', 0, Pos('\clcbpatraw7', def));
+    AssertEquals('the old colour gone', 0, Pos('\clcbpat7', def));
+    AssertTrue('a colour', Pos('\clcbpat', def) > 0);
+    d.Undo;
+    // the first cell's bottom: the words after it in the cell stay
+    p := Default(TTyRichCellProps);
+    p.Valid := [rcpBorderBottom];
+    p.Borders[rcsBottom] := TyRichBorder(rbsDouble, 30, clRed);
+    AssertTrue('a bottom', Exec(d, TTyRichSetCellProps.Create(tp, 0, 0, 0, 0, p)));
+    got := StrOf(SaveBytes(d));
+    k := Pos('\trowd', got);
+    def := Copy(got, k, Pos('\cellx', Copy(got, k, MaxInt)) + 10);
+    AssertTrue('\clbrdrr after it', Pos('\clbrdrr', def) > 0);
+    AssertTrue('\clcbpat7 after it', Pos('\clcbpat7', def) > 0);
+    AssertTrue('\cltxlrtb after it', Pos('\cltxlrtb', def) > 0);
+    AssertTrue('\clwWidth1600 after it', Pos('\clwWidth1600', def) > 0);
+    AssertTrue('\clcbpatraw7 after it', Pos('\clcbpatraw7', def) > 0);
+  finally
+    d.Free;
+  end;
+end;
+
+{ The agreement of facing sides (TTyRichAgreeEdges): at the same width the later cell's
+  definition is the line - the lower row's top -, as the layout draws; a row that holds a
+  nested table is left as it is, and so is the side that faces it. }
+procedure TTyRichTablePropsTest.TestTheAgreementKeepsTheDrawnLineAndLeavesNestedRows;
+const
+  Plain = '{\rtf1\ansi{\fonttbl{\f0 Arial;}}' +
+    '\trowd\clbrdrb\brdrdot\brdrw10\cellx1440\pard\intbl a\cell\row' +
+    '\trowd\clbrdrt\brdrdash\brdrw10\cellx1440\pard\intbl b\cell\row\pard after\par}';
+  Nested = '{\rtf1 \trowd\clbrdrb\brdrdot\brdrw10\cellx1000\cellx2000\pard\intbl a\cell \pard\intbl\itap2 x' +
+    '\nestcell{\*\nesttableprops\trowd\cellx500\nestrow}{\nonesttables\par}\pard\intbl\cell\row' +
+    '\trowd\clbrdrt\brdrdash\brdrw10\cellx1000\cellx2000\pard\intbl c\cell d\cell\row\pard after\par}';
+var
+  d: TTyRichDocument;
+  tp: TTyRichPos;
+begin
+  d := LoadDoc(BytesOf(Plain));
+  try
+    tp := TablePos(d);
+    AssertTrue('agreed', Exec(d, TTyRichAgreeEdges.Create(tp, 0, 1)));
+    AssertEquals('the lower row''s top is the line', Ord(rbsDashed),
+      Ord(d.CellProps(tp, 0, 0).Borders[rcsBottom].Style));
+    AssertEquals('and stays', Ord(rbsDashed), Ord(d.CellProps(tp, 1, 0).Borders[rcsTop].Style));
+  finally
+    d.Free;
+  end;
+  d := LoadDoc(BytesOf(Nested));
+  try
+    tp := TablePos(d);
+    Exec(d, TTyRichAgreeEdges.Create(tp, 0, 1));
+    AssertEquals('the nested row as it was', Ord(rbsDotted),
+      Ord(d.CellProps(tp, 0, 0).Borders[rcsBottom].Style));
+    AssertEquals('the row facing it as it was', Ord(rbsDashed),
+      Ord(d.CellProps(tp, 1, 0).Borders[rcsTop].Style));
+  finally
+    d.Free;
+  end;
+end;
+
+{ The same bytes decoded for another number of cells give that many cells (the decoder keeps
+  the last bytes it read: the count is part of what it keeps). }
+procedure TTyRichTablePropsTest.TestTheDecodedFormatFollowsTheCellCount;
+const
+  Raw = '\trowd\trgaph108\cellx1000\cellx2000';
+var
+  a, b: TTyRichRowFormat;
+begin
+  a := TyRichDecodeRowFormat(Raw, 2, []);
+  b := TyRichDecodeRowFormat(Raw, 3, []);
+  try
+    AssertEquals('two', 2, a.CellCount);
+    AssertEquals('three', 3, b.CellCount);
+  finally
+    a.Release;
+    b.Release;
+  end;
+end;
+
+{ A cell's padding whose unit word is 0 ("not there") is not the cell's own: the row's goes;
+  with the unit 3 (twips) it is. (Word writes a cell's left padding as \clpadt.) }
+procedure TTyRichTablePropsTest.TestAPaddingWithNoUnitIsNotThere;
+const
+  Rtf = '{\rtf1\ansi{\fonttbl{\f0 Arial;}}' +
+    '\trowd\trgaph108\clpadt300\clpadft0\cellx1440\clpadt300\clpadft3\cellx2880' +
+    '\pard\intbl a\cell b\cell\row\pard after\par}';
+var
+  d: TTyRichDocument;
+  tp: TTyRichPos;
+begin
+  d := LoadDoc(BytesOf(Rtf));
+  try
+    tp := TablePos(d);
+    AssertEquals('no unit: the row''s', 108, d.CellProps(tp, 0, 0).Pad[rcsLeft]);
+    AssertEquals('in twips: its own', 300, d.CellProps(tp, 0, 1).Pad[rcsLeft]);
   finally
     d.Free;
   end;
