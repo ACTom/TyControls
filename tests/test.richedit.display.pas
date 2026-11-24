@@ -879,14 +879,14 @@ begin
     end;
   end;
   AssertTrue('a theme with a dark mode', FDarkTheme <> '');
-  Shot('t7-home-100-light.png', True, 96, False);
-  Shot('t7-home-150-light.png', True, 144, False);
-  Shot('t7-home-100-dark.png', True, 96, True);
-  Shot('t7-home-150-dark.png', True, 144, True);
-  Shot('t7-help-100-light.png', False, 96, False);
-  Shot('t7-help-150-light.png', False, 144, False);
-  Shot('t7-help-100-dark.png', False, 96, True);
-  Shot('t7-help-150-dark.png', False, 144, True);
+  Shot('rich-home-page-100-light.png', True, 96, False);
+  Shot('rich-home-page-150-light.png', True, 144, False);
+  Shot('rich-home-page-100-dark.png', True, 96, True);
+  Shot('rich-home-page-150-dark.png', True, 144, True);
+  Shot('rich-help-page-100-light.png', False, 96, False);
+  Shot('rich-help-page-150-light.png', False, 144, False);
+  Shot('rich-help-page-100-dark.png', False, 96, True);
+  Shot('rich-help-page-150-dark.png', False, 144, True);
   FCtl.Mode := 'light';
 end;
 
