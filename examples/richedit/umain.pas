@@ -29,6 +29,8 @@ unit umain;
     size (uviewerform);
   - Format > Line Spacing takes any multiple (1.08, 3), Paragraph Spacing the space before
     and after (0, 6, 12 pt);
+  - Samples > A Page Built from Code opens upageform: a page made entirely with the builder
+    (upagesample), shown as a help page and as a home page;
   - View: zoom, wrap mode, read only, plain text, the ruler, the skins and their dark mode.
   The window, the menus, the tool bars and the actions are in umain.lfm; the code here is the
   application's part: files, the boxes and swatches, the status bar, the skin menu. }
@@ -46,7 +48,7 @@ uses
   tyControls.Dialogs.FileDialog, tyControls.RichEdit.Model, tyControls.RichEdit.Attrs,
   tyControls.RichEdit.Text, tyControls.RichEdit.Layout,
   tyControls.RichEdit, tyControls.RichEdit.Ruler, tyControls.RichEdit.Actions,
-  ulinkform, ubookmarkform, uviewerform;
+  ulinkform, ubookmarkform, uviewerform, upageform;
 
 type
   TMainForm = class(TTyForm)
@@ -286,6 +288,8 @@ type
     PopDeleteRow: TMenuItem;
     PopDeleteColumn: TMenuItem;
     PopDeleteTable: TMenuItem;
+    MnuSepSamples: TMenuItem;
+    MnuSamplePage: TMenuItem;
     BtnInsertLink: TTySpeedButton;
     ActSpacing108: TTyRichEditLineSpacing;
     ActSpacing115: TTyRichEditLineSpacing;
@@ -348,6 +352,7 @@ type
     procedure ActShowRulerExecute(Sender: TObject);
     procedure ActShowRulerUpdate(Sender: TObject);
     procedure SampleClick(Sender: TObject);
+    procedure PageSampleClick(Sender: TObject);
     procedure WrapClick(Sender: TObject);
     procedure DarkClick(Sender: TObject);
     procedure SkinClick(Sender: TObject);
@@ -387,6 +392,8 @@ type
     procedure ShowZoom;
     procedure ShowTitle;
     procedure SetSkin(const AName: string);
+    { The theme's chrome on every window of the example (the page form is not modal). }
+    procedure ApplyThemeEverywhere;
     { Asks to save a changed document first; False: the user cancelled. }
     function MaySetAside: Boolean;
     function SaveAs: Boolean;
@@ -727,7 +734,7 @@ var
   i: Integer;
 begin
   TyDefaultController.ThemeName := AName;
-  ApplyChromeTheme(TyDefaultController);
+  ApplyThemeEverywhere;
   for i := 0 to MnuSkin.Count - 1 do
     MnuSkin.Items[i].Checked := SameText(MnuSkin.Items[i].Caption, AName);
 end;
@@ -742,7 +749,22 @@ begin
   MnuDark.Checked := not MnuDark.Checked;
   if MnuDark.Checked then TyDefaultController.Mode := 'dark'
   else TyDefaultController.Mode := 'light';
-  ApplyChromeTheme(TyDefaultController);
+  ApplyThemeEverywhere;
+end;
+
+procedure TMainForm.ApplyThemeEverywhere;
+var
+  i: Integer;
+begin
+  for i := 0 to Screen.CustomFormCount - 1 do
+    if Screen.CustomForms[i] is TTyForm then
+      TTyForm(Screen.CustomForms[i]).ApplyChromeTheme(TyDefaultController);
+end;
+
+{ The page made from code (upagesample), shown as a help page and as a home page. }
+procedure TMainForm.PageSampleClick(Sender: TObject);
+begin
+  ShowPageForm;
 end;
 
 procedure TMainForm.Tell(const AText: string);

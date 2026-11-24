@@ -307,6 +307,10 @@ msgstr "图片"
 msgid "Word's table of contents with links"
 msgstr "Word 的目录（带链接）"
 
+#: tmainform.mnusamplepage.caption
+msgid "A Page Built from &Code..."
+msgstr "用代码搭的页面(&C)..."
+
 #: tmainform.mnuedit.caption
 msgid "&Edit"
 msgstr "编辑(&E)"
@@ -564,3 +568,212 @@ msgstr "图片"
 #: tviewerform.bar.caption
 msgid "Picture"
 msgstr "图片"
+
+# --- upageform.lfm captions/text/hints (msgid = the English source) ---
+
+#: tpageform.caption
+msgid "A page built from code"
+msgstr "用代码搭的页面"
+
+#: tpageform.bar.caption
+msgid "A page built from code"
+msgstr "用代码搭的页面"
+
+#: tpageform.btnappend.caption
+msgid "&Append a line"
+msgstr "追加一行(&A)"
+
+#: tpageform.btnappend.hint
+msgid "AppendContent: one line with the time, at the end of both pages"
+msgstr "AppendContent：在两个页面末尾各加一行时间"
+
+#: tpageform.btnrebuild.caption
+msgid "&Rebuild the page"
+msgstr "重新生成页面(&R)"
+
+#: tpageform.btnrebuild.hint
+msgid "SetContent: the page made again from the start"
+msgstr "SetContent：从头重新生成页面"
+
+#: tpageform.tabhelp.caption
+msgid "Help page"
+msgstr "帮助页"
+
+#: tpageform.tabhome.caption
+msgid "Home page"
+msgstr "首页"
+
+# --- resourcestrings (upagesample) ---
+
+#: upagesample.rspgtitle
+msgid "A page built from code"
+msgstr "用代码搭的页面"
+
+#: upagesample.rspgintro1
+msgid "This page is not a file. It is made in "
+msgstr "这个页面不是文件，它是在 "
+
+#: upagesample.rspgintro2
+msgid " with "
+msgstr " 里用 "
+
+#: upagesample.rspgintro3
+msgid ", in calls that read the way the page does: "
+msgstr " 搭出来的，调用的顺序就是页面的顺序："
+
+#: upagesample.rspgintrobold
+msgid "bold words"
+msgstr "加粗的词"
+
+#: upagesample.rspgintro4
+msgid ", a word in "
+msgstr "，"
+
+#: upagesample.rspgintrored
+msgid "red"
+msgstr "红色的字"
+
+#: upagesample.rspgintro5
+msgid ", links, lists, tab stops, a table and a picture."
+msgstr "，链接、列表、制表位、表格和一张图片。"
+
+#: upagesample.rspgcontents
+msgid "Contents"
+msgstr "目录"
+
+#: upagesample.rspgweb
+msgid "The Lazarus home page"
+msgstr "Lazarus 主页"
+
+#: upagesample.rspgs1
+msgid "1. Showing a page"
+msgstr "1. 展示一个页面"
+
+#: upagesample.rspgs1a
+msgid "A rich edit can show a page instead of editing one: an application's home page, a page that leads to its parts, its help. It is read only, has no caret, and a plain click on a link follows it."
+msgstr "富文本控件可以用来展示页面，而不是编辑：应用的首页、导航页、帮助页。它只读、没有光标，单击链接就跳转。"
+
+#: upagesample.rspgs1b
+msgid "The same content is shown on two tabs of this window. The help page can be selected and copied and scrolls by itself. The home page cannot be selected, never takes the focus, has no scroll bars of its own and is as tall as its content: the scroll box around it scrolls the whole page."
+msgstr "同样的内容在这个窗口的两个页签里各显示一次。帮助页可以选中、复制，自己滚动。首页不能选中，从不拿焦点，没有自己的滚动条，高度就是内容的高度：外面的滚动框滚动整个页面。"
+
+#: upagesample.rspgnote
+msgid "Note: switch the skin or the dark mode with this window open. The text and the links take the new theme's colours; only the colours the page chose itself stay."
+msgstr "提示：开着这个窗口换皮肤或切换深色模式试试。文字和链接会换成新主题的颜色，只有页面自己指定的颜色不变。"
+
+#: upagesample.rspgs1c
+msgid "A click on an entry of the contents jumps to its section: the section's heading comes to the top of the view."
+msgstr "点目录里的一项就跳到那一节：那一节的标题来到视图顶部。"
+
+#: upagesample.rspgs2
+msgid "2. Lists and tab stops"
+msgstr "2. 列表和制表位"
+
+#: upagesample.rspgs2a
+msgid "A bulleted list with a second level:"
+msgstr "带第二级的项目符号列表："
+
+#: upagesample.rspgbullet1
+msgid "Links to the sections of the page"
+msgstr "指向页面各节的链接"
+
+#: upagesample.rspgbullet1a
+msgid "each one jumps to a bookmark"
+msgstr "每个都跳到一个书签"
+
+#: upagesample.rspgbullet1b
+msgid "and \"Back to the top\" jumps back"
+msgstr "\"回到顶部\"跳回来"
+
+#: upagesample.rspgbullet2
+msgid "Pictures from an image list, an icon font, a file or a resource"
+msgstr "图片可以来自图像列表、图标字体、文件或资源"
+
+#: upagesample.rspgbullet3
+msgid "Tables with the widths you give their columns"
+msgstr "表格的列宽由你指定"
+
+#: upagesample.rspgs2b
+msgid "A numbered list:"
+msgstr "编号列表："
+
+#: upagesample.rspgstep1
+msgid "Make a builder: B := Rich.NewBuilder"
+msgstr "建一个构建器：B := Rich.NewBuilder"
+
+#: upagesample.rspgstep1a
+msgid "add the text, the formats and the links to it"
+msgstr "往里加文字、格式和链接"
+
+#: upagesample.rspgstep2
+msgid "Put it in: Rich.SetContent(B)"
+msgstr "放进控件：Rich.SetContent(B)"
+
+#: upagesample.rspgstep3
+msgid "Free the builder, or keep it and put it in again"
+msgstr "释放构建器，或者留着再放一次"
+
+#: upagesample.rspgs2c
+msgid "Tab stops with a dot leader, as in a table of contents:"
+msgstr "带点状前导符的制表位，像目录一样："
+
+#: upagesample.rspgtab1
+msgid "Showing a page"
+msgstr "展示一个页面"
+
+#: upagesample.rspgtab2
+msgid "Lists and tab stops"
+msgstr "列表和制表位"
+
+#: upagesample.rspgtab3
+msgid "A table"
+msgstr "表格"
+
+#: upagesample.rspgs3
+msgid "3. A table"
+msgstr "3. 表格"
+
+#: upagesample.rspgs3a
+msgid "Two columns, 1.5 and 3.5 inches wide:"
+msgstr "两列，宽 1.5 英寸和 3.5 英寸："
+
+#: upagesample.rspgcolprop
+msgid "Property"
+msgstr "属性"
+
+#: upagesample.rspgcolwhat
+msgid "On the home page"
+msgstr "首页上的值"
+
+#: upagesample.rspgreadonly
+msgid "True: nothing can be typed"
+msgstr "True：不能输入"
+
+#: upagesample.rspgallowsel
+msgid "False: nothing can be selected"
+msgstr "False：不能选中"
+
+#: upagesample.rspgfocus
+msgid "False: a click never takes the focus"
+msgstr "False：点击不拿焦点"
+
+#: upagesample.rspgbars
+msgid "ssNone: no scroll bars of its own"
+msgstr "ssNone：没有自己的滚动条"
+
+#: upagesample.rspgautoh
+msgid "True: as tall as its content"
+msgstr "True：高度跟着内容"
+
+#: upagesample.rspgs3b
+msgid "The table's cells hold text, links and pictures like any paragraph. The columns keep the widths given here whatever the window's width."
+msgstr "表格的单元格和普通段落一样可以放文字、链接和图片。不管窗口多宽，各列都保持这里给的宽度。"
+
+#: upagesample.rspgtop
+msgid "Back to the top"
+msgstr "回到顶部"
+
+#: upagesample.rspgstamp
+#, object-pascal-format
+msgid "Appended at %s."
+msgstr "追加于 %s。"

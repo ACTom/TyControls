@@ -1058,6 +1058,13 @@ object MainForm: TMainForm
           Caption = 'Word''s table of contents with links'
           OnClick = SampleClick
         end
+        object MnuSepSamples: TMenuItem
+          Caption = '-'
+        end
+        object MnuSamplePage: TMenuItem
+          Caption = 'A Page Built from &Code...'
+          OnClick = PageSampleClick
+        end
       end
       object MnuSep2: TMenuItem
         Caption = '-'
