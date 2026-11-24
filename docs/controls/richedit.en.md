@@ -334,6 +334,28 @@ end;
 
 `MergeCells` merges the selected cells (at least two, of one table): the top-left cell takes the others' paragraphs in reading order - an empty cell adds nothing -, keeps its shading, padding and alignment, and keeps the lines that were on the rectangle's outline; across it becomes one wide cell, down a merge (Word's own forms). `SplitCell(Columns, Rows)` splits the caret's cell: a merged cell split into as many columns as it covers gets the grid's own columns back, any other number divides its width equally; over several rows, `Rows` must divide them; a cell of one row split into rows adds rows below it, and the row's other cells reach down over them. The content stays in the first cell. Each is one undo step; `CanMergeCells` and `CanSplitCell` say whether they may run, and the actions `TTyRichEditMergeCells` and `TTyRichEditSplitCell` (`Columns` x `Rows`, `OnChooseSize` first) run them. Rows the edit does not touch keep their bytes when saved.
 
+**Merged cells from code.** The builder's `Cell(ColSpan, RowSpan)` opens a cell that covers that many columns and rows from its place; the builder keeps the places a span covers, so the next `Cell` is the first place to its right that no span covers - in the row below a span from above, do not call `Cell` for its place. A span's borders, padding, shading and alignment are given once, on the cell that opens it. The second table of the example's Samples > A Table, word for word from `examples/richedit/utablesample.pas` - a header cell over three columns and a side cell over two rows:
+
+```pascal
+procedure AddMergedTable(B: TTyRichBuilder);
+const
+  Shade = TColor($00F7EBDD);            // the price table's light blue
+begin
+  B.Table([1700, 2000, 2000, 2000]).TableAlign(rraCenter);
+  // the first row: a cell, then one cell over the other three columns
+  B.Cell.Shading(Shade).Bold.Text(rsTsTime).Reset;
+  B.Cell(3).Shading(Shade).Bold.Align(paraCenter).Text(rsTsDays).Reset;
+  // "Morning" covers this row and the next; the next row's Cell calls skip its place
+  B.Row.Cell(1, 2).CellVAlign(rcvCenter).Text(rsTsMorning);
+  B.Cell.Text(rsTsReading).Cell.Text(rsTsWriting).Cell.Text(rsTsDrawing);
+  B.Row.Cell.Text(rsTsMusic).Cell.Text(rsTsSport).Cell.Text(rsTsScience);
+  B.Row.Cell.Text(rsTsAfternoon).Cell(3).Align(paraCenter).Text(rsTsFree);
+  B.EndTable;
+end;
+```
+
+In the example, Table > Merge Cells merges the selected cells and Table > Split Cells... asks for the columns and rows in a small form (`usplitform.pas`, through the split action's `OnChooseSize`): it starts from 2 × 1, and for a merged cell from the columns and rows it covers, so OK splits it back; both are in the table's context menu and on the second tool bar row too.
+
 **What is refused, and why.** Each refusal is told once through `OnEditRefused`, nothing raised, nothing changed.
 
 - A table with merged cells (a file's, or merged here): rows and columns cannot be inserted or deleted yet, and the columns cannot be distributed (that would pull a merged cell away from its neighbours). Cells can be merged further and split, its edges can be dragged, and every cell format works.

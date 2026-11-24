@@ -334,6 +334,28 @@ end;
 
 `MergeCells` 合并选中的单元格(同一张表里至少两格)：左上格按阅读顺序接上其他格子的段落——空格子不添东西——保留自己的底色、内边距和对齐，保留矩形外沿原来的边线；横向合并成一个宽格子，纵向用合并标记(Word 自己的写法)。`SplitCell(Columns, Rows)` 拆分光标所在的格子：合并过的格子拆成它占的那么多列时还原网格本来的列，其他列数按宽度平分；跨几行的格子，`Rows` 必须能整除行数；一行里的格子拆成几行会在它下面加行，这一行的其他格子向下盖过新行。内容留在第一个格子里。每次都是一步撤销；`CanMergeCells`、`CanSplitCell` 回答现在能不能做，动作 `TTyRichEditMergeCells`、`TTyRichEditSplitCell`(`Columns` × `Rows`，先触发 `OnChooseSize`)执行它们。保存时没被改动的行照旧是原来的字节。
 
+**用代码搭合并的单元格。** 构建器的 `Cell(ColSpan, RowSpan)` 打开一个从这里起跨这么多列、这么多行的格子；被跨过的位置构建器自己记着，下一个 `Cell` 是右边第一个没被跨过的位置——上面的格子跨下来的那个位置，下一行里不要再为它调 `Cell`。跨格的边框、内边距、底色和对齐只在打开它的那个格子上给一次。示例"示例文档 → 表格"里的第二张表，原样摘自 `examples/richedit/utablesample.pas`——表头一格跨三列，左边一格跨两行：
+
+```pascal
+procedure AddMergedTable(B: TTyRichBuilder);
+const
+  Shade = TColor($00F7EBDD);            // the price table's light blue
+begin
+  B.Table([1700, 2000, 2000, 2000]).TableAlign(rraCenter);
+  // the first row: a cell, then one cell over the other three columns
+  B.Cell.Shading(Shade).Bold.Text(rsTsTime).Reset;
+  B.Cell(3).Shading(Shade).Bold.Align(paraCenter).Text(rsTsDays).Reset;
+  // "Morning" covers this row and the next; the next row's Cell calls skip its place
+  B.Row.Cell(1, 2).CellVAlign(rcvCenter).Text(rsTsMorning);
+  B.Cell.Text(rsTsReading).Cell.Text(rsTsWriting).Cell.Text(rsTsDrawing);
+  B.Row.Cell.Text(rsTsMusic).Cell.Text(rsTsSport).Cell.Text(rsTsScience);
+  B.Row.Cell.Text(rsTsAfternoon).Cell(3).Align(paraCenter).Text(rsTsFree);
+  B.EndTable;
+end;
+```
+
+示例里，"表格 → 合并单元格"合并选中的格子，"表格 → 拆分单元格..."用一个小窗体问列数和行数(`usplitform.pas`，通过拆分动作的 `OnChooseSize`)：普通格子从 2 × 1 开始，合并过的格子从它跨的列数和行数开始，直接点确定就拆回原样；这两项在表格的右键菜单和第二行工具栏上也有。
+
 **什么会被拒绝，为什么。** 每次拒绝都通过 `OnEditRefused` 说一次，不抛异常，什么都不改。
 
 - 含合并单元格的表(文件里来的，或者在这里合并的)：暂时还不能增删行列，也不能平均分布各列(那会把合并的格子和邻居拉开)。可以继续合并和拆分单元格。它的边线可以拖，单元格格式都能用。
