@@ -156,7 +156,7 @@ end;
 **构建器怎么记格式。** 它记着当前的字符格式和正在搭的这一段的段落格式。字符方面的调用(`Font`、`Bold`、`Italic`、`Underline`、`StrikeOut`、`Superscript`、`Subscript`、`Color`、`Highlight`)改的是之后加进来的内容的格式；`Reset` 回到文档的默认格式。段落方面的调用(`Align`、`Indent`、`Spacing`、`SpaceBefore`、`SpaceAfter`、`LineSpacing`、`LineSpacingExact`、`Tab`、`Bullet`、`Numbered`、`Shading`)改的是正在搭的这一段。第一段一开始就有；`Paragraph` 结束这一段、开始下一段，下一段用默认的段落格式，字符格式保持不变。字号、缩进、间距用磅；表格的列宽用缇(1 英寸 1440 缇)。
 
 - **文字**:`Text`(`#9` 是制表符,`#10` 是段内换行)。
-- **列表**:`Bullet(级别, 符号)`、`Numbered(级别, 起始编号)`;0 级是最外层，每一级有自己的悬挂缩进。
+- **列表**:`Bullet(级别, 符号)`、`Numbered(级别, 起始编号)`;0 级是最外层(最深 8 级),每一级有自己的悬挂缩进。给了起始编号的项从这个号开始一个新列表，不给(0)就接着同一级的前一项编：`Numbered(0, 5)`、`Numbered`、`Numbered` 是 5、6、7,后面再来一个 `Numbered(0, 1)` 又是 1;内层的项跟在外层的项后面从 1 开始。
 - **制表位**:`Tab(位置, 对齐, 前导符)`，比如目录行用 `Tab(300, rtaRight, rtlDot)`。
 - **链接和书签**:`Link(文字, 地址)`——文字在前，按页面的阅读顺序，和 `Text` 一样；控件的 `InsertLink(地址, 文字)` 地址在前，因为文字可以不给——`Bookmark(名字)`(一个点)、`BookmarkStart` / `BookmarkEnd`(一段范围)。指向 `'#名字'` 的链接点了就跳到那个书签，不用写代码(见 §7)。
 - **图片**:`Picture` 可以来自 `TGraphic`、文件、流、图像列表加下标,`PictureResource` 来自程序的资源；大小用磅，给 0 就是它自己的大小(按 96 dpi 算像素)。PNG 和 JPEG 原样保存字节，其他格式转成 PNG。
