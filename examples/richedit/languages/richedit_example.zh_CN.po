@@ -1332,3 +1332,81 @@ msgstr "合计"
 #: utablesample.rstsafter
 msgid "A paragraph after the table."
 msgstr "表格后面的段落。"
+
+#: utablesample.rstsmerged
+msgid "Merged cells"
+msgstr "合并的单元格"
+
+#: utablesample.rstsmergedabout
+msgid "Its first row is one cell over three columns, and \"Morning\" covers two rows. Select cells and use Merge Cells, or put the caret in a merged cell and use Split Cells."
+msgstr "第一行是一个跨三列的单元格，“上午”跨两行。选中几个单元格试试“合并单元格”，或者把光标放进合并过的单元格试试“拆分单元格”。"
+
+#: utablesample.rststime
+msgid "Time"
+msgstr "时间"
+
+#: utablesample.rstsdays
+msgid "Monday to Wednesday"
+msgstr "周一到周三"
+
+#: utablesample.rstsmorning
+msgid "Morning"
+msgstr "上午"
+
+#: utablesample.rstsafternoon
+msgid "Afternoon"
+msgstr "下午"
+
+#: utablesample.rstsreading
+msgid "Reading"
+msgstr "阅读"
+
+#: utablesample.rstswriting
+msgid "Writing"
+msgstr "写作"
+
+#: utablesample.rstsdrawing
+msgid "Drawing"
+msgstr "绘画"
+
+#: utablesample.rstsmusic
+msgid "Music"
+msgstr "音乐"
+
+#: utablesample.rstssport
+msgid "Sport"
+msgstr "体育"
+
+#: utablesample.rstsscience
+msgid "Science"
+msgstr "科学"
+
+#: utablesample.rstsfree
+msgid "Free time"
+msgstr "自由活动"
+
+# --- usplitform.lfm captions/text/hints (msgid = the English source) ---
+
+#: tsplitform.caption
+msgid "Split Cells"
+msgstr "拆分单元格"
+
+#: tsplitform.bar.caption
+msgid "Split Cells"
+msgstr "拆分单元格"
+
+#: tsplitform.lblcolumns.caption
+msgid "Number of &columns:"
+msgstr "列数(&C)："
+
+#: tsplitform.lblrows.caption
+msgid "Number of &rows:"
+msgstr "行数(&R)："
+
+#: tsplitform.btnok.caption
+msgid "OK"
+msgstr "确定"
+
+#: tsplitform.btncancel.caption
+msgid "Cancel"
+msgstr "取消"

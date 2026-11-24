@@ -576,6 +576,28 @@ object MainForm: TMainForm
         StyleClass = 'ghost'
         OnColorChanged = SwatchColorChanged
       end
+      object BtnMergeCells: TTySpeedButton
+        Left = 1020
+        Top = 4
+        Width = 28
+        Action = ActMergeCells
+        ShowHint = True
+        StyleClass = 'ghost'
+        IconFont = LucideFont
+        GlyphName = 'table-cells-merge'
+        ShowCaption = False
+      end
+      object BtnSplitCell: TTySpeedButton
+        Left = 1050
+        Top = 4
+        Width = 28
+        Action = ActSplitCell
+        ShowHint = True
+        StyleClass = 'ghost'
+        IconFont = LucideFont
+        GlyphName = 'table-cells-split'
+        ShowCaption = False
+      end
     end
     object Ruler: TTyRichEditRuler
       Left = 0
@@ -1251,6 +1273,15 @@ object MainForm: TMainForm
       OnExecute = ActShadingChooseExecute
       OnUpdate = ActShadingNoneUpdate
     end
+    object ActMergeCells: TTyRichEditMergeCells
+      Category = 'Rich edit'
+      RichEdit = Editor
+    end
+    object ActSplitCell: TTyRichEditSplitCell
+      Category = 'Rich edit'
+      RichEdit = Editor
+      OnChooseSize = SplitChooseSize
+    end
     object ActTableProperties: TTyRichEditTableProperties
       Category = 'Rich edit'
       RichEdit = Editor
@@ -1594,6 +1625,15 @@ object MainForm: TMainForm
           Action = ActSelectCell
         end
       end
+      object MnuSepMerge: TMenuItem
+        Caption = '-'
+      end
+      object MnuMergeCells: TMenuItem
+        Action = ActMergeCells
+      end
+      object MnuSplitCell: TMenuItem
+        Action = ActSplitCell
+      end
       object MnuSepTbl1: TMenuItem
         Caption = '-'
       end
@@ -1865,6 +1905,12 @@ object MainForm: TMainForm
       object PopClearCells: TMenuItem
         Action = ActClearCells
       end
+    end
+    object PopMergeCells: TMenuItem
+      Action = ActMergeCells
+    end
+    object PopSplitCell: TMenuItem
+      Action = ActSplitCell
     end
     object PopTblCellAlign: TMenuItem
       Caption = 'Cell Ali&gnment'

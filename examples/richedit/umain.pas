@@ -15,6 +15,8 @@ unit umain;
     dragging them formats the paragraphs;
   - the Table menu, grouped as Word groups it: Insert (a table, rows, columns), Delete (the
     table, columns, rows, the cells' contents), Select (the table, a column, a row, a cell),
+    Merge Cells and Split Cells... (usplitform asks the columns and rows: 2 x 1, or what a
+    merged cell covers, to split it back),
     AutoFit (a column to its contents, the table to the window, rows and columns evenly), the
     cells' vertical alignment, the table's alignment, the ten border presets, the shading and
     Table Properties (utableform: a form of the example's own that the action asks through its
@@ -56,9 +58,10 @@ uses
   tyControls.ComboBox, tyControls.FontComboBox, tyControls.FontSizeComboBox,
   tyControls.ColorButton, tyControls.StatusBar, tyControls.Dialogs, tyControls.Dialogs.Color,
   tyControls.Dialogs.FileDialog, tyControls.RichEdit.Model, tyControls.RichEdit.Attrs,
-  tyControls.RichEdit.Text, tyControls.RichEdit.Layout, tyControls.ImageCollection,
+  tyControls.RichEdit.Text, tyControls.RichEdit.Layout, tyControls.RichEdit.Grid,
+  tyControls.ImageCollection,
   tyControls.RichEdit, tyControls.RichEdit.Ruler, tyControls.RichEdit.Actions,
-  ulinkform, ubookmarkform, uviewerform, upageform, utableform, utablesample;
+  ulinkform, ubookmarkform, uviewerform, upageform, utableform, utablesample, usplitform;
 
 type
   TMainForm = class(TTyForm)
@@ -346,6 +349,15 @@ type
     BtnBorders: TTyToolButton;
     BtnShading: TTySpeedButton;
     ShadingSwatch: TTyColorButton;
+    BtnMergeCells: TTySpeedButton;
+    BtnSplitCell: TTySpeedButton;
+    ActMergeCells: TTyRichEditMergeCells;
+    ActSplitCell: TTyRichEditSplitCell;
+    MnuSepMerge: TMenuItem;
+    MnuMergeCells: TMenuItem;
+    MnuSplitCell: TMenuItem;
+    PopMergeCells: TMenuItem;
+    PopSplitCell: TMenuItem;
     ActSelectCell: TTyRichEditSelectCell;
     ActSelectRow: TTyRichEditSelectRow;
     ActSelectColumn: TTyRichEditSelectColumn;
@@ -495,6 +507,8 @@ type
     procedure ReplaceReplaced(Sender: TObject; ACount: Integer);
     procedure TableChooseSize(Sender: TObject; var ARows, AColumns: Integer;
       var AInsert: Boolean);
+    procedure SplitChooseSize(Sender: TObject; var ARows, AColumns: Integer;
+      var ASplit: Boolean);
     procedure BorderBeforeExecute(Sender: TObject; var APreset: TTyRichBorderPreset;
       var ABorder: TTyRichBorder; var AAllow: Boolean);
     procedure ActShadingNoneExecute(Sender: TObject);
@@ -842,6 +856,8 @@ begin
   PopTblDelete.Visible := t;
   PopTblCellAlign.Visible := t;
   PopTblAutoFit.Visible := t;
+  PopMergeCells.Visible := t;
+  PopSplitCell.Visible := t;
   PopTableProperties.Visible := t;
 end;
 
@@ -1075,6 +1091,36 @@ begin
     AInsert := False;
     Tell(rsTableBadSize);
   end;
+end;
+
+{ Split Cells asks here: the split form, starting from 2 x 1 - or, for a merged cell, from the
+  columns and rows it covers (the table's grid says), so OK splits it back. }
+procedure TMainForm.SplitChooseSize(Sender: TObject; var ARows, AColumns: Integer;
+  var ASplit: Boolean);
+var
+  pos: TTyRichPos;
+  r, c: Integer;
+  grid: TTyRichGrid;
+  cell: TTyRichGridCell;
+begin
+  if Editor.CaretCell(pos, r, c) then
+  begin
+    grid := Editor.TableGrid(pos);
+    try
+      if grid <> nil then
+      begin
+        cell := grid.CellOf(r, c);
+        if (cell.ColSpan > 1) or (cell.RowSpan > 1) then
+        begin
+          AColumns := cell.ColSpan;
+          ARows := cell.RowSpan;
+        end;
+      end;
+    finally
+      grid.Free;
+    end;
+  end;
+  ASplit := AskSplit(AColumns, ARows);
 end;
 
 function TMainForm.MaySetAside: Boolean;

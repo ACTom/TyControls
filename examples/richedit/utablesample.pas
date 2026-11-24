@@ -4,8 +4,9 @@ unit utablesample;
   builder (TTyRichBuilder), as the documentation's example in "Tables" shows it, and put in as
   a new document (SetContent), ready to edit: a shaded header row, an outline thicker than the
   lines inside, the table centred, a last row of a fixed height and its cells' content in the
-  middle of them. Its text is the example's resource strings, so it reads in the language the
-  example runs in. }
+  middle of them - and a second table with merged cells: a header cell over three columns and
+  a side cell over two rows, made with the builder's Cell(AColSpan, ARowSpan). Its text is the
+  example's resource strings, so it reads in the language the example runs in. }
 
 {$mode objfpc}{$H+}
 
@@ -17,6 +18,9 @@ uses
 
 { The price table into B: four columns, a header, three items and a total. }
 procedure AddPriceTable(B: TTyRichBuilder);
+
+{ The timetable into B: a header cell over three columns, a side cell over two rows. }
+procedure AddMergedTable(B: TTyRichBuilder);
 
 { The whole sample - a heading, a line about the table, the table, a line after it - as Rich's
   new content. }
@@ -37,6 +41,21 @@ resourcestring
   rsTsNotes   = 'Notebook';
   rsTsTotal   = 'Total';
   rsTsAfter   = 'A paragraph after the table.';
+  rsTsMerged  = 'Merged cells';
+  rsTsMergedAbout = 'Its first row is one cell over three columns, and "Morning" covers two ' +
+                'rows. Select cells and use Merge Cells, or put the caret in a merged cell and ' +
+                'use Split Cells.';
+  rsTsTime    = 'Time';
+  rsTsDays    = 'Monday to Wednesday';
+  rsTsMorning = 'Morning';
+  rsTsAfternoon = 'Afternoon';
+  rsTsReading = 'Reading';
+  rsTsWriting = 'Writing';
+  rsTsDrawing = 'Drawing';
+  rsTsMusic   = 'Music';
+  rsTsSport   = 'Sport';
+  rsTsScience = 'Science';
+  rsTsFree    = 'Free time';
 
 implementation
 
@@ -87,6 +106,24 @@ begin
   B.EndTable;
 end;
 
+{ This procedure is the documentation's example of merged cells ("Tables", docs/controls/
+  richedit.md), word for word: kept here so that it is compiled with the example. }
+procedure AddMergedTable(B: TTyRichBuilder);
+const
+  Shade = TColor($00F7EBDD);            // the price table's light blue
+begin
+  B.Table([1700, 2000, 2000, 2000]).TableAlign(rraCenter);
+  // the first row: a cell, then one cell over the other three columns
+  B.Cell.Shading(Shade).Bold.Text(rsTsTime).Reset;
+  B.Cell(3).Shading(Shade).Bold.Align(paraCenter).Text(rsTsDays).Reset;
+  // "Morning" covers this row and the next; the next row's Cell calls skip its place
+  B.Row.Cell(1, 2).CellVAlign(rcvCenter).Text(rsTsMorning);
+  B.Cell.Text(rsTsReading).Cell.Text(rsTsWriting).Cell.Text(rsTsDrawing);
+  B.Row.Cell.Text(rsTsMusic).Cell.Text(rsTsSport).Cell.Text(rsTsScience);
+  B.Row.Cell.Text(rsTsAfternoon).Cell(3).Align(paraCenter).Text(rsTsFree);
+  B.EndTable;
+end;
+
 procedure ShowTableSample(Rich: TTyRichEdit);
 var
   B: TTyRichBuilder;
@@ -97,6 +134,10 @@ begin
     B.Paragraph.SpaceAfter(6).Text(rsTsAbout);
     AddPriceTable(B);
     B.Paragraph.SpaceBefore(6).Text(rsTsAfter);
+    B.Paragraph.SpaceBefore(12).Font('', 12).Bold.Text(rsTsMerged).Reset;
+    B.Paragraph.SpaceAfter(6).Text(rsTsMergedAbout);
+    AddMergedTable(B);
+    B.Paragraph;
     Rich.SetContent(B);
   finally
     B.Free;
