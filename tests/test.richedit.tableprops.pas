@@ -1126,7 +1126,8 @@ end;
   each cell; an edit of another property of a cell keeps every word. }
 procedure TTyRichTablePropsTest.TestUnknownWordsKeepTheirPlace;
 const
-  Rtf = '{\rtf1\ansi{\fonttbl{\f0 Arial;}}' +
+  // (a paragraph before the table: its definition is read as a body's words)
+  Rtf = '{\rtf1\ansi{\fonttbl{\f0 Arial;}}\pard before\par' +
     '\trowd\trgaph108\trfoo5\clbar1\clbrdrb\brdrs\brdrw10\clzed\cellx2000\xyzzy3\clqq9' +
     '\clbrdrt\brdrnone\cellx4000\trqux7\zork2 \pard\intbl a\cell b\cell\row\pard after\par}';
   Order: array[0..6] of string = ('\trfoo5', '\clbar1', '\clzed', '\cellx2000', '\xyzzy3',
@@ -1178,6 +1179,21 @@ begin
       k := Pos('\cellx', def);
     end;
     AssertEquals('the new row: two \cellx', 2, n);
+  finally
+    d.Free;
+  end;
+  // read whole at once (the reader's other path): the same definition
+  d := LoadDoc(BytesOf(Rtf), True);
+  try
+    tp := TablePos(d);
+    d.BeginRead;
+    try
+      row := d.CellAt(d.Text.ParaOfPos(tp)).Row;
+      AssertTrue('read whole: to the last \cellx', Pos('\cellx4000', row.RawFormat) > 0);
+      AssertTrue('read whole: the word between the cells in it', Pos('\xyzzy3', row.RawFormat) > 0);
+    finally
+      d.EndRead;
+    end;
   finally
     d.Free;
   end;
