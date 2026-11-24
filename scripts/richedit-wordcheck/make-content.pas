@@ -64,6 +64,16 @@ begin
   ARich.SelLength := 0;
 end;
 
+{ The size the control shows the text at the selection in, as Word prints a size. }
+function ShownSize(ARich: TTyRichEdit): string;
+var
+  fs: TFormatSettings;
+begin
+  fs := DefaultFormatSettings;
+  fs.DecimalSeparator := '.';
+  Result := FormatFloat('0.##', ARich.SelAttributes.SizeF, fs);
+end;
+
 procedure Must(ACond: Boolean; const AWhat: string);
 begin
   if not ACond then
@@ -172,6 +182,11 @@ begin
     finally
       B.Free;
     end;
+    // text with no size of its own: Word must show it at the size the control shows it in
+    SelectText(R, 'Body of section two, line 1.');
+    Want('para=Body of section two, line 1.|rule=0|ls=12|before=0|after=0|shade=auto|align=0|size='
+      + ShownSize(R) + '|bold=0');
+    Say('the document''s own size: ' + ShownSize(R));
     SaveAll(R, 'built');
   finally
     R.Free;
@@ -237,6 +252,9 @@ begin
     Want('nolink=http://gone.example/');
     Want('links=4');
     Want('bookmarks=3');
+    SelectText(R, 'Second paragraph holds the');
+    Want('para=Second paragraph holds the target heading.|rule=0|ls=12|before=0|after=0|shade=auto|align=0|size='
+      + ShownSize(R) + '|bold=0');
     SaveAll(R, 'edited');
   finally
     R.Free;
