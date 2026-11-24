@@ -36,6 +36,7 @@ type
     procedure TestTheLayoutShowsWhatWasSet;
     procedure TestALineStyleNotDrawnHereIsKept;
     procedure TestUnknownWordsKeepTheirPlace;
+    procedure TestOldRowVersionsGoWithWhatHeldThem;
   end;
 
 implementation
@@ -1173,6 +1174,68 @@ begin
       k := Pos('\cellx', def);
     end;
     AssertEquals('the new row: two \cellx', 2, n);
+  finally
+    d.Free;
+  end;
+end;
+
+{ A row version an edit made lives as long as something refers to it: ten edits of a whole
+  column keep ten versions of every row for their undo steps; the steps cleared (or trimmed
+  by MaxUndoBytes), only the rows of now are left beside the ones the reader added - and the
+  table's size and the history's byte count say what they hold. }
+procedure TTyRichTablePropsTest.TestOldRowVersionsGoWithWhatHeldThem;
+const
+  Rows = 500;
+  Edits = 10;
+var
+  d: TTyRichDocument;
+  src: RawByteString;
+  r, k: Integer;
+  t: TTyRichTable;
+  tp: TTyRichPos;
+  size1, size2: Int64;
+begin
+  src := '{\rtf1\ansi{\fonttbl{\f0 Arial;}}';
+  for r := 0 to Rows - 1 do
+    src := src + '\trowd\trgaph108\cellx1440\cellx2880\cellx4320\pard\intbl a\cell b\cell c\cell\row';
+  src := src + '\pard after\par}';
+  d := LoadDoc(BytesOf(src), True);
+  try
+    tp := TablePos(d);
+    for k := 1 to Edits do
+      AssertTrue('shaded', Exec(d, TTyRichSetCellProps.Create(tp, 0, 1, Rows - 1, 1,
+        Shading(RGBToColor(k * 20, 200, 100)))));
+    d.BeginRead;
+    try
+      t := d.TableAt(d.Text.ParaOfPos(tp));
+      AssertTrue(Format('the versions the steps hold (%d)', [t.LiveRowCount]),
+        t.LiveRowCount >= Rows * (Edits + 1));
+      size1 := t.MemSize;
+    finally
+      d.EndRead;
+    end;
+    AssertTrue('the history counts them', d.HistoryBytes > Int64(Rows) * Edits * 100);
+    d.ClearUndo;
+    d.BeginRead;
+    try
+      t := d.TableAt(d.Text.ParaOfPos(tp));
+      AssertEquals('the steps gone: the rows of now and the reader''s', 2 * Rows, t.LiveRowCount);
+      size2 := t.MemSize;
+    finally
+      d.EndRead;
+    end;
+    AssertTrue(Format('its size says so (%d to %d)', [size1, size2]), size2 * 3 < size1);
+    // a history held to a size: the versions it no longer holds go
+    d.MaxUndoBytes := 1;
+    for k := 1 to Edits do
+      Exec(d, TTyRichSetCellProps.Create(tp, 0, 1, Rows - 1, 1, Shading(RGBToColor(k * 20, 100, 200))));
+    d.BeginRead;
+    try
+      t := d.TableAt(d.Text.ParaOfPos(tp));
+      AssertTrue(Format('held to the history''s size (%d)', [t.LiveRowCount]), t.LiveRowCount <= 4 * Rows);
+    finally
+      d.EndRead;
+    end;
   finally
     d.Free;
   end;

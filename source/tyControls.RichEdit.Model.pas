@@ -612,6 +612,15 @@ type
     { Its edges are not what RawFormat says (an edit moved them): written from the model
       (Edited) - the \cellx and Word's preferred widths made again from CellEdges. }
     FEdgesMoved: Boolean;
+    { A row an edit made (Freeable) lives as long as something refers to it - the table's
+      rows of now (FRows), an undo step that holds it (FRowsOld / FRowsNew), a paragraph
+      value whose cell is one of its cells - and no longer: FRefs counts them, the last
+      release frees it (its slot in the table's FOwned, FOwnedAt, goes nil). The rows a reader
+      added are the table's for its life (a reader that gives paragraphs later finds them by
+      their number). }
+    FRefs: Integer;
+    FFreeable: Boolean;
+    FOwnedAt: Integer;
     // (see Format, BaseFormat; nil until asked: decoded from FRawFormat then)
     FFormat, FBase: TTyRichRowFormat;
     function GetCell(AIndex: Integer): TTyRichCell;
@@ -698,6 +707,9 @@ type
       them). }
     function AddedRow(AIndex: Integer): TTyRichRow;
     function AddedRowCount: Integer;
+    { The row objects alive in it: those a reader added and the versions an edit made that
+      something still refers to (the rows of now, an undo step, a paragraph value). }
+    function LiveRowCount: Integer;
     { Sets the format of the row AddRow made last as its bytes say it (TTyRichRow.BaseFormat;
       the reader decodes it with its file's colours). The table takes a reference of its
       own. Only before a paragraph uses the table. }
@@ -4071,15 +4083,48 @@ destructor TTyRichTable.Destroy;
 var
   i: Integer;
 begin
+  // (a row freed before is a nil slot)
   for i := 0 to FOwnedCount - 1 do FOwned[i].Free;
   inherited Destroy;
+end;
+
+function TTyRichTable.LiveRowCount: Integer;
+var
+  i: Integer;
+begin
+  Result := 0;
+  for i := 0 to FOwnedCount - 1 do
+    if FOwned[i] <> nil then Inc(Result);
 end;
 
 procedure OwnRow(T: TTyRichTable; R: TTyRichRow);
 begin
   if T.FOwnedCount = Length(T.FOwned) then SetLength(T.FOwned, T.FOwnedCount * 2 + 4);
   T.FOwned[T.FOwnedCount] := R;
+  R.FOwnedAt := T.FOwnedCount;
   Inc(T.FOwnedCount);
+end;
+
+// one more refers to row R (an edit's row; the others are their table's for its life)
+procedure RowAddRef(R: TTyRichRow); inline;
+begin
+  if (R <> nil) and R.FFreeable then Inc(R.FRefs);
+end;
+
+{ One less refers to row R: the last one frees it - never a row that is still one of its
+  table's rows of now. }
+procedure RowRelease(R: TTyRichRow);
+var
+  t: TTyRichTable;
+begin
+  if (R = nil) or not R.FFreeable or (R.FRefs <= 0) then Exit;
+  Dec(R.FRefs);
+  if R.FRefs > 0 then Exit;
+  t := R.FTable;
+  if (R.FIndex >= 0) and (R.FIndex <= High(t.FRows)) and (t.FRows[R.FIndex] = R) then Exit;
+  if (R.FOwnedAt >= 0) and (R.FOwnedAt < t.FOwnedCount) and (t.FOwned[R.FOwnedAt] = R) then
+    t.FOwned[R.FOwnedAt] := nil;
+  R.Free;
 end;
 
 { A row of T that is in none of its places yet (Index -1): an edit's new row or a row's new
@@ -4094,6 +4139,7 @@ begin
     raise ETyRichModel.Create('A row needs at least one cell');
   Result := TTyRichRow.Create;
   OwnRow(T, Result);
+  Result.FFreeable := True;
   Result.FTable := T;
   Result.FIndex := -1;
   Result.FRawFormat := ARaw;
@@ -4116,7 +4162,13 @@ end;
 procedure ReplaceRowRange(T: TTyRichTable; AAt, AOldCount: Integer; const ANew: array of TTyRichRow);
 var
   n, d, tail, i: Integer;
+  old: array of TTyRichRow;
 begin
+  // (the rows that come in are referred to by the table first, those that go let go last)
+  for i := 0 to High(ANew) do RowAddRef(ANew[i]);
+  old := nil;
+  SetLength(old, AOldCount);
+  for i := 0 to AOldCount - 1 do old[i] := T.FRows[AAt + i];
   n := Length(T.FRows);
   d := Length(ANew) - AOldCount;
   tail := n - AAt - AOldCount;
@@ -4135,6 +4187,7 @@ begin
   for i := 0 to High(ANew) do T.FRows[AAt + i] := ANew[i];
   if d = 0 then n := AAt + Length(ANew) else n := Length(T.FRows);
   for i := AAt to n - 1 do T.FRows[i].FIndex := i;
+  for i := 0 to High(old) do RowRelease(old[i]);
 end;
 
 function TTyRichTable.AddRow(ACellCount: Integer; const ARawFormat: RawByteString): TTyRichRow;
@@ -4150,6 +4203,8 @@ begin
   if FAdded < FOwnedCount then
     raise ETyRichModel.Create('A table an edit changed cannot be given rows');
   Result := NewRowIn(Self, ACellCount, ARawFormat, ABoundaries, AHoldsNestedTable, nil, nil);
+  // (the table's for its life: a reader finds it by its number)
+  Result.FFreeable := False;
   Inc(FAdded);
   Result.FIndex := Length(FRows);
   SetLength(FRows, Length(FRows) + 1);
@@ -4215,10 +4270,12 @@ var
   r: TTyRichRow;
 begin
   Result := InstanceSize + Length(FRows) * SizeOf(Pointer) +
-    Length(FColBoundaries) * SizeOf(Integer);
-  for i := 0 to High(FRows) do
+    Length(FColBoundaries) * SizeOf(Integer) + Length(FOwned) * SizeOf(Pointer);
+  // every row alive: of now, and the versions steps and values hold
+  for i := 0 to FOwnedCount - 1 do
   begin
-    r := FRows[i];
+    r := FOwned[i];
+    if r = nil then Continue;
     Inc(Result, r.InstanceSize + Length(r.FRawFormat) + Length(r.FBoundaries) * SizeOf(Integer) +
       Length(r.FCells) * (TTyRichCell.InstanceSize + SizeOf(Pointer)));
   end;
@@ -4231,7 +4288,6 @@ var
   i: Integer;
 begin
   for i := High(FParts) downto 0 do FreeAndNil(FParts[i]);
-  if FRowTable <> nil then FRowTable.Release;
   for i := 0 to FOldCount - 1 do FDoc.ReleaseData(FOldData[i].Data);
   for i := 0 to High(FRemoved.Pieces) do
     if (FRemoved.Pieces[i].Separator <> rsNone) and (FRemoved.Pieces[i].Data <> nil) then
@@ -4240,6 +4296,11 @@ begin
   for i := 0 to FSwapPieceCount - 1 do
     if (FSwapPieces[i].Separator <> rsNone) and (FSwapPieces[i].Data <> nil) then
       FDoc.ReleaseData(TTyRichParaData(FSwapPieces[i].Data));
+  // the row versions the step held (after the values, which may name their cells; before the
+  // table, which frees what is left of its rows with it)
+  for i := 0 to High(FRowsOld) do RowRelease(FRowsOld[i]);
+  for i := 0 to High(FRowsNew) do RowRelease(FRowsNew[i]);
+  if FRowTable <> nil then FRowTable.Release;
   inherited Destroy;
 end;
 
@@ -4976,6 +5037,8 @@ begin
     t.AddRef;
     Inc(t.FParaRefs);
     t.FFrozen := True;
+    // (a value whose cell is one of a row's keeps that row alive)
+    RowAddRef(ACell.FRow);
   end;
   Result.FNext := FFirstData;
   if FFirstData <> nil then FFirstData.FPrev := Result;
@@ -5001,6 +5064,8 @@ begin
   begin
     t := D.FCell.Table;
     Dec(t.FParaRefs);
+    // (the row first: the table's last release frees its rows with it)
+    RowRelease(D.FCell.FRow);
     t.Release;
   end;
   src := D.FSource;
@@ -8500,6 +8565,13 @@ end;
 
 { ---- a table's rows, and its properties ---- }
 
+// the bytes a row object takes
+function RowBytes(R: TTyRichRow): Int64;
+begin
+  Result := R.InstanceSize + Length(R.FRawFormat) + Length(R.FBoundaries) * SizeOf(Integer) +
+    Length(R.FCells) * (TTyRichCell.InstanceSize + SizeOf(Pointer));
+end;
+
 function TTyRichDocument.SpliceRows(ATable: TTyRichTable; AAt, AOldCount: Integer;
   const ANew: array of TTyRichRow; ANewValid: Boolean): TTyRichUndoData;
 var
@@ -8516,12 +8588,17 @@ begin
   for i := 0 to AOldCount - 1 do
   begin
     Result.FRowsOld[i] := ATable.FRows[AAt + i];
+    RowAddRef(Result.FRowsOld[i]);
     Result.FRowsOldIdx[i] := ATable.FRows[AAt + i].FIndex;
+    // (a row the step keeps alive: its bytes are the step's)
+    if Result.FRowsOld[i].FFreeable then
+      Inc(Result.FExtraBytes, RowBytes(Result.FRowsOld[i]));
   end;
   SetLength(Result.FRowsNew, Length(ANew));
   for i := 0 to High(ANew) do
   begin
     Result.FRowsNew[i] := ANew[i];
+    RowAddRef(ANew[i]);
     // a row made for the edit: what the step makes the table keep
     if ANew[i].FIndex < 0 then
       Inc(Result.FExtraBytes, ANew[i].InstanceSize + Length(ANew[i].FBoundaries) * SizeOf(Integer) +

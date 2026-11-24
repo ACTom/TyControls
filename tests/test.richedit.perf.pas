@@ -2425,6 +2425,13 @@ begin
   end;
 end;
 
+function ShadingProps(AColor: TColor): TTyRichCellProps;
+begin
+  Result := Default(TTyRichCellProps);
+  Result.Valid := [rcpShading];
+  Result.Shading := AColor;
+end;
+
 { A table of 10,000 rows: a column's edge moved in every row (the rich edit's own door, what a
   drag's release runs - one command), to the end of the paint after it; and a row's height. }
 procedure TTyRichEditPerfTest.TestAColumnEdgeOfALongTable;
@@ -2433,6 +2440,8 @@ const
   // the suite's line for a whole column's change
   CColumnMs = 150;
 var
+  held, left, i: Integer;
+  tbytes, lbytes: Int64;
   bmp: TBitmap;
   d: TTyRichDocument;
   t: TTyRichText;
@@ -2476,6 +2485,29 @@ begin
     TPerfRich(FRich).PaintInto(bmp);
     dist := Clock - t0;
     Report('table: the rows made alike (DistributeRows), to the end of its paint', dist);
+    { memory: 30 whole-column edits keep their row versions for their undo steps; the steps
+      cleared, they go - the rows of now and the reader's are left }
+    for i := 1 to 30 do
+      d.Execute(TTyRichSetCellProps.Create(t.ParaStart(1), 0, 1, Rows - 1, 1,
+        ShadingProps(RGBToColor(i * 8, 200, 120))));
+    d.BeginRead;
+    try
+      held := d.CellAt(1).Row.Table.LiveRowCount;
+      tbytes := d.CellAt(1).Row.Table.MemSize;
+    finally
+      d.EndRead;
+    end;
+    d.ClearUndo;
+    d.BeginRead;
+    try
+      left := d.CellAt(1).Row.Table.LiveRowCount;
+      lbytes := d.CellAt(1).Row.Table.MemSize;
+    finally
+      d.EndRead;
+    end;
+    WriteLn(Format('TTyRichEditPerfTest: table: 30 whole-column edits hold %d row objects ' +
+      '(%.1f MB); ClearUndo leaves %d (%.1f MB)', [held, tbytes / 1048576, left, lbytes / 1048576]));
+    AssertEquals('the steps gone: the rows of now and the reader''s', 2 * Rows, left);
     AssertTrue(Format('a column in %.1f ms', [col]), col <= CColumnMs);
     AssertTrue(Format('again in %.1f ms', [again]), again <= CColumnMs);
     AssertTrue(Format('a row in %.1f ms', [row]), row <= CKeystrokeMs);
