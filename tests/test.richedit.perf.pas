@@ -105,6 +105,9 @@ function GetProcessMemoryInfo(AProcess: THandle; var ACounters: TTyPerfMemCounte
   ASize: LongWord): LongBool; stdcall; external 'psapi' name 'GetProcessMemoryInfo';
 function GetDiskFreeSpaceExW(ADir: PWideChar; out AAvail, ATotal, AFree: QWord): LongBool;
   stdcall; external 'kernel32' name 'GetDiskFreeSpaceExW';
+// (both -1: the pages the process has not touched lately leave its working set)
+function SetProcessWorkingSetSize(AProcess: THandle; AMin, AMax: PtrUInt): LongBool; stdcall;
+  external 'kernel32' name 'SetProcessWorkingSetSize';
 {$ENDIF}
 
 const
@@ -1718,6 +1721,12 @@ begin
     bmp.PixelFormat := pf32bit;
     bmp.SetSize(FRich.Width, FRich.Height);
     look0 := TyRichKeptPictureLookups;
+    {$IFDEF MSWINDOWS}
+    { The working set the document's: what the heap keeps of the tests before (freed, kept
+      for the next allocations, how much as the allocations before fell) out of it first -
+      what the load and the views use again comes back in as they touch it. }
+    SetProcessWorkingSetSize(GetCurrentProcess, PtrUInt(-1), PtrUInt(-1));
+    {$ENDIF}
     t0 := Clock;
     FRich.LoadFromFile(path);
     TPerfRich(FRich).PaintInto(bmp);
