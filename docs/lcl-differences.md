@@ -200,7 +200,7 @@ uses
 - **域显示它的结果文字。** RTF 文件里的域(超链接、页码、目录:`{\field{\*\fldinst ...}{\fldrslt ...}}`)显示文件里存着的结果，带着它自己的格式——链接按文件里的样子带下划线和颜色，目录按它的段落显示，制表位和点状前导符都在——查找能找到这些文字，跨过域的边界也能找到;纯文本复制、`Text`、`Lines` 和存成纯文本时都包含它们，域的两端不占字符。控件不重新计算域：结果就是保存文件的程序写进去的那样。
 - **域边上的光标。** 域的两端不占地方，方向键也不会在上面多停一下：光标在链接开头时停在链接前面，在链接末尾时停在链接后面，所以在那里打的字落在链接外面，用的是旁边文字的格式(和 Word 一样)。在结果里面光标可以停在任何地方，方便选中一部分来复制。书签的两端和其他什么都不显示的对象也一样被跳过：方向键、Home 和 End、按词移动和双击都当它们不存在(一个词可以穿过它们),Backspace 和 Delete 也跳过它们，留在原处。
 - **结果不能改，整个域可以。** 在结果里打字、删除、回车、粘贴或拖放，都会被拒绝，并通过 `OnEditRefused` 告知原因(代码调用时抛 `ETyRichEdit`)。紧挨在域后面按 Backspace、紧挨在域前面按 Delete,不会只删掉半个域，而是选中整个域，什么也不提示：再按一次就把它删掉。光标在某个域的结果里面时(比如目录条目的页码后面),按这些键就是在结果里编辑，照样被拒绝并告知一次，选区不动。Ctrl+Backspace 和 Ctrl+Delete 也一样：要删的那个词含有域(整个或一部分)时，第一下把这个词连同它碰到的每个域整个选中，什么也不删、不提示，第二下才删掉。选区只包含域的一部分时，删除、Backspace、剪切、打字、输入法、粘贴、拖动移动都不会改动任何东西：选区扩大到把整个域包进来，拒绝的原因只告知一次，下一次操作就作用在选中的内容上。代码里的编辑(`SelText`、文档的命令、格式方法)照旧被拒绝，选区不会扩大。选中整个域可以删除、剪切、复制或移动，撤销会把域原样带回来。字符格式或段落格式作用在含有结果的选区上时，只改其余部分，结果保持原样;选区完全在结果里面时会被拒绝。复制永远不会被拒绝：不管是复制到剪贴板还是按住 Ctrl 拖动，选中了整个域就复制这个域，只选中一部分就只复制那部分文字。在别处编辑后保存，每个域都按文件原来的样子写回。
-- **点击链接**会触发 `OnLinkClick(Sender, AURL, AButton)`,对应 Delphi 的 `TRichEdit.OnLinkClick`:可编辑时是按住 Ctrl 用左键或中键点击,`ReadOnly` 时直接用左键或中键点击，点在链接的文字或链接里的图片上，按下和松开都在同一个链接上，中间没有拖动;右键、禁用的控件、双击的第二下都不算。这样的点击不做别的事(光标不动)。`AURL` 是链接的目标：指向文档里某处的(`\l "name"`)是 `#name`,两者都有时是 `target#name`。控件自己什么也不打开：没有处理程序就什么也不发生。能点的地方指针变成手形，鼠标不动时按下或松开 Ctrl 也会跟着变。子类可以重写 `LinkClickFires` 来改变哪些点击算数;`LinkAtPoint` 给出某一点下面的链接(比如用来显示提示),`GetFieldRange` 给出某个位置所在的域和它的指令。从 Delphi 窗体转过来的处理方法照样挂着;它的第一个参数这里是 `Sender: TObject`(Delphi 是 `TCustomRichEdit`),改这一个词就行。
+- **点击链接**会触发 `OnLinkClick(Sender, AURL, AButton)`,对应 Delphi 的 `TRichEdit.OnLinkClick`:可编辑时是按住 Ctrl 用左键或中键点击,`ReadOnly` 或 `AllowSelection` 为 False 时直接用左键或中键点击，点在链接的文字或链接里的图片上，按下和松开都在同一个链接上，中间没有拖动;右键、禁用的控件、双击的第二下都不算。这样的点击不做别的事(光标不动)。`AURL` 是链接的目标：指向文档里某处的(`\l "name"`)是 `#name`,两者都有时是 `target#name`。控件自己不打开任何地址：没有处理程序就不会有别的事——只有 `#name` 链接接着会被跟到文档里的那个书签(`FollowBookmarkLinks`，默认 True;`OnFollowLink` 可以拦下)，那一行放到视图顶部。能点的地方指针变成手形，鼠标不动时按下或松开 Ctrl 也会跟着变。子类可以重写 `LinkClickFires` 来改变哪些点击算数;`LinkAtPoint` 给出某一点下面的链接(比如用来显示提示),`GetFieldRange` 给出某个位置所在的域和它的指令。从 Delphi 窗体转过来的处理方法照样挂着;它的第一个参数这里是 `Sender: TObject`(Delphi 是 `TCustomRichEdit`),改这一个词就行。
 - **仍作为一个对象保留的**:控件不能这样显示的域——没有结果、结果为空或者结果里什么都显示不出来(只有书签、可选连字符)的、结果里有表格、分节符、页眉、页脚、脚注或批注的、在表格单元格里而结果有段落结束的、嵌套超过八层的——作为一个对象保留它的字节，原样存回;公式、嵌入对象和图形也一样。
 - **粘贴进来的域还是域。** 从别的文档(另一个控件、Word、写字板)粘贴或拖放进来，或者粘贴到新文档里，域还是原来的域：它的指令，它的结果连同结果自己的格式、段落和嵌套的域，链接照样能点。在它自己的文档里，保存时写的是它带来的字节;到了别的文档里，它的字节会把字体和颜色指错，所以保存时围绕结果重新写出这个域：指令按文字写，域自己的状态字(`\fldlock`、`\flddirty`、`\fldedit`、`\fldpriv`)也写上;指令本身的格式和 `\datafield` 不保留。指令里含有别的域或图片的域，只进来它的结果，不带域;结果里的域照样是域。只复制了域的一部分时，进来的是那部分文字。粘贴、拖放或移动到表格单元格里时，结果里有段落结尾的域只进来它的结果(单元格里不放这样的域);结果里能放进单元格的域照样是域——目录进来是一条条条目，每条仍是带页码的链接。
 
@@ -221,10 +221,11 @@ uses
 - **RichMemo 的类型名**:记录、枚举和集合都带本库的前缀(`TTyFontParams`、`TTyParaMetric`、`TTyParaNumbering`、`TTyTabStopList`、`TTyTextModifyMask` ……),`TTabStop` 是 `TTyRichTabStop`。成员保留 RichMemo 的名字(`paLeft`、`tmm_Styles` ……);在同时用了 `RichMemo` 或 `Menus` 的单元里要加限定名。
 - **把 `Integer` 变量传给 `GetStyleRange` 或 `GetParaRange`** 编译不过：改声明为 `TTyRichPos`。
 - **控件不保存的属性**:`Protected`、`Disabled`、`Hidden`、`Link`、`Offset`、`Pitch`、`RevAuthor`、`UseForAllText` 以及 `ConsistentAttributes` 里对应的成员(`caProtected` ……)。RTF 文件里的这些内容按原字节保留，保存时写回。
-- **多行文本框的成员**:控件不是 `TCustomMemo`,所以没有 `WordWrap`(用 `WrapMode`)、`ScrollBars`(需要时自动出现;`ScrollBarAutoHide`)、`Alignment`(按段落设:`Paragraph.Alignment`)、`MaxLength`、`WantReturns`(回车总是新起一段)、`BorderStyle`、`Color` 和 `ParentColor`(颜色来自主题，用 `StyleOverride` 改)、`HideSelection`、`HideScrollBars`、`GetSelTextBuf`、`SetSelTextBuf`;`is TCustomEdit` 判断和 LCL 的标准编辑动作也认不出它，本库自己的动作(`tyControls.RichEdit.Actions`,见下)认得。右键菜单是本库的文本菜单。
+- **多行文本框的成员**:控件不是 `TCustomMemo`,所以没有 `WordWrap`(用 `WrapMode`)、`Alignment`(按段落设:`Paragraph.Alignment`)、`MaxLength`、`WantReturns`(回车总是新起一段)、`BorderStyle`、`Color` 和 `ParentColor`(颜色来自主题，用 `StyleOverride` 改)、`HideSelection`、`HideScrollBars`、`GetSelTextBuf`、`SetSelTextBuf`;`is TCustomEdit` 判断和 LCL 的标准编辑动作也认不出它，本库自己的动作(`tyControls.RichEdit.Actions`,见下)认得。右键菜单是本库的文本菜单。
 - **Delphi 的其他成员**:`OnProtectChange`、`OnResizeRequest`、`OnSaveClipboard`、`EnableURLs`、`ShowURLHint`、`SelectionStreamMode`、`SpellChecking`、`ShowSpellCheckMenu`、`Transparent`、`EditMargins`、`ActiveLineNo`、`ScrollPosition`(用 `ScrollY`,视图顶端的像素位置，可以写入;`ScrollX` 读出水平偏移)、`Print`、`RenderRange`、`PageRect`、`DefaultConverter`、`RegisterConversionFormat` 和 `SetSelTextToFriendlyURL`。
-- **RichMemo 的其他成员**:`SetLink`、`isLink`、`OnLinkAction`、`Print`、`OnPrintAction`、`InDelInline`、`InitParaNumber`、`InitParaBullet`、第二个 `InitTabStopList`、`GetFontParams`、`InitPrintParams` 和 `InitTextUIParams`。
+- **RichMemo 的其他成员**:`isLink`、`OnLinkAction`、`Print`、`OnPrintAction`、`InDelInline`、`InitParaNumber`、`InitParaBullet`、第二个 `InitTabStopList`、`GetFontParams`、`InitPrintParams` 和 `InitTextUIParams`。
 - **替换当前匹配**:用 `SelText :=` 或 `InDelText`。
+- **`SetLink` 不是 RichMemo 的那个。** RichMemo 的 `SetLink(TextStart, TextLength, AIsLink, ALinkRef)` 标记一段范围；这里的 `SetLink(AURL, AText)` 改插入点所在的链接,`InsertLink(AURL, AText)` 用选区新建链接,`RemoveLink` 取消链接(见下面的"新增")。按 RichMemo 的写法调用编译不过。
 - **窗体文件里的 `Lines`。** 富文本不能脱离格式按行保存，所以 `Lines` 不发布：在运行时设置文字或载入文件。
 - **从 Delphi 转换来的窗体**,对下表里 Delphi 的 `TRichEdit` 存过、本控件不发布的每个属性都会报属性不存在。把它们删掉就够了(打开窗体时 IDE 会弹出"Repair LFM file"对话框，选"移除所有无效属性";或者在编辑器里打开这个 .lfm,用"工具 → 在编辑器中检查 LFM 文件")，除非表里写了要改设什么。
 
@@ -232,7 +233,7 @@ uses
 |--------------|------|
 | `Lines.Strings` | 在运行时设置文字或载入文件 |
 | `WordWrap` | `WrapMode`(`False` 对应 `rwmNone`) |
-| `ScrollBars`、`HideScrollBars` | 不用设：滚动条需要时自动出现;`ScrollBarAutoHide` |
+| `ScrollBars` | `ScrollBars`(除 `ssNone` 外，滚动条都只在需要时出现);`HideScrollBars` 不用设,`ScrollBarAutoHide` |
 | `HideSelection` | 不用设：没有焦点时选区照样显示，颜色是主题给的 |
 | `Alignment` | 在运行时按段落设 `Paragraph.Alignment` 或 `ParaAlign` |
 | `MaxLength` | 不用设：没有长度上限 |
@@ -270,8 +271,12 @@ uses
 - **查找和替换**:`FindNext`、`FindNextAsync`、`ReplaceAll`(三种形式)、`ReplaceAllAsync`、`CancelFind`、`FindRunning`、`OnFindProgress`、`OnFindDone`、`OnReplaceDone`。一次替换算一步撤销，不受 `ReadOnly` 限制。
 - **`Action` 是发布的**,和 `TTyMemo` 一样(Delphi 的 `TRichEdit` 和 LCL 的 `TMemo` 不发布它):关联了动作时，点击编辑区会执行它;它的 `Caption` 不会进入文字。
 - **大文件**:RTF 文件在后台读入(`Loading`、`FinishLoading`、`CancelLoad`、`OnLoadProgress`);`OnSaveProgress` 报告保存进度。
-- **事件和设置**:`OnModifiedChange`、`OnEditRefused`(用户的编辑被文档拒绝)、`OnZoomChange`、`OnFallbackFont`、`WrapMode`、`TextEncoding`、`TextCodePage`、`ScrollBarAutoHide`。
+- **事件和设置**:`OnModifiedChange`、`OnEditRefused`(用户的编辑被文档拒绝)、`OnZoomChange`、`OnFallbackFont`、`WrapMode`、`TextEncoding`、`TextCodePage`、`ScrollBarAutoHide`、`ScrollBars`(`ssNone`：没有滚动条；其他值：内容放不下时才出现)。
 - **文档本身**:`Document`(命令、撤销历史、格式),给需要的不只是控件成员的代码用。
 - **用户改格式的门**:`ApplyCharacterFormat` 和 `ApplyParagraphFormat` 像用户的编辑一样改格式(只读或禁用时什么都不做，被拒绝时通过 `OnEditRefused` 告诉，不抛异常),`SelAttributes` 和 `Paragraph` 则是程序的写(不管只读，被拒绝时抛异常);`CanFormatCharacters`、`CanFormatParagraphs` 事先告诉会不会被接受。
-- **动作**:Delphi 的 `TRichEditBold`、`TRichEditItalic`、`TRichEditUnderline`、`TRichEditStrikeOut`、`TRichEditBullets`、`TRichEditAlignLeft`、`TRichEditAlignRight`、`TRichEditAlignCenter`(Vcl.ExtActns)在 `tyControls.RichEdit.Actions` 里是 `TTyRichEditBold` …… `TTyRichEditAlignCenter`,另外还有剪切、复制、粘贴、全选、字体、字号、文字颜色和突出显示、清除格式、上标、下标、两端对齐、编号、缩进、行距、图片、表格和它的行列、查找、替换、撤销、重做、缩放;见 [richedit.md](controls/richedit.md)。
+- **链接和书签**:`InsertLink`、`SetLink`、`RemoveLink`、`CanInsertLink`、`CanEditLink`、`LinkAtSelection`;`BookmarkCount`、`BookmarkName`、`FindBookmark`、`GoToBookmark`、`AddBookmark`、`DeleteBookmark`、`RenameBookmark`、`CanEditBookmarks`;`FollowBookmarkLinks`、`OnFollowLink`;`OnObjectClick`、`OnObjectDblClick`、`ObjectAtPoint`(见 [richedit.md](controls/richedit.md) §7)。
+- **用代码搭内容**:`NewBuilder` 和 `TTyRichBuilder`(`tyControls.RichEdit.Builder`)、`SetContent`、`AppendContent`、`InsertContent`(那一页的 §5)。
+- **当展示页用**:`ReadOnlyCaret`、`AllowSelection`、`FocusOnClick`、`AutoHeight`、`ContentHeight`、`ContentWidth`、`OnContentSizeChange`(那一页的 §6);Delphi 的 `TRichEdit` 没有这些开关。
+- **更多段落和文档成员**:`Paragraph.ListLevel`、`ListStart`、`BulletText`、`Shading`、`LineSpacingMultiple`、带对齐方式和前导符的 `SetTab`;`SelAttributes.SizeF`(半磅);`ApplyParagraphSpacing`、`SetPageSetup`、`SetDefaultFormats`、`DocumentColor`。
+- **动作**:Delphi 的 `TRichEditBold`、`TRichEditItalic`、`TRichEditUnderline`、`TRichEditStrikeOut`、`TRichEditBullets`、`TRichEditAlignLeft`、`TRichEditAlignRight`、`TRichEditAlignCenter`(Vcl.ExtActns)在 `tyControls.RichEdit.Actions` 里是 `TTyRichEditBold` …… `TTyRichEditAlignCenter`,另外还有剪切、复制、粘贴、全选、字体、字号、文字颜色和突出显示、清除格式、上标、下标、两端对齐、编号、缩进、行距、段落间距、图片、表格和它的行列、链接、查找、替换、撤销、重做、缩放;见 [richedit.md](controls/richedit.md)。
 - **标尺**:`TTyRichEditRuler`(`tyControls.RichEdit.Ruler`)显示并拖动缩进和制表位;Delphi 没有。
