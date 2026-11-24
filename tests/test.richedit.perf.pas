@@ -72,6 +72,8 @@ type
     procedure TestATableCellPropertyAndARowInALongTable;
     procedure TestAScreenOfALongStyledTable;
     procedure TestAColumnEdgeOfALongTable;
+    procedure TestMergeAndSplitInALongTable;
+    procedure TestKeysThroughALongTableWithSpans;
   private
     procedure SaveBesideFields(ABytes: Int64; ANest: Integer);
   end;
@@ -82,7 +84,8 @@ uses
   Math, LCLType, Controls, BGRABitmap, BGRABitmapTypes, tyControls.RichEdit.Text,
   tyControls.RichEdit.RtfRead, tyControls.RichEdit.RtfWrite, tyControls.RichEdit.Model,
   tyControls.RichEdit.Commands, tyControls.RichEdit.Find, tyControls.RichEdit.Ruler,
-  tyControls.RichEdit.Actions, tyControls.RichEdit.Builder, tyControls.RichEdit.TableProps
+  tyControls.RichEdit.Actions, tyControls.RichEdit.Builder, tyControls.RichEdit.TableProps,
+  tyControls.RichEdit.Grid
   {$IFDEF LCLWin32}, test.richedit.dropacross{$ENDIF};
 
 {$IFDEF MSWINDOWS}
@@ -2520,6 +2523,111 @@ begin
     AssertTrue(Format('a column in %.1f ms', [col]), col <= CColumnMs);
     AssertTrue(Format('again in %.1f ms', [again]), again <= CColumnMs);
     AssertTrue(Format('a row in %.1f ms', [row]), row <= CKeystrokeMs);
+  finally
+    bmp.Free;
+  end;
+end;
+
+{ A table of 10,000 rows of three cells: two cells of a row in the middle merged with the two
+  below them (the door, its content moved in), then split back - each to the end of its paint;
+  the rows they touch, not the table, are what it costs. No grid is made for either but the
+  split's (it asks the grid for the cell's columns). }
+procedure TTyRichEditPerfTest.TestMergeAndSplitInALongTable;
+const
+  Rows = 10000;
+var
+  bmp: TBitmap;
+  d: TTyRichDocument;
+  t: TTyRichText;
+  k: Integer;
+  t0, merge, split: Double;
+  n: Int64;
+begin
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf32bit;
+    bmp.SetSize(FRich.Width, FRich.Height);
+    FRich.Lines.Text := 'before' + LineEnding + 'after';
+    d := FRich.Document;
+    t := d.Text;
+    AssertTrue('a long table', d.Execute(TTyRichInsertTable.Create(t.ParaStart(1), Rows, 3)));
+    k := 1 + 3 * (Rows div 2);
+    d.Execute(TTyRichInsertText.Create(t.ParaStart(k), 'a'));
+    d.Execute(TTyRichInsertText.Create(t.ParaStart(k + 4), 'b'));
+    FRich.SelStart := t.ParaStart(k);
+    TPerfRich(FRich).PaintInto(bmp);
+    // cells 0 .. 1 of this row and the next
+    FRich.SelStart := t.ParaStart(k);
+    FRich.SelLength := t.ParaStart(k + 4) + t.ParaLength(k + 4) + 1 - t.ParaStart(k);
+    n := TyRichGridBuildCount;
+    t0 := Clock;
+    AssertTrue('merged', FRich.MergeCells);
+    TPerfRich(FRich).PaintInto(bmp);
+    merge := Clock - t0;
+    AssertEquals('no grid made for a merge', n, TyRichGridBuildCount);
+    Report(Format('table of %d rows: 2 x 2 cells merged, to the end of its paint', [Rows]), merge);
+    t0 := Clock;
+    AssertTrue('split back', FRich.SplitCell(2, 2));
+    TPerfRich(FRich).PaintInto(bmp);
+    split := Clock - t0;
+    Report('table: the merged cell split back (its grid read), to the end of its paint', split);
+    AssertTrue(Format('the merge in %.1f ms', [merge]), merge <= CKeystrokeMs);
+    AssertTrue(Format('the split in %.1f ms', [split]), split <= CScrollMs);
+  finally
+    bmp.Free;
+  end;
+end;
+
+{ A table of 10,000 rows of three cells with a cell over two rows in its middle: Down through
+  the span and Up into it, and a character typed in it, each to the end of its paint - no grid
+  made by any of them. }
+procedure TTyRichEditPerfTest.TestKeysThroughALongTableWithSpans;
+const
+  Rows = 10000;
+var
+  bmp: TBitmap;
+  d: TTyRichDocument;
+  t: TTyRichText;
+  k: Integer;
+  t0, down, up, key: Double;
+  n: Int64;
+begin
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf32bit;
+    bmp.SetSize(FRich.Width, FRich.Height);
+    FRich.Lines.Text := 'before' + LineEnding + 'after';
+    d := FRich.Document;
+    t := d.Text;
+    AssertTrue('a long table', d.Execute(TTyRichInsertTable.Create(t.ParaStart(1), Rows, 3)));
+    k := 1 + 3 * (Rows div 2);
+    FRich.SelStart := t.ParaStart(k);
+    FRich.SelLength := t.ParaStart(k + 3) + 1 - t.ParaStart(k);
+    AssertTrue('a span over two rows', FRich.MergeCells);
+    FRich.SelStart := t.ParaStart(k);
+    TPerfRich(FRich).PaintInto(bmp);
+    n := TyRichGridBuildCount;
+    t0 := Clock;
+    TPerfRich(FRich).Key(VK_DOWN, []);
+    TPerfRich(FRich).PaintInto(bmp);
+    down := Clock - t0;
+    AssertEquals('Down: past the span', k + 6, t.ParaOfPos(FRich.SelStart));
+    Report(Format('table of %d rows: Down out of a span over two rows, to the end of its paint', [Rows]), down);
+    t0 := Clock;
+    TPerfRich(FRich).Key(VK_UP, []);
+    TPerfRich(FRich).PaintInto(bmp);
+    up := Clock - t0;
+    AssertEquals('Up: into the span''s cell', k, t.ParaOfPos(FRich.SelStart));
+    Report('table: Up into the span, to the end of its paint', up);
+    t0 := Clock;
+    TPerfRich(FRich).TypeChar('x');
+    TPerfRich(FRich).PaintInto(bmp);
+    key := Clock - t0;
+    Report('table: a character typed in the span, to the end of its paint', key);
+    AssertEquals('no grid made by a key', n, TyRichGridBuildCount);
+    AssertTrue(Format('Down in %.1f ms', [down]), down <= CKeystrokeMs);
+    AssertTrue(Format('Up in %.1f ms', [up]), up <= CKeystrokeMs);
+    AssertTrue(Format('a key in %.1f ms', [key]), key <= CKeystrokeMs);
   finally
     bmp.Free;
   end;

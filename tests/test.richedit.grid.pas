@@ -23,6 +23,7 @@ type
     procedure TestWideCellsAndMergeFlagsAreTheSameGrid;
     procedure TestOpenSaveStaysByteIdentical;
     procedure TestARowShorterThanTheGridHasEmptyPlaces;
+    procedure TestEdgesAFewTwipsApartAreOne;
   end;
 
   TGridRich = class(TTyRichEdit)
@@ -47,6 +48,7 @@ type
     procedure TestSelectionGrowsToWholeMergedCells;
     procedure TestTabAndArrowsFollowTheGrid;
     procedure TestAHitInASpanLandsInItsCell;
+    procedure TestACellThatContinuesAMergeButHoldsTextIsReached;
   end;
 
 { The listing of the grid of the table at ATablePos, in the form of
@@ -551,6 +553,72 @@ begin
   p := FRich.PositionAtPoint(r.Left + 2, (r.Top + r.Bottom) div 2);
   AssertEquals('in the span''s cell', 1, FRich.Document.Text.ParaOfPos(p));
   AssertEquals('at its end', PS(FRich, 1) + 1, p);
+end;
+
+{ Word writes one line's cells up to 15 twips apart from row to row: one edge of the grid;
+  16 apart, two. }
+procedure TTyRichGridTest.TestEdgesAFewTwipsApartAreOne;
+const
+  Near = '{\rtf1\ansi{\fonttbl{\f0 Arial;}}' +
+    '\trowd\cellx1000\cellx2000\pard\intbl A\cell B\cell\row' +
+    '\trowd\cellx1012\cellx2000\pard\intbl C\cell D\cell\row' +
+    '\pard\par}';
+  Far = '{\rtf1\ansi{\fonttbl{\f0 Arial;}}' +
+    '\trowd\cellx1000\cellx2000\pard\intbl A\cell B\cell\row' +
+    '\trowd\cellx1016\cellx2000\pard\intbl C\cell D\cell\row' +
+    '\pard\par}';
+var
+  d: TTyRichDocument;
+  g: TTyRichGrid;
+begin
+  d := LoadDoc(BytesOf(Near));
+  try
+    g := TyRichTableGrid(d, 0);
+    try
+      AssertEquals('12 twips apart: one edge', 2, g.ColCount);
+      AssertEquals('each cell one column', 1, g.CellOf(1, 0).ColSpan);
+    finally
+      g.Free;
+    end;
+  finally
+    d.Free;
+  end;
+  d := LoadDoc(BytesOf(Far));
+  try
+    g := TyRichTableGrid(d, 0);
+    try
+      AssertEquals('16 apart: two', 3, g.ColCount);
+      AssertEquals('the first row''s second cell over two columns', 2, g.CellOf(0, 1).ColSpan);
+      AssertTrue('consistent', g.Consistent);
+    finally
+      g.Free;
+    end;
+  finally
+    d.Free;
+  end;
+end;
+
+{ A file may put text in a cell that continues a merge down: it is shown, so it is a cell of
+  its own - Tab, the arrows and a click reach it. }
+procedure TTyRichGridControlTest.TestACellThatContinuesAMergeButHoldsTextIsReached;
+const
+  Held = '{\rtf1\ansi{\fonttbl{\f0 Arial;}}\pard x\par' +
+    '\trowd\clvmgf\cellx1500\cellx3000\cellx4500\pard\intbl A\cell B\cell C\cell\row' +
+    '\trowd\clvmrg\cellx1500\cellx3000\cellx4500\pard\intbl Z\cell D\cell E\cell\row' +
+    '\pard\par}';
+var
+  r: TRect;
+begin
+  Load(Held);
+  FRich.SelStart := PS(FRich, 3);
+  FRich.Key(VK_TAB);
+  AssertEquals('Tab: the cell with text', 4, FRich.Document.Text.ParaOfPos(FRich.SelStart));
+  FRich.SelStart := PS(FRich, 5);
+  FRich.Key(VK_LEFT);
+  AssertEquals('Left: into it', 4, ParaOfCaret);
+  r := FRich.ParagraphRect(4);
+  AssertEquals('a click: there', 4, FRich.Document.Text.ParaOfPos(
+    FRich.PositionAtPoint(r.Left + 2, (r.Top + r.Bottom) div 2)));
 end;
 
 initialization

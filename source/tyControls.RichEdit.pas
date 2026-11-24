@@ -6224,10 +6224,10 @@ end;
 
 procedure TTyCustomRichEdit.MoveVertical(ADown, AExtend: Boolean);
 var
-  r, r2: TRect;
+  r: TRect;
   q, q2: TTyRichPos;
   atEnd, atEnd2: Boolean;
-  n: Integer;
+  n, k: Integer;
 begin
   ScrollCaretIntoView;
   Settle;
@@ -6239,24 +6239,30 @@ begin
   end;
   q := LineFrom(r, ADown, atEnd);
   if q < 0 then Exit;
-  { Into a covered cell: on in the same direction, by position, past the span (down: the row
-    below it; up: the cell the span starts with) - bounded by the span's rows. }
+  { Into a covered cell: up, the cell the span starts with (its text's end); down, on to the
+    row below the covered cell's - row by row, bounded by the span's rows. }
   n := 0;
   while (q >= 0) and CoveredPara(FDoc.Text.ParaOfPos(q)) and (n < CRichMaxTableRows) do
   begin
     Inc(n);
-    if not CaretRaster(q, atEnd, r2) then Break;
-    q2 := LineFrom(r2, ADown, atEnd2);
+    if not ADown then
+    begin
+      q := SpanOwnerPos(q);
+      atEnd := False;
+      Break;
+    end;
+    k := HeldBlockOf(q);
+    if k < 0 then Break;
+    if k < FBlockCount - 1 then
+      q2 := HitRaster(FWishX, FBlocks[k].Top + FBlocks[k].Height, atEnd2)
+    else
+      q2 := HitNeighbour(k, True, FWishX, atEnd2);
     if (q2 < 0) or (q2 = q) then Break;
     q := q2;
     atEnd := atEnd2;
   end;
-  if (q >= 0) and CoveredPara(FDoc.Text.ParaOfPos(q)) then
-  begin
-    if ADown then Exit;
-    q := SpanOwnerPos(q);
-    atEnd := False;
-  end;
+  // (a covered cell the table ends with: no move)
+  if (q >= 0) and CoveredPara(FDoc.Text.ParaOfPos(q)) then Exit;
   if AExtend then Select(FSelAnchor, q, atEnd) else Select(q, q, atEnd);
 end;
 

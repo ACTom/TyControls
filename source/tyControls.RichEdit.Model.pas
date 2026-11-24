@@ -8980,6 +8980,8 @@ var
   k, r: Integer;
 begin
   Result := AEdit;
+  // (a split names its cell by Index: only a row edit's row is resolved here)
+  if AEdit.Kind in [rtkMergeCells, rtkSplitCell] then Exit;
   if S.Window then
   begin
     // (the window's refusal resolved it)

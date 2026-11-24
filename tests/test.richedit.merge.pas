@@ -54,6 +54,9 @@ type
     procedure TestTheBuildersSpansAreMergeCellsOwn;
     procedure TestTheBuildersSpanMisuseRaises;
     procedure TestWordReadsWhatWeWrite;
+    procedure TestTheCommandRefusesCellsNotEmpty;
+    procedure TestASpanSplitIntoPartsOfItsRows;
+    procedure TestAMergeHereLocksRowsAndColumnsAsAFilesDoes;
   end;
 
 implementation
@@ -471,6 +474,13 @@ begin
   AssertEquals('one step', 1, FRich.Document.UndoDepth);
   FRich.Undo;
   AssertTrue('undone: the bytes', SaveRtf = before);
+  // a cell whose index is not its row's: the cell named, not another
+  MakeTable(3, 3);
+  FRich.SelStart := CellStart(0, 2);
+  AssertTrue('the last cell of the first row in two', FRich.SplitCell(2, 1));
+  AssertEquals('its content stays', 'r0c2', CellParas(0, 2));
+  AssertEquals('the new cell after it', '', CellParas(0, 3));
+  AssertEquals('the first cell as it was', 'r0c0', CellParas(0, 0));
 end;
 
 procedure TTyRichMergeTest.TestASplitThatCannotBeIsRefused;
@@ -808,6 +818,64 @@ begin
   BuildFive(FRich, [Span(1, 0, 3, 1)], True);
   Keep('builder-column-of-three', 0);
   AssertEquals('every case', 11, n);
+end;
+
+{ The command alone merges only cells that are empty but the first (the door moves their
+  content first): with text in a cell that would go, refused, nothing changed. }
+procedure TTyRichMergeTest.TestTheCommandRefusesCellsNotEmpty;
+var
+  d: TTyRichDocument;
+  before: RawByteString;
+begin
+  MakeTable(3, 3);
+  d := FRich.Document;
+  before := SaveRtf;
+  AssertTrue('refused: not empty', TTyRichMergeCells.Create(d.Text.ParaStart(1), 0, 0, 0, 2880).Refusal(d) =
+    rtrNotEmpty);
+  AssertFalse('the command does nothing', d.Execute(TTyRichMergeCells.Create(d.Text.ParaStart(1), 0, 0, 0, 2880)));
+  AssertTrue('the bytes as they were', SaveRtf = before);
+end;
+
+{ A cell over four rows split into two down: two cells over two rows each. }
+procedure TTyRichMergeTest.TestASpanSplitIntoPartsOfItsRows;
+var
+  g: TTyRichGrid;
+begin
+  MakeTable(5, 2);
+  SelCells(0, 0, 3, 0);
+  AssertTrue('a span over four rows', FRich.MergeCells);
+  FRich.SelStart := CellStart(0, 0);
+  AssertTrue('into two', FRich.SplitCell(1, 2));
+  g := Grid;
+  try
+    AssertTrue('consistent', g.Consistent);
+    AssertEquals('the first part over two rows', 2, g.Cell(0, 0).RowSpan);
+    AssertEquals('the second starts at row 2', 2, g.Cell(2, 0).Row);
+    AssertFalse('... its own', g.Cell(2, 0).Covered);
+    AssertEquals('... over two rows', 2, g.Cell(2, 0).RowSpan);
+  finally
+    g.Free;
+  end;
+end;
+
+{ Cells merged down here (every row keeps its number of cells): rows and columns are not
+  inserted or deleted, as on a file's merged table - told with the reason; the cells can still
+  be split. }
+procedure TTyRichMergeTest.TestAMergeHereLocksRowsAndColumnsAsAFilesDoes;
+begin
+  MakeTable(4, 3);
+  SelCells(1, 1, 2, 1);
+  AssertTrue('merged down', FRich.MergeCells);
+  FRich.SelStart := CellStart(0, 0);
+  AssertFalse('no row inserted', FRich.CanInsertRow);
+  AssertFalse('no row deleted', FRich.CanDeleteRow);
+  AssertFalse('no column inserted', FRich.CanInsertColumn);
+  AssertFalse('no column deleted', FRich.CanDeleteColumn);
+  FRich.Refusals.Clear;
+  AssertFalse('the door', FRich.InsertColumn(True));
+  AssertEquals('told once', 1, FRich.Refusals.Count);
+  FRich.SelStart := CellStart(1, 1);
+  AssertTrue('split: yes', FRich.CanSplitCell);
 end;
 
 initialization

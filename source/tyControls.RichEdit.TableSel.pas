@@ -856,6 +856,8 @@ var
     begin
       SetLength(starts, Length(starts) + 1);
       starts[High(starts)] := a;
+      // (the rows the items name, no more: a long table is not walked to its end)
+      if Length(starts) >= want then Break;
       if b + 1 >= t.ParaCount then Break;
       d := ADoc.CellAt(b + 1);
       if d = nil then Break;
@@ -868,10 +870,10 @@ begin
   FDropped := 0;
   ADoc.BeginRead;
   try
-    FindRows;
     // rows the items need below the table's last
-    want := 0;
+    want := 1;
     for i := 0 to High(FItems) do want := Max(want, FItems[i].Row + 1);
+    FindRows;
     rows := Length(starts);
     while rows < want do
     begin
