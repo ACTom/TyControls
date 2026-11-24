@@ -907,7 +907,8 @@ begin
   SelCells(1, 1, 2, 2);
   AssertTrue(FRich.MergeCells);
   SelCells(0, 1, 1, 0);
-  SelCells(0, 0, 3, 3);
+  // (a part of the table: rows 1 .. 3, columns 0 .. 2)
+  SelCells(1, 0, 3, 2);
   FRich.CopyToClipboard;
   FRich.Lines.Text := '';
   FRich.ClipText := '';
@@ -1059,10 +1060,15 @@ begin
   AssertTrue('a span over rows 0 .. 2', FRich.MergeCells);
   FRich.Document.ClearUndo;
   before := SaveRtf;
+  // (the command alone: the merge's content would go with the row - refused)
+  AssertTrue('the command alone: refused', TTyRichDeleteRow.Create(CellStart(0, 0), 0).Refusal(
+    FRich.Document) = rtrNotEmpty);
   FRich.SelStart := CellStart(0, 0);
   AssertTrue('may delete', FRich.CanDeleteRow);
   AssertTrue('the first row deleted', FRich.DeleteRow);
   AssertEquals('one step', 1, FRich.Document.UndoDepth);
+  AssertEquals('the next row begins the merge (rcmFirst)', 1, TyRichCellVMerge(
+    FRich.Document.CellAt(FRich.Document.Text.ParaOfPos(CellStart(0, 1))).Row, 1));
   AssertEquals('the content moved down', 'r0c1|r1c1|r2c1', CellParas(0, 1));
   AssertEquals('the row''s own cell went', 'r1c0', CellParas(0, 0));
   g := Grid;
@@ -1167,6 +1173,20 @@ begin
   end;
   FRich.Undo;
   AssertTrue('undone: the bytes', SaveRtf = before);
+  // the span's first column deleted: it starts there and reaches out - it stays, narrower
+  FRich.SelStart := CellStart(0, 1);
+  AssertTrue('column 1 deleted', FRich.DeleteColumn);
+  g := Grid;
+  try
+    AssertTrue('consistent', g.Consistent);
+    AssertEquals('3 columns', 3, g.ColCount);
+    AssertEquals('the span one column', 1, g.Cell(1, 1).ColSpan);
+    AssertEquals('its content kept', 'r1c1|r1c2|r2c1|r2c2', CellParas(1, 1));
+  finally
+    g.Free;
+  end;
+  FRich.Undo;
+  AssertTrue('undone again: the bytes', SaveRtf = before);
 end;
 
 { A table that is no plain grid: its grid's columns made as wide as each other, every cell
@@ -1210,7 +1230,8 @@ begin
   MakeTable(4, 4);
   SelCells(1, 1, 2, 2);
   AssertTrue('merged', FRich.MergeCells);
-  SelCells(0, 0, 3, 3);
+  // (a part of the table: a whole table is copied as text, its spans with it)
+  SelCells(1, 0, 3, 2);
   FRich.CopyToClipboard;
   d := TTyRichDocument.Create;
   st := TBytesStream.Create;
@@ -1223,10 +1244,13 @@ begin
     a := TyRichGridListing(FRich.Document, FRich.Document.Text.ParaStart(1));
     b := TyRichGridListing(d, d.Text.ParaStart(k));
     try
-      // (the copy's columns are equal: the spans and texts are what is compared)
-      AssertEquals('as many rows', a.Count, b.Count);
-      AssertEquals('row 1', StripWidths(a[2]), StripWidths(b[2]));
-      AssertEquals('row 2', StripWidths(a[3]), StripWidths(b[3]));
+      // (rows 1 .. 3, columns 0 .. 2: the span whole in it)
+      AssertEquals('three rows', 4, b.Count);
+      AssertTrue('the span begins: ' + b[1], Pos('  2/restart/', b[1]) > 0);
+      AssertTrue('... with its content: ' + b[1], Pos('r1c1r1c2r2c1r2c2', b[1]) > 0);
+      AssertTrue('the span goes on: ' + b[2], Pos('  2/cont/', b[2]) > 0);
+      AssertTrue('the last row its own: ' + b[3], Pos('restart', b[3] + b[3]) + Pos('cont', b[3]) = 0);
+      AssertTrue('the source as listed', a.Count = 5);
     finally
       a.Free;
       b.Free;
@@ -1323,6 +1347,8 @@ end;
   twips): after a merge, a split back, a column put in through a span and one deleted, on Word's
   merged table. }
 procedure TTyRichMergeTest.TestEveryRewrittenCellSaysItsOwnWidth;
+var
+  checked: Integer;
 
   procedure CheckWidths(const AWhat: string);
   var
@@ -1346,7 +1372,7 @@ procedure TTyRichMergeTest.TestEveryRewrittenCellSaysItsOwnWidth;
         Continue;
       end;
       k := i + 1;
-      while (k <= Length(f)) and (f[k] in ['a'..'z']) do Inc(k);
+      while (k <= Length(f)) and (f[k] in ['a'..'z', 'A'..'Z']) do Inc(k);
       word := Copy(f, i + 1, k - i - 1);
       neg := (k <= Length(f)) and (f[k] = '-');
       if neg then Inc(k);
@@ -1375,7 +1401,10 @@ procedure TTyRichMergeTest.TestEveryRewrittenCellSaysItsOwnWidth;
       else if (word = 'cellx') and (k > x) then
       begin
         if (fts = 3) and (w >= 0) then
+        begin
           AssertEquals(Format('%s: a cell at %d says its width', [AWhat, num]), num - prev, w);
+          Inc(checked);
+        end;
         prev := num;
         w := -1;
         fts := -1;
@@ -1438,8 +1467,10 @@ procedure TTyRichMergeTest.TestEveryRewrittenCellSaysItsOwnWidth;
   end;
 
 begin
+  checked := 0;
   LoadWord;
   CheckWidths('as read');
+  AssertTrue('widths were read', checked > 20);
   Sel2(0, 0, 0, 1);
   AssertTrue('merged', FRich.MergeCells);
   CheckWidths('merge');
