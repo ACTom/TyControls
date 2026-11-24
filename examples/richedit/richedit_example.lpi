@@ -26,7 +26,7 @@
       <Item1><PackageName Value="LCL"/></Item1>
       <Item2><PackageName Value="tycontrols"/></Item2>
     </RequiredPackages>
-    <Units Count="7">
+    <Units Count="9">
       <Unit0>
         <Filename Value="richedit_example.lpr"/>
         <IsPartOfProject Value="True"/>
@@ -61,6 +61,16 @@
         <IsPartOfProject Value="True"/>
         <UnitName Value="upageform"/>
       </Unit6>
+      <Unit7>
+        <Filename Value="utableform.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="utableform"/>
+      </Unit7>
+      <Unit8>
+        <Filename Value="utablesample.pas"/>
+        <IsPartOfProject Value="True"/>
+        <UnitName Value="utablesample"/>
+      </Unit8>
     </Units>
   </ProjectOptions>
   <CompilerOptions>

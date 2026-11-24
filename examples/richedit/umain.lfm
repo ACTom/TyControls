@@ -250,7 +250,7 @@ object MainForm: TMainForm
       Width = 960
       Align = alTop
       ButtonHeight = 28
-      ButtonSpacing = 2
+      ButtonSpacing = 1
       Indent = 6
       ShowHint = True
       StyleOverride = '--toolbar-icon-size: 16px;'
@@ -258,7 +258,7 @@ object MainForm: TMainForm
         Left = 6
         Height = 28
         Top = 4
-        Width = 150
+        Width = 112
         Hint = 'Font'
         ShowHint = True
         Style = csDropDown
@@ -267,10 +267,10 @@ object MainForm: TMainForm
         OnSelect = FontBoxSelect
       end
       object SizeBox: TTyFontSizeComboBox
-        Left = 158
+        Left = 119
         Height = 28
         Top = 4
-        Width = 64
+        Width = 56
         Hint = 'Font size'
         ShowHint = True
         TabStop = False
@@ -278,12 +278,12 @@ object MainForm: TMainForm
         OnSelect = SizeBoxSelect
       end
       object Sep6: TTyToolSeparator
-        Left = 224
+        Left = 176
         Top = 4
         Width = 8
       end
       object BtnBold: TTySpeedButton
-        Left = 234
+        Left = 185
         Top = 4
         Width = 28
         Action = ActBold
@@ -295,7 +295,7 @@ object MainForm: TMainForm
         ShowCaption = False
       end
       object BtnItalic: TTySpeedButton
-        Left = 264
+        Left = 214
         Top = 4
         Width = 28
         Action = ActItalic
@@ -307,7 +307,7 @@ object MainForm: TMainForm
         ShowCaption = False
       end
       object BtnUnderline: TTySpeedButton
-        Left = 294
+        Left = 243
         Top = 4
         Width = 28
         Action = ActUnderline
@@ -319,7 +319,7 @@ object MainForm: TMainForm
         ShowCaption = False
       end
       object BtnStrikeOut: TTySpeedButton
-        Left = 324
+        Left = 272
         Top = 4
         Width = 28
         Action = ActStrikeOut
@@ -331,7 +331,7 @@ object MainForm: TMainForm
         ShowCaption = False
       end
       object BtnSuperscript: TTySpeedButton
-        Left = 354
+        Left = 301
         Top = 4
         Width = 28
         Action = ActSuperscript
@@ -343,7 +343,7 @@ object MainForm: TMainForm
         ShowCaption = False
       end
       object BtnSubscript: TTySpeedButton
-        Left = 384
+        Left = 330
         Top = 4
         Width = 28
         Action = ActSubscript
@@ -355,12 +355,12 @@ object MainForm: TMainForm
         ShowCaption = False
       end
       object Sep7: TTyToolSeparator
-        Left = 414
+        Left = 359
         Top = 4
         Width = 8
       end
       object BtnTextColor: TTySpeedButton
-        Left = 424
+        Left = 368
         Top = 4
         Width = 28
         Action = ActTextColor
@@ -371,7 +371,7 @@ object MainForm: TMainForm
         ShowCaption = False
       end
       object TextSwatch: TTyColorButton
-        Left = 454
+        Left = 397
         Top = 4
         Width = 16
         Hint = 'Choose the text color'
@@ -381,7 +381,7 @@ object MainForm: TMainForm
         OnColorChanged = SwatchColorChanged
       end
       object BtnHighlight: TTySpeedButton
-        Left = 472
+        Left = 426
         Top = 4
         Width = 28
         Action = ActHighlight
@@ -392,7 +392,7 @@ object MainForm: TMainForm
         ShowCaption = False
       end
       object HighlightSwatch: TTyColorButton
-        Left = 502
+        Left = 455
         Top = 4
         Width = 16
         Hint = 'Choose the highlight color'
@@ -402,12 +402,12 @@ object MainForm: TMainForm
         OnColorChanged = SwatchColorChanged
       end
       object Sep8: TTyToolSeparator
-        Left = 520
+        Left = 484
         Top = 4
         Width = 8
       end
       object BtnAlignLeft: TTySpeedButton
-        Left = 530
+        Left = 493
         Top = 4
         Width = 28
         Action = ActAlignLeft
@@ -419,7 +419,7 @@ object MainForm: TMainForm
         ShowCaption = False
       end
       object BtnAlignCenter: TTySpeedButton
-        Left = 560
+        Left = 522
         Top = 4
         Width = 28
         Action = ActAlignCenter
@@ -431,7 +431,7 @@ object MainForm: TMainForm
         ShowCaption = False
       end
       object BtnAlignRight: TTySpeedButton
-        Left = 590
+        Left = 551
         Top = 4
         Width = 28
         Action = ActAlignRight
@@ -443,7 +443,7 @@ object MainForm: TMainForm
         ShowCaption = False
       end
       object BtnJustify: TTySpeedButton
-        Left = 620
+        Left = 580
         Top = 4
         Width = 28
         Action = ActJustify
@@ -455,12 +455,12 @@ object MainForm: TMainForm
         ShowCaption = False
       end
       object Sep9: TTyToolSeparator
-        Left = 650
+        Left = 609
         Top = 4
         Width = 8
       end
       object BtnBullets: TTySpeedButton
-        Left = 660
+        Left = 618
         Top = 4
         Width = 28
         Action = ActBullets
@@ -472,7 +472,7 @@ object MainForm: TMainForm
         ShowCaption = False
       end
       object BtnNumbering: TTySpeedButton
-        Left = 690
+        Left = 647
         Top = 4
         Width = 28
         Action = ActNumbering
@@ -484,7 +484,7 @@ object MainForm: TMainForm
         ShowCaption = False
       end
       object BtnIndentDecrease: TTySpeedButton
-        Left = 720
+        Left = 676
         Top = 4
         Width = 28
         Action = ActIndentDecrease
@@ -495,7 +495,7 @@ object MainForm: TMainForm
         ShowCaption = False
       end
       object BtnIndentIncrease: TTySpeedButton
-        Left = 750
+        Left = 705
         Top = 4
         Width = 28
         Action = ActIndentIncrease
@@ -506,12 +506,12 @@ object MainForm: TMainForm
         ShowCaption = False
       end
       object Sep10: TTyToolSeparator
-        Left = 780
+        Left = 734
         Top = 4
         Width = 8
       end
       object BtnSpacing: TTyToolButton
-        Left = 790
+        Left = 743
         Top = 4
         Width = 40
         Hint = 'Line spacing'
@@ -522,13 +522,8 @@ object MainForm: TMainForm
         GlyphName = 'unfold-vertical'
         ShowCaption = False
       end
-      object Sep11: TTyToolSeparator
-        Left = 832
-        Top = 4
-        Width = 8
-      end
       object BtnClearFormat: TTySpeedButton
-        Left = 842
+        Left = 790
         Top = 4
         Width = 28
         Action = ActClearFormat
@@ -537,6 +532,44 @@ object MainForm: TMainForm
         IconFont = LucideFont
         GlyphName = 'remove-formatting'
         ShowCaption = False
+      end
+      object Sep12: TTyToolSeparator
+        Left = 819
+        Top = 4
+        Width = 8
+      end
+      object BtnBorders: TTyToolButton
+        Left = 828
+        Top = 4
+        Width = 40
+        Action = ActBorderAll
+        ShowHint = True
+        Style = tbsButtonDrop
+        DropdownMenu = PopBorders
+        IconFont = LucideFont
+        GlyphName = 'grid-2x2'
+        ShowCaption = False
+      end
+      object BtnShading: TTySpeedButton
+        Left = 875
+        Top = 4
+        Width = 28
+        Action = ActShading
+        ShowHint = True
+        StyleClass = 'ghost'
+        IconFont = LucideFont
+        GlyphName = 'paint-bucket'
+        ShowCaption = False
+      end
+      object ShadingSwatch: TTyColorButton
+        Left = 904
+        Top = 4
+        Width = 16
+        Hint = 'Choose the shading color'
+        ShowHint = True
+        TabStop = False
+        StyleClass = 'ghost'
+        OnColorChanged = SwatchColorChanged
       end
     end
     object Ruler: TTyRichEditRuler
@@ -558,6 +591,11 @@ object MainForm: TMainForm
           Text = ''
           Width = 0
           Alignment = taLeftJustify
+        end
+        item
+          Text = ''
+          Width = 200
+          Alignment = taCenter
         end
         item
           Text = ''
@@ -729,6 +767,7 @@ object MainForm: TMainForm
     end
     object ActInsertTable: TTyRichEditInsertTable
       Category = 'Rich edit'
+      Caption = '&Table...'
       OnChooseSize = TableChooseSize
       RichEdit = Editor
     end
@@ -1019,6 +1058,210 @@ object MainForm: TMainForm
       Hint = 'Add, delete, rename or go to the document''s bookmarks'
       OnExecute = ActBookmarksExecute
     end
+    object ActSelectCell: TAction
+      Category = 'Rich edit'
+      Caption = '&Cell'
+      Hint = 'Select the cell'
+      OnExecute = SelectExecute
+      OnUpdate = SelectUpdate
+    end
+    object ActSelectRow: TAction
+      Category = 'Rich edit'
+      Caption = '&Row'
+      Hint = 'Select the row'
+      OnExecute = SelectExecute
+      OnUpdate = SelectUpdate
+    end
+    object ActSelectColumn: TAction
+      Category = 'Rich edit'
+      Caption = 'C&olumn'
+      Hint = 'Select the column'
+      OnExecute = SelectExecute
+      OnUpdate = SelectUpdate
+    end
+    object ActSelectTable: TAction
+      Category = 'Rich edit'
+      Caption = '&Table'
+      Hint = 'Select the whole table'
+      OnExecute = SelectExecute
+      OnUpdate = SelectUpdate
+    end
+    object ActClearCells: TAction
+      Category = 'Rich edit'
+      Caption = 'Cell &Contents'
+      Hint = 'Clear what the selected cells hold'
+      OnExecute = ActClearCellsExecute
+      OnUpdate = ActClearCellsUpdate
+    end
+    object ActAutoFit: TTyRichEditAutoFitColumn
+      Category = 'Rich edit'
+      RichEdit = Editor
+    end
+    object ActFitWindow: TTyRichEditFitTableToWindow
+      Category = 'Rich edit'
+      RichEdit = Editor
+    end
+    object ActDistributeRows: TTyRichEditDistributeRows
+      Category = 'Rich edit'
+      RichEdit = Editor
+    end
+    object ActDistributeColumns: TTyRichEditDistributeColumns
+      Category = 'Rich edit'
+      RichEdit = Editor
+    end
+    object ActAlignTop: TTyRichEditCellVAlign
+      Category = 'Rich edit'
+      Caption = 'Align &Top'
+      Hint = 'The content at the top of the cells'
+      RichEdit = Editor
+    end
+    object ActAlignMiddle: TTyRichEditCellVAlign
+      Category = 'Rich edit'
+      Caption = 'Align &Middle'
+      Hint = 'The content in the middle of the cells'
+      Align = rcvCenter
+      RichEdit = Editor
+    end
+    object ActAlignBottom: TTyRichEditCellVAlign
+      Category = 'Rich edit'
+      Caption = 'Align &Bottom'
+      Hint = 'The content at the bottom of the cells'
+      Align = rcvBottom
+      RichEdit = Editor
+    end
+    object ActTableLeft: TTyRichEditTableAlign
+      Category = 'Rich edit'
+      Caption = '&Left'
+      Hint = 'The table at the left margin'
+      Align = rraLeft
+      RichEdit = Editor
+    end
+    object ActTableCenter: TTyRichEditTableAlign
+      Category = 'Rich edit'
+      Caption = '&Center'
+      Hint = 'The table in the middle of the text'
+      RichEdit = Editor
+    end
+    object ActTableRight: TTyRichEditTableAlign
+      Category = 'Rich edit'
+      Caption = '&Right'
+      Hint = 'The table at the right margin'
+      Align = rraRight
+      RichEdit = Editor
+    end
+    object ActBorderAll: TTyRichEditCellBorders
+      Category = 'Rich edit'
+      Caption = '&All Borders'
+      Hint = 'Lines on every side of the selected cells'
+      ImageIndex = 0
+      RichEdit = Editor
+      OnBeforeExecute = BorderBeforeExecute
+    end
+    object ActBorderOutside: TTyRichEditCellBorders
+      Category = 'Rich edit'
+      Caption = 'O&utside Borders'
+      Hint = 'A line around the selected cells'
+      ImageIndex = 1
+      Preset = rbpOutside
+      RichEdit = Editor
+      OnBeforeExecute = BorderBeforeExecute
+    end
+    object ActBorderInside: TTyRichEditCellBorders
+      Category = 'Rich edit'
+      Caption = '&Inside Borders'
+      Hint = 'Lines between the selected cells'
+      ImageIndex = 2
+      Preset = rbpInside
+      RichEdit = Editor
+      OnBeforeExecute = BorderBeforeExecute
+    end
+    object ActBorderNone: TTyRichEditCellBorders
+      Category = 'Rich edit'
+      Caption = '&No Border'
+      Hint = 'No lines on the selected cells'
+      ImageIndex = 3
+      Preset = rbpNone
+      RichEdit = Editor
+      OnBeforeExecute = BorderBeforeExecute
+    end
+    object ActBorderTop: TTyRichEditCellBorders
+      Category = 'Rich edit'
+      Caption = '&Top Border'
+      Hint = 'A line above the selected cells'
+      ImageIndex = 4
+      Preset = rbpTop
+      RichEdit = Editor
+      OnBeforeExecute = BorderBeforeExecute
+    end
+    object ActBorderBottom: TTyRichEditCellBorders
+      Category = 'Rich edit'
+      Caption = '&Bottom Border'
+      Hint = 'A line below the selected cells'
+      ImageIndex = 5
+      Preset = rbpBottom
+      RichEdit = Editor
+      OnBeforeExecute = BorderBeforeExecute
+    end
+    object ActBorderLeft: TTyRichEditCellBorders
+      Category = 'Rich edit'
+      Caption = '&Left Border'
+      Hint = 'A line left of the selected cells'
+      ImageIndex = 6
+      Preset = rbpLeft
+      RichEdit = Editor
+      OnBeforeExecute = BorderBeforeExecute
+    end
+    object ActBorderRight: TTyRichEditCellBorders
+      Category = 'Rich edit'
+      Caption = '&Right Border'
+      Hint = 'A line right of the selected cells'
+      ImageIndex = 7
+      Preset = rbpRight
+      RichEdit = Editor
+      OnBeforeExecute = BorderBeforeExecute
+    end
+    object ActBorderInsideH: TTyRichEditCellBorders
+      Category = 'Rich edit'
+      Caption = 'Inside &Horizontal Border'
+      Hint = 'Lines between the selected rows'
+      ImageIndex = 8
+      Preset = rbpInsideH
+      RichEdit = Editor
+      OnBeforeExecute = BorderBeforeExecute
+    end
+    object ActBorderInsideV: TTyRichEditCellBorders
+      Category = 'Rich edit'
+      Caption = 'Inside &Vertical Border'
+      Hint = 'Lines between the selected columns'
+      ImageIndex = 9
+      Preset = rbpInsideV
+      RichEdit = Editor
+      OnBeforeExecute = BorderBeforeExecute
+    end
+    object ActShading: TTyRichEditCellShading
+      Category = 'Rich edit'
+      Color = 14277081
+      RichEdit = Editor
+    end
+    object ActShadingNone: TAction
+      Category = 'Rich edit'
+      Caption = '&No Shading'
+      Hint = 'Take the shading off the selected cells'
+      OnExecute = ActShadingNoneExecute
+      OnUpdate = ActShadingNoneUpdate
+    end
+    object ActShadingChoose: TAction
+      Category = 'Rich edit'
+      Caption = '&More Colors...'
+      Hint = 'Choose the shading color'
+      OnExecute = ActShadingChooseExecute
+      OnUpdate = ActShadingNoneUpdate
+    end
+    object ActTableProperties: TTyRichEditTableProperties
+      Category = 'Rich edit'
+      RichEdit = Editor
+      OnBeforeExecute = TablePropertiesBeforeExecute
+    end
   end
   object MainMenu1: TMainMenu
     Left = 360
@@ -1303,29 +1546,155 @@ object MainForm: TMainForm
     end
     object MnuTable: TMenuItem
       Caption = '&Table'
-      object MnuRowAbove: TMenuItem
-        Action = ActRowAbove
+      object MnuTblInsert: TMenuItem
+        Caption = '&Insert'
+        object MnuInsTable: TMenuItem
+          Action = ActInsertTable
+        end
+        object MnuSepIns1: TMenuItem
+          Caption = '-'
+        end
+        object MnuRowAbove: TMenuItem
+          Action = ActRowAbove
+        end
+        object MnuRowBelow: TMenuItem
+          Action = ActRowBelow
+        end
+        object MnuSepIns2: TMenuItem
+          Caption = '-'
+        end
+        object MnuColumnLeft: TMenuItem
+          Action = ActColumnLeft
+        end
+        object MnuColumnRight: TMenuItem
+          Action = ActColumnRight
+        end
       end
-      object MnuRowBelow: TMenuItem
-        Action = ActRowBelow
+      object MnuTblDelete: TMenuItem
+        Caption = '&Delete'
+        object MnuDeleteTable: TMenuItem
+          Action = ActDeleteTable
+        end
+        object MnuDeleteColumn: TMenuItem
+          Action = ActDeleteColumn
+        end
+        object MnuDeleteRow: TMenuItem
+          Action = ActDeleteRow
+        end
+        object MnuClearCells: TMenuItem
+          Action = ActClearCells
+        end
       end
-      object MnuColumnLeft: TMenuItem
-        Action = ActColumnLeft
+      object MnuTblSelect: TMenuItem
+        Caption = 'Se&lect'
+        object MnuSelectTable: TMenuItem
+          Action = ActSelectTable
+        end
+        object MnuSelectColumn: TMenuItem
+          Action = ActSelectColumn
+        end
+        object MnuSelectRow: TMenuItem
+          Action = ActSelectRow
+        end
+        object MnuSelectCell: TMenuItem
+          Action = ActSelectCell
+        end
       end
-      object MnuColumnRight: TMenuItem
-        Action = ActColumnRight
-      end
-      object MnuSep11: TMenuItem
+      object MnuSepTbl1: TMenuItem
         Caption = '-'
       end
-      object MnuDeleteRow: TMenuItem
-        Action = ActDeleteRow
+      object MnuTblAutoFit: TMenuItem
+        Caption = '&AutoFit'
+        object MnuAutoFit: TMenuItem
+          Action = ActAutoFit
+        end
+        object MnuFitWindow: TMenuItem
+          Action = ActFitWindow
+        end
+        object MnuSepFit: TMenuItem
+          Caption = '-'
+        end
+        object MnuDistributeRows: TMenuItem
+          Action = ActDistributeRows
+        end
+        object MnuDistributeColumns: TMenuItem
+          Action = ActDistributeColumns
+        end
       end
-      object MnuDeleteColumn: TMenuItem
-        Action = ActDeleteColumn
+      object MnuTblCellAlign: TMenuItem
+        Caption = 'Cell Ali&gnment'
+        object MnuAlignTop: TMenuItem
+          Action = ActAlignTop
+        end
+        object MnuAlignMiddle: TMenuItem
+          Action = ActAlignMiddle
+        end
+        object MnuAlignBottom: TMenuItem
+          Action = ActAlignBottom
+        end
       end
-      object MnuDeleteTable: TMenuItem
-        Action = ActDeleteTable
+      object MnuTblAlign: TMenuItem
+        Caption = '&Table Alignment'
+        object MnuTableLeft: TMenuItem
+          Action = ActTableLeft
+        end
+        object MnuTableCenter: TMenuItem
+          Action = ActTableCenter
+        end
+        object MnuTableRight: TMenuItem
+          Action = ActTableRight
+        end
+      end
+      object MnuTblBorders: TMenuItem
+        Caption = '&Borders'
+        object MnuBorderAll: TMenuItem
+          Action = ActBorderAll
+        end
+        object MnuBorderOutside: TMenuItem
+          Action = ActBorderOutside
+        end
+        object MnuBorderInside: TMenuItem
+          Action = ActBorderInside
+        end
+        object MnuBorderNone: TMenuItem
+          Action = ActBorderNone
+        end
+        object MnuBorderTop: TMenuItem
+          Action = ActBorderTop
+        end
+        object MnuBorderBottom: TMenuItem
+          Action = ActBorderBottom
+        end
+        object MnuBorderLeft: TMenuItem
+          Action = ActBorderLeft
+        end
+        object MnuBorderRight: TMenuItem
+          Action = ActBorderRight
+        end
+        object MnuBorderInsideH: TMenuItem
+          Action = ActBorderInsideH
+        end
+        object MnuBorderInsideV: TMenuItem
+          Action = ActBorderInsideV
+        end
+      end
+      object MnuTblShading: TMenuItem
+        Caption = '&Shading'
+        object MnuShading: TMenuItem
+          Action = ActShading
+        end
+        object MnuShadingNone: TMenuItem
+          Action = ActShadingNone
+        end
+        object MnuShadingChoose: TMenuItem
+          Action = ActShadingChoose
+        end
+      end
+      object MnuSepTbl2: TMenuItem
+        Caption = '-'
+      end
+      object MnuTableProperties: TMenuItem
+        Action = ActTableProperties
       end
     end
     object MnuView: TMenuItem
@@ -1455,26 +1824,138 @@ object MainForm: TMainForm
     object PopSepTable: TMenuItem
       Caption = '-'
     end
-    object PopRowAbove: TMenuItem
-      Action = ActRowAbove
+    object PopTblSelect: TMenuItem
+      Caption = 'Se&lect'
+      object PopSelectTable: TMenuItem
+        Action = ActSelectTable
+      end
+      object PopSelectColumn: TMenuItem
+        Action = ActSelectColumn
+      end
+      object PopSelectRow: TMenuItem
+        Action = ActSelectRow
+      end
+      object PopSelectCell: TMenuItem
+        Action = ActSelectCell
+      end
     end
-    object PopRowBelow: TMenuItem
-      Action = ActRowBelow
+    object PopTblInsert: TMenuItem
+      Caption = '&Insert'
+      object PopRowAbove: TMenuItem
+        Action = ActRowAbove
+      end
+      object PopRowBelow: TMenuItem
+        Action = ActRowBelow
+      end
+      object PopSepIns: TMenuItem
+        Caption = '-'
+      end
+      object PopColumnLeft: TMenuItem
+        Action = ActColumnLeft
+      end
+      object PopColumnRight: TMenuItem
+        Action = ActColumnRight
+      end
     end
-    object PopColumnLeft: TMenuItem
-      Action = ActColumnLeft
+    object PopTblDelete: TMenuItem
+      Caption = '&Delete'
+      object PopDeleteTable: TMenuItem
+        Action = ActDeleteTable
+      end
+      object PopDeleteColumn: TMenuItem
+        Action = ActDeleteColumn
+      end
+      object PopDeleteRow: TMenuItem
+        Action = ActDeleteRow
+      end
+      object PopClearCells: TMenuItem
+        Action = ActClearCells
+      end
     end
-    object PopColumnRight: TMenuItem
-      Action = ActColumnRight
+    object PopTblCellAlign: TMenuItem
+      Caption = 'Cell Ali&gnment'
+      object PopAlignTop: TMenuItem
+        Action = ActAlignTop
+      end
+      object PopAlignMiddle: TMenuItem
+        Action = ActAlignMiddle
+      end
+      object PopAlignBottom: TMenuItem
+        Action = ActAlignBottom
+      end
     end
-    object PopDeleteRow: TMenuItem
-      Action = ActDeleteRow
+    object PopTblAutoFit: TMenuItem
+      Caption = '&AutoFit'
+      object PopAutoFit: TMenuItem
+        Action = ActAutoFit
+      end
+      object PopFitWindow: TMenuItem
+        Action = ActFitWindow
+      end
+      object PopSepFit: TMenuItem
+        Caption = '-'
+      end
+      object PopDistributeRows: TMenuItem
+        Action = ActDistributeRows
+      end
+      object PopDistributeColumns: TMenuItem
+        Action = ActDistributeColumns
+      end
     end
-    object PopDeleteColumn: TMenuItem
-      Action = ActDeleteColumn
+    object PopTableProperties: TMenuItem
+      Action = ActTableProperties
     end
-    object PopDeleteTable: TMenuItem
-      Action = ActDeleteTable
+  end
+  object PopBorders: TTyImagesMenu
+    Images = BorderGlyphs
+    Left = 600
+    Top = 160
+    object PopBBorderAll: TMenuItem
+      Action = ActBorderAll
     end
+    object PopBBorderOutside: TMenuItem
+      Action = ActBorderOutside
+    end
+    object PopBBorderInside: TMenuItem
+      Action = ActBorderInside
+    end
+    object PopBBorderNone: TMenuItem
+      Action = ActBorderNone
+    end
+    object PopBBorderTop: TMenuItem
+      Action = ActBorderTop
+    end
+    object PopBBorderBottom: TMenuItem
+      Action = ActBorderBottom
+    end
+    object PopBBorderLeft: TMenuItem
+      Action = ActBorderLeft
+    end
+    object PopBBorderRight: TMenuItem
+      Action = ActBorderRight
+    end
+    object PopBBorderInsideH: TMenuItem
+      Action = ActBorderInsideH
+    end
+    object PopBBorderInsideV: TMenuItem
+      Action = ActBorderInsideV
+    end
+  end
+  object BorderGlyphs: TTyVirtualImageList
+    IconFont = LucideFont
+    Names.Strings = (
+      'grid-2x2'
+      'square'
+      'plus'
+      'square-dashed'
+      'panel-top'
+      'panel-bottom'
+      'panel-left'
+      'panel-right'
+      'square-split-vertical'
+      'square-split-horizontal'
+    )
+    Left = 680
+    Top = 160
   end
 end

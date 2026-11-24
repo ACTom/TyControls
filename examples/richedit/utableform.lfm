@@ -1,0 +1,330 @@
+object TableForm: TTableForm
+  Left = 0
+  Height = 484
+  Top = 0
+  Width = 640
+  BorderIcons = [biSystemMenu]
+  Caption = 'Table Properties'
+  ClientHeight = 484
+  ClientWidth = 640
+  Position = poOwnerFormCenter
+  LCLVersion = '4.4.0.0'
+  OnCreate = FormCreate
+  TitleBar = Bar
+  object Surface: TTyFormSurface
+    Left = 0
+    Height = 484
+    Top = 0
+    Width = 640
+    Align = alClient
+    object Bar: TTyTitleBar
+      Left = 0
+      Height = 34
+      Top = 0
+      Width = 640
+      Align = alTop
+      Caption = 'Table Properties'
+      ShowMinimize = False
+      ShowMaximize = False
+    end
+    object GrpTable: TTyGroupBox
+      Left = 16
+      Height = 106
+      Top = 46
+      Width = 296
+      Caption = 'Table'
+      TabOrder = 0
+      object LblTableAlign: TTyLabel
+        Left = 8
+        Height = 20
+        Top = 30
+        Width = 148
+        Caption = '&Alignment:'
+        FocusControl = CboTableAlign
+      end
+      object CboTableAlign: TTyComboBox
+        Left = 156
+        Height = 28
+        Top = 26
+        Width = 130
+        TabOrder = 0
+      end
+      object LblIndent: TTyLabel
+        Left = 8
+        Height = 20
+        Top = 66
+        Width = 148
+        Caption = '&Indent (cm):'
+        FocusControl = EdtIndent
+      end
+      object EdtIndent: TTyEdit
+        Left = 156
+        Height = 28
+        Top = 62
+        Width = 130
+        TabOrder = 1
+        Alignment = taRightJustify
+      end
+    end
+    object GrpRow: TTyGroupBox
+      Left = 16
+      Height = 106
+      Top = 160
+      Width = 296
+      Caption = 'Row'
+      TabOrder = 1
+      object LblRowRule: TTyLabel
+        Left = 8
+        Height = 20
+        Top = 30
+        Width = 148
+        Caption = 'Height &rule:'
+        FocusControl = CboRowRule
+      end
+      object CboRowRule: TTyComboBox
+        Left = 156
+        Height = 28
+        Top = 26
+        Width = 130
+        TabOrder = 0
+      end
+      object LblRowHeight: TTyLabel
+        Left = 8
+        Height = 20
+        Top = 66
+        Width = 148
+        Caption = 'H&eight (cm):'
+        FocusControl = EdtRowHeight
+      end
+      object EdtRowHeight: TTyEdit
+        Left = 156
+        Height = 28
+        Top = 62
+        Width = 130
+        TabOrder = 1
+        Alignment = taRightJustify
+      end
+    end
+    object GrpColumn: TTyGroupBox
+      Left = 16
+      Height = 70
+      Top = 274
+      Width = 296
+      Caption = 'Column'
+      TabOrder = 2
+      object LblColWidth: TTyLabel
+        Left = 8
+        Height = 20
+        Top = 30
+        Width = 148
+        Caption = '&Width (cm):'
+        FocusControl = EdtColWidth
+      end
+      object EdtColWidth: TTyEdit
+        Left = 156
+        Height = 28
+        Top = 26
+        Width = 130
+        TabOrder = 0
+        Alignment = taRightJustify
+      end
+    end
+    object GrpShading: TTyGroupBox
+      Left = 16
+      Height = 70
+      Top = 352
+      Width = 296
+      Caption = 'Shading'
+      TabOrder = 3
+      object LblShading: TTyLabel
+        Left = 8
+        Height = 20
+        Top = 30
+        Width = 148
+        Caption = '&Fill:'
+        FocusControl = ClrShading
+      end
+      object ClrShading: TTyColorBox
+        Left = 156
+        Height = 28
+        Top = 26
+        Width = 130
+        TabOrder = 0
+      end
+    end
+    object GrpCell: TTyGroupBox
+      Left = 328
+      Height = 142
+      Top = 46
+      Width = 296
+      Caption = 'Cell (lengths in cm)'
+      TabOrder = 4
+      object LblVAlign: TTyLabel
+        Left = 8
+        Height = 20
+        Top = 30
+        Width = 148
+        Caption = '&Vertical alignment:'
+        FocusControl = CboVAlign
+      end
+      object CboVAlign: TTyComboBox
+        Left = 156
+        Height = 28
+        Top = 26
+        Width = 130
+        TabOrder = 0
+      end
+      object LblPadLR: TTyLabel
+        Left = 8
+        Height = 20
+        Top = 66
+        Width = 148
+        Caption = 'Left, right padding:'
+        FocusControl = EdtPadLeft
+      end
+      object EdtPadLeft: TTyEdit
+        Left = 156
+        Height = 28
+        Top = 62
+        Width = 64
+        TabOrder = 1
+        Alignment = taRightJustify
+      end
+      object EdtPadRight: TTyEdit
+        Left = 222
+        Height = 28
+        Top = 62
+        Width = 64
+        TabOrder = 2
+        Alignment = taRightJustify
+      end
+      object LblPadTB: TTyLabel
+        Left = 8
+        Height = 20
+        Top = 102
+        Width = 148
+        Caption = 'Top, bottom padding:'
+        FocusControl = EdtPadTop
+      end
+      object EdtPadTop: TTyEdit
+        Left = 156
+        Height = 28
+        Top = 98
+        Width = 64
+        TabOrder = 3
+        Alignment = taRightJustify
+      end
+      object EdtPadBottom: TTyEdit
+        Left = 222
+        Height = 28
+        Top = 98
+        Width = 64
+        TabOrder = 4
+        Alignment = taRightJustify
+      end
+    end
+    object GrpBorders: TTyGroupBox
+      Left = 328
+      Height = 178
+      Top = 196
+      Width = 296
+      Caption = 'Borders'
+      TabOrder = 5
+      object LblLines: TTyLabel
+        Left = 8
+        Height = 20
+        Top = 30
+        Width = 148
+        Caption = '&Lines:'
+        FocusControl = CboLines
+      end
+      object CboLines: TTyComboBox
+        Left = 156
+        Height = 28
+        Top = 26
+        Width = 130
+        TabOrder = 0
+        OnChange = LinesChanged
+      end
+      object LblLineStyle: TTyLabel
+        Left = 8
+        Height = 20
+        Top = 66
+        Width = 148
+        Caption = '&Style:'
+        FocusControl = CboLineStyle
+      end
+      object CboLineStyle: TTyComboBox
+        Left = 156
+        Height = 28
+        Top = 62
+        Width = 130
+        TabOrder = 1
+        OnChange = LineChanged
+      end
+      object LblLineWidth: TTyLabel
+        Left = 8
+        Height = 20
+        Top = 102
+        Width = 148
+        Caption = 'Wi&dth:'
+        FocusControl = CboLineWidth
+      end
+      object CboLineWidth: TTyComboBox
+        Left = 156
+        Height = 28
+        Top = 98
+        Width = 130
+        TabOrder = 2
+        OnChange = LineChanged
+      end
+      object LblLineColor: TTyLabel
+        Left = 8
+        Height = 20
+        Top = 138
+        Width = 148
+        Caption = '&Color:'
+        FocusControl = ClrLine
+      end
+      object ClrLine: TTyColorBox
+        Left = 156
+        Height = 28
+        Top = 134
+        Width = 130
+        TabOrder = 3
+        OnChange = LineChanged
+      end
+    end
+    object LblScope: TTyLabel
+      Left = 16
+      Height = 20
+      Top = 442
+      Width = 400
+      Anchors = [akLeft, akBottom]
+      AutoSize = False
+    end
+    object BtnOk: TTyButton
+      Left = 432
+      Height = 30
+      Top = 438
+      Width = 92
+      Anchors = [akRight, akBottom]
+      Default = True
+      StyleClass = 'primary'
+      Caption = 'OK'
+      TabOrder = 6
+      OnClick = BtnOkClick
+    end
+    object BtnCancel: TTyButton
+      Left = 532
+      Height = 30
+      Top = 438
+      Width = 92
+      Anchors = [akRight, akBottom]
+      Cancel = True
+      ModalResult = 2
+      Caption = 'Cancel'
+      TabOrder = 7
+    end
+  end
+end

@@ -39,6 +39,10 @@ msgstr "选择突出显示颜色"
 msgid "Line spacing"
 msgstr "行距"
 
+#: tmainform.shadingswatch.hint
+msgid "Choose the shading color"
+msgstr "选择底色"
+
 #: tmainform.dlgopen.title
 msgid "Open a document"
 msgstr "打开文档"
@@ -142,6 +146,10 @@ msgstr "标尺(&U)"
 #: tmainform.actshowruler.hint
 msgid "Show the ruler"
 msgstr "显示标尺"
+
+#: tmainform.actinserttable.caption
+msgid "&Table..."
+msgstr "表格(&T)..."
 
 #: tmainform.actspacing1.caption
 msgid "1.0"
@@ -283,6 +291,190 @@ msgstr "书签(&B)..."
 msgid "Add, delete, rename or go to the document's bookmarks"
 msgstr "添加、删除、重命名书签，或转到书签"
 
+#: tmainform.actselectcell.caption
+msgid "&Cell"
+msgstr "单元格(&C)"
+
+#: tmainform.actselectcell.hint
+msgid "Select the cell"
+msgstr "选中单元格"
+
+#: tmainform.actselectrow.caption
+msgid "&Row"
+msgstr "行(&R)"
+
+#: tmainform.actselectrow.hint
+msgid "Select the row"
+msgstr "选中行"
+
+#: tmainform.actselectcolumn.caption
+msgid "C&olumn"
+msgstr "列(&O)"
+
+#: tmainform.actselectcolumn.hint
+msgid "Select the column"
+msgstr "选中列"
+
+#: tmainform.actselecttable.caption
+msgid "&Table"
+msgstr "表格(&T)"
+
+#: tmainform.actselecttable.hint
+msgid "Select the whole table"
+msgstr "选中整张表格"
+
+#: tmainform.actclearcells.caption
+msgid "Cell &Contents"
+msgstr "单元格内容(&C)"
+
+#: tmainform.actclearcells.hint
+msgid "Clear what the selected cells hold"
+msgstr "清空选中单元格的内容"
+
+#: tmainform.actaligntop.caption
+msgid "Align &Top"
+msgstr "顶端对齐(&T)"
+
+#: tmainform.actaligntop.hint
+msgid "The content at the top of the cells"
+msgstr "内容靠单元格顶端"
+
+#: tmainform.actalignmiddle.caption
+msgid "Align &Middle"
+msgstr "垂直居中(&M)"
+
+#: tmainform.actalignmiddle.hint
+msgid "The content in the middle of the cells"
+msgstr "内容在单元格中间"
+
+#: tmainform.actalignbottom.caption
+msgid "Align &Bottom"
+msgstr "底端对齐(&B)"
+
+#: tmainform.actalignbottom.hint
+msgid "The content at the bottom of the cells"
+msgstr "内容靠单元格底端"
+
+#: tmainform.acttableleft.caption
+msgid "&Left"
+msgstr "左对齐(&L)"
+
+#: tmainform.acttableleft.hint
+msgid "The table at the left margin"
+msgstr "表格靠左边距"
+
+#: tmainform.acttablecenter.caption
+msgid "&Center"
+msgstr "居中(&C)"
+
+#: tmainform.acttablecenter.hint
+msgid "The table in the middle of the text"
+msgstr "表格在正文中间"
+
+#: tmainform.acttableright.caption
+msgid "&Right"
+msgstr "右对齐(&R)"
+
+#: tmainform.acttableright.hint
+msgid "The table at the right margin"
+msgstr "表格靠右边距"
+
+#: tmainform.actborderall.caption
+msgid "&All Borders"
+msgstr "所有框线(&A)"
+
+#: tmainform.actborderall.hint
+msgid "Lines on every side of the selected cells"
+msgstr "选中单元格的每一边都加线"
+
+#: tmainform.actborderoutside.caption
+msgid "O&utside Borders"
+msgstr "外侧框线(&U)"
+
+#: tmainform.actborderoutside.hint
+msgid "A line around the selected cells"
+msgstr "选中单元格外围一圈线"
+
+#: tmainform.actborderinside.caption
+msgid "&Inside Borders"
+msgstr "内部框线(&I)"
+
+#: tmainform.actborderinside.hint
+msgid "Lines between the selected cells"
+msgstr "选中单元格之间的线"
+
+#: tmainform.actbordernone.caption
+msgid "&No Border"
+msgstr "无框线(&N)"
+
+#: tmainform.actbordernone.hint
+msgid "No lines on the selected cells"
+msgstr "去掉选中单元格的线"
+
+#: tmainform.actbordertop.caption
+msgid "&Top Border"
+msgstr "上框线(&T)"
+
+#: tmainform.actbordertop.hint
+msgid "A line above the selected cells"
+msgstr "选中单元格上方的线"
+
+#: tmainform.actborderbottom.caption
+msgid "&Bottom Border"
+msgstr "下框线(&B)"
+
+#: tmainform.actborderbottom.hint
+msgid "A line below the selected cells"
+msgstr "选中单元格下方的线"
+
+#: tmainform.actborderleft.caption
+msgid "&Left Border"
+msgstr "左框线(&L)"
+
+#: tmainform.actborderleft.hint
+msgid "A line left of the selected cells"
+msgstr "选中单元格左侧的线"
+
+#: tmainform.actborderright.caption
+msgid "&Right Border"
+msgstr "右框线(&R)"
+
+#: tmainform.actborderright.hint
+msgid "A line right of the selected cells"
+msgstr "选中单元格右侧的线"
+
+#: tmainform.actborderinsideh.caption
+msgid "Inside &Horizontal Border"
+msgstr "内部横框线(&H)"
+
+#: tmainform.actborderinsideh.hint
+msgid "Lines between the selected rows"
+msgstr "选中各行之间的线"
+
+#: tmainform.actborderinsidev.caption
+msgid "Inside &Vertical Border"
+msgstr "内部竖框线(&V)"
+
+#: tmainform.actborderinsidev.hint
+msgid "Lines between the selected columns"
+msgstr "选中各列之间的线"
+
+#: tmainform.actshadingnone.caption
+msgid "&No Shading"
+msgstr "无底色(&N)"
+
+#: tmainform.actshadingnone.hint
+msgid "Take the shading off the selected cells"
+msgstr "去掉选中单元格的底色"
+
+#: tmainform.actshadingchoose.caption
+msgid "&More Colors..."
+msgstr "更多颜色(&M)..."
+
+#: tmainform.actshadingchoose.hint
+msgid "Choose the shading color"
+msgstr "选择底色"
+
 #: tmainform.mnufile.caption
 msgid "&File"
 msgstr "文件(&F)"
@@ -347,6 +539,38 @@ msgstr "插入(&I)"
 msgid "&Table"
 msgstr "表格(&T)"
 
+#: tmainform.mnutblinsert.caption
+msgid "&Insert"
+msgstr "插入(&I)"
+
+#: tmainform.mnutbldelete.caption
+msgid "&Delete"
+msgstr "删除(&D)"
+
+#: tmainform.mnutblselect.caption
+msgid "Se&lect"
+msgstr "选择(&L)"
+
+#: tmainform.mnutblautofit.caption
+msgid "&AutoFit"
+msgstr "自动调整(&A)"
+
+#: tmainform.mnutblcellalign.caption
+msgid "Cell Ali&gnment"
+msgstr "单元格对齐(&G)"
+
+#: tmainform.mnutblalign.caption
+msgid "&Table Alignment"
+msgstr "表格对齐(&T)"
+
+#: tmainform.mnutblborders.caption
+msgid "&Borders"
+msgstr "边框(&B)"
+
+#: tmainform.mnutblshading.caption
+msgid "&Shading"
+msgstr "底色(&S)"
+
 #: tmainform.mnuview.caption
 msgid "&View"
 msgstr "视图(&V)"
@@ -374,6 +598,26 @@ msgstr "皮肤(&S)"
 #: tmainform.mnudark.caption
 msgid "&Dark"
 msgstr "暗色(&D)"
+
+#: tmainform.poptblselect.caption
+msgid "Se&lect"
+msgstr "选择(&L)"
+
+#: tmainform.poptblinsert.caption
+msgid "&Insert"
+msgstr "插入(&I)"
+
+#: tmainform.poptbldelete.caption
+msgid "&Delete"
+msgstr "删除(&D)"
+
+#: tmainform.poptblcellalign.caption
+msgid "Cell Ali&gnment"
+msgstr "单元格对齐(&G)"
+
+#: tmainform.poptblautofit.caption
+msgid "&AutoFit"
+msgstr "自动调整(&A)"
 
 # --- resourcestrings (umain) ---
 
@@ -456,6 +700,10 @@ msgstr "文字颜色"
 #: umain.rshighlighttitle
 msgid "Highlight color"
 msgstr "突出显示颜色"
+
+#: umain.rsshadingtitle
+msgid "Shading color"
+msgstr "底色"
 
 #: umain.rsbadsize
 msgid "Give the size in points, for example 11 or 10.5."
@@ -753,3 +1001,358 @@ msgstr "回到顶部"
 #, object-pascal-format
 msgid "Appended at %s."
 msgstr "追加于 %s。"
+
+# --- utableform.lfm captions/text/hints (msgid = the English source) ---
+
+#: ttableform.caption
+msgid "Table Properties"
+msgstr "表格属性"
+
+#: ttableform.bar.caption
+msgid "Table Properties"
+msgstr "表格属性"
+
+#: ttableform.grptable.caption
+msgid "Table"
+msgstr "表格"
+
+#: ttableform.lbltablealign.caption
+msgid "&Alignment:"
+msgstr "对齐方式(&A)："
+
+#: ttableform.lblindent.caption
+msgid "&Indent (cm):"
+msgstr "左缩进(厘米)(&I)："
+
+#: ttableform.grprow.caption
+msgid "Row"
+msgstr "行"
+
+#: ttableform.lblrowrule.caption
+msgid "Height &rule:"
+msgstr "行高规则(&R)："
+
+#: ttableform.lblrowheight.caption
+msgid "H&eight (cm):"
+msgstr "高度(厘米)(&E)："
+
+#: ttableform.grpcolumn.caption
+msgid "Column"
+msgstr "列"
+
+#: ttableform.lblcolwidth.caption
+msgid "&Width (cm):"
+msgstr "宽度(厘米)(&W)："
+
+#: ttableform.grpshading.caption
+msgid "Shading"
+msgstr "底色"
+
+#: ttableform.lblshading.caption
+msgid "&Fill:"
+msgstr "填充(&F)："
+
+#: ttableform.grpcell.caption
+msgid "Cell (lengths in cm)"
+msgstr "单元格(长度单位：厘米)"
+
+#: ttableform.lblvalign.caption
+msgid "&Vertical alignment:"
+msgstr "垂直对齐(&V)："
+
+#: ttableform.lblpadlr.caption
+msgid "Left, right padding:"
+msgstr "左、右边距："
+
+#: ttableform.lblpadtb.caption
+msgid "Top, bottom padding:"
+msgstr "上、下边距："
+
+#: ttableform.grpborders.caption
+msgid "Borders"
+msgstr "边框"
+
+#: ttableform.lbllines.caption
+msgid "&Lines:"
+msgstr "框线(&L)："
+
+#: ttableform.lbllinestyle.caption
+msgid "&Style:"
+msgstr "线型(&S)："
+
+#: ttableform.lbllinewidth.caption
+msgid "Wi&dth:"
+msgstr "粗细(&D)："
+
+#: ttableform.lbllinecolor.caption
+msgid "&Color:"
+msgstr "颜色(&C)："
+
+#: ttableform.btnok.caption
+msgid "OK"
+msgstr "确定"
+
+#: ttableform.btncancel.caption
+msgid "Cancel"
+msgstr "取消"
+
+# --- resourcestrings (utableform) ---
+
+#: utableform.rstpleft
+msgid "Left"
+msgstr "左对齐"
+
+#: utableform.rstpcenter
+msgid "Center"
+msgstr "居中"
+
+#: utableform.rstpright
+msgid "Right"
+msgstr "右对齐"
+
+#: utableform.rstpauto
+msgid "Automatic"
+msgstr "自动"
+
+#: utableform.rstpatleast
+msgid "At least"
+msgstr "最小值"
+
+#: utableform.rstpexactly
+msgid "Exactly"
+msgstr "固定值"
+
+#: utableform.rstptop
+msgid "Top"
+msgstr "顶端"
+
+#: utableform.rstpmiddle
+msgid "Middle"
+msgstr "居中"
+
+#: utableform.rstpbottom
+msgid "Bottom"
+msgstr "底端"
+
+#: utableform.rstpastheyare
+msgid "(as they are)"
+msgstr "(保持不变)"
+
+#: utableform.rstpall
+msgid "All lines"
+msgstr "所有框线"
+
+#: utableform.rstpoutside
+msgid "Outside lines"
+msgstr "外侧框线"
+
+#: utableform.rstpinside
+msgid "Inside lines"
+msgstr "内部框线"
+
+#: utableform.rstpnolines
+msgid "No lines"
+msgstr "无框线"
+
+#: utableform.rstptopline
+msgid "Top line"
+msgstr "上框线"
+
+#: utableform.rstpbottomline
+msgid "Bottom line"
+msgstr "下框线"
+
+#: utableform.rstpleftline
+msgid "Left line"
+msgstr "左框线"
+
+#: utableform.rstprightline
+msgid "Right line"
+msgstr "右框线"
+
+#: utableform.rstpinsideh
+msgid "Inside horizontal lines"
+msgstr "内部横框线"
+
+#: utableform.rstpinsidev
+msgid "Inside vertical lines"
+msgstr "内部竖框线"
+
+#: utableform.rstpstylenone
+msgid "(no line)"
+msgstr "(无)"
+
+#: utableform.rstpsingle
+msgid "Single line"
+msgstr "单实线"
+
+#: utableform.rstpdouble
+msgid "Double line"
+msgstr "双线"
+
+#: utableform.rstpdotted
+msgid "Dotted line"
+msgstr "点线"
+
+#: utableform.rstpdashed
+msgid "Dashed line"
+msgstr "虚线"
+
+#: utableform.rstppoints
+#, object-pascal-format
+msgid "%s pt"
+msgstr "%s 磅"
+
+#: utableform.rstpautocolor
+msgid "Automatic"
+msgstr "自动"
+
+#: utableform.rstpnocolor
+msgid "No color"
+msgstr "无颜色"
+
+#: utableform.rstpblack
+msgid "Black"
+msgstr "黑色"
+
+#: utableform.rstpgray
+msgid "Gray"
+msgstr "灰色"
+
+#: utableform.rstplightgray
+msgid "Light gray"
+msgstr "浅灰"
+
+#: utableform.rstpwhite
+msgid "White"
+msgstr "白色"
+
+#: utableform.rstpred
+msgid "Red"
+msgstr "红色"
+
+#: utableform.rstporange
+msgid "Orange"
+msgstr "橙色"
+
+#: utableform.rstpyellow
+msgid "Yellow"
+msgstr "黄色"
+
+#: utableform.rstplightyellow
+msgid "Light yellow"
+msgstr "浅黄"
+
+#: utableform.rstpgreen
+msgid "Green"
+msgstr "绿色"
+
+#: utableform.rstplightgreen
+msgid "Light green"
+msgstr "浅绿"
+
+#: utableform.rstpblue
+msgid "Blue"
+msgstr "蓝色"
+
+#: utableform.rstplightblue
+msgid "Light blue"
+msgstr "浅蓝"
+
+#: utableform.rstppurple
+msgid "Purple"
+msgstr "紫色"
+
+#: utableform.rstpcells
+#, object-pascal-format
+msgid "%d × %d cells"
+msgstr "%d × %d 个单元格"
+
+#: utableform.rstpcell
+#, object-pascal-format
+msgid "Row %d, column %d"
+msgstr "第 %d 行，第 %d 列"
+
+#: utableform.rstprowone
+#, object-pascal-format
+msgid "Row %d"
+msgstr "第 %d 行"
+
+#: utableform.rstprows
+#, object-pascal-format
+msgid "Rows %d–%d"
+msgstr "第 %d–%d 行"
+
+#: utableform.rstpcolumnone
+#, object-pascal-format
+msgid "Column %d"
+msgstr "第 %d 列"
+
+#: utableform.rstpcolumns
+#, object-pascal-format
+msgid "Columns %d–%d"
+msgstr "第 %d–%d 列"
+
+#: utableform.rstptable
+#, object-pascal-format
+msgid "The table (%d × %d)"
+msgstr "整张表格（%d × %d）"
+
+#: utableform.rstpapplies
+#, object-pascal-format
+msgid "For: %s"
+msgstr "作用于：%s"
+
+#: utableform.rstpbadlength
+msgid "Give a length in centimetres, for example 1.5."
+msgstr "请输入以厘米为单位的长度，例如 1.5。"
+
+#: utableform.rstpnoheight
+msgid "Give the row's height."
+msgstr "请输入行高。"
+
+# --- resourcestrings (utablesample) ---
+
+#: utablesample.rststitle
+msgid "A price list"
+msgstr "价目表"
+
+#: utablesample.rstsabout
+msgid "The table below is centred; its header row is shaded, its outline is thicker than the lines inside it, and its last row has a fixed height with its content in the middle. Select cells and try the Table menu, the borders and the shading on the tool bar, or Table Properties."
+msgstr "下面这张表格居中放置：表头一行有底色，外框比里面的线粗，最后一行是固定行高，内容在格子中间。选中一些单元格，试试“表格”菜单、工具栏上的边框和底色，或者“表格属性”。"
+
+#: utablesample.rstsitem
+msgid "Item"
+msgstr "品名"
+
+#: utablesample.rstscount
+msgid "Count"
+msgstr "数量"
+
+#: utablesample.rstsprice
+msgid "Price"
+msgstr "单价"
+
+#: utablesample.rstsamount
+msgid "Amount"
+msgstr "金额"
+
+#: utablesample.rstspencil
+msgid "Pencil"
+msgstr "铅笔"
+
+#: utablesample.rstseraser
+msgid "Eraser"
+msgstr "橡皮"
+
+#: utablesample.rstsnotes
+msgid "Notebook"
+msgstr "笔记本"
+
+#: utablesample.rststotal
+msgid "Total"
+msgstr "合计"
+
+#: utablesample.rstsafter
+msgid "A paragraph after the table."
+msgstr "表格后面的段落。"

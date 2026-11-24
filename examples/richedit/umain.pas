@@ -13,13 +13,23 @@ unit umain;
     package's colour dialog;
   - a TTyRichEditRuler above the text shows the paragraph's indents and tab stops, and
     dragging them formats the paragraphs;
-  - the editor's context menu: cut, copy, paste, select all, and the table's operations when
-    the caret is in a table;
+  - the Table menu, grouped as Word groups it: Insert (a table, rows, columns), Delete (the
+    table, columns, rows, the cells' contents), Select (the table, a column, a row, a cell),
+    AutoFit (a column to its contents, the table to the window, rows and columns evenly), the
+    cells' vertical alignment, the table's alignment, the ten border presets, the shading and
+    Table Properties (utableform: a form of the example's own that the action asks through its
+    OnBeforeExecute); the tool bar's second row has a borders drop-down that keeps the preset
+    used last and a shading button with its colour swatch, like the highlight's;
+  - the editor's context menu: cut, copy, paste, select all, and in a table the table's
+    commands (select, insert, delete, cell alignment, autofit, table properties) - each enabled
+    as the tool bar's are, by the control's own answers;
   - the status bar shows what the rich edit refused (OnEditRefused: never a dialog), what was
-    not found, the line and column of the caret, the zoom, and a large file's load;
+    not found, what is selected in a table ("2 × 3 cells", "Row 4"), the line and column of the
+    caret, the zoom, and a large file's load;
   - File opens and saves RTF and plain text through the package's file dialogs; Samples opens
-    a few documents kept in samples/ (Chinese text and its formats, a table, pictures, Word's
-    table of contents with its links) - read from a stream, so Save asks for a new name;
+    a few documents kept in samples/ (Chinese text and its formats, pictures, Word's table of
+    contents with its links) - read from a stream, so Save asks for a new name - and a table
+    built from code (utablesample, the documentation's example);
   - a click on a link (Word's table of contents has many) shows its address in the status bar;
     a place in the document (#name) is gone to by the rich edit itself, a web or mail address
     opens in the system's handler, any other target is only shown;
@@ -46,9 +56,10 @@ uses
   tyControls.ComboBox, tyControls.FontComboBox, tyControls.FontSizeComboBox,
   tyControls.ColorButton, tyControls.StatusBar, tyControls.Dialogs, tyControls.Dialogs.Color,
   tyControls.Dialogs.FileDialog, tyControls.RichEdit.Model, tyControls.RichEdit.Attrs,
-  tyControls.RichEdit.Text, tyControls.RichEdit.Layout,
+  tyControls.RichEdit.Text, tyControls.RichEdit.Layout, tyControls.ImageCollection,
+  tyControls.RichEdit.TableProps, tyControls.RichEdit.TableSel,
   tyControls.RichEdit, tyControls.RichEdit.Ruler, tyControls.RichEdit.Actions,
-  ulinkform, ubookmarkform, uviewerform, upageform;
+  ulinkform, ubookmarkform, uviewerform, upageform, utableform, utablesample;
 
 type
   TMainForm = class(TTyForm)
@@ -102,7 +113,6 @@ type
     BtnIndentIncrease: TTySpeedButton;
     Sep10: TTyToolSeparator;
     BtnSpacing: TTyToolButton;
-    Sep11: TTyToolSeparator;
     BtnClearFormat: TTySpeedButton;
     Ruler: TTyRichEditRuler;
     Status: TTyStatusBar;
@@ -251,7 +261,6 @@ type
     MnuRowBelow: TMenuItem;
     MnuColumnLeft: TMenuItem;
     MnuColumnRight: TMenuItem;
-    MnuSep11: TMenuItem;
     MnuDeleteRow: TMenuItem;
     MnuDeleteColumn: TMenuItem;
     MnuDeleteTable: TMenuItem;
@@ -333,6 +342,114 @@ type
     PopInsertLink: TMenuItem;
     PopEditLink: TMenuItem;
     PopRemoveLink: TMenuItem;
+    Sep12: TTyToolSeparator;
+    BtnBorders: TTyToolButton;
+    BtnShading: TTySpeedButton;
+    ShadingSwatch: TTyColorButton;
+    ActSelectCell: TAction;
+    ActSelectRow: TAction;
+    ActSelectColumn: TAction;
+    ActSelectTable: TAction;
+    ActClearCells: TAction;
+    ActAutoFit: TTyRichEditAutoFitColumn;
+    ActFitWindow: TTyRichEditFitTableToWindow;
+    ActDistributeRows: TTyRichEditDistributeRows;
+    ActDistributeColumns: TTyRichEditDistributeColumns;
+    ActAlignTop: TTyRichEditCellVAlign;
+    ActAlignMiddle: TTyRichEditCellVAlign;
+    ActAlignBottom: TTyRichEditCellVAlign;
+    ActTableLeft: TTyRichEditTableAlign;
+    ActTableCenter: TTyRichEditTableAlign;
+    ActTableRight: TTyRichEditTableAlign;
+    ActBorderAll: TTyRichEditCellBorders;
+    ActBorderOutside: TTyRichEditCellBorders;
+    ActBorderInside: TTyRichEditCellBorders;
+    ActBorderNone: TTyRichEditCellBorders;
+    ActBorderTop: TTyRichEditCellBorders;
+    ActBorderBottom: TTyRichEditCellBorders;
+    ActBorderLeft: TTyRichEditCellBorders;
+    ActBorderRight: TTyRichEditCellBorders;
+    ActBorderInsideH: TTyRichEditCellBorders;
+    ActBorderInsideV: TTyRichEditCellBorders;
+    ActShading: TTyRichEditCellShading;
+    ActShadingNone: TAction;
+    ActShadingChoose: TAction;
+    ActTableProperties: TTyRichEditTableProperties;
+    MnuTblInsert: TMenuItem;
+    MnuInsTable: TMenuItem;
+    MnuSepIns1: TMenuItem;
+    MnuSepIns2: TMenuItem;
+    MnuTblDelete: TMenuItem;
+    MnuClearCells: TMenuItem;
+    MnuTblSelect: TMenuItem;
+    MnuSelectTable: TMenuItem;
+    MnuSelectColumn: TMenuItem;
+    MnuSelectRow: TMenuItem;
+    MnuSelectCell: TMenuItem;
+    MnuSepTbl1: TMenuItem;
+    MnuTblAutoFit: TMenuItem;
+    MnuAutoFit: TMenuItem;
+    MnuFitWindow: TMenuItem;
+    MnuSepFit: TMenuItem;
+    MnuDistributeRows: TMenuItem;
+    MnuDistributeColumns: TMenuItem;
+    MnuTblCellAlign: TMenuItem;
+    MnuAlignTop: TMenuItem;
+    MnuAlignMiddle: TMenuItem;
+    MnuAlignBottom: TMenuItem;
+    MnuTblAlign: TMenuItem;
+    MnuTableLeft: TMenuItem;
+    MnuTableCenter: TMenuItem;
+    MnuTableRight: TMenuItem;
+    MnuTblBorders: TMenuItem;
+    MnuBorderAll: TMenuItem;
+    MnuBorderOutside: TMenuItem;
+    MnuBorderInside: TMenuItem;
+    MnuBorderNone: TMenuItem;
+    MnuBorderTop: TMenuItem;
+    MnuBorderBottom: TMenuItem;
+    MnuBorderLeft: TMenuItem;
+    MnuBorderRight: TMenuItem;
+    MnuBorderInsideH: TMenuItem;
+    MnuBorderInsideV: TMenuItem;
+    MnuTblShading: TMenuItem;
+    MnuShading: TMenuItem;
+    MnuShadingNone: TMenuItem;
+    MnuShadingChoose: TMenuItem;
+    MnuSepTbl2: TMenuItem;
+    MnuTableProperties: TMenuItem;
+    PopTblSelect: TMenuItem;
+    PopSelectTable: TMenuItem;
+    PopSelectColumn: TMenuItem;
+    PopSelectRow: TMenuItem;
+    PopSelectCell: TMenuItem;
+    PopTblInsert: TMenuItem;
+    PopSepIns: TMenuItem;
+    PopTblDelete: TMenuItem;
+    PopClearCells: TMenuItem;
+    PopTblCellAlign: TMenuItem;
+    PopAlignTop: TMenuItem;
+    PopAlignMiddle: TMenuItem;
+    PopAlignBottom: TMenuItem;
+    PopTblAutoFit: TMenuItem;
+    PopAutoFit: TMenuItem;
+    PopFitWindow: TMenuItem;
+    PopSepFit: TMenuItem;
+    PopDistributeRows: TMenuItem;
+    PopDistributeColumns: TMenuItem;
+    PopTableProperties: TMenuItem;
+    PopBorders: TTyImagesMenu;
+    PopBBorderAll: TMenuItem;
+    PopBBorderOutside: TMenuItem;
+    PopBBorderInside: TMenuItem;
+    PopBBorderNone: TMenuItem;
+    PopBBorderTop: TMenuItem;
+    PopBBorderBottom: TMenuItem;
+    PopBBorderLeft: TMenuItem;
+    PopBBorderRight: TMenuItem;
+    PopBBorderInsideH: TMenuItem;
+    PopBBorderInsideV: TMenuItem;
+    BorderGlyphs: TTyVirtualImageList;
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
     procedure FormCloseQuery(Sender: TObject; var CanClose: Boolean);
@@ -378,11 +495,27 @@ type
     procedure ReplaceReplaced(Sender: TObject; ACount: Integer);
     procedure TableChooseSize(Sender: TObject; var ARows, AColumns: Integer;
       var AInsert: Boolean);
+    procedure SelectExecute(Sender: TObject);
+    procedure SelectUpdate(Sender: TObject);
+    procedure ActClearCellsExecute(Sender: TObject);
+    procedure ActClearCellsUpdate(Sender: TObject);
+    procedure BorderBeforeExecute(Sender: TObject; var APreset: TTyRichBorderPreset;
+      var ABorder: TTyRichBorder; var AAllow: Boolean);
+    procedure ActShadingNoneExecute(Sender: TObject);
+    procedure ActShadingNoneUpdate(Sender: TObject);
+    procedure ActShadingChooseExecute(Sender: TObject);
+    procedure TablePropertiesBeforeExecute(Sender: TObject; var AProps: TTyRichTableProperties;
+      var AAllow: Boolean);
   private
     { The actions' record of the rich edit, and how many times it had asked when the boxes
       were last filled from it. }
     FBoxesAt: Integer;
+    { The same for the table's state: the caret is in a table, cells are selected (what the
+      select and clear actions and the status bar show). }
+    FTableAt: Integer;
+    FInTable, FCellsSelected: Boolean;
     procedure AppIdle(Sender: TObject; var Done: Boolean);
+    procedure ShowTableState;
     procedure ShowFormatInBoxes;
     procedure ApplyFontName(const AName: string);
     procedure ApplyFontSize(const AText: string);
@@ -426,6 +559,7 @@ resourcestring
   rsSaveFilter   = 'Rich text (*.rtf)|*.rtf|Text (*.txt)|*.txt';
   rsTextColorTitle = 'Text color';
   rsHighlightTitle = 'Highlight color';
+  rsShadingTitle = 'Shading color';
   rsBadSize      = 'Give the size in points, for example 11 or 10.5.';
   rsPicture      = 'Picture';
 
@@ -451,9 +585,11 @@ begin
   DlgSave.Filter := rsSaveFilter;
   TextSwatch.DialogCaption := rsTextColorTitle;
   HighlightSwatch.DialogCaption := rsHighlightTitle;
+  ShadingSwatch.DialogCaption := rsShadingTitle;
   SetSkin('default');
   MnuWrapWindow.Checked := True;
   FBoxesAt := -1;
+  FTableAt := -1;
   ShowSwatches;
   Application.AddOnIdleHandler(@AppIdle);
   ShowCaret;
@@ -471,6 +607,24 @@ end;
 procedure TMainForm.AppIdle(Sender: TObject; var Done: Boolean);
 begin
   ShowFormatInBoxes;
+  ShowTableState;
+end;
+
+{ The table's state, asked of the rich edit when the actions' record asked it again (after a
+  move of the selection or a change), never per idle round: the caret in a table, cells
+  selected, and what the status bar says about them. }
+procedure TMainForm.ShowTableState;
+var
+  st: TTyRichEditActionState;
+begin
+  st := TTyRichEditActionState.Find(Editor);
+  st.Check;
+  if st.Refreshes = FTableAt then Exit;
+  FTableAt := st.Refreshes;
+  FInTable := Editor.InTable;
+  FCellsSelected := FInTable and Editor.SelectedCells.InTable;
+  if FInTable then Status.Panels[1].Text := TableSelectionText(Editor)
+  else Status.Panels[1].Text := '';
 end;
 
 { Filled from the record the actions read (asked of the rich edit once per change of its
@@ -577,6 +731,8 @@ begin
   else TextSwatch.ButtonColor := ActTextColor.Color;
   if ActHighlight.Color = clNone then HighlightSwatch.ButtonColor := clWindow
   else HighlightSwatch.ButtonColor := ActHighlight.Color;
+  if ActShading.Color = clNone then ShadingSwatch.ButtonColor := clWindow
+  else ShadingSwatch.ButtonColor := ActShading.Color;
 end;
 
 { The swatch's own dialog chose a colour: it is its button's colour now, and applied. }
@@ -586,6 +742,11 @@ begin
   begin
     ActTextColor.Color := TextSwatch.ButtonColor;
     ActTextColor.Execute;
+  end
+  else if Sender = ShadingSwatch then
+  begin
+    ActShading.Color := ShadingSwatch.ButtonColor;
+    ActShading.Execute;
   end
   else
   begin
@@ -668,7 +829,8 @@ begin
 end;
 
 { The context menu: a new link where one may be made, the link's own items in a link, the
-  table's operations only when the caret is in a table. }
+  table's commands only when the caret is in a table (each enabled by its action, as on the
+  tool bar). }
 procedure TMainForm.PopEditorPopup(Sender: TObject);
 var
   t, inLink, newLink: Boolean;
@@ -681,13 +843,100 @@ begin
   PopRemoveLink.Visible := inLink;
   t := Editor.InTable;
   PopSepTable.Visible := t;
-  PopRowAbove.Visible := t;
-  PopRowBelow.Visible := t;
-  PopColumnLeft.Visible := t;
-  PopColumnRight.Visible := t;
-  PopDeleteRow.Visible := t;
-  PopDeleteColumn.Visible := t;
-  PopDeleteTable.Visible := t;
+  PopTblSelect.Visible := t;
+  PopTblInsert.Visible := t;
+  PopTblDelete.Visible := t;
+  PopTblCellAlign.Visible := t;
+  PopTblAutoFit.Visible := t;
+  PopTableProperties.Visible := t;
+end;
+
+{ ---- the table ---- }
+
+{ Select > Cell / Row / Column / Table: the control's own methods (the package has no action
+  for them). They select in a read-only document too: selecting is no edit. }
+procedure TMainForm.SelectExecute(Sender: TObject);
+begin
+  if Sender = ActSelectCell then Editor.SelectCell
+  else if Sender = ActSelectRow then Editor.SelectRow
+  else if Sender = ActSelectColumn then Editor.SelectColumn
+  else Editor.SelectTable;
+end;
+
+procedure TMainForm.SelectUpdate(Sender: TObject);
+begin
+  ShowTableState;
+  TAction(Sender).Enabled := FInTable and Editor.Enabled;
+end;
+
+{ Delete > Cell Contents: the selected cells emptied, the cells kept - what the Delete key does
+  to them (ClearSelection is the key's door). }
+procedure TMainForm.ActClearCellsExecute(Sender: TObject);
+begin
+  Editor.ClearSelection;
+end;
+
+procedure TMainForm.ActClearCellsUpdate(Sender: TObject);
+begin
+  ShowTableState;
+  ActClearCells.Enabled := FCellsSelected and not Editor.ReadOnly and Editor.Enabled;
+end;
+
+{ A preset from the borders drop-down or the Borders menu: the drop-down's button keeps it, so
+  a click on the button gives the same lines again (as Word's). }
+procedure TMainForm.BorderBeforeExecute(Sender: TObject; var APreset: TTyRichBorderPreset;
+  var ABorder: TTyRichBorder; var AAllow: Boolean);
+begin
+  if BtnBorders.Action <> Sender then
+  begin
+    BtnBorders.Action := TBasicAction(Sender);
+    BtnBorders.GlyphName := BorderGlyphs.Names[Ord(APreset)];
+  end;
+end;
+
+procedure TMainForm.ActShadingNoneExecute(Sender: TObject);
+begin
+  ActShading.Color := clNone;
+  ActShading.Execute;
+  ShowSwatches;
+end;
+
+procedure TMainForm.ActShadingNoneUpdate(Sender: TObject);
+var
+  st: TTyRichEditActionState;
+begin
+  st := TTyRichEditActionState.Find(Editor);
+  st.Check;
+  TAction(Sender).Enabled := st.CanFormatCells;
+end;
+
+procedure TMainForm.ActShadingChooseExecute(Sender: TObject);
+var
+  c: TColor;
+  alpha: Byte;
+begin
+  c := ShadingSwatch.ButtonColor;
+  alpha := 255;
+  if not TySelectColor(rsShadingTitle, c, alpha) then Exit;
+  ActShading.Color := c;
+  ActShading.Execute;
+  ShowSwatches;
+end;
+
+{ Table Properties: the example's form (utableform) asks; what it hands back is applied by the
+  action as one undo step. The lines are no field of that record: changed, they go through
+  SetCellBorders first, a step of their own. }
+procedure TMainForm.TablePropertiesBeforeExecute(Sender: TObject;
+  var AProps: TTyRichTableProperties; var AAllow: Boolean);
+var
+  lines: Boolean;
+  preset: TTyRichBorderPreset;
+  line: TTyRichBorder;
+begin
+  AAllow := AskTableProperties(Editor, AProps, lines, preset, line);
+  if not AAllow then Exit;
+  if lines then Editor.SetCellBorders(preset, line);
+  AAllow := AProps.Valid <> [];
 end;
 
 { ---- links, bookmarks, pictures ---- }
@@ -781,12 +1030,12 @@ var
   p: TPoint;
 begin
   p := Editor.CaretPos;
-  Status.Panels[1].Text := Format(rsLineColumn, [p.Y + 1, p.X + 1]);
+  Status.Panels[2].Text := Format(rsLineColumn, [p.Y + 1, p.X + 1]);
 end;
 
 procedure TMainForm.ShowZoom;
 begin
-  Status.Panels[2].Text := Format(rsZoomPercent, [Editor.Zoom]);
+  Status.Panels[3].Text := Format(rsZoomPercent, [Editor.Zoom]);
 end;
 
 procedure TMainForm.ShowTitle;
@@ -981,11 +1230,18 @@ var
   sample: string;
   f: TFileStream;
 begin
+  if not MaySetAside then Exit;
+  if Sender = MnuSampleTable then
+  begin
+    // made with the builder (utablesample): a new document, no file behind it
+    ShowTableSample(Editor);
+    Tell('');
+    ShowTitle;
+    Exit;
+  end;
   if Sender = MnuSampleFormats then sample := 'wp-styles.rtf'
-  else if Sender = MnuSampleTable then sample := 'wp-zh-table.rtf'
   else if Sender = MnuSamplePictures then sample := 're-zh-picture.rtf'
   else sample := 'word-toc.rtf';
-  if not MaySetAside then Exit;
   try
     // read from a stream: the sample is not the document's file, so Save asks for a name
     f := TFileStream.Create(SamplesDir + sample, fmOpenRead or fmShareDenyWrite);
