@@ -126,6 +126,7 @@ type
     procedure TestThePictureActionAsksForAFileOfAReadableFormat;
     procedure TestTheIndentActionsStepByHalfAnInch;
     procedure TestTheIndentActionsMoveListItemsALevel;
+    procedure TestTheIndentActionsOverListCellsTakeTheirLevels;
     procedure TestUndoRedoAndZoom;
     procedure TestAShortcutIsHandledByOneOfTheTwo;
     procedure TestTheCaptionsAndHintsAreInTheCatalogue;
@@ -1245,6 +1246,59 @@ begin
   AssertEquals('at level 0: where it is', 0, Lvl(0));
   AssertEquals('no step', depth, FRich.Document.UndoDepth);
   AssertTrue('still enabled', UpdatedOn(decr).Enabled);
+end;
+
+{ The indent actions over selected cells of a table whose paragraphs are all list items:
+  those cells' paragraphs - the rectangle's, as the paragraph formats take them - go a level
+  deeper or shallower, in one step; the cells outside it (also those between in text order)
+  stay. }
+procedure TTyRichEditActionsTest.TestTheIndentActionsOverListCellsTakeTheirLevels;
+var
+  incr, decr: TTyRichEditAction;
+  d: TTyRichDocument;
+  r, c, f, l: Integer;
+  inside: Boolean;
+
+  function Cell(ARow, ACol: Integer): TTyRichPos;
+  begin
+    AssertTrue('the cell', d.TableCellParas(1, ARow, ACol, f, l));
+    Result := d.Text.ParaStart(f);
+  end;
+
+  function Lvl(APos: TTyRichPos): Integer;
+  begin
+    Result := d.Formats.ParaFormat(d.ParaFormatOf(d.Text.ParaOfPos(APos))).List.Level;
+  end;
+
+begin
+  SetText('before'#10'after');
+  d := FRich.Document;
+  AssertTrue('a table', d.Execute(TTyRichInsertTable.Create(d.Text.ParaStart(1), 3, 3, 1440 * 3)));
+  for r := 2 downto 0 do
+    for c := 2 downto 0 do
+      d.Execute(TTyRichInsertText.Create(Cell(r, c), Format('r%dc%d', [r, c])));
+  // every cell's paragraph a numbered item
+  AssertTrue('the last cell', d.TableCellParas(1, 2, 2, f, l));
+  Select(Cell(0, 0), d.Text.ParaStart(l) + d.Text.ParaLength(l) + 1 - Cell(0, 0));
+  FRich.Paragraph.Numbering := lkDecimal;
+  d.ClearUndo;
+  incr := Make(TTyRichEditIndentIncrease);
+  decr := Make(TTyRichEditIndentDecrease);
+  // r0c1 .. r1c2: the rectangle of rows 0 - 1, columns 1 - 2
+  Select(Cell(0, 1), Cell(1, 2) + 1 - Cell(0, 1));
+  AssertTrue('cells', FRich.SelectedCells.InTable);
+  incr.Execute;
+  AssertEquals('one step', 1, d.UndoDepth);
+  for r := 0 to 2 do
+    for c := 0 to 2 do
+    begin
+      inside := (r <= 1) and (c >= 1);
+      AssertEquals(Format('%d,%d', [r, c]), Ord(inside), Lvl(Cell(r, c)));
+    end;
+  Select(Cell(0, 1), Cell(1, 2) + 1 - Cell(0, 1));
+  decr.Execute;
+  AssertEquals('back: 0,1', 0, Lvl(Cell(0, 1)));
+  AssertEquals('back: 1,2', 0, Lvl(Cell(1, 2)));
 end;
 
 { Undo and Redo: the control's CanUndo / CanRedo, its Undo / Redo. Zoom: by the wheel's step

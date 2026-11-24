@@ -18,8 +18,7 @@ uses
   tyControls.RichEdit.Text, tyControls.RichEdit.Model, tyControls.RichEdit.Commands,
   tyControls.RichEdit.TableProps, tyControls.RichEdit.TableSel, tyControls.RichEdit.RtfRead,
   tyControls.RichEdit.Layout, tyControls.RichEdit, tyControls.RichEdit.Builder,
-  tyControls.RichEdit.Bookmarks, tyControls.StrConsts, tyControls.RichEdit.Attrs,
-  tyControls.RichEdit.Actions, test.richedit.layoutdevice;
+  tyControls.RichEdit.Bookmarks, tyControls.StrConsts, test.richedit.layoutdevice;
 
 type
   TSelRich = class(TTyRichEdit)
@@ -97,7 +96,6 @@ type
     procedure TestTheRowAndColumnZonesAreWideEnough;
     procedure TestCutOverCellsCopiesAndClears;
     procedure TestTabOverListCellsMovesAndNoLevelChanges;
-    procedure TestTheIndentActionsOverListCellsTakeTheirLevels;
   end;
 
 implementation
@@ -1638,41 +1636,6 @@ begin
     for c := 0 to 2 do
       AssertEquals(Format('%d,%d: its level as it was', [r, c]), 0, LevelAt(FRich, CellStart(r, c)));
   AssertEquals('no step', 0, FRich.Document.UndoDepth);
-end;
-
-{ The indent actions over selected cells whose paragraphs are all list items: those cells'
-  paragraphs - the rectangle's, as the paragraph formats take them - go a level deeper or
-  shallower, in one step; the cells outside it (also those between in text order) stay. }
-procedure TTyRichTableSelTest.TestTheIndentActionsOverListCellsTakeTheirLevels;
-var
-  inc_, dec_: TTyRichEditIndentAction;
-  r, c: Integer;
-  inside: Boolean;
-begin
-  MakeTable(3, 3);
-  NumberEveryCell(FRich, CellStart(0, 0), CellEnd(2, 2));
-  inc_ := TTyRichEditIndentIncrease.Create(nil);
-  dec_ := TTyRichEditIndentDecrease.Create(nil);
-  try
-    inc_.RichEdit := FRich;
-    dec_.RichEdit := FRich;
-    Sel(CellStart(0, 1), CellStart(1, 2) + 1);
-    inc_.Execute;
-    AssertEquals('one step', 1, FRich.Document.UndoDepth);
-    for r := 0 to 2 do
-      for c := 0 to 2 do
-      begin
-        inside := (r <= 1) and (c >= 1);
-        AssertEquals(Format('%d,%d', [r, c]), Ord(inside), LevelAt(FRich, CellStart(r, c)));
-      end;
-    Sel(CellStart(0, 1), CellStart(1, 2) + 1);
-    dec_.Execute;
-    AssertEquals('back: 0,1', 0, LevelAt(FRich, CellStart(0, 1)));
-    AssertEquals('back: 1,2', 0, LevelAt(FRich, CellStart(1, 2)));
-  finally
-    inc_.Free;
-    dec_.Free;
-  end;
 end;
 
 { ---- painting ---- }
