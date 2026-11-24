@@ -57,7 +57,6 @@ uses
   tyControls.ColorButton, tyControls.StatusBar, tyControls.Dialogs, tyControls.Dialogs.Color,
   tyControls.Dialogs.FileDialog, tyControls.RichEdit.Model, tyControls.RichEdit.Attrs,
   tyControls.RichEdit.Text, tyControls.RichEdit.Layout, tyControls.ImageCollection,
-  tyControls.RichEdit.TableProps, tyControls.RichEdit.TableSel,
   tyControls.RichEdit, tyControls.RichEdit.Ruler, tyControls.RichEdit.Actions,
   ulinkform, ubookmarkform, uviewerform, upageform, utableform, utablesample;
 
@@ -112,6 +111,7 @@ type
     BtnIndentDecrease: TTySpeedButton;
     BtnIndentIncrease: TTySpeedButton;
     Sep10: TTyToolSeparator;
+    Sep11: TTyToolSeparator;
     BtnSpacing: TTyToolButton;
     BtnClearFormat: TTySpeedButton;
     Ruler: TTyRichEditRuler;
@@ -346,10 +346,10 @@ type
     BtnBorders: TTyToolButton;
     BtnShading: TTySpeedButton;
     ShadingSwatch: TTyColorButton;
-    ActSelectCell: TAction;
-    ActSelectRow: TAction;
-    ActSelectColumn: TAction;
-    ActSelectTable: TAction;
+    ActSelectCell: TTyRichEditSelectCell;
+    ActSelectRow: TTyRichEditSelectRow;
+    ActSelectColumn: TTyRichEditSelectColumn;
+    ActSelectTable: TTyRichEditSelectTable;
     ActClearCells: TAction;
     ActAutoFit: TTyRichEditAutoFitColumn;
     ActFitWindow: TTyRichEditFitTableToWindow;
@@ -495,8 +495,6 @@ type
     procedure ReplaceReplaced(Sender: TObject; ACount: Integer);
     procedure TableChooseSize(Sender: TObject; var ARows, AColumns: Integer;
       var AInsert: Boolean);
-    procedure SelectExecute(Sender: TObject);
-    procedure SelectUpdate(Sender: TObject);
     procedure ActClearCellsExecute(Sender: TObject);
     procedure ActClearCellsUpdate(Sender: TObject);
     procedure BorderBeforeExecute(Sender: TObject; var APreset: TTyRichBorderPreset;
@@ -853,22 +851,6 @@ end;
 
 { ---- the table ---- }
 
-{ Select > Cell / Row / Column / Table: the control's own methods (the package has no action
-  for them). They select in a read-only document too: selecting is no edit. }
-procedure TMainForm.SelectExecute(Sender: TObject);
-begin
-  if Sender = ActSelectCell then Editor.SelectCell
-  else if Sender = ActSelectRow then Editor.SelectRow
-  else if Sender = ActSelectColumn then Editor.SelectColumn
-  else Editor.SelectTable;
-end;
-
-procedure TMainForm.SelectUpdate(Sender: TObject);
-begin
-  ShowTableState;
-  TAction(Sender).Enabled := FInTable and Editor.Enabled;
-end;
-
 { Delete > Cell Contents: the selected cells emptied, the cells kept - what the Delete key does
   to them (ClearSelection is the key's door). }
 procedure TMainForm.ActClearCellsExecute(Sender: TObject);
@@ -923,19 +905,12 @@ begin
   ShowSwatches;
 end;
 
-{ Table Properties: the example's form (utableform) asks; what it names as changed is applied
-  by the action as one undo step (nothing changed: nothing). The lines are no field of that
-  record: changed, they go through SetCellBorders first, a step of their own. }
+{ Table Properties: the example's form (utableform) asks; what it names as changed - the lines
+  too - is applied by the action as one undo step (nothing changed: nothing). }
 procedure TMainForm.TablePropertiesBeforeExecute(Sender: TObject;
   var AProps: TTyRichTableProperties; var AAllow: Boolean);
-var
-  lines: Boolean;
-  preset: TTyRichBorderPreset;
-  line: TTyRichBorder;
 begin
-  AAllow := AskTableProperties(Editor, AProps, lines, preset, line);
-  if not AAllow then Exit;
-  if lines then Editor.SetCellBorders(preset, line);
+  AAllow := AskTableProperties(Editor, AProps);
 end;
 
 { ---- links, bookmarks, pictures ---- }

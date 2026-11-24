@@ -12,8 +12,8 @@ unit utablesample;
 interface
 
 uses
-  Classes, SysUtils, Graphics, tyControls.RichEdit.Model, tyControls.RichEdit.RowFormat,
-  tyControls.RichEdit.TableProps, tyControls.RichEdit.Builder, tyControls.RichEdit;
+  Classes, SysUtils, Graphics, tyControls.RichEdit.Model, tyControls.RichEdit.Builder,
+  tyControls.RichEdit;
 
 { The price table into B: four columns, a header, three items and a total. }
 procedure AddPriceTable(B: TTyRichBuilder);

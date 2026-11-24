@@ -295,33 +295,17 @@ msgstr "添加、删除、重命名书签，或转到书签"
 msgid "&Cell"
 msgstr "单元格(&C)"
 
-#: tmainform.actselectcell.hint
-msgid "Select the cell"
-msgstr "选中单元格"
-
 #: tmainform.actselectrow.caption
 msgid "&Row"
 msgstr "行(&R)"
-
-#: tmainform.actselectrow.hint
-msgid "Select the row"
-msgstr "选中行"
 
 #: tmainform.actselectcolumn.caption
 msgid "C&olumn"
 msgstr "列(&O)"
 
-#: tmainform.actselectcolumn.hint
-msgid "Select the column"
-msgstr "选中列"
-
 #: tmainform.actselecttable.caption
 msgid "&Table"
 msgstr "表格(&T)"
-
-#: tmainform.actselecttable.hint
-msgid "Select the whole table"
-msgstr "选中整张表格"
 
 #: tmainform.actclearcells.caption
 msgid "Cell &Contents"

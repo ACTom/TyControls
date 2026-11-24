@@ -6,12 +6,11 @@ unit utableform;
 
   The rich edit's TTyRichEditTableProperties asks it through OnBeforeExecute (the package has
   no such form of its own: this one is yours to copy). The action hands over the selection's
-  values and the fields alike over all of it (Uniform; the control's GetTableProperties); a
-  value the selected cells do not share shows empty. The lines are no field of that record: the
-  form reads them itself through the control's public members (SelectedCells, CaretCell,
-  Document.CellProps). On OK the form names what the person changed (Changed) and the action
-  applies only that, as ONE undo step; a change of the lines goes through SetCellBorders before
-  it, an undo step of its own. Nothing changed, nothing is done. Cancel changes nothing.
+  values - its lines too: the outline's four sides and the inner lines - and the fields alike
+  over all of it (Uniform; the control's GetTableProperties); a value the selected cells do not
+  share shows empty. On OK the form names what the person changed (Changed) and the action
+  applies only that, lines and all, as ONE undo step; nothing changed, nothing is done. Cancel
+  changes nothing.
 
   Lengths are shown in centimetres (the control's are twips) through one pair of functions,
   TwipsToCm and CmToTwips; a field counts as changed only when the twips it gives differ from
@@ -25,8 +24,7 @@ interface
 uses
   Classes, SysUtils, Forms, Controls, Graphics, tyControls.Controller, tyControls.Form,
   tyControls.FormSurface, tyControls.TyLabel, tyControls.Edit, tyControls.ComboBox,
-  tyControls.ColorBox, tyControls.GroupBox, tyControls.Button, tyControls.RichEdit.RowFormat,
-  tyControls.RichEdit.TableProps, tyControls.RichEdit.TableSel, tyControls.RichEdit.Text,
+  tyControls.ColorBox, tyControls.GroupBox, tyControls.Button, tyControls.RichEdit.Text,
   tyControls.RichEdit;
 
 type
@@ -89,20 +87,20 @@ type
     function LengthChanged(AEdit: TTyEdit; AShown: Integer; out ATwips: Integer): Boolean;
     procedure Refuse(AEdit: TTyEdit);
   public
-    { Fills the form: AProps as the action hands it over (the values, Uniform what is alike),
-      the lines from ARich's selected cells (else the caret's cell). }
+    { Fills the form: AProps as the action hands it over (the values, Uniform what is alike);
+      ARich for the words saying what is selected. }
     procedure Prepare(ARich: TTyCustomRichEdit; const AProps: TTyRichTableProperties);
-    { What the person changed: AProps' values and Changed naming them; ALines True: the lines
-      too, APreset with ALine. }
-    procedure Collect(var AProps: TTyRichTableProperties; out ALines: Boolean;
-      out APreset: TTyRichBorderPreset; out ALine: TTyRichBorder);
+    { What the person changed: AProps' values and Changed naming them. }
+    procedure Collect(var AProps: TTyRichTableProperties);
   end;
 
 { The table properties of ARich's selection, asked in the form: AProps in is what the action
   hands its OnBeforeExecute (the values, Uniform); out, Changed names what the person changed.
-  ALines: the lines were changed (APreset, ALine). False: cancelled. }
-function AskTableProperties(ARich: TTyCustomRichEdit; var AProps: TTyRichTableProperties;
-  out ALines: Boolean; out APreset: TTyRichBorderPreset; out ALine: TTyRichBorder): Boolean;
+  False: cancelled. }
+function AskTableProperties(ARich: TTyCustomRichEdit; var AProps: TTyRichTableProperties): Boolean;
+
+{ The lines a border preset names (the outline's sides, the inner lines). }
+function PresetLines(APreset: TTyRichBorderPreset): TTyRichCellLines;
 
 { Twips (1440 an inch) as centimetres with two decimals, and back (False: no number there). The
   one pair every length of the form goes through. }
@@ -229,27 +227,6 @@ end;
 
 { ---- what is selected ---- }
 
-{ The cells a format door takes (the selected ones, else the caret's), with the caret's cell. }
-function TargetCells(ARich: TTyCustomRichEdit; out APos: TTyRichPos; out AR0, AC0, AR1,
-  AC1: Integer): Boolean;
-var
-  rng: TTyRichCellRange;
-begin
-  rng := ARich.SelectedCells;
-  if rng.InTable then
-  begin
-    APos := rng.TablePos;
-    AR0 := rng.Row0;
-    AC0 := rng.Col0;
-    AR1 := rng.Row1;
-    AC1 := rng.Col1;
-    Exit(True);
-  end;
-  Result := ARich.CaretCell(APos, AR0, AC0);
-  AR1 := AR0;
-  AC1 := AC0;
-end;
-
 { How many cells row ARow has (CellProps answers Valid empty past the last). }
 function CellCount(ARich: TTyCustomRichEdit; APos: TTyRichPos; ARow: Integer): Integer;
 begin
@@ -294,21 +271,48 @@ end;
 
 { ---- the form ---- }
 
-function AskTableProperties(ARich: TTyCustomRichEdit; var AProps: TTyRichTableProperties;
-  out ALines: Boolean; out APreset: TTyRichBorderPreset; out ALine: TTyRichBorder): Boolean;
+function AskTableProperties(ARich: TTyCustomRichEdit; var AProps: TTyRichTableProperties): Boolean;
 var
   f: TTableForm;
 begin
-  ALines := False;
-  APreset := rbpAll;
-  ALine := TyRichBorder(rbsSingle, 10);
   f := TTableForm.Create(Application);
   try
     f.Prepare(ARich, AProps);
     Result := f.ShowModal = mrOk;
-    if Result then f.Collect(AProps, ALines, APreset, ALine);
+    if Result then f.Collect(AProps);
   finally
     f.Free;
+  end;
+end;
+
+{ Two lines alike (no line: its width and colour say nothing). }
+function SameLine(const A, B: TTyRichBorder): Boolean;
+begin
+  if (A.Style = rbsNone) and (B.Style = rbsNone) then Exit(True);
+  Result := (A.Style = B.Style) and (A.WidthTwips = B.WidthTwips) and (A.Color = B.Color);
+end;
+
+function LineField(ALine: TTyRichCellLine): TTyRichTablePropField;
+const
+  Fields: array[TTyRichCellLine] of TTyRichTablePropField = (tpfLineLeft, tpfLineTop,
+    tpfLineRight, tpfLineBottom, tpfLineInsideH, tpfLineInsideV);
+begin
+  Result := Fields[ALine];
+end;
+
+function PresetLines(APreset: TTyRichBorderPreset): TTyRichCellLines;
+begin
+  case APreset of
+    rbpAll, rbpNone: Result := [rclLeft, rclTop, rclRight, rclBottom, rclInsideH, rclInsideV];
+    rbpOutside: Result := [rclLeft, rclTop, rclRight, rclBottom];
+    rbpInside: Result := [rclInsideH, rclInsideV];
+    rbpTop: Result := [rclTop];
+    rbpBottom: Result := [rclBottom];
+    rbpLeft: Result := [rclLeft];
+    rbpRight: Result := [rclRight];
+    rbpInsideH: Result := [rclInsideH];
+  else
+    Result := [rclInsideV];
   end;
 end;
 
@@ -390,11 +394,10 @@ end;
 
 procedure TTableForm.Prepare(ARich: TTyCustomRichEdit; const AProps: TTyRichTableProperties);
 var
-  pos: TTyRichPos;
-  r0, c0, r1, c1, r, c, n: Integer;
-  cp: TTyRichCellProps;
+  n: Integer;
   sd: TTyRowCellSide;
-  lineMixed, firstLine: Boolean;
+  ln: TTyRichCellLine;
+  lineMixed, seen: Boolean;
   line: TTyRichBorder;
 
   function Alike(AField: TTyRichTablePropField): Boolean;
@@ -404,6 +407,7 @@ var
 
 begin
   FRich := ARich;
+  seen := False;
   FFilling := True;
   try
     // the table
@@ -450,29 +454,21 @@ begin
         ClrShading.Selected := FShading;
       end;
     end;
-    // the lines: what every side of every cell has, else nothing shown
-    lineMixed := True;
+    // the lines: shown when every line the selection has is alike, else nothing shown
+    lineMixed := False;
     line := TyRichBorder(rbsSingle, 10);
-    if TargetCells(ARich, pos, r0, c0, r1, c1) then
-    begin
-      lineMixed := False;
-      firstLine := True;
-      for r := r0 to r1 do
-        for c := c0 to c1 do
+    for ln := Low(TTyRichCellLine) to High(TTyRichCellLine) do
+      if LineField(ln) in AProps.Uniform then
+        if not seen then
         begin
-          cp := ARich.Document.CellProps(pos, r, c);
-          if cp.Valid = [] then Break;
-          for sd := Low(sd) to High(sd) do
-            if firstLine then
-            begin
-              line := cp.Borders[sd];
-              firstLine := False;
-            end
-            else if not TyRichSameBorder(line, cp.Borders[sd]) then lineMixed := True;
-        end;
-      if firstLine then lineMixed := True;
-      LblScope.Caption := Format(rsTpApplies, [TableSelectionText(ARich)]);
-    end;
+          line := AProps.Lines[ln];
+          seen := True;
+        end
+        else if not SameLine(line, AProps.Lines[ln]) then lineMixed := True;
+    // the outline's sides are in every selection: one of them mixed, the lines are
+    for ln := rclLeft to rclBottom do
+      if not (LineField(ln) in AProps.Uniform) then lineMixed := True;
+    LblScope.Caption := Format(rsTpApplies, [TableSelectionText(ARich)]);
     CboLines.ItemIndex := 0;
     if lineMixed then
     begin
@@ -557,12 +553,13 @@ begin
   ModalResult := mrOk;
 end;
 
-procedure TTableForm.Collect(var AProps: TTyRichTableProperties; out ALines: Boolean;
-  out APreset: TTyRichBorderPreset; out ALine: TTyRichBorder);
+procedure TTableForm.Collect(var AProps: TTyRichTableProperties);
 var
   t: Integer;
   sd: TTyRowCellSide;
   padChanged: Boolean;
+  ln: TTyRichCellLine;
+  line: TTyRichBorder;
 begin
   AProps.Changed := [];
   // the table
@@ -622,16 +619,19 @@ begin
     Include(AProps.Changed, tpfShading);
     AProps.Shading := ClrShading.Selected;
   end;
-  // the lines: their own door
-  ALines := CboLines.ItemIndex > 0;
-  APreset := rbpAll;
-  ALine := TyRichBorder(rbsSingle, 10);
-  if ALines then
+  // the lines the preset names, each to the style, width and colour shown
+  if CboLines.ItemIndex > 0 then
   begin
-    APreset := TTyRichBorderPreset(CboLines.ItemIndex - 1);
-    if CboLineStyle.ItemIndex >= 0 then ALine.Style := TTyRichBorderStyle(CboLineStyle.ItemIndex);
-    if CboLineWidth.ItemIndex >= 0 then ALine.WidthTwips := CLineWidths[CboLineWidth.ItemIndex];
-    if ClrLine.ItemIndex >= 0 then ALine.Color := ClrLine.Selected else ALine.Color := clDefault;
+    line := TyRichBorder(rbsSingle, 10);
+    if CboLineStyle.ItemIndex >= 0 then line.Style := TTyRichBorderStyle(CboLineStyle.ItemIndex);
+    if CboLineWidth.ItemIndex >= 0 then line.WidthTwips := CLineWidths[CboLineWidth.ItemIndex];
+    if ClrLine.ItemIndex >= 0 then line.Color := ClrLine.Selected else line.Color := clDefault;
+    if TTyRichBorderPreset(CboLines.ItemIndex - 1) = rbpNone then line := TyRichBorder(rbsNone, 0);
+    for ln in PresetLines(TTyRichBorderPreset(CboLines.ItemIndex - 1)) do
+    begin
+      AProps.Lines[ln] := line;
+      Include(AProps.Changed, LineField(ln));
+    end;
   end;
 end;
 
