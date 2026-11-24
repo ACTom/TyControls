@@ -32,14 +32,15 @@ uses
   Graphics, tyControls.RichEdit.RowFormat;
 
 type
-  TTyRichBorderStyle = (rbsNone, rbsSingle, rbsDouble, rbsDotted, rbsDashed);
+  TTyRichBorderStyle = (rbsNone, rbsSingle, rbsDouble, rbsDotted, rbsDashed, rbsOther);
   // (the same sides as the display's: one set of names)
   TTyRichCellSide = TTyRowCellSide;
 
   { A cell border: no line (rbsNone), or a line of a style, a width and a colour. Color
-    clDefault: automatic (the text's colour where it is drawn). A file's styles other than
-    these four are read as rbsSingle and are written back as the file had them while the
-    border is not changed. }
+    clDefault: automatic (the text's colour where it is drawn). rbsOther: a style of a file's
+    this control does not draw (Word's thick, triple, wavy, dash-dot ... lines) - drawn as a
+    single line, reported as itself, written back with the file's own words while that side
+    is not changed (a side set to it is written as a single line). }
   TTyRichBorder = record
     Style: TTyRichBorderStyle;
     WidthTwips: Integer;
@@ -466,7 +467,8 @@ begin
   else if AWord = 'brdrdb' then AStyle := rbsDouble
   else if AWord = 'brdrdot' then AStyle := rbsDotted
   else if (AWord = 'brdrdash') or (AWord = 'brdrdashsm') then AStyle := rbsDashed
-  else AStyle := rbsSingle;
+  else if AWord = 'brdrs' then AStyle := rbsSingle
+  else AStyle := rbsOther;
 end;
 
 function SideOfLetter(C: Char): TTyRichCellSide;
@@ -827,7 +829,8 @@ end;
 
 const
   CStyleWords: array[TTyRichBorderStyle] of string = ('brdrnone', 'brdrs', 'brdrdb', 'brdrdot',
-    'brdrdash');
+    'brdrdash',
+    'brdrs');
 
 function BorderWords(const AWord: string; const B: TTyRichBorder;
   AColorIndex: TTyRichColorIndexFunc): string;

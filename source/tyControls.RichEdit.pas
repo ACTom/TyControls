@@ -611,6 +611,34 @@ type
   end;
   TTyRichColumnEdges = array of TTyRichColumnEdge;
 
+  { The engine's types and values the table doors take, here too: a caller needs this one
+    unit (tyControls.RichEdit.RowFormat and .TableProps declare them). }
+  TTyRowAlign = tyControls.RichEdit.RowFormat.TTyRowAlign;
+  TTyRowCellVAlign = tyControls.RichEdit.RowFormat.TTyRowCellVAlign;
+  TTyRowCellSide = tyControls.RichEdit.RowFormat.TTyRowCellSide;
+  TTyRowCellSides = tyControls.RichEdit.RowFormat.TTyRowCellSides;
+  TTyRichBorderStyle = tyControls.RichEdit.TableProps.TTyRichBorderStyle;
+  TTyRichBorder = tyControls.RichEdit.TableProps.TTyRichBorder;
+
+const
+  rraLeft = tyControls.RichEdit.RowFormat.rraLeft;
+  rraCenter = tyControls.RichEdit.RowFormat.rraCenter;
+  rraRight = tyControls.RichEdit.RowFormat.rraRight;
+  rcvTop = tyControls.RichEdit.RowFormat.rcvTop;
+  rcvCenter = tyControls.RichEdit.RowFormat.rcvCenter;
+  rcvBottom = tyControls.RichEdit.RowFormat.rcvBottom;
+  rcsLeft = tyControls.RichEdit.RowFormat.rcsLeft;
+  rcsTop = tyControls.RichEdit.RowFormat.rcsTop;
+  rcsRight = tyControls.RichEdit.RowFormat.rcsRight;
+  rcsBottom = tyControls.RichEdit.RowFormat.rcsBottom;
+  rbsNone = tyControls.RichEdit.TableProps.rbsNone;
+  rbsSingle = tyControls.RichEdit.TableProps.rbsSingle;
+  rbsDouble = tyControls.RichEdit.TableProps.rbsDouble;
+  rbsDotted = tyControls.RichEdit.TableProps.rbsDotted;
+  rbsDashed = tyControls.RichEdit.TableProps.rbsDashed;
+  rbsOther = tyControls.RichEdit.TableProps.rbsOther;
+
+type
   { The table properties of the selected cells (else the caret's cell), their rows and their
     table: GetTableProperties fills them in, a form changes some, ApplyTableProperties sets
     those (the table properties action does the three). Two sets that must not be confused:
@@ -2005,6 +2033,12 @@ type
     procedure PaintTableHandle(ABitmap: TBGRABitmap; AX, AY: Integer; const AClip: TRect;
       const AStyle: TTyRichPaintStyle);
   protected
+    { Diagnostics a test's subclass reads: the table rows the last paints highlighted as
+      selected cells; whether a drag of a table's edge is under way; the row guide's client y
+      (-1 none). }
+    property CellRowsPainted: Int64 read FCellRowsPainted write FCellRowsPainted;
+    function EdgeDragging: Boolean;
+    property GuideRow: Integer read FGuideY;
     { Whether the user may select at all: False, the table's zones and handle do not show
       and the Select... methods do nothing. AllowSelection here. }
     function SelectionAllowed: Boolean; virtual;
@@ -2840,8 +2874,6 @@ type
     function SelectRow: Boolean;
     function SelectColumn: Boolean;
     function SelectTable: Boolean;
-    // the table rows the last paints highlighted as selected cells (a count for tests)
-    property CellRowsPainted: Int64 read FCellRowsPainted write FCellRowsPainted;
     { Column widths and row heights. With the pointer on a column's edge (the east-west cursor)
       a drag moves that edge: only a guide line follows the pointer, and the release runs ONE
       command - the cells either side trade width and the table keeps its width; with Shift the
@@ -2876,8 +2908,6 @@ type
       rules as a drag, the rows a drag takes). }
     function CaretRowEdges(out AEdges: TTyRichColumnEdges): Boolean;
     function MoveCaretRowEdge(AIndex, AOffsetTwips: Integer; AShiftRest: Boolean): Boolean;
-    // a drag of a table's edge is under way
-    function EdgeDragging: Boolean;
     { Cell formats - the selected cells (both ends of the selection in one table), else the
       caret's cell: the shading (clNone: none); borders by a preset, each line set to ABorder
       (rbpNone: none); the padding of each side, twips (-1: as it is); where the content sits.
@@ -2902,8 +2932,6 @@ type
       column width (the columns right of it shift), the table's alignment and indent. Changed
       empty: nothing, True. }
     function ApplyTableProperties(const AProps: TTyRichTableProperties): Boolean;
-    // the row guide's client y, -1 none (what a test reads)
-    property GuideRow: Integer read FGuideY;
     { Pictures: the user's actions for a toolbar, a menu or an action, as the table actions
       (an open composition ends first; ReadOnly, disabled or inside the document's update:
       nothing, nothing told, False; a refusal told once through EditRefused, never raised).
@@ -3842,6 +3870,11 @@ var
   TyRichReplaceFileW: TTyRichReplaceFileFunc;
 {$ENDIF}
 
+{ A cell border (tyControls.RichEdit.TableProps.TyRichBorder, here for a caller of this unit
+  alone). }
+function TyRichBorder(AStyle: TTyRichBorderStyle; AWidthTwips: Integer;
+  AColor: TColor = clDefault): TTyRichBorder;
+
 implementation
 
 uses
@@ -3851,6 +3884,13 @@ uses
   tyControls.PlatformWS, tyControls.Animation
   {$IFDEF LCLCocoa}, tyControls.CocoaWS{$ENDIF}
   {$IFDEF LCLWin32}, tyControls.RichEdit.OleDrop{$ENDIF};
+
+function TyRichBorder(AStyle: TTyRichBorderStyle; AWidthTwips: Integer;
+  AColor: TColor): TTyRichBorder;
+begin
+  Result := tyControls.RichEdit.TableProps.TyRichBorder(AStyle, AWidthTwips, AColor);
+end;
+
 
 const
   // what an edge drag does: none, a column's edge, a row's bottom

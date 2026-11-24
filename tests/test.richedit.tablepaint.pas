@@ -26,6 +26,7 @@ type
     procedure TestPaddingMovesTheText;
     procedure TestASharedEdgeIsDrawnOnce;
     procedure TestAutomaticTextContrastsWithShading;
+    procedure TestSelectedTextStandsOutFromWhatIsUnderIt;
     procedure TestCrispAt150And200;
     procedure TestWordsStyledTableAsWordDrawsIt;
     procedure TestAnExactRowCutsItsContent;
@@ -171,6 +172,27 @@ begin
     b := lay.LayoutBlock(ADoc, APara, AWidth, APPI, 1.0);
     TAssert.AssertTrue('a row', b is TTyRowLayout);
     Result.Row := TTyRowLayout(b);
+    Result.Bmp := TBGRABitmap.Create(Result.Row.Width + 2 * OX, Result.Row.Height + 2 * OY, Ground);
+    Result.Row.Paint(Result.Bmp, OX, OY, Rect(0, 0, Result.Bmp.Width, Result.Bmp.Height), AStyle, 0, 0);
+  finally
+    lay.Free;
+  end;
+end;
+
+// PaintRow with the cells ALit selected whole
+function PaintRowLit(ADoc: TTyRichDocument; APara: Integer; const AStyle: TTyRichPaintStyle;
+  const ALit: array of Boolean): TPainted;
+var
+  lay: TTyRichLayouter;
+  b: TTyBlockLayout;
+begin
+  Result := TPainted.Create;
+  lay := TTyRichLayouter.Create(TTyRichTestDevice.Create, True);
+  try
+    b := lay.LayoutBlock(ADoc, APara, 2000, 96, 1.0);
+    TAssert.AssertTrue('a row', b is TTyRowLayout);
+    Result.Row := TTyRowLayout(b);
+    Result.Row.SetCellHighlight(ALit);
     Result.Bmp := TBGRABitmap.Create(Result.Row.Width + 2 * OX, Result.Row.Height + 2 * OY, Ground);
     Result.Row.Paint(Result.Bmp, OX, OY, Rect(0, 0, Result.Bmp.Width, Result.Bmp.Height), AStyle, 0, 0);
   finally
@@ -486,6 +508,57 @@ begin
       q := r.At(r.Row.Cells[1].Left, r.Row.Height div 2);
       AssertTrue(Format('a line on the dark shading: light (%d,%d,%d)', [q.red, q.green, q.blue]),
         SamePx(BGRA(235, 235, 235), q));
+    finally
+      r.Free;
+    end;
+  finally
+    d.Free;
+  end;
+end;
+
+{ A cell selected whole: its text takes the colour that stands out from what is painted under
+  it - the selection's colour over the shading - by the rule automatic text has: a light
+  shading under a dark theme's light selection text gives dark text; a dark shading keeps the
+  light one; an unshaded cell the selection's text colour. }
+procedure TTyRichTablePaintTest.TestSelectedTextStandsOutFromWhatIsUnderIt;
+var
+  d: TTyRichDocument;
+  p: TTyRichCellProps;
+  r: TPainted;
+  st: TTyRichPaintStyle;
+  it: TTyRichRowItem;
+  q: TBGRAPixel;
+  k: Integer;
+begin
+  // a dark skin: light text, a half-transparent selection, light selection text
+  st := Style;
+  st.TextColor := BGRA(235, 235, 235, 255);
+  st.SelectionBack := BGRA(70, 110, 170, 110);
+  st.SelectionText := BGRA(229, 231, 235, 255);
+  d := TableDoc(1, 3);
+  try
+    p := Default(TTyRichCellProps);
+    p.Valid := [rcpShading];
+    p.Shading := RGBToColor(255, 230, 120);
+    SetCells(d, 0, 0, 0, 0, p);
+    p.Shading := RGBToColor(0, 0, 96);
+    SetCells(d, 0, 1, 0, 1, p);
+    r := PaintRowLit(d, 1, st, [True, True, True]);
+    try
+      for k := 0 to 2 do
+      begin
+        it := r.Row.Items[k];
+        q := r.At(it.X + 2, it.Y + it.Layout.Height div 2);
+        case k of
+          0: AssertTrue(Format('on the light shading, selected: dark (%d,%d,%d)', [q.red, q.green, q.blue]),
+               q.red + q.green + q.blue < 200);
+          1: AssertTrue(Format('on the dark shading, selected: light (%d,%d,%d)', [q.red, q.green, q.blue]),
+               q.red + q.green + q.blue > 600);
+        else
+          AssertTrue(Format('no shading, selected: the selection''s text (%d,%d,%d)', [q.red, q.green, q.blue]),
+            SamePx(BGRA(229, 231, 235), q));
+        end;
+      end;
     finally
       r.Free;
     end;

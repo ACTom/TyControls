@@ -34,6 +34,7 @@ type
     procedure TestRowPropertiesAndWidths;
     procedure TestARowEditLeavesTheOtherRowsAsTheyAre;
     procedure TestTheLayoutShowsWhatWasSet;
+    procedure TestALineStyleNotDrawnHereIsKept;
   end;
 
 implementation
@@ -1075,6 +1076,39 @@ begin
       after) > 0);
     d.Undo;
     AssertEquals('undone', before, Boxes(d, 1));
+  finally
+    d.Free;
+  end;
+end;
+
+{ Word's line styles this control does not draw (thick, triple, wave ...) read as rbsOther:
+  drawn as a single line, reported as themselves, written back with the file's own words while
+  that side is not changed - also when another property of the same cell is. }
+procedure TTyRichTablePropsTest.TestALineStyleNotDrawnHereIsKept;
+const
+  Rtf = '{\rtf1\ansi{\fonttbl{\f0 Arial;}}' +
+    '\trowd\clbrdrt\brdrth\brdrw30\clbrdrb\brdrs\brdrw10\cellx1440\clbrdrt\brdrtriple\brdrw30\cellx2880' +
+    '\pard\intbl a\cell b\cell\row\pard after\par}';
+var
+  d: TTyRichDocument;
+  tp: TTyRichPos;
+  got: RawByteString;
+  p: TTyRichCellProps;
+begin
+  d := LoadDoc(BytesOf(Rtf));
+  try
+    tp := TablePos(d);
+    p := d.CellProps(tp, 0, 0);
+    AssertEquals('thick: another style', Ord(rbsOther), Ord(p.Borders[rcsTop].Style));
+    AssertEquals('its width', 30, p.Borders[rcsTop].WidthTwips);
+    AssertEquals('single: single', Ord(rbsSingle), Ord(p.Borders[rcsBottom].Style));
+    AssertEquals('triple: another style', Ord(rbsOther), Ord(d.CellProps(tp, 0, 1).Borders[rcsTop].Style));
+    // another property of the same cell changed: the file's words for the line stay
+    AssertTrue('shaded', Exec(d, TTyRichSetCellProps.Create(tp, 0, 0, 0, 0, Shading(clYellow))));
+    got := StrOf(SaveBytes(d));
+    AssertTrue('\brdrth kept', Pos('\brdrth', got) > 0);
+    AssertTrue('\brdrtriple kept', Pos('\brdrtriple', got) > 0);
+    AssertEquals('still reported as itself', Ord(rbsOther), Ord(d.CellProps(tp, 0, 0).Borders[rcsTop].Style));
   finally
     d.Free;
   end;

@@ -3353,6 +3353,22 @@ begin
   if ContrastOf(opposite, back) > ContrastOf(Result, back) then Result := opposite;
 end;
 
+{ The selection's text colour, or its opposite where that stands out more, over AGround with
+  the selection's colour laid over it (as a cell selected whole is painted). }
+function InkOnSelection(const AGround: TBGRAPixel; const AStyle: TTyRichPaintStyle): TBGRAPixel;
+var
+  under, opposite: TBGRAPixel;
+  a: Integer;
+begin
+  a := AStyle.SelectionBack.alpha;
+  under := BGRA((AGround.red * (255 - a) + AStyle.SelectionBack.red * a) div 255,
+    (AGround.green * (255 - a) + AStyle.SelectionBack.green * a) div 255,
+    (AGround.blue * (255 - a) + AStyle.SelectionBack.blue * a) div 255, 255);
+  Result := AStyle.SelectionText;
+  opposite := BGRA(255 - Result.red, 255 - Result.green, 255 - Result.blue, Result.alpha);
+  if ContrastOf(opposite, under) > ContrastOf(Result, under) then Result := opposite;
+end;
+
 { The selected stretch [ASelX0, ASelX1) cut out of what is drawn of a fragment: the parts
   left and right of it in the normal colour, the stretch in the selection's - each the whole
   fragment drawn with the clip narrowed to its part, so that no glyph moves between them. }
@@ -4108,6 +4124,10 @@ begin
         ATarget.ClipRect := old;
       end;
       st.SelectionBack.alpha := 0;
+      { its text stands out from what is painted under it - the selection's colour over the
+        shading - by the rule automatic text has (TextInk's) }
+      if (bx^.Shading <> clNone) and (bx^.Shading <> clDefault) then
+        st.SelectionText := InkOnSelection(ColorToBGRA(ColorToRGB(bx^.Shading)), AStyle);
     end;
     for k := bx^.FirstItem to bx^.FirstItem + bx^.ItemCount - 1 do
     begin
