@@ -73,7 +73,7 @@ RichEdit1.SaveToFile('说明.rtf');
 
 | 动作 | 标题 | 快捷键 | Enabled 问的是 | Checked 问的是 |
 |---|---|---|---|---|
-| `TTyRichEditCut` / `Copy` / `Paste` | 剪切 / 复制 / 粘贴 | Ctrl+X / C / V | 有选区且不是只读 / 有选区 / 剪贴板里有能粘贴的东西 | — |
+| `TTyRichEditCut` / `Copy` / `Paste` | 剪切 / 复制 / 粘贴 | Ctrl+X / C / V | `CanCut` / 有选区 / 剪贴板里有能粘贴的东西 | — |
 | `TTyRichEditSelectAll` / `Delete` | 全选 / 删除 | Ctrl+A / — | 文档里有文字 / 有选区且不是只读 | — |
 | `TTyRichEditBold` / `Italic` / `Underline` | 粗体 / 斜体 / 下划线 | Ctrl+B / I / U | 用户这里能不能改格式 | 整个选区都有这个样式 |
 | `TTyRichEditStrikeOut` | 删除线 | — | 同上 | 同上 |
@@ -97,8 +97,9 @@ RichEdit1.SaveToFile('说明.rtf');
 | `TTyRichEditSelectCell` / `SelectRow` / `SelectColumn` / `SelectTable` | 选择单元格 / 行 / 列 / 表格 | — | `CanSelectCells` | — |
 | `TTyRichEditCellShading` | 底色 | — | `CanFormatCells` | — |
 | `TTyRichEditCellBorders` | 边框 | — | `CanFormatCells` | — |
-| `TTyRichEditCellPadding` / `CellVAlign` | 单元格内边距 / 单元格对齐 | — | `CanFormatCells` | — |
-| `TTyRichEditTableAlign` | 表格对齐 | — | `CanFormatCells` | — |
+| `TTyRichEditCellPadding` | 单元格内边距 | — | `CanFormatCells` | — |
+| `TTyRichEditCellVAlign` | 单元格对齐 | — | `CanFormatCells` | 选中的每个格子(没选就是插入点所在的格)都是 `Align` |
+| `TTyRichEditTableAlign` | 表格对齐 | — | `CanFormatCells` | 表格的行都是 `Align` |
 | `TTyRichEditTableProperties` | 表格属性... | — | `CanFormatCells` | — |
 | `TTyRichEditAutoFitColumn` / `FitTableToWindow` / `DistributeColumns` | 列宽适应内容 / 表格适应窗口 / 平均分布各列 | — | `CanResizeColumns` | — |
 | `TTyRichEditDistributeRows` | 平均分布各行 | — | `CanResizeRows` | — |
@@ -121,7 +122,7 @@ RichEdit1.SaveToFile('说明.rtf');
 - **表格操作**在插入点所在行的上方或下方插入一行，在所在列的左侧或右侧插入一列——选中了单元格时，盖到几行(几列)就插几行(几列)——或者删除这些行、这些列、整个表格；插入点进到新的行或列。控件说不行的地方就是灰的(不在表格里、有合并单元格的表格、含嵌套表格的行、各行单元格数不同时的列)。
 - **缩进**把插入点所在段落的首行移到下一个(上一个)半英寸处，不越过左边距；选了几个段落时都移到那个位置，各自保留自己的悬挂距离(和标尺的规则一样)。选区碰到的段落全是列表项时，改的是列表级别：增加缩进降一级、减少缩进升一级(0 到 8 级，缩进跟着移半英寸，一步撤销),编号照规则重排——内层的项从 1 开始，外层列表在它后面接着编;已经在 0 级时减少缩进什么也不做，和 Word 一样。选中表格的单元格时，这些段落是选中单元格里的段落(和段落格式一样按矩形算);表格里的 Tab 仍然在单元格之间移动，从不改列表级别。
 - **插入表格**插入 `Rows` × `Columns`(默认 3 × 3)。插入前触发 `OnChooseSize`，程序可以在这里问用户，改大小，或者取消。
-- **表格的格式和尺寸**(§8):`TTyRichEditCellShading` 给选中的单元格(没选就是插入点所在的格)设 `Color`(`clNone`：无底色);`TTyRichEditCellBorders` 设 `Preset`，线是 `LineStyle`、`LineWidth`(缇，Word 的 ½ 磅是 10)、`LineColor`(`clDefault`：自动)——先触发 `OnBeforeExecute`，程序可以在这里改预设和线，或者取消;`TTyRichEditCellPadding` 设 `PadLeft` … `PadBottom`(缇，-1 表示这一边不变);`TTyRichEditCellVAlign` 设 `Align`;`TTyRichEditTableAlign` 设表格的 `Align`，缩进不变。和对齐一样，一个值一个动作：示例里有三个 `TTyRichEditCellVAlign`、三个 `TTyRichEditTableAlign`，每个预设一个 `TTyRichEditCellBorders`。`TTyRichEditTableProperties` 自己什么都不做：它的 `OnBeforeExecute` 拿到选区的值(`GetTableProperties`)和 `Uniform`——整个选区里一样的字段，其余是混合的；程序在这里弹自己的窗体(包里没有现成的；示例的 `utableform.pas` 可以照抄),把用户改过的值填回去并在 `Changed` 里列出，动作只应用这些，一步撤销；什么都没改就什么都不做。`TTyRichEditAutoFitColumn`、`FitTableToWindow`、`DistributeColumns`、`DistributeRows` 就是控件里同名的成员。选中单元格、行、列、整张表没有动作：直接调 `SelectCell` … `SelectTable`(示例的"选择"菜单就是这样)。
+- **表格的格式和尺寸**(§8):`TTyRichEditCellShading` 给选中的单元格(没选就是插入点所在的格)设 `Color`(`clNone`：无底色);`TTyRichEditCellBorders` 设 `Preset`，线是 `LineStyle`、`LineWidth`(缇，Word 的 ½ 磅是 10)、`LineColor`(`clDefault`：自动)——先触发 `OnBeforeExecute`，程序可以在这里改预设和线，或者取消;`TTyRichEditCellPadding` 设 `PadLeft` … `PadBottom`(缇，-1 表示这一边不变);`TTyRichEditCellVAlign` 设 `Align`;`TTyRichEditTableAlign` 设表格的 `Align`，缩进不变。和对齐一样，一个值一个动作：示例里有三个 `TTyRichEditCellVAlign`、三个 `TTyRichEditTableAlign`，每个预设一个 `TTyRichEditCellBorders`。`TTyRichEditTableProperties` 自己什么都不做：它的 `OnBeforeExecute` 拿到选区的值(`GetTableProperties`，框线也在里面)和 `Uniform`——整个选区里一样的字段，其余是混合的；程序在这里弹自己的窗体(包里没有现成的；示例的 `utableform.pas` 可以照抄),把用户改过的值填回去并在 `Changed` 里列出，动作只应用这些(框线一起),一步撤销；什么都没改就什么都不做。`TTyRichEditAutoFitColumn`、`FitTableToWindow`、`DistributeColumns`、`DistributeRows` 就是控件里同名的成员，`TTyRichEditSelectCell`、`SelectRow`、`SelectColumn`、`SelectTable` 是四个选择方法(§8)。选区是哪种对齐，对应的对齐动作就打勾，菜单上能看出当前的对齐。
 - **插入图片**用本库自己的打开对话框(`Dialog`，一个 `TTyOpenPictureDialog`)，过滤器是控件能读的格式(`TyRichPictureFilter`：LCL 能读的图片都行，PNG 和 JPEG 原样保存字节，其他转成 PNG；不收 WMF、EMF)。
 - **查找、替换**显示本库自己的查找、替换对话框(`Dialog`)。"查找下一个"就是控件的 `FindNext`(区分大小写、全字匹配、向上向下，到头了从另一头接着找)；"替换"替换选中的那个匹配再找下一个；"全部替换"是 `ReplaceAll`，一步撤销，`OnReplaced` 告诉替换了几处。没找到时触发 `OnNotFound`，没有处理程序就弹本库的消息框。替换的方法属于程序那一层，不挡只读，所以动作只在用户能改的地方替换。
 - **快捷键**是动作的默认值，可以改。同一个键不会两边都处理：LCL 先把键交给有焦点的控件，富文本自己处理 Ctrl+Z、Ctrl+Y(撤销、重做)，动作的 Ctrl+Z、Ctrl+Y 只在焦点不在富文本上、又设了 `RichEdit` 的时候起作用；Ctrl+B 这类富文本不处理的键归动作。
@@ -252,21 +253,21 @@ end;
 **选择。** 在一个单元格里，选区就是文字，和别处一样。选区盖到哪些单元格，按被选中的字符算，单元格的结束符(最后一段的段尾)也算这个格子的字符：从格首选到结束符之后，就是整格选中，整格高亮；停在结束符之前，选的是格子里的文字。两端落在同一张表的两个格子里，中间的格子是一个矩形(每一行取落在两个角格横向范围下的格子)；一端在表外，表内被盖到的行整行选中。Shift+方向键、Shift+单击、拖过格子的边，都会扩大这个矩形。用鼠标：
 
 - 单元格左边缘内侧(指针变成箭头)：单击选中这一格，拖动选多格；
-- 表格左边的空白：单击选中这一行，上下拖选多行；
+- 表格左边的空白：单击选中这一行，上下拖选多行(表格紧贴正文左边、左边空白太窄时，这个区域伸进第一格几个像素)；
 - 第一行上方(向下的箭头)：单击选中这一列，左右拖选多列；
 - 指针在表格上时，左上角出现一个小手柄，点它选中整张表。
 
-代码里：`SelectCell`、`SelectRow`、`SelectColumn`、`SelectTable`(光标所在的格、行、列、表)；`SelectedCells` 给出范围(`TTyRichCellRange`：`InTable`、表的位置 `TablePos`、`Row0`、`Col0`、`Row1`、`Col1`、`WholeTable`)，`CaretCell(TablePos, Row, Col)` 给出光标所在的格。选择不算编辑：`ReadOnly` 时这些区域照样能选，只是没有手柄，什么也拖不动；`AllowSelection` 为 False 时没有这些区域，也没有手柄。包里没有这四个选择方法的动作，示例各做了一个(`TAction`，`OnExecute` 里调它们)。
+代码里：`SelectCell`、`SelectRow`、`SelectColumn`、`SelectTable`(光标所在的格、行、列、表)；`SelectedCells` 给出范围(`TTyRichCellRange`：`InTable`、表的位置 `TablePos`、`Row0`、`Col0`、`Row1`、`Col1`、`WholeTable`)，`CaretCell(TablePos, Row, Col)` 给出光标所在的格。选择不算编辑：`ReadOnly` 时这些区域照样能选，只是没有手柄，什么也拖不动；`AllowSelection` 为 False 时没有这些区域，也没有手柄。动作 `TTyRichEditSelectCell`、`SelectRow`、`SelectColumn`、`SelectTable` 执行它们，由 `CanSelectCells` 决定是否可用。
 
-**选中单元格时按键做什么。** Delete 清空它们，格子留着(一步)；Backspace 在整行被选中时删这些行，整张表被选中时删表，其余同 Delete；打字替换第一个格子的内容，其余格子不变(和 Word 一样)；字符格式、段落格式作用到每个选中的格子。复制出来的是一张小表，外加用制表符分隔的文字，一行一行。光标在单元格里时粘贴一张表——控件自己的、Word 的、或者电子表格那种带制表符的文字——从这一格起逐格填进去，行不够在末尾加行，超出最后一列的丢掉，并说一次。
+**选中单元格时按键做什么。** Delete 清空它们，格子留着(一步)；Backspace 删掉整个被选中的部分——整行选中删这些行，整列选中删这些列，整张表选中删表——其余同 Delete，只清空；剪切先复制这些格子，再做 Backspace 做的事(一块矩形复制后清空，整列复制后删列，整行和整张表按行剪切)；选区一头在表外时，打字、Delete、Backspace 和剪切都被拒绝；打字替换第一个格子的内容，其余格子不变(和 Word 一样)；字符格式、段落格式作用到每个选中的格子。复制出来的是一张小表，外加用制表符分隔的文字，一行一行。光标在单元格里时粘贴一张表——控件自己的、Word 的、或者电子表格那种带制表符的文字——从这一格起逐格填进去，行不够在末尾加行，超出最后一列的丢掉，并说一次。
 
-**按选区增删行列。** "在上方 / 下方插入行"和"在左侧 / 右侧插入列"按选中的格子盖到几行(几列)就插几行(几列)——选了三行就插三行——插在第一行上方或最后一行下方(第一列左侧或最后一列右侧)；没选格子时在光标处插一行(一列)。"删除行""删除列"删掉选区盖到的行(列)；"删除表格"删整张表。每个都是一步撤销。
+**按选区增删行列。** "在上方 / 下方插入行"和"在左侧 / 右侧插入列"按选中的格子盖到几行(几列)就插几行(几列)——选了三行就插三行——插在第一行上方或最后一行下方(第一列左侧或最后一列右侧)；没选格子时在光标处插一行(一列)。"删除行""删除列"删掉选区盖到的行(列)，按选区画出来的样子算(盖满所有列的矩形就是整张表)；"删除表格"删整张表。每个都是一步撤销。
 
 **尺寸。** 指针移到列的边线上变成 ↔：拖动移动这条边线；拖动时只有一条参考线跟着指针，松手才应用，一步撤销。默认两侧的格子此消彼长，表宽不变；按住 Shift 只改左边那一格，右边的整体跟着边线移动，表宽随之变。表格最右边的边线改最后一列和表宽；最左边的边线移动表格的起点，第一列跟着变。选中了单元格时只改这些行(和 Word 一样)，否则改有这条边线的每一行(相距 15 缇以内的边线算同一条)。一个格子不会窄于它的内边距加文档字体的一个平均字宽(字号的一半)，参考线到这里就停。双击列的边线，左边那一列的宽度变成它最宽内容的宽度(不超过正文宽度)。指针移到行的下边线上变成 ↕：拖动把这一行——选中的那些行——设成"至少这么高"，不会矮于内容。拖动中按 Esc，或者松手时什么也没动，什么都不变。光标在表格里时，标尺(§3)上显示光标所在行的列边界，也可以在标尺上拖。
 
-对应的成员：`SetColumnWidth(Twips)`(光标所在的列，右边的列跟着平移，和 Word 的"表格属性"一样)、`SetRowHeight(Twips, Exact)`(光标所在的行、选中的行；0 且不固定：跟内容一样高)、`AutoFitColumn`、`DistributeColumns`(每行的格子一样宽)、`DistributeRows`(各行设成平均高度，"至少")、`FitTableToWindow`(表格和正文一样宽)；`CanResizeColumns`、`CanResizeRows` 说它们现在能不能执行。自己做标尺用 `CaretRowEdges` 和 `MoveCaretRowEdge`。
+对应的成员：`SetColumnWidth(Twips)`(选中的列，没选就是光标所在的列，右边的列跟着平移，和 Word 的"表格属性"一样)、`SetRowHeight(Twips, Exact)`(光标所在的行、选中的行；0 且不固定：跟内容一样高)、`AutoFitColumn`(选中的列，没选就是光标所在的列)、`DistributeColumns`(每行的格子一样宽)、`DistributeRows`(各行设成平均高度，"至少")、`FitTableToWindow`(表格和正文一样宽)；`CanResizeColumns`、`CanResizeRows` 说它们现在能不能执行。自己做标尺用 `CaretRowEdges` 和 `MoveCaretRowEdge`。
 
-**单元格格式。** 都作用在选中的格子上(选区两端在同一张表里)，否则作用在光标所在的格子上，各是一步撤销：`SetCellShading(Color)`(`clNone`：无底色)、`SetCellBorders(Preset, Border)`、`SetCellPadding(Left, Top, Right, Bottom)`(单位缇；-1 表示这一边不变)、`SetCellVAlign(rcvTop / rcvCenter / rcvBottom)`，以及整张表的 `SetTableAlign(Align)`(缩进不变)或 `SetTableAlign(Align, IndentTwips)`；`CanFormatCells` 说它们现在能不能执行。`GetTableProperties` 给出选区的行高和规则、光标所在列的列宽、表格的对齐和缩进、内边距、垂直对齐和底色，`Uniform` 列出整个选区里一样的字段;`ApplyTableProperties` 把 `Changed` 列出的字段一起设好，一步撤销——"表格属性"窗体调的就是它。边框(`TyRichBorder(Style, WidthTwips, Color)`)由线型——`rbsNone`、`rbsSingle`、`rbsDouble`、`rbsDotted`、`rbsDashed`;文件里别的线型读成 `rbsOther`,按单实线画、原样写回——宽度(缇，Word 的 ½ 磅是 10)和颜色(`clDefault`：自动，取画在那里的文字颜色；表格内部有底色的格子上取和底色对比的颜色，表格外框保持主题色)组成。各预设设的线：
+**单元格格式。** 都作用在选中的格子上(选区两端在同一张表里)，否则作用在光标所在的格子上，各是一步撤销：`SetCellShading(Color)`(`clNone`：无底色)、`SetCellBorders(Preset, Border)`、`SetCellPadding(Left, Top, Right, Bottom)`(单位缇；-1 表示这一边不变)、`SetCellVAlign(rcvTop / rcvCenter / rcvBottom)`，以及整张表的 `SetTableAlign(Align)`(缩进不变)或 `SetTableAlign(Align, IndentTwips)`；`CanFormatCells` 说它们现在能不能执行。`GetTableProperties` 给出选区的行高和规则、光标所在列的列宽、表格的对齐和缩进、内边距、垂直对齐、底色和框线(`Lines`：外框的左、上、右、下四边和内部的横线、竖线,`rclLeft` … `rclInsideV`),`Uniform` 列出整个选区里一样的字段;`ApplyTableProperties` 把 `Changed` 列出的字段一起设好，一步撤销——"表格属性"窗体调的就是它。边框(`TyRichBorder(Style, WidthTwips, Color)`)由线型——`rbsNone`、`rbsSingle`、`rbsDouble`、`rbsDotted`、`rbsDashed`;文件里别的线型读成 `rbsOther`,按单实线画、原样写回——宽度(缇，Word 的 ½ 磅是 10)和颜色(`clDefault`：自动，取画在那里的文字颜色；表格内部有底色的格子上取和底色对比的颜色，表格外框保持主题色)组成。各预设设的线：
 
 | 预设 | 设哪些线 |
 |---|---|
@@ -278,7 +279,7 @@ end;
 
 **一条线，一个定义。** 两个单元格共用的一条线，在文件里写了两遍：一个单元格的这一边，和另一个单元格对着它的那一边。Word 让这两处保持一致，只显示一条线；控件写出的每条线也是这样。通过 `SetCellBorders`(每种预设都算，"无"也算)或构建器的 `CellBorders` 给单元格某一边设边框时，旁边那个单元格对着的一边也在同一步撤销里设上(上下相邻的行里，是整条边都落在设了边框的单元格下面的那些单元格；只有一部分落在下面的，保留自己的);插入、删除行列之后，两边也还是一致的。只有别的程序做的文件会给一条线两个定义：这时控件画两者中较宽的那个(一样宽时画右边或下边那个单元格的),这也是控件显示的线可能和 Word 不同的唯一情况。
 
-**在代码里搭。** 构建器的表格成员(§5)：`Table(widths)`——各列宽度，单位缇，空数组表示正文宽度内等分——打开第一行；`Row(height, exact)` 开下一行，跟内容一样高(0)、至少或正好这么多缇高；每个格子的内容前调 `Cell`；在格子里，`Shading(color)` 是格子的底色，`CellBorders(sides, style, width, color)` 是这几边的线，`CellPadding(left, top, right, bottom)` 是内边距(缇；-1：取行的)，`CellVAlign` 是内容的垂直位置；`TableAlign(align, indent)` 是表格的对齐和起点；`EndTable` 结束表格。每一行的格子数必须等于表格的列数。示例"示例文档 → 表格"里那张价目表，原样摘自 `examples/richedit/utablesample.pas`：
+**在代码里搭。** 构建器的表格成员(§5)：`Table(widths)`——各列宽度，单位缇，空数组表示正文宽度内等分——打开第一行；`Row(height, exact)` 开下一行，跟内容一样高(0)、至少或正好这么多缇高；每个格子的内容前调 `Cell`；在格子里，`Shading(color)` 是格子的底色，`CellBorders(sides, style, width, color)` 是这几边的线，`CellPadding(left, top, right, bottom)` 是内边距(缇；负数会抛异常；没设的格子取行的)，`CellVAlign` 是内容的垂直位置；`TableAlign(align)` 或 `TableAlign(align, indent)` 是表格的对齐和起点；`EndTable` 结束表格。每一行的格子数必须等于表格的列数。示例"示例文档 → 表格"里那张价目表，原样摘自 `examples/richedit/utablesample.pas`：
 
 ```pascal
 procedure AddPriceTable(B: TTyRichBuilder);
@@ -334,7 +335,7 @@ end;
 - 按需读入的大 RTF 文件里大到没法整张读进来的表(文件里约 1 MB 以上)：要看整张表的操作——改列宽、增删列、表格对齐、选中整列或整张表——被拒绝；已读入部分的格子和行可以选、可以改格式。
 - 纯文本文档没有可编辑的表格；只读或禁用的控件什么都不做，也什么都不说。
 
-**大表格上的开销。** 在 10,000 行的表里，改一个格子的格式、一行的行高、在最后一格按 Tab，都在一次按键的时间内；改一列在全部 10,000 行里的宽度约 130 毫秒；选中一列只高亮屏幕上看得到的行。`DistributeRows` 要把每一行排版一遍来量高度，是同步的：10,000 行约 3 秒，期间显示等待光标。
+**大表格上的开销。** 在 10,000 行的表里，改一个格子的格式、一行的行高、在最后一格按 Tab，都在一次按键的时间内；改一列在全部 10,000 行里的宽度约 130 毫秒；选中一列只高亮屏幕上看得到的行。`DistributeRows` 要把每一行排版一遍来量高度，是同步的：10,000 行视机器负载从半秒到约 3 秒，期间显示等待光标。
 
 ## 9. 文件
 
