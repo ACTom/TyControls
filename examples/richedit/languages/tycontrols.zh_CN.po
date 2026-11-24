@@ -890,6 +890,10 @@ msgstr "调整对象大小"
 msgid "Document settings"
 msgstr "文档设置"
 
+#: tycontrols.strconsts.rsrichundoinsertcontent
+msgid "Insert content"
+msgstr "插入内容"
+
 #: tycontrols.strconsts.rsrichundomove
 msgid "Move"
 msgstr "移动"

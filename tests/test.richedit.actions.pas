@@ -1371,6 +1371,11 @@ begin
     Bytes(root + 'languages' + PathDelim + 'tycontrols.strconsts.zh_CN.po') =
     Bytes(root + 'tools' + PathDelim + 'themebuilder' + PathDelim + 'languages' + PathDelim +
       'tycontrols.zh_CN.po'));
+  // the rich edit example carries the catalogue too (its actions' captions, its undo names)
+  AssertTrue('the rich edit example''s copy is the catalogue',
+    Bytes(root + 'languages' + PathDelim + 'tycontrols.strconsts.zh_CN.po') =
+    Bytes(root + 'examples' + PathDelim + 'richedit' + PathDelim + 'languages' + PathDelim +
+      'tycontrols.zh_CN.po'));
 end;
 
 { The IDE lists them: the design-time package registers every action of the unit (RegisterActions,
@@ -1922,8 +1927,9 @@ end;
   side given there is nothing to do (grey). }
 procedure TTyRichEditActionsTest.TestTheParagraphSpacingAction;
 var
-  b12, b0, a6, both, none: TTyRichEditParagraphSpacing;
+  b12, b0, a6, both, none, half: TTyRichEditParagraphSpacing;
   depth: Integer;
+  metric: TTyParaMetric;
 begin
   b12 := TTyRichEditParagraphSpacing(Make(TTyRichEditParagraphSpacing));
   b12.Before := 12;
@@ -1961,6 +1967,17 @@ begin
   a6.Execute;
   AssertEquals('6 before still', 6, FRich.Paragraph.SpaceBefore);
   AssertFalse('before the same, after not: not checked', UpdatedOn(both).Checked);
+  // points to the twip: 7.5
+  half := TTyRichEditParagraphSpacing(Make(TTyRichEditParagraphSpacing));
+  half.Before := 7.5;
+  AssertFalse('7.5 not yet', UpdatedOn(half).Checked);
+  half.Execute;
+  metric := Default(TTyParaMetric);
+  FRich.GetParaMetric(FRich.SelStart, metric);
+  AssertEquals('7.5 pt before', 7.5, metric.SpaceBefore, 0.0001);
+  AssertTrue('7.5 checked', UpdatedOn(half).Checked);
+  half.Before := 8;
+  AssertFalse('8 is not 7.5', UpdatedOn(half).Checked);
   FRich.ReadOnly := True;
   AssertFalse('read-only: grey', UpdatedOn(b12).Enabled);
 end;

@@ -112,7 +112,7 @@ type
     FFontSize: Integer;
     FSpacing: TTyLineSpacing;
     FMultiple: Double;
-    FSpaceBefore, FSpaceAfter: Integer;
+    FSpaceBefore, FSpaceAfter: Double;
     FCanRowIns, FCanColIns, FCanRowDel, FCanColDel, FCanTableDel: Boolean;
     FCanLink, FCanEditLink: Boolean;
     procedure ViewChanged(Sender: TObject);
@@ -153,12 +153,13 @@ type
     property FontName: string read FFontName;
     property FontSize: Integer read FFontSize;
     property LineSpacing: TTyLineSpacing read FSpacing;
-    { Paragraph.LineSpacingMultiple (0 for an exact or an at-least spacing), SpaceBefore and
-      SpaceAfter (points) - the first paragraph the selection touches (meaningful with
+    { Paragraph.LineSpacingMultiple (0 for an exact or an at-least spacing), the space before
+      and after (points, to the twip, as GetParaMetric reports them) - the first paragraph the
+      selection touches (meaningful with
       Readable). }
     property LineMultiple: Double read FMultiple;
-    property SpaceBefore: Integer read FSpaceBefore;
-    property SpaceAfter: Integer read FSpaceAfter;
+    property SpaceBefore: Double read FSpaceBefore;
+    property SpaceAfter: Double read FSpaceAfter;
     property CanInsertRow: Boolean read FCanRowIns;
     property CanInsertColumn: Boolean read FCanColIns;
     property CanDeleteRow: Boolean read FCanRowDel;
@@ -741,20 +742,23 @@ type
   end;
 
   { The space before and after the paragraphs the selection touches: Before and After in
-    points, each -1 (the default) to leave that side as it is - 0, 6, 12 as Word's menu has
-    them, or both at once. Checked: the first paragraph the selection touches has the sides
-    given. Enabled: CanFormatParagraphs, and a side given. }
+    points (to the twip, 7.5 as well), each -1 (the default) to leave that side as it is -
+    0, 6, 12 as Word's menu has them, or both at once. Checked: the first paragraph the
+    selection touches has the sides given, to the twip (GetParaMetric's points). Enabled:
+    CanFormatParagraphs, and a side given. }
   TTyRichEditParagraphSpacing = class(TTyRichEditAction)
   private
-    FBefore, FAfter: Integer;
+    FBefore, FAfter: Double;
+    function IsBeforeStored: Boolean;
+    function IsAfterStored: Boolean;
   protected
     procedure UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
     procedure ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
   public
     constructor Create(AOwner: TComponent); override;
   published
-    property Before: Integer read FBefore write FBefore default -1;
-    property After: Integer read FAfter write FAfter default -1;
+    property Before: Double read FBefore write FBefore stored IsBeforeStored;
+    property After: Double read FAfter write FAfter stored IsAfterStored;
   end;
 
   { ---- table operations: the control's own, Enabled by its own Can... at the caret ---- }
@@ -926,6 +930,7 @@ end;
 procedure TTyRichEditActionState.Refresh;
 var
   d: TTyRichDocument;
+  metric: TTyParaMetric;
 begin
   FDirty := False;
   Inc(FRefreshes);
@@ -951,8 +956,11 @@ begin
     FFontSize := FRich.SelAttributes.Size;
     FSpacing := FRich.Paragraph.LineSpacingRule;
     FMultiple := FRich.Paragraph.LineSpacingMultiple;
-    FSpaceBefore := FRich.Paragraph.SpaceBefore;
-    FSpaceAfter := FRich.Paragraph.SpaceAfter;
+    // the paragraph door's points, to the twip (Paragraph.SpaceBefore is whole points)
+    metric := Default(TTyParaMetric);
+    FRich.GetParaMetric(Min(FRich.SelStart, d.Text.Length), metric);
+    FSpaceBefore := metric.SpaceBefore;
+    FSpaceAfter := metric.SpaceAfter;
     Inc(FQueries, 13);
   end
   else
@@ -2178,13 +2186,24 @@ begin
   FAfter := -1;
 end;
 
+function TTyRichEditParagraphSpacing.IsBeforeStored: Boolean;
+begin
+  Result := FBefore <> -1;
+end;
+
+function TTyRichEditParagraphSpacing.IsAfterStored: Boolean;
+begin
+  Result := FAfter <> -1;
+end;
+
 procedure TTyRichEditParagraphSpacing.UpdateOn(ARich: TTyCustomRichEdit;
   AState: TTyRichEditActionState);
 begin
   Enabled := AState.CanFormatParagraphs and ((FBefore >= 0) or (FAfter >= 0));
+  // to the twip, as the action writes it and the paragraph reports it
   Checked := AState.Readable and ((FBefore >= 0) or (FAfter >= 0)) and
-    ((FBefore < 0) or (AState.SpaceBefore = FBefore)) and
-    ((FAfter < 0) or (AState.SpaceAfter = FAfter));
+    ((FBefore < 0) or (TyRichPtToTwips(AState.SpaceBefore) = TyRichPtToTwips(FBefore))) and
+    ((FAfter < 0) or (TyRichPtToTwips(AState.SpaceAfter) = TyRichPtToTwips(FAfter)));
 end;
 
 procedure TTyRichEditParagraphSpacing.ExecuteOn(ARich: TTyCustomRichEdit;
@@ -2198,12 +2217,12 @@ begin
   if FBefore >= 0 then
   begin
     Include(m, pffSpaceBefore);
-    f.SpaceBefore := FBefore * 20;
+    f.SpaceBefore := TyRichPtToTwips(FBefore);
   end;
   if FAfter >= 0 then
   begin
     Include(m, pffSpaceAfter);
-    f.SpaceAfter := FAfter * 20;
+    f.SpaceAfter := TyRichPtToTwips(FAfter);
   end;
   if m <> [] then ARich.ApplyParagraphFormat(m, f);
 end;
