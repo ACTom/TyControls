@@ -765,6 +765,8 @@ type
     LineStyle: array[TTyRowCellSide] of TTyRichBorderStyle;
     LineColor: array[TTyRowCellSide] of TColor;
     Shading: TColor;
+    // the sides that are the table's outline (the page's ground lies beyond them)
+    Outer: TTyRowCellSides;
   end;
 
   { One paragraph of a row: its layout (the row holds the reference; it follows the row to
@@ -4050,9 +4052,21 @@ var
 
   function Ink(ASide: TTyRowCellSide): TBGRAPixel;
   begin
-    // a line of automatic colour in the theme's line colour, a file's colour as it is
+    { A line of automatic colour in the theme's line colour, a file's colour as it is. Inside
+      the table, on a shaded cell - the line lies inside the box of the cell that draws it, on
+      that cell's shading - the automatic line takes the colour automatic text takes there
+      (TextInk: it stands out from the shading), so it shows in every theme. Between a shaded
+      and an unshaded cell the line is the one the cell that draws it gives (the later's at the
+      same width): on the shading in that colour, on the unshaded side in the theme's. The
+      table's outline stays the theme's colour on a shaded cell too: the page's ground lies
+      beyond it, and a line in the shading's contrast colour would vanish into a dark page. }
     if (bx^.LineColor[ASide] = clDefault) or (bx^.LineColor[ASide] = clNone) then
-      Result := AStyle.TableBorder
+    begin
+      if (bx^.Shading <> clNone) and (bx^.Shading <> clDefault) and not (ASide in bx^.Outer) then
+        Result := TextInk(clDefault, bx^.Shading, AStyle)
+      else
+        Result := AStyle.TableBorder;
+    end
     else
       Result := ColorToBGRA(ColorToRGB(bx^.LineColor[ASide]));
   end;
@@ -7206,13 +7220,20 @@ begin
       declare is the wider, the later cell's at the same width (Word's rule), by the cell
       that declares it: between two cells the later one's left, or the earlier one's right
       when that is the wider or the only one; between two rows likewise the lower one's top
-      or the upper one's bottom. The row's last cell closes the row, the table's last row the
-      table. A cell that continues the one above (a vertical merge) has no line toward it,
-      nor has the one it continues. }
+      or the upper one's bottom. The two differ only in a file made elsewhere: the control
+      writes both sides of every line alike, as Word does (TTyRichBorderPlan,
+      TTyRichAgreeEdges), and Word, given two that differ, may show another line than this
+      rule does. The row's last cell closes the row, the table's last row the table. A cell
+      that continues the one above (a vertical merge) has no line toward it, nor has the one
+      it continues. }
     for i := 0 to nc - 1 do
     begin
       bx := @R.FCells[i];
+      bx^.Outer := [];
       if bx^.Hidden then Continue;
+      if i = 0 then Include(bx^.Outer, rcsLeft);
+      if prevRow = nil then Include(bx^.Outer, rcsTop);
+      if lastRow then Include(bx^.Outer, rcsBottom);
       // (the one that declares the winning line draws it: inside its own box)
       own := CellBorder(fmt, i, rcsLeft);
       if i > 0 then other := CellBorder(fmt, i - 1, rcsRight) else other := TyRichBorder(rbsNone, 0);
@@ -7223,6 +7244,7 @@ begin
       while (j + 1 < nc) and R.FCells[j + 1].Hidden do Inc(j);
       if j = nc - 1 then
       begin
+        Include(bx^.Outer, rcsRight);
         own := CellBorder(fmt, j, rcsRight);
         if own.Style <> rbsNone then Draw(i, rcsRight, own);
       end;

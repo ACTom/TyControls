@@ -211,6 +211,7 @@ begin
       // the text over it: the glyph boxes the test device draws, in the text's colour
       it := r.Row.Items[0];
       AssertTrue('its text drawn over it', SamePx(BGRA(0, 0, 0), r.At(it.X + 2, it.Y + it.Layout.Height div 2)));
+      // (the table's outline: the theme's line colour, on the shading too)
       AssertTrue('its line over it', SamePx(BGRA(128, 128, 128), r.At(c0.Left, 0)));
     finally
       r.Free;
@@ -443,17 +444,48 @@ begin
       it := r.Row.Items[1];
       q := r.At(it.X + 2, it.Y + it.Layout.Height div 2);
       AssertTrue('no shading: the theme''s', SamePx(BGRA(235, 235, 235), q));
+      { The table's outline stays the theme's on a shaded cell (the page lies beyond it); the
+        line the shaded cell shares with the unshaded one is that cell's left (the later's at
+        the same width), on the ground: the theme's line colour. }
+      q := r.At(r.Row.Cells[0].Left, r.Row.Height div 2);
+      AssertTrue(Format('the outline on the shading: the theme''s (%d,%d,%d)', [q.red, q.green, q.blue]),
+        SamePx(BGRA(128, 128, 128), q));
+      q := r.At(r.Row.Cells[1].Left, r.Row.Height div 2);
+      AssertTrue(Format('the line beside it: the theme''s (%d,%d,%d)', [q.red, q.green, q.blue]),
+        SamePx(BGRA(128, 128, 128), q));
     finally
       r.Free;
     end;
-    // a dark shading keeps the light text
+    { The second cell shaded instead: the line it shares with the first is its own left (the
+      later's), drawn on its shading - an automatic line stands out there as the text does;
+      its right is the outline, the theme's. }
+    p.Shading := clNone;
+    SetCells(d, 0, 0, 0, 0, p);
+    p.Shading := RGBToColor(255, 255, 204);
+    SetCells(d, 0, 1, 0, 1, p);
+    r := PaintRow(d, 1, st);
+    try
+      q := r.At(r.Row.Cells[1].Left, r.Row.Height div 2);
+      AssertTrue(Format('a line on the light shading: dark (%d,%d,%d)', [q.red, q.green, q.blue]),
+        SamePx(BGRA(20, 20, 20), q));
+      q := r.At(r.Row.Cells[1].Right - 1, r.Row.Height div 2);
+      AssertTrue(Format('its outline: the theme''s (%d,%d,%d)', [q.red, q.green, q.blue]),
+        SamePx(BGRA(128, 128, 128), q));
+    finally
+      r.Free;
+    end;
+    // a dark shading keeps the light text, and a light line
     p.Shading := RGBToColor(0, 0, 96);
     SetCells(d, 0, 0, 0, 0, p);
+    SetCells(d, 0, 1, 0, 1, p);
     r := PaintRow(d, 1, st);
     try
       it := r.Row.Items[0];
       AssertTrue('on a dark shading: light', SamePx(BGRA(235, 235, 235),
         r.At(it.X + 2, it.Y + it.Layout.Height div 2)));
+      q := r.At(r.Row.Cells[1].Left, r.Row.Height div 2);
+      AssertTrue(Format('a line on the dark shading: light (%d,%d,%d)', [q.red, q.green, q.blue]),
+        SamePx(BGRA(235, 235, 235), q));
     finally
       r.Free;
     end;
