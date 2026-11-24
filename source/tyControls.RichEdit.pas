@@ -22954,8 +22954,9 @@ begin
 end;
 
 { The rows (selected, else the table's) as high as their average now, each at least that.
-  Synchronous: every row in range is laid out to read its height - about 3 s for a table of
-  10,000 rows of three cells. Above the threshold the control's other long synchronous work
+  Synchronous: every row in range is laid out to read its height - about 0.5 s for a table of
+  10,000 rows of three cells, to the end of the paint after it (the performance suite's line,
+  460 - 500 ms). Above the threshold the control's other long synchronous work
   uses (CopyWaitChars, a laid-out paragraph counted as CRichLayoutParaChars characters) the
   wait cursor shows meanwhile. }
 function TTyCustomRichEdit.DistributeRows: Boolean;

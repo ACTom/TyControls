@@ -336,7 +336,7 @@ end;
 - A table in a large RTF file read on demand that is too big to read whole (about a megabyte of the file): what needs the whole table - a column's width, a column inserted or deleted, the table's alignment, a column or the whole table selected - is refused; cells and rows of the part read can be selected and formatted.
 - A plain text document has no tables to edit; a read-only control or one disabled does nothing and says nothing.
 
-**What it costs on a large table.** A cell's format, a row's height and Tab in the last cell are within a keystroke on a table of 10,000 rows; a column's width changed in all 10,000 rows takes about 130 ms; selecting a column highlights only the rows on the screen. `DistributeRows` lays out every row to measure it and is synchronous: on 10,000 rows from half a second to about 3 s by the machine's load, with the wait cursor.
+**What it costs on a large table.** A cell's format, a row's height and Tab in the last cell are within a keystroke on a table of 10,000 rows; a column's width changed in all 10,000 rows takes about 130 ms; selecting a column highlights only the rows on the screen. `DistributeRows` lays out every row to measure it and is synchronous: on 10,000 rows of three cells about half a second (460 to 500 ms to the end of its paint in the performance suite), with the wait cursor.
 
 ## 9. Files
 
