@@ -27,6 +27,7 @@ type
     procedure TestASharedEdgeIsDrawnOnce;
     procedure TestAutomaticTextContrastsWithShading;
     procedure TestSelectedTextStandsOutFromWhatIsUnderIt;
+    procedure TestAFilesConflictIsDecidedInTwipsByPosition;
     procedure TestCrispAt150And200;
     procedure TestWordsStyledTableAsWordDrawsIt;
     procedure TestAnExactRowCutsItsContent;
@@ -559,6 +560,54 @@ begin
             SamePx(BGRA(229, 231, 235), q));
         end;
       end;
+    finally
+      r.Free;
+    end;
+  finally
+    d.Free;
+  end;
+end;
+
+{ A line a file defines twice, two ways: the wider in twips is drawn - not the wider in device
+  pixels, so a 15-twip line beside a 10-twip one wins at every scale -, the later cell's at the
+  same width; between rows the cells are paired by where their edges are, not by index: a cell
+  below that lies under no cell of the row above draws its own top. }
+procedure TTyRichTablePaintTest.TestAFilesConflictIsDecidedInTwipsByPosition;
+const
+  Side = '{\rtf1\ansi{\fonttbl{\f0 Arial;}}\pard before\par' +
+    '\trowd\clbrdrr\brdrs\brdrw15\brdrcf1\cellx1440\clbrdrl\brdrs\brdrw10\brdrcf2\cellx2880' +
+    '\pard\intbl a\cell b\cell\row\pard after\par}';
+  Rows = '{\rtf1\ansi{\fonttbl{\f0 Arial;}}\pard before\par' +
+    '\trowd\clbrdrb\brdrs\brdrw30\cellx1440\clbrdrb\brdrs\brdrw30\cellx2880' +
+    '\pard\intbl a\cell b\cell\row' +
+    '\trowd\clbrdrt\brdrs\brdrw10\cellx2880\pard\intbl c\cell\row\pard after\par}';
+  Colors = '{\colortbl;\red255\green0\blue0;\red0\green0\blue255;}';
+var
+  d: TTyRichDocument;
+  r: TPainted;
+  ppi: Integer;
+begin
+  d := LoadDoc(BytesOf(StringReplace(Side, '{\fonttbl{\f0 Arial;}}', '{\fonttbl{\f0 Arial;}}' + Colors, [])));
+  try
+    for ppi in [96, 144, 192] do
+    begin
+      r := PaintRow(d, 1, Style, ppi);
+      try
+        // the earlier cell's 15 twips: drawn by it, its right side
+        AssertTrue(Format('%d: the wider is drawn', [ppi]), rcsRight in r.Row.Cells[0].Sides);
+        AssertFalse(Format('%d: not the narrower', [ppi]), rcsLeft in r.Row.Cells[1].Sides);
+      finally
+        r.Free;
+      end;
+    end;
+  finally
+    d.Free;
+  end;
+  d := LoadDoc(BytesOf(Rows));
+  try
+    r := PaintRow(d, 3, Style);
+    try
+      AssertTrue('a cell under no single cell above: its own top drawn', rcsTop in r.Row.Cells[0].Sides);
     finally
       r.Free;
     end;

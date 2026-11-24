@@ -50,6 +50,8 @@ type
     function SaveRtf: RawByteString;
     function RowCount: Integer;
     function ColCount(ARow: Integer): Integer;
+    // '' or where a full shared line has two definitions
+    function Disagreement: string;
     { The three ranges: the caret in cell 1,1 (AKind 0); cells 1,1 .. 2,2 (1); every cell (2). }
     procedure Range(AKind: Integer; out AR0, AC0, AR1, AC1: Integer);
     function InRange(ARow, ACol, AR0, AC0, AR1, AC1: Integer): Boolean;
@@ -84,6 +86,8 @@ type
     procedure TestTablePropertiesApplyOnlyWhatChanged;
     procedure TestTableAlignLeavesTheIndent;
     procedure TestTheBuildersRowIsInTwipsAndMisuseRaises;
+    procedure TestEdgesLinedUpAgainShareOneDefinition;
+    procedure TestARandomWalkLeavesNoLineWithTwoDefinitions;
   end;
 
 implementation
@@ -1188,6 +1192,133 @@ begin
       B.Free;
     end;
     AssertTrue(Format('%d: a negative measure raises', [k]), raised);
+  end;
+end;
+
+function TTyRichTableFormatTest.Disagreement: string;
+var
+  r, c, n, b: Integer;
+  ea, eb: TTyRichEdges;
+  la, lb: Integer;
+
+  function EdgesOf(ARow: Integer; out ALeft: Integer): TTyRichEdges;
+  begin
+    FRich.Document.BeginRead;
+    try
+      Result := FRich.Document.CellAt(FRich.Document.Text.ParaOfPos(CellStart(ARow, 0))).Row.CellEdges;
+    finally
+      FRich.Document.EndRead;
+    end;
+    ALeft := RowP(ARow).LeftTwips;
+  end;
+
+begin
+  Result := '';
+  n := RowCount;
+  for r := 0 to n - 1 do
+  begin
+    ea := EdgesOf(r, la);
+    for c := 0 to High(ea) - 1 do
+      if not TyRichSameBorder(Cell(r, c).Borders[rcsRight], Cell(r, c + 1).Borders[rcsLeft]) then
+        Exit(Format('%d,%d right / %d,%d left', [r, c, r, c + 1]));
+    if r = n - 1 then Continue;
+    eb := EdgesOf(r + 1, lb);
+    for c := 0 to High(ea) do
+    begin
+      b := TyRichFacingCell(ea, la, c, eb, lb);
+      if (b >= 0) and not TyRichSameBorder(Cell(r, c).Borders[rcsBottom], Cell(r + 1, b).Borders[rcsTop]) then
+        Exit(Format('%d,%d bottom / %d,%d top', [r, c, r + 1, b]));
+    end;
+  end;
+end;
+
+{ A column's edge dragged in one row and back: the two rows' cells line up again and the
+  sides that now face each other agree - the line drawn there stays. }
+procedure TTyRichTableFormatTest.TestEdgesLinedUpAgainShareOneDefinition;
+var
+  red: TTyRichBorder;
+begin
+  red := TyRichBorder(rbsSingle, 30, clRed);
+  MakeTable(2, 2);
+  // (the first cell of row 0 selected: its width, in that row alone)
+  Sel(CellStart(0, 0), CellEnd(0, 0));
+  AssertTrue('row 0''s first cell wider', FRich.SetColumnWidth(1740));
+  FRich.SelStart := CellStart(1, 0) + 1;
+  AssertTrue('cell 1,0''s top', FRich.SetCellBorders(rbpTop, red));
+  AssertFalse('the cell above lies wider: its own bottom', TyRichSameBorder(Cell(0, 0).Borders[rcsBottom], red));
+  Sel(CellStart(0, 0), CellEnd(0, 0));
+  AssertTrue('back to 1440', FRich.SetColumnWidth(1440));
+  AssertTrue('lined up again: one definition', TyRichSameBorder(Cell(0, 0).Borders[rcsBottom], red));
+  AssertEquals('nowhere two', '', Disagreement);
+end;
+
+{ A walk of a few hundred random operations - border presets on random cells, rows and
+  columns in and out, widths set on random rows (lining edges up and parting them), undo -
+  never leaves a line two cells wholly share with two definitions. }
+procedure TTyRichTableFormatTest.TestARandomWalkLeavesNoLineWithTwoDefinitions;
+const
+  Seeds: array[0..2] of Integer = (7, 2026, 31337);
+  Steps = 70;
+var
+  sd, k, r0, c0, r1, c1, op, rows, cols: Integer;
+  b: TTyRichBorder;
+  what, bad: string;
+begin
+  for sd := 0 to High(Seeds) do
+  begin
+    RandSeed := Seeds[sd];
+    MakeTable(4, 4);
+    for k := 1 to Steps do
+    begin
+      rows := RowCount;
+      cols := ColCount(0);
+      r0 := Random(rows);
+      c0 := Random(Math.Min(cols, ColCount(r0)));
+      r1 := Math.Min(rows - 1, r0 + Random(2));
+      c1 := Math.Min(ColCount(r1) - 1, c0 + Random(2));
+      if c1 < 0 then c1 := 0;
+      op := Random(10);
+      what := Format('seed %d, step %d, op %d at %d,%d..%d,%d', [Seeds[sd], k, op, r0, c0, r1, c1]);
+      case op of
+        0..3:
+          begin
+            if Random(3) = 0 then b := TyRichBorder(rbsNone, 0)
+            else b := TyRichBorder(TTyRichBorderStyle(1 + Random(4)), 10 + 10 * Random(3), clRed);
+            Sel(CellStart(r0, Math.Min(c0, ColCount(r0) - 1)), CellEnd(r1, Math.Min(c1, ColCount(r1) - 1)));
+            FRich.SetCellBorders(TTyRichBorderPreset(Random(10)), b);
+          end;
+        4:
+          begin
+            FRich.SelStart := CellStart(r0, 0) + 1;
+            if rows < 7 then FRich.InsertRow(Random(2) = 0);
+          end;
+        5:
+          begin
+            FRich.SelStart := CellStart(r0, 0) + 1;
+            if rows > 2 then FRich.DeleteRow;
+          end;
+        6:
+          begin
+            Sel(CellStart(r0, 0), CellEnd(r0, ColCount(r0) - 1));
+            FRich.SetColumnWidth(1440 + 300 * (Random(3) - 1));
+          end;
+        7:
+          begin
+            FRich.SelStart := CellStart(r0, 0) + 1;
+            FRich.SetColumnWidth(1440 + 300 * (Random(3) - 1));
+          end;
+        8:
+          if FRich.Document.CanUndo then FRich.Undo;
+      else
+        begin
+          FRich.SelStart := CellStart(0, 0) + 1;
+          if (cols < 6) and (Random(2) = 0) then FRich.InsertColumn(True)
+          else if cols > 2 then FRich.DeleteColumn;
+        end;
+      end;
+      bad := Disagreement;
+      AssertEquals(what, '', bad);
+    end;
   end;
 end;
 

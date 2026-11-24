@@ -536,10 +536,6 @@ var
     else Result := TyRichBorder(rbsNone, 0);
   end;
 
-  function Weight(const B: TTyRichBorder): Integer;
-  begin
-    if B.Style = rbsNone then Result := 0 else Result := B.WidthTwips;
-  end;
 
   procedure Change(AI, AC: Integer; ASide: TTyRichCellSide; const B: TTyRichBorder);
   begin
@@ -560,8 +556,9 @@ var
     e := BorderOf(AI, AC, ASide);
     l := BorderOf(AJ, AD, AFace);
     if TyRichSameBorder(e, l) then Exit;
-    if Weight(e) > Weight(l) then Change(AJ, AD, AFace, e)
-    else Change(AI, AC, ASide, l);
+    // (the layout's rule: the line drawn there stays - TyRichLaterLineWins)
+    if TyRichLaterLineWins(e, l) then Change(AI, AC, ASide, l)
+    else Change(AJ, AD, AFace, e);
   end;
 
   function LeftOf(AI, AC: Integer; const AE: TTyRichEdges): Integer;
@@ -586,20 +583,11 @@ var
       eb := rows[i + 1].CellEdges;
       na := Length(ea);
       nb := Length(eb);
-      a := 0;
-      b := 0;
-      while (a < na) and (b < nb) do
+      // (cells paired by where their edges are: the layout's pairing, TyRichFacingCell)
+      for a := 0 to na - 1 do
       begin
-        if (Abs(LeftOf(i, a, ea) - LeftOf(i + 1, b, eb)) <= CRichSharedEdgeTwips) and
-           (Abs(ea[a] - eb[b]) <= CRichSharedEdgeTwips) then
-          Agree(i, a, rcsBottom, i + 1, b, rcsTop);
-        if Abs(ea[a] - eb[b]) <= CRichSharedEdgeTwips then
-        begin
-          Inc(a);
-          Inc(b);
-        end
-        else if ea[a] < eb[b] then Inc(a)
-        else Inc(b);
+        b := TyRichFacingCell(ea, LeftOf(i, 0, ea), a, eb, LeftOf(i + 1, 0, eb));
+        if b >= 0 then Agree(i, a, rcsBottom, i + 1, b, rcsTop);
       end;
     end;
     { The parts: a change the same in the next row (the same cell, side and border) runs on

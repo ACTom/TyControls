@@ -10884,7 +10884,8 @@ var
   atEnd, ok: Boolean;
   marks: TTyRichStepMarks;
   refusal, cannot: string;
-  lateWhy, propsWhy, lateFirst, partRefused: Boolean;
+  lateWhy, propsWhy, lateFirst, propsFirst, partRefused: Boolean;
+  pwhy: TTyRichTableRefusal;
   lateCmd: TTyRichCommand;
   why: TTyRichTableRefusal;
   edit: TTyRichTableEdit;
@@ -10928,7 +10929,15 @@ begin
   { A table properties command reads the rows it changes for its reason as for its work (a
     column's edge in ten thousand rows): the reason is asked only when it was refused. }
   propsWhy := ACmd is TTyRichTablePropsCommand;
-  if propsWhy then pedit := TTyRichTablePropsCommand(ACmd).Edit;
+  propsFirst := False;
+  if propsWhy then pedit := TTyRichTablePropsCommand(ACmd).Edit
+  else if (lateCmd <> ACmd) and (lateCmd is TTyRichTablePropsCommand) then
+  begin
+    // (a properties edit and what keeps its lines right: the edit's reason is the step's)
+    propsWhy := True;
+    propsFirst := True;
+    pedit := TTyRichTablePropsCommand(lateCmd).Edit;
+  end;
   if lateWhy then
   begin
     edit := TTyRichTableCommand(lateCmd).Edit;
@@ -10968,7 +10977,7 @@ begin
         FCaretAtEnd := atEnd;
         if not AUser then raise;
         refusal := EngineRefusal(E);
-        partRefused := lateFirst and (E is ETyRichRefused);
+        partRefused := (lateFirst or propsFirst) and (E is ETyRichRefused);
       end;
       on E: EOutOfMemory do
       begin
@@ -10985,10 +10994,16 @@ begin
   end;
   // a table edit's step refused at its edit: the edit's own reason
   if partRefused and (RefusalReason = '') then
-  begin
-    why := FDoc.TableEditRefusal(edit);
-    if why <> rtrNone then refusal := TableRefusalText(why, edit);
-  end;
+    if lateFirst then
+    begin
+      why := FDoc.TableEditRefusal(edit);
+      if why <> rtrNone then refusal := TableRefusalText(why, edit);
+    end
+    else
+    begin
+      pwhy := FDoc.TablePropsRefusal(pedit);
+      if pwhy <> rtrNone then refusal := PropsRefusalText(pwhy, pedit);
+    end;
   { Told once the edit's bracket is closed: a handler that changes or loads the document is
     heard as a change from elsewhere (its OnChange), not taken for this edit's. }
   if refusal <> '' then
@@ -22229,6 +22244,8 @@ function TTyCustomRichEdit.RunEdgeCommand(ACmd: TTyRichTablePropsCommand): Boole
 var
   place: TTyRichEditPlace;
   keep: Boolean;
+  cmd: TTyRichCommand;
+  comp: TTyRichCompositeCommand;
 begin
   Result := False;
   if FReadOnly or not IsEnabled or ViewBehind then
@@ -22246,8 +22263,19 @@ begin
   keep := FNoEditScroll;
   FNoEditScroll := True;
   FDoc.PropsSkipped := 0;
+  { Edges that moved may line cells of two rows up again (or part them): the sides that now
+    face each other agree in the same step, by the rule the insert and delete keep - the line
+    drawn there stays (TTyRichAgreeEdges), over the rows moved and their neighbours. }
+  cmd := ACmd;
+  if not ACmd.Edit.OfRows or (ACmd.Edit.EdgeKind <> rekNone) then
+  begin
+    comp := TTyRichCompositeCommand.Create(ACmd.Description);
+    comp.Add(ACmd);
+    comp.Add(TTyRichAgreeEdges.Create(ACmd.Edit.Pos, ACmd.Edit.Row0 - 1, ACmd.Edit.Row1 + 1));
+    cmd := comp;
+  end;
   try
-    Result := RunMade(ACmd, place, True);
+    Result := RunMade(cmd, place, True);
   finally
     FNoEditScroll := keep;
   end;

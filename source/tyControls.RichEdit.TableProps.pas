@@ -161,10 +161,30 @@ function TyRichBorder(AStyle: TTyRichBorderStyle; AWidthTwips: Integer;
   AColor: TColor = clDefault): TTyRichBorder;
 function TyRichSameBorder(const A, B: TTyRichBorder): Boolean;
 
+{ ---- one line two cells share: which definition is the line ----
+
+  The ONE rule the layout draws by and the agreement of facing sides keeps (TTyRichAgreeEdges):
+  of the earlier cell's side (the left cell's right, the upper cell's bottom) and the later's
+  facing side, the wider in twips (no line: 0) is the line, the later's at the same width;
+  between two rows the cells are paired by where their edges are (TyRichFacingCell), not by
+  their index. }
+
+// True: the later cell's definition is the line
+function TyRichLaterLineWins(const AEarlier, ALater: TTyRichBorder): Boolean;
+{ The cell of the other row whose left and right edges are cell ACell's (within
+  CRichEdgeSlackTwips), else -1. AEdges / AOtherEdges: the rows' cells' right edges, ALeft /
+  AOtherLeft: where their first cells start. }
+function TyRichFacingCell(const AEdges: array of Integer; ALeft, ACell: Integer;
+  const AOtherEdges: array of Integer; AOtherLeft: Integer): Integer;
+
+const
+  // edges this close are one (Word writes a line's cells 15 twips apart at most)
+  CRichEdgeSlackTwips = 15;
+
 implementation
 
 uses
-  SysUtils;
+  SysUtils, Math;
 
 const
   CDefaultHalfGap = 108;
@@ -201,6 +221,35 @@ begin
   // (no line: its width and colour say nothing)
   if (A.Style = rbsNone) and (B.Style = rbsNone) then Exit(True);
   Result := (A.Style = B.Style) and (A.WidthTwips = B.WidthTwips) and (A.Color = B.Color);
+end;
+
+// (a line of width 0 - the thinnest, as a file may say - is still more than none)
+function BorderWeight(const B: TTyRichBorder): Integer;
+begin
+  if B.Style = rbsNone then Result := 0 else Result := 1 + Math.Max(0, B.WidthTwips);
+end;
+
+function TyRichLaterLineWins(const AEarlier, ALater: TTyRichBorder): Boolean;
+begin
+  Result := BorderWeight(ALater) >= BorderWeight(AEarlier);
+end;
+
+function TyRichFacingCell(const AEdges: array of Integer; ALeft, ACell: Integer;
+  const AOtherEdges: array of Integer; AOtherLeft: Integer): Integer;
+var
+  l, r, j, ol: Integer;
+begin
+  Result := -1;
+  if (ACell < 0) or (ACell > High(AEdges)) then Exit;
+  if ACell = 0 then l := ALeft else l := AEdges[ACell - 1];
+  r := AEdges[ACell];
+  for j := 0 to High(AOtherEdges) do
+  begin
+    if j = 0 then ol := AOtherLeft else ol := AOtherEdges[j - 1];
+    if (Abs(ol - l) <= CRichEdgeSlackTwips) and (Abs(AOtherEdges[j] - r) <= CRichEdgeSlackTwips) then
+      Exit(j);
+    if ol > r + CRichEdgeSlackTwips then Exit;
+  end;
 end;
 
 function NoBorder: TTyRichBorder;

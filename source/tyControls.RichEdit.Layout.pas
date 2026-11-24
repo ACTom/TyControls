@@ -7136,6 +7136,7 @@ var
   pads: array of array[TTyRowCellSide] of Integer;
   cp: TTyRichCellProps;
   own, other: TTyRichBorder;
+  myEdges, prevEdges, nextEdges: TTyRichEdges;
 
   function Px(ATwips: Int64): Integer;
   begin
@@ -7188,6 +7189,10 @@ begin
     if nextRow <> nil then nextFmt := nextRow.Format else nextFmt := nil;
     prevRow := PrevRowOf(ADoc, AFirst, ARow);
     if prevRow <> nil then prevFmt := prevRow.Format else prevFmt := nil;
+    // (the rows' edges: cells above and below are paired by them - TyRichFacingCell)
+    myEdges := ARow.CellEdges;
+    if prevRow <> nil then prevEdges := prevRow.CellEdges else prevEdges := nil;
+    if nextRow <> nil then nextEdges := nextRow.CellEdges else nextEdges := nil;
     // the cells' boxes, left to right
     SetLength(R.FCells, nc);
     pads := nil;
@@ -7257,7 +7262,7 @@ begin
       // (the one that declares the winning line draws it: inside its own box)
       own := CellBorder(fmt, i, rcsLeft);
       if i > 0 then other := CellBorder(fmt, i - 1, rcsRight) else other := TyRichBorder(rbsNone, 0);
-      if LineWidth(other) > LineWidth(own) then Draw(R.FCells[i - 1].Owner, rcsRight, other)
+      if not TyRichLaterLineWins(other, own) then Draw(R.FCells[i - 1].Owner, rcsRight, other)
       else if own.Style <> rbsNone then Draw(i, rcsLeft, own);
       // the box's right: the last cell merged into it
       j := i;
@@ -7271,9 +7276,13 @@ begin
       if bx^.VMerge <> rcmContinue then
       begin
         own := CellBorder(fmt, i, rcsTop);
-        o := BoxCellOf(prevFmt, i);
+        // (the cell above: the one whose edges are this one's)
+        o := -1;
+        if prevRow <> nil then
+          o := BoxCellOf(prevFmt, TyRichFacingCell(myEdges, fmt.Row.LeftTwips, i, prevEdges,
+            prevFmt.Row.LeftTwips));
         other := CellBorder(prevFmt, o, rcsBottom);
-        if (own.Style <> rbsNone) and (LineWidth(other) <= LineWidth(own)) then Draw(i, rcsTop, own);
+        if (own.Style <> rbsNone) and TyRichLaterLineWins(other, own) then Draw(i, rcsTop, own);
       end;
       own := CellBorder(fmt, i, rcsBottom);
       if own.Style <> rbsNone then
@@ -7281,11 +7290,13 @@ begin
           Draw(i, rcsBottom, own)
         else
         begin
-          o := BoxCellOf(nextFmt, i);
-          if (o >= nextFmt.CellCount) or (nextFmt.Cells[o].VMerge <> rcmContinue) then
+          // (the cell below: the one whose edges are this one's)
+          o := BoxCellOf(nextFmt, TyRichFacingCell(myEdges, fmt.Row.LeftTwips, i, nextEdges,
+            nextFmt.Row.LeftTwips));
+          if (o < 0) or (o >= nextFmt.CellCount) or (nextFmt.Cells[o].VMerge <> rcmContinue) then
           begin
             other := CellBorder(nextFmt, o, rcsTop);
-            if LineWidth(own) > LineWidth(other) then Draw(i, rcsBottom, own);
+            if not TyRichLaterLineWins(own, other) then Draw(i, rcsBottom, own);
           end;
         end;
     end;
