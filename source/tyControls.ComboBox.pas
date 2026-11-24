@@ -2440,6 +2440,14 @@ begin
     // the right edge stops at the chevron button zone.
     TextR := Types.Rect(R.Left + P.Scale(S.Padding.Left), R.Top + P.Scale(S.Padding.Top),
       R.Right - BtnW, R.Bottom - P.Scale(S.Padding.Bottom));
+    { #244. In the editable styles an edit box lies over the text zone and shows the text,
+      and it stops one right padding short of the drop arrow (LayoutEditor). What the field
+      paints under it has to stop there too. It did not: the field's own copy of the item
+      text ran on into that gap, where its last letter -- or the dots of its ellipsis -- was
+      in view beside the edit box's text ("Microsoft YaHei UIII"). Narrowed here, before the
+      mirroring below, so every field paint (a font combo's, an image combo's) is held to it. }
+    if TyComboStyleHasEditBox(FStyle) then
+      Dec(TextR.Right, P.Scale(S.Padding.Right));
     { #153: mirrored, the chevron and the text change sides -- one reflection of the finished
       slots, the one PointInChevron and LayoutEditor make too. Not an armed painter: a
       descendant lays its swatch or image out inside TextR itself. }
