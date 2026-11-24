@@ -63,6 +63,7 @@ type
     procedure PropsAsk(Sender: TObject; var AProps: TTyRichTableProperties; var AAllow: Boolean);
     procedure PropsOk(Sender: TObject; var AProps: TTyRichTableProperties; var AAllow: Boolean);
     procedure PropsVAlign(Sender: TObject; var AProps: TTyRichTableProperties; var AAllow: Boolean);
+    procedure PropsLines(Sender: TObject; var AProps: TTyRichTableProperties; var AAllow: Boolean);
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -88,6 +89,10 @@ type
     procedure TestTheBuildersRowIsInTwipsAndMisuseRaises;
     procedure TestEdgesLinedUpAgainShareOneDefinition;
     procedure TestARandomWalkLeavesNoLineWithTwoDefinitions;
+    procedure TestTheSelectActions;
+    procedure TestTablePropertiesSetLinesInTheSameStep;
+    procedure TestAlignmentActionsAreCheckedWhenAllAlike;
+    procedure TestWidthsAndHeightsOverEverySelectedColumnAndRow;
   end;
 
 implementation
@@ -1320,6 +1325,193 @@ begin
       AssertEquals(what, '', bad);
     end;
   end;
+end;
+
+// the outline's top double red, the inner horizontal lines dashed, and the alignment
+procedure TTyRichTableFormatTest.PropsLines(Sender: TObject; var AProps: TTyRichTableProperties;
+  var AAllow: Boolean);
+begin
+  FGot := AProps;
+  AProps.Lines[rclTop] := TyRichBorder(rbsDouble, 30, clRed);
+  AProps.Lines[rclInsideH] := TyRichBorder(rbsDashed, 20, clBlue);
+  AProps.VAlign := rcvCenter;
+  AProps.Changed := [tpfLineTop, tpfLineInsideH, tpfVAlign];
+end;
+
+{ Select Cell / Row / Column / Table as actions: enabled by the control's own answer in a
+  table, off outside one; each selects what it says. }
+procedure TTyRichTableFormatTest.TestTheSelectActions;
+var
+  list: TActionList;
+  ac: array[0..3] of TTyRichEditAction;
+  k: Integer;
+  g: TTyRichCellRange;
+begin
+  list := TActionList.Create(nil);
+  try
+    ac[0] := TTyRichEditSelectCell.Create(list);
+    ac[1] := TTyRichEditSelectRow.Create(list);
+    ac[2] := TTyRichEditSelectColumn.Create(list);
+    ac[3] := TTyRichEditSelectTable.Create(list);
+    for k := 0 to 3 do ac[k].RichEdit := FRich;
+    MakeTable(3, 3);
+    FRich.SelStart := 1;
+    for k := 0 to 3 do
+    begin
+      ac[k].Update;
+      AssertFalse(Format('%d: off outside a table', [k]), ac[k].Enabled);
+    end;
+    for k := 0 to 3 do
+    begin
+      FRich.SelStart := CellStart(1, 1) + 1;
+      ac[k].Update;
+      AssertTrue(Format('%d: on in a table', [k]), ac[k].Enabled);
+      AssertEquals(Format('%d: the control''s answer', [k]), FRich.CanSelectCells, ac[k].Enabled);
+      ac[k].Execute;
+      g := FRich.SelectedCells;
+      AssertTrue(Format('%d: cells', [k]), g.InTable);
+      case k of
+        0: AssertTrue('a cell', (g.Row0 = 1) and (g.Row1 = 1) and (g.Col0 = 1) and (g.Col1 = 1));
+        1: AssertTrue('a row', (g.Row0 = 1) and (g.Row1 = 1) and (g.Col0 = 0) and (g.Col1 = 2));
+        2: AssertTrue('a column', (g.Row0 = 0) and (g.Row1 = 2) and (g.Col0 = 1) and (g.Col1 = 1));
+      else
+        AssertTrue('the table', g.WholeTable);
+      end;
+    end;
+  finally
+    list.Free;
+  end;
+end;
+
+{ The table properties carry the lines too - the outline's four sides and the inner lines,
+  with the same Uniform / Changed sets -: the whole form is one undo step, and a line given
+  goes to the facing side of the cell beside it as every border door's. }
+procedure TTyRichTableFormatTest.TestTablePropertiesSetLinesInTheSameStep;
+var
+  list: TActionList;
+  pr: TTyRichEditTableProperties;
+  v: TTyRichTableProperties;
+  dbl, dash: TTyRichBorder;
+begin
+  dbl := TyRichBorder(rbsDouble, 30, clRed);
+  dash := TyRichBorder(rbsDashed, 20, clBlue);
+  list := TActionList.Create(nil);
+  try
+    pr := TTyRichEditTableProperties.Create(list);
+    pr.RichEdit := FRich;
+    pr.OnBeforeExecute := @PropsLines;
+    MakeTable(4, 3);
+    Sel(CellStart(1, 0), CellStart(2, 1) + 1);
+    pr.Execute;
+    AssertTrue('the lines were alike', (tpfLineTop in FGot.Uniform) and (tpfLineInsideH in FGot.Uniform));
+    AssertTrue('a single line', FGot.Lines[rclTop].Style = rbsSingle);
+    AssertEquals('one step', 1, FRich.Document.UndoDepth);
+    AssertTrue('the top: 1,0', TyRichSameBorder(Cell(1, 0).Borders[rcsTop], dbl));
+    AssertTrue('the top: 1,1', TyRichSameBorder(Cell(1, 1).Borders[rcsTop], dbl));
+    AssertFalse('not 1,2', TyRichSameBorder(Cell(1, 2).Borders[rcsTop], dbl));
+    AssertTrue('the facing side above', TyRichSameBorder(Cell(0, 0).Borders[rcsBottom], dbl));
+    AssertTrue('inside: 1,0 bottom', TyRichSameBorder(Cell(1, 0).Borders[rcsBottom], dash));
+    AssertTrue('inside: 2,1 top', TyRichSameBorder(Cell(2, 1).Borders[rcsTop], dash));
+    AssertFalse('not the outline''s bottom', TyRichSameBorder(Cell(2, 0).Borders[rcsBottom], dash));
+    AssertTrue('the alignment in the same step', Cell(2, 1).VAlign = rcvCenter);
+    // read back
+    Sel(CellStart(1, 0), CellStart(2, 1) + 1);
+    AssertTrue('read', FRich.GetTableProperties(v));
+    AssertTrue('the top alike', (tpfLineTop in v.Uniform) and TyRichSameBorder(v.Lines[rclTop], dbl));
+    AssertTrue('the inner lines alike', (tpfLineInsideH in v.Uniform) and TyRichSameBorder(v.Lines[rclInsideH], dash));
+    FRich.Undo;
+    AssertFalse('undone in one', TyRichSameBorder(Cell(1, 0).Borders[rcsTop], dbl));
+  finally
+    list.Free;
+  end;
+end;
+
+{ The cell alignment and table alignment actions are checked when the selection's cells (the
+  table) all have their alignment, not when it is mixed. }
+procedure TTyRichTableFormatTest.TestAlignmentActionsAreCheckedWhenAllAlike;
+var
+  list: TActionList;
+  va: TTyRichEditCellVAlign;
+  ta: TTyRichEditTableAlign;
+begin
+  list := TActionList.Create(nil);
+  try
+    va := TTyRichEditCellVAlign.Create(list);
+    va.RichEdit := FRich;
+    va.Align := rcvBottom;
+    ta := TTyRichEditTableAlign.Create(list);
+    ta.RichEdit := FRich;
+    ta.Align := rraCenter;
+    MakeTable(2, 2);
+    FRich.SelStart := CellStart(0, 0) + 1;
+    FRich.SelectTable;
+    va.Update;
+    ta.Update;
+    AssertFalse('not at the bottom yet', va.Checked);
+    AssertFalse('not centred yet', ta.Checked);
+    FRich.SetCellVAlign(rcvBottom);
+    FRich.SetTableAlign(rraCenter);
+    FRich.SelStart := CellStart(0, 0) + 1;
+    FRich.SelectTable;
+    va.Update;
+    ta.Update;
+    AssertTrue('all at the bottom', va.Checked);
+    AssertTrue('centred', ta.Checked);
+    FRich.SelStart := CellStart(1, 1) + 1;
+    FRich.SetCellVAlign(rcvTop);
+    FRich.SelStart := CellStart(0, 0) + 1;
+    FRich.SelectTable;
+    va.Update;
+    AssertFalse('mixed: not checked', va.Checked);
+  finally
+    list.Free;
+  end;
+end;
+
+{ As Word: a width given with several columns selected goes to each of them, a row height to
+  each selected row, a fit to each selected column - one undo step each. }
+procedure TTyRichTableFormatTest.TestWidthsAndHeightsOverEverySelectedColumnAndRow;
+var
+  e: TTyRichEdges;
+
+  function EdgesOf(ARow: Integer): TTyRichEdges;
+  begin
+    FRich.Document.BeginRead;
+    try
+      Result := FRich.Document.CellAt(FRich.Document.Text.ParaOfPos(CellStart(ARow, 0))).Row.CellEdges;
+    finally
+      FRich.Document.EndRead;
+    end;
+  end;
+
+begin
+  MakeTable(3, 4);
+  Sel(CellStart(0, 1), CellStart(2, 2) + 1);
+  AssertTrue('widths', FRich.SetColumnWidth(2000));
+  AssertEquals('one step', 1, FRich.Document.UndoDepth);
+  e := EdgesOf(1);
+  AssertEquals('column 0 as it was', 1440, e[0] - RowP(1).LeftTwips);
+  AssertEquals('column 1', 2000, e[1] - e[0]);
+  AssertEquals('column 2', 2000, e[2] - e[1]);
+  AssertEquals('column 3 as it was', 1440, e[3] - e[2]);
+  FRich.Undo;
+  // a height to every selected row
+  Sel(CellStart(0, 0), CellStart(1, 1) + 1);
+  AssertTrue('heights', FRich.SetRowHeight(700, False));
+  AssertEquals('row 0', 700, RowP(0).HeightTwips);
+  AssertEquals('row 1', 700, RowP(1).HeightTwips);
+  AssertEquals('row 2 as it was', 0, RowP(2).HeightTwips);
+  FRich.Undo;
+  // a fit to each selected column, by its own content
+  FRich.Document.Execute(TTyRichInsertText.Create(CellStart(1, 2), 'a much longer text in here'));
+  FRich.Document.ClearUndo;
+  Sel(CellStart(0, 1), CellStart(2, 2) + 1);
+  AssertTrue('fitted', FRich.AutoFitColumn);
+  AssertEquals('one step', 1, FRich.Document.UndoDepth);
+  e := EdgesOf(1);
+  AssertTrue(Format('column 2 wider than column 1 (%d, %d)', [e[2] - e[1], e[1] - e[0]]),
+    e[2] - e[1] > e[1] - e[0]);
+  AssertTrue('column 1 fitted to its short text', e[1] - e[0] < 1440);
 end;
 
 initialization

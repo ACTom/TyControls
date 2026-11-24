@@ -94,6 +94,7 @@ type
     procedure TestDeleteOverANestedRowIsTold;
     procedure TestShiftClickOnAZoneExtendsByRowsOrColumns;
     procedure TestTheRowAndColumnZonesAreWideEnough;
+    procedure TestCutOverCellsCopiesAndClears;
   end;
 
 implementation
@@ -1563,6 +1564,36 @@ begin
       end;
     AssertTrue(Format('%d: the column zone %d px (at least %d)', [k, n, need]), n >= need);
   end;
+end;
+
+{ As Word: Cut over cells copies them and clears what they hold - the rows and columns stay -,
+  one undo step; whole rows, columns or the table go as Backspace takes them. CanCut says what
+  the door does: off for a selection that reaches outside the table. }
+procedure TTyRichTableSelTest.TestCutOverCellsCopiesAndClears;
+begin
+  MakeTable(3, 3);
+  Sel(CellStart(0, 0), CellStart(1, 1) + 1);
+  AssertTrue('may cut', FRich.CanCut);
+  FRich.Refusals.Clear;
+  FRich.CutToClipboard;
+  AssertEquals('nothing refused', 0, FRich.Refusals.Count);
+  AssertEquals('copied as tabbed text', 'r0c0' + #9 + 'r0c1' + LineEnding + 'r1c0' + #9 + 'r1c1', FRich.ClipText);
+  AssertEquals('cleared', '', CellText(0, 0));
+  AssertEquals('cleared too', '', CellText(1, 1));
+  AssertEquals('outside it as it was', 'r0c2', CellText(0, 2));
+  AssertEquals('the rows stay', 3, RowCount);
+  AssertEquals('the columns stay', 3, ColCount);
+  AssertEquals('one step', 1, FRich.Document.UndoDepth);
+  FRich.Undo;
+  AssertEquals('undone', 'r0c0', CellText(0, 0));
+  // whole rows: they go, as with Backspace
+  Sel(CellStart(1, 0), CellEnd(1, 2));
+  FRich.CutToClipboard;
+  AssertEquals('a row cut', 2, RowCount);
+  FRich.Undo;
+  // reaching outside the table: not offered, refused as before
+  Sel(2, CellStart(1, 1) + 1);
+  AssertFalse('not from outside', FRich.CanCut);
 end;
 
 { ---- painting ---- }

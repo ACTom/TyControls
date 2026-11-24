@@ -261,7 +261,8 @@ begin
      TTyRichEditParagraphSpacing, TTyRichEditCellShading, TTyRichEditCellBorders,
      TTyRichEditCellPadding, TTyRichEditCellVAlign, TTyRichEditTableAlign,
      TTyRichEditTableProperties, TTyRichEditAutoFitColumn, TTyRichEditDistributeColumns,
-     TTyRichEditDistributeRows, TTyRichEditFitTableToWindow], nil);
+     TTyRichEditDistributeRows, TTyRichEditFitTableToWindow,
+     TTyRichEditSelectCell, TTyRichEditSelectRow, TTyRichEditSelectColumn, TTyRichEditSelectTable], nil);
   { The three sibling units own everything else. }
   RegisterPropertyEditors;
   RegisterComponentEditors;

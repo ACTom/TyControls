@@ -2082,12 +2082,19 @@ begin
     AssertTrue('Backspace over cells: changed', Shape(d, f) <> before);
     FRich.Undo;
     AssertEquals('Backspace over cells: undone', before, Shape(d, f));
-    // a cut, a paste of plain text and a replace over them: refused, as before
+    // a cut over them: copied, then as Backspace (Word's way)
     FRich.SelStart := t.ParaStart(f) + 1;
     FRich.SelLength := t.ParaStart(f + 1) + 1 - FRich.SelStart;
     ResetEvents;
     FRich.CutToClipboard;
-    CheckRefused('Cut over cells', False, rsRichEditRefusedCells);
+    AssertEquals('Cut over cells: taken', 0, FRich.Refused);
+    AssertTrue('Cut over cells: changed', Shape(d, f) <> before);
+    FRich.Undo;
+    AssertEquals('Cut over cells: undone', before, Shape(d, f));
+    // a paste of plain text and a replace over them: refused, as before
+    FRich.SelStart := t.ParaStart(f) + 1;
+    FRich.SelLength := t.ParaStart(f + 1) + 1 - FRich.SelStart;
+    ResetEvents;
     FRich.ClipRtf := '';
     FRich.ClipText := 'pasted';
     FRich.PasteFromClipboard;

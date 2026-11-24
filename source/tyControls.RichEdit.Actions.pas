@@ -117,6 +117,9 @@ type
     FCanRowIns, FCanColIns, FCanRowDel, FCanColDel, FCanTableDel: Boolean;
     FCanLink, FCanEditLink: Boolean;
     FCanCells, FCanColSize, FCanRowSize: Boolean;
+    FCanSelectCells: Boolean;
+    FHasTableProps: Boolean;
+    FTableProps: TTyRichTableProperties;
     procedure ViewChanged(Sender: TObject);
     procedure Refresh;
   public
@@ -173,6 +176,12 @@ type
     // the table format and size queries CanFormatCells, CanResizeColumns, CanResizeRows
     property CanFormatCells: Boolean read FCanCells;
     property CanResizeColumns: Boolean read FCanColSize;
+    // the control's CanSelectCells
+    property CanSelectCells: Boolean read FCanSelectCells;
+    { GetTableProperties of the selection (HasTableProperties: there were cells to read;
+      read only while CanFormatCells): what the alignment actions show checked. }
+    property HasTableProperties: Boolean read FHasTableProps;
+    property TableProperties: TTyRichTableProperties read FTableProps;
     property CanResizeRows: Boolean read FCanRowSize;
   end;
 
@@ -830,6 +839,46 @@ type
     constructor Create(AOwner: TComponent); override;
   end;
 
+  { ---- selecting cells: the control's SelectCell, SelectRow, SelectColumn, SelectTable,
+    Enabled by its CanSelectCells ---- }
+
+  TTyRichEditSelectKind = (rskCell, rskRow, rskColumn, rskTable);
+
+  TTyRichEditSelectAction = class(TTyRichEditAction)
+  protected
+    function KindOf: TTyRichEditSelectKind; virtual; abstract;
+    procedure UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+    procedure ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
+  end;
+
+  TTyRichEditSelectCell = class(TTyRichEditSelectAction)
+  protected
+    function KindOf: TTyRichEditSelectKind; override;
+  public
+    constructor Create(AOwner: TComponent); override;
+  end;
+
+  TTyRichEditSelectRow = class(TTyRichEditSelectAction)
+  protected
+    function KindOf: TTyRichEditSelectKind; override;
+  public
+    constructor Create(AOwner: TComponent); override;
+  end;
+
+  TTyRichEditSelectColumn = class(TTyRichEditSelectAction)
+  protected
+    function KindOf: TTyRichEditSelectKind; override;
+  public
+    constructor Create(AOwner: TComponent); override;
+  end;
+
+  TTyRichEditSelectTable = class(TTyRichEditSelectAction)
+  protected
+    function KindOf: TTyRichEditSelectKind; override;
+  public
+    constructor Create(AOwner: TComponent); override;
+  end;
+
 
   { ---- a table's formats and sizes: Enabled by the control's CanFormatCells / CanResize... ---- }
 
@@ -979,7 +1028,7 @@ type
 
 const
   { Every action of this unit, in the order the IDE lists them. }
-  CTyRichEditActions: array[0..55] of TTyRichEditActionClass = (
+  CTyRichEditActions: array[0..59] of TTyRichEditActionClass = (
     TTyRichEditBold, TTyRichEditItalic, TTyRichEditUnderline, TTyRichEditStrikeOut,
     TTyRichEditSuperscript, TTyRichEditSubscript,
     TTyRichEditAlignLeft, TTyRichEditAlignCenter, TTyRichEditAlignRight,
@@ -997,7 +1046,8 @@ const
     TTyRichEditParagraphSpacing, TTyRichEditCellShading, TTyRichEditCellBorders,
     TTyRichEditCellPadding, TTyRichEditCellVAlign, TTyRichEditTableAlign,
     TTyRichEditTableProperties, TTyRichEditAutoFitColumn, TTyRichEditDistributeColumns,
-    TTyRichEditDistributeRows, TTyRichEditFitTableToWindow);
+    TTyRichEditDistributeRows, TTyRichEditFitTableToWindow, TTyRichEditSelectCell,
+    TTyRichEditSelectRow, TTyRichEditSelectColumn, TTyRichEditSelectTable);
 
   { The font sizes the grow and shrink actions step through (points). }
   CTyRichFontSizes: array[0..15] of Integer = (8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28,
@@ -1147,7 +1197,10 @@ begin
   FCanCells := FRich.CanFormatCells;
   FCanColSize := FRich.CanResizeColumns;
   FCanRowSize := FRich.CanResizeRows;
-  Inc(FQueries, 12);
+  FCanSelectCells := FRich.CanSelectCells;
+  FHasTableProps := FCanCells and FRich.GetTableProperties(FTableProps);
+  if not FHasTableProps then FTableProps := Default(TTyRichTableProperties);
+  Inc(FQueries, 14);
 end;
 
 { TTyRichEditAction }
@@ -1749,7 +1802,9 @@ end;
 procedure TTyRichEditCellVAlign.UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState);
 begin
   Enabled := AState.CanFormatCells;
-  Checked := False;
+  // every selected cell (else the caret's) has this alignment; mixed: not checked
+  Checked := Enabled and AState.HasTableProperties and
+    (tpfVAlign in AState.TableProperties.Uniform) and (AState.TableProperties.VAlign = FAlign);
 end;
 
 procedure TTyRichEditCellVAlign.ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState);
@@ -1768,7 +1823,9 @@ end;
 procedure TTyRichEditTableAlign.UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState);
 begin
   Enabled := AState.CanFormatCells;
-  Checked := False;
+  // the table's rows (those of the selection) all have this alignment
+  Checked := Enabled and AState.HasTableProperties and
+    (tpfAlign in AState.TableProperties.Uniform) and (AState.TableProperties.Align = FAlign);
 end;
 
 procedure TTyRichEditTableAlign.ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState);
@@ -2233,8 +2290,8 @@ end;
 
 procedure TTyRichEditCut.UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState);
 begin
-  // the text menu's answer for Cut
-  Enabled := ARich.TeHasSelection and not ARich.TeIsReadOnly;
+  // what Cut does: the control's own answer (refused - so not offered - from cells out of their table)
+  Enabled := ARich.CanCut;
   Checked := False;
 end;
 
@@ -2708,6 +2765,73 @@ begin
   inherited Create(AOwner);
   Caption := rsRichActDeleteTable;
   Hint := rsRichActDeleteTableHint;
+end;
+
+{ ---- selecting cells ---- }
+
+procedure TTyRichEditSelectAction.UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState);
+begin
+  Enabled := AState.CanSelectCells;
+  Checked := False;
+end;
+
+procedure TTyRichEditSelectAction.ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState);
+begin
+  case KindOf of
+    rskCell: ARich.SelectCell;
+    rskRow: ARich.SelectRow;
+    rskColumn: ARich.SelectColumn;
+  else
+    ARich.SelectTable;
+  end;
+end;
+
+function TTyRichEditSelectCell.KindOf: TTyRichEditSelectKind;
+begin
+  Result := rskCell;
+end;
+
+constructor TTyRichEditSelectCell.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  Caption := rsRichActSelectCell;
+  Hint := rsRichActSelectCellHint;
+end;
+
+function TTyRichEditSelectRow.KindOf: TTyRichEditSelectKind;
+begin
+  Result := rskRow;
+end;
+
+constructor TTyRichEditSelectRow.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  Caption := rsRichActSelectRow;
+  Hint := rsRichActSelectRowHint;
+end;
+
+function TTyRichEditSelectColumn.KindOf: TTyRichEditSelectKind;
+begin
+  Result := rskColumn;
+end;
+
+constructor TTyRichEditSelectColumn.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  Caption := rsRichActSelectColumn;
+  Hint := rsRichActSelectColumnHint;
+end;
+
+function TTyRichEditSelectTable.KindOf: TTyRichEditSelectKind;
+begin
+  Result := rskTable;
+end;
+
+constructor TTyRichEditSelectTable.Create(AOwner: TComponent);
+begin
+  inherited Create(AOwner);
+  Caption := rsRichActSelectTable;
+  Hint := rsRichActSelectTableHint;
 end;
 
 end.

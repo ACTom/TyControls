@@ -1055,6 +1055,38 @@ msgstr ""
 msgid "Select all"
 msgstr ""
 
+#: tycontrols.strconsts.rsrichactselectcell
+msgid "Select &Cell"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactselectcellhint
+msgid "Select the cell"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactselectcolumn
+msgid "Select Colu&mn"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactselectcolumnhint
+msgid "Select the column"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactselectrow
+msgid "Select &Row"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactselectrowhint
+msgid "Select the row"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactselecttable
+msgid "Select &Table"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichactselecttablehint
+msgid "Select the whole table"
+msgstr ""
+
 #: tycontrols.strconsts.rsrichactstrikeout
 msgid "Stri&kethrough"
 msgstr ""

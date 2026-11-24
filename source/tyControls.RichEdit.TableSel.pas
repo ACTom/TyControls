@@ -149,6 +149,10 @@ function TyRichLoneMarksOutside(ADoc: TTyRichDocument; AFirst, ALast: Integer): 
   later cell's at the same width: where Word may show another line). }
 
 type
+  { The lines of a rectangle of cells: its outline's four sides and its inner lines. }
+  TTyRichCellLine = (rclLeft, rclTop, rclRight, rclBottom, rclInsideH, rclInsideV);
+  TTyRichCellLines = set of TTyRichCellLine;
+
   { The cells' sides a border goes to (Mark), and then the facing sides of the cells beside
     them: in a row, the cell before / after (by index); between rows, the cells of the row
     above / below whose whole edge lies inside the span the marked cells' edge covers there
@@ -169,6 +173,9 @@ type
     { The rows ARow0 - 1 .. ARow1 + 1 of the table APos is in are read. }
     constructor Create(ADoc: TTyRichDocument; APos: TTyRichPos; ARow0, ARow1: Integer);
     procedure Mark(ARow0, ACol0, ARow1, ACol1: Integer; ASides: TTyRowCellSides);
+    { The sides that make ALines of the rectangle rows ARow0 .. ARow1, cells ACol0 .. ACol1 -
+      each row's last cell in it its right edge (ACol1 past a row's cells: to its last). }
+    procedure MarkLines(ARow0, ACol0, ARow1, ACol1: Integer; ALines: TTyRichCellLines);
     { The parts, ABorder on every side marked and on every side facing one, added to AComp;
       ASkipped: rows left as they are (they hold a nested table) added. }
     procedure AddParts(AComp: TTyRichCompositeCommand; const ABorder: TTyRichBorder;
@@ -383,6 +390,38 @@ begin
     if (i < 0) or (i > High(FOwn)) then Continue;
     for c := Math.Max(ACol0, 0) to Math.Min(ACol1, CellCount(i) - 1) do
       FOwn[i][c] := FOwn[i][c] + ASides;
+  end;
+end;
+
+procedure TTyRichBorderPlan.MarkLines(ARow0, ACol0, ARow1, ACol1: Integer; ALines: TTyRichCellLines);
+var
+  r, i, c, last: Integer;
+  sd: TTyRowCellSides;
+begin
+  for r := ARow0 to ARow1 do
+  begin
+    i := r - FFirst;
+    if (i < 0) or (i > High(FOwn)) then Continue;
+    last := Math.Min(ACol1, CellCount(i) - 1);
+    for c := Math.Max(ACol0, 0) to last do
+    begin
+      sd := [];
+      if (rclLeft in ALines) and (c = ACol0) then Include(sd, rcsLeft);
+      if (rclRight in ALines) and (c = last) then Include(sd, rcsRight);
+      if (rclTop in ALines) and (r = ARow0) then Include(sd, rcsTop);
+      if (rclBottom in ALines) and (r = ARow1) then Include(sd, rcsBottom);
+      if rclInsideH in ALines then
+      begin
+        if r < ARow1 then Include(sd, rcsBottom);
+        if r > ARow0 then Include(sd, rcsTop);
+      end;
+      if rclInsideV in ALines then
+      begin
+        if c < last then Include(sd, rcsRight);
+        if c > ACol0 then Include(sd, rcsLeft);
+      end;
+      FOwn[i][c] := FOwn[i][c] + sd;
+    end;
   end;
 end;
 

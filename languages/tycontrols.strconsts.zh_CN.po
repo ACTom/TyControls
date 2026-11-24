@@ -1544,6 +1544,38 @@ msgstr "删除表格(&T)"
 msgid "Delete the table"
 msgstr "删除整个表格"
 
+#: tycontrols.strconsts.rsrichactselectcell
+msgid "Select &Cell"
+msgstr "选择单元格(&C)"
+
+#: tycontrols.strconsts.rsrichactselectcellhint
+msgid "Select the cell"
+msgstr "选择这个单元格"
+
+#: tycontrols.strconsts.rsrichactselectrow
+msgid "Select &Row"
+msgstr "选择行(&R)"
+
+#: tycontrols.strconsts.rsrichactselectrowhint
+msgid "Select the row"
+msgstr "选择这一行"
+
+#: tycontrols.strconsts.rsrichactselectcolumn
+msgid "Select Colu&mn"
+msgstr "选择列(&M)"
+
+#: tycontrols.strconsts.rsrichactselectcolumnhint
+msgid "Select the column"
+msgstr "选择这一列"
+
+#: tycontrols.strconsts.rsrichactselecttable
+msgid "Select &Table"
+msgstr "选择表格(&T)"
+
+#: tycontrols.strconsts.rsrichactselecttablehint
+msgid "Select the whole table"
+msgstr "选择整个表格"
+
 #: tycontrols.strconsts.rsrichactcellshading
 msgid "&Shading"
 msgstr "底色(&S)"

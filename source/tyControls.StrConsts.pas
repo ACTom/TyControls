@@ -495,6 +495,14 @@ resourcestring
   rsRichActDeleteColumnHint  = 'Delete the column';
   rsRichActDeleteTable       = 'Delete &Table';
   rsRichActDeleteTableHint   = 'Delete the table';
+  rsRichActSelectCell        = 'Select &Cell';
+  rsRichActSelectCellHint    = 'Select the cell';
+  rsRichActSelectRow         = 'Select &Row';
+  rsRichActSelectRowHint     = 'Select the row';
+  rsRichActSelectColumn      = 'Select Colu&mn';
+  rsRichActSelectColumnHint  = 'Select the column';
+  rsRichActSelectTable       = 'Select &Table';
+  rsRichActSelectTableHint   = 'Select the whole table';
   rsRichActCellShading = '&Shading';
   rsRichActCellShadingHint = 'Give the selected cells a shading';
   rsRichActCellBorders = '&Borders';

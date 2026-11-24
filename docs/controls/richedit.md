@@ -94,6 +94,7 @@ RichEdit1.SaveToFile('说明.rtf');
 | `TTyRichEditInsertRowAbove` / `RowBelow` | 在上方 / 下方插入行 | — | `CanInsertRow` | — |
 | `TTyRichEditInsertColumnLeft` / `ColumnRight` | 在左侧 / 右侧插入列 | — | `CanInsertColumn` | — |
 | `TTyRichEditDeleteRow` / `DeleteColumn` / `DeleteTable` | 删除行 / 列 / 表格 | — | `CanDeleteRow` / `CanDeleteColumn` / `CanDeleteTable` | — |
+| `TTyRichEditSelectCell` / `SelectRow` / `SelectColumn` / `SelectTable` | 选择单元格 / 行 / 列 / 表格 | — | `CanSelectCells` | — |
 | `TTyRichEditFind` | 查找... | Ctrl+F | 控件可用 | — |
 | `TTyRichEditReplace` | 替换... | Ctrl+H | 用户这里能不能改 | — |
 | `TTyRichEditUndo` / `Redo` | 撤销 / 重做 | Ctrl+Z / Y | `CanUndo` / `CanRedo` | — |

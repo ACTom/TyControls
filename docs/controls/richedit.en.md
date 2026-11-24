@@ -94,6 +94,7 @@ Ready-made actions for a `TActionList` (the IDE's action list editor shows them 
 | `TTyRichEditInsertRowAbove` / `RowBelow` | Insert Row Above / Below | — | `CanInsertRow` | — |
 | `TTyRichEditInsertColumnLeft` / `ColumnRight` | Insert Column Left / Right | — | `CanInsertColumn` | — |
 | `TTyRichEditDeleteRow` / `DeleteColumn` / `DeleteTable` | Delete Row / Column / Table | — | `CanDeleteRow` / `CanDeleteColumn` / `CanDeleteTable` | — |
+| `TTyRichEditSelectCell` / `SelectRow` / `SelectColumn` / `SelectTable` | Select Cell / Row / Column / Table | — | `CanSelectCells` | — |
 | `TTyRichEditFind` | Find... | Ctrl+F | the control is enabled | — |
 | `TTyRichEditReplace` | Replace... | Ctrl+H | may the user edit here | — |
 | `TTyRichEditUndo` / `Redo` | Undo / Redo | Ctrl+Z / Y | `CanUndo` / `CanRedo` | — |
