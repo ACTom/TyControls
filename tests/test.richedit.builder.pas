@@ -54,6 +54,8 @@ type
     procedure TestPicturesFromEverySource;
     procedure TestTablesWithWidthsAndCellsOfSeveralParagraphs;
     procedure TestABuilderAloneMakesADocument;
+    procedure TestARefusedContentChangesNothing;
+    procedure TestTheSelectionKeepsWhatItCovered;
   end;
 
 implementation
@@ -760,6 +762,161 @@ begin
     finally
       d.Free;
     end;
+  finally
+    B.Free;
+  end;
+end;
+
+{ Each door refused where the content cannot go - InsertContent inside a link's result and in a
+  row that holds a nested table, AppendContent and InsertContent while a file is still being
+  read: one error with the reason, nothing changed (the bytes, the history), nothing freed
+  twice; the builder still good for a place that takes it, and for SetContent. }
+procedure TTyRichBuilderTest.TestARefusedContentChangesNothing;
+const
+  LinkRtf = '{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}\pard\f0 ab {\field{\*\fldinst HYPERLINK ' +
+    '"http://a/"}{\fldrslt link}} cd\par}';
+  Nested = '{\rtf1 \trowd\cellx1000\cellx2000\pard\intbl a\cell \pard\intbl\itap2 x' +
+    '\nestcell{\*\nesttableprops\trowd\cellx500\nestrow}{\nonesttables\par}\pard\intbl\cell' +
+    '\row\pard b\par}';
+var
+  B: TTyRichBuilder;
+  before: TBytes;
+  depth: Integer;
+  st: TBytesStream;
+  big: RawByteString;
+  b2: TBytes;
+  i, paras: Integer;
+
+  procedure LoadText(const S: RawByteString);
+  var
+    m: TBytesStream;
+    x: TBytes;
+  begin
+    x := nil;
+    SetLength(x, Length(S));
+    Move(S[1], x[0], Length(S));
+    m := TBytesStream.Create(x);
+    try
+      FRich.LoadFromStream(m);
+    finally
+      m.Free;
+    end;
+    FRich.FinishLoading;
+  end;
+
+  // the door's refusal: its message ('' when it took the content)
+  function Refusal(ADoor: Integer; APos: TTyRichPos): string;
+  begin
+    Result := '';
+    try
+      case ADoor of
+        0: FRich.SetContent(B);
+        1: FRich.AppendContent(B);
+        2: FRich.InsertContent(APos, B);
+      end;
+    except
+      on E: ETyRichEdit do Result := E.Message;
+    end;
+  end;
+
+  procedure CheckRefused(const AWhat: string; ADoor: Integer; APos: TTyRichPos);
+  var
+    why: string;
+  begin
+    before := Saved;
+    depth := FRich.Document.UndoDepth;
+    why := Refusal(ADoor, APos);
+    AssertTrue(AWhat + ': refused with a reason', why <> '');
+    AssertTrue(AWhat + ': nothing changed', SameBytes(before, Saved));
+    AssertEquals(AWhat + ': no step', depth, FRich.Document.UndoDepth);
+  end;
+
+begin
+  B := TTyRichBuilder.Create;
+  try
+    B.Text('in').Bookmark('here').Paragraph.Link('more', 'http://m.test');
+    // in a link's result
+    LoadText(LinkRtf);
+    CheckRefused('in a link''s result', 2, 5);
+    AssertEquals('the builder good: beside the link', '', Refusal(2, 1));
+    AssertEquals('it went in', 'ain', Copy(FRich.Lines[0], 1, 3));
+    // in a row that holds a nested table
+    LoadText(Nested);
+    AssertTrue('(a row with a nested table)', FRich.Document.CellAt(0).Row.HoldsNestedTable);
+    CheckRefused('in a row with a nested table', 2, 1);
+    AssertEquals('the builder good: after the table', '',
+      Refusal(2, FRich.Document.Text.ParaStart(FRich.Document.Text.ParaCount - 1)));
+    // while a file is being read: each door
+    big := '{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}\pard\f0 ';
+    for i := 1 to 40000 do
+      big := big + 'line ' + IntToStr(i) + ' of the file that is read in slices\par' + #13#10;
+    big := big + '}';
+    b2 := nil;
+    SetLength(b2, Length(big));
+    Move(big[1], b2[0], Length(big));
+    FRich.Slices(64 * 1024, 64 * 1024);
+    st := TBytesStream.Create(b2);
+    try
+      FRich.LoadFromStream(st);
+    finally
+      st.Free;
+    end;
+    AssertTrue('still reading', FRich.Loading);
+    depth := FRich.Document.UndoDepth;
+    AssertTrue('append: refused', Refusal(1, 0) <> '');
+    AssertTrue('insert: refused', Refusal(2, 0) <> '');
+    AssertEquals('no step', depth, FRich.Document.UndoDepth);
+    AssertTrue('still reading', FRich.Loading);
+    FRich.FinishLoading;
+    paras := FRich.Document.Text.ParaCount;
+    AssertTrue('every paragraph read', paras >= 40000);
+    AssertEquals('the builder good: appended', '', Refusal(1, 0));
+    AssertTrue('its paragraphs after the file''s', FRich.Document.Text.ParaCount > paras);
+    AssertEquals('the builder good: set', '', Refusal(0, 0));
+    AssertEquals('set: its two paragraphs', 2, FRich.Document.Text.ParaCount);
+  finally
+    B.Free;
+  end;
+end;
+
+{ InsertContent at the selection's start, inside it, before it: the selection covers what it
+  covered - moved by what went in before it, grown by what went in inside it. }
+procedure TTyRichBuilderTest.TestTheSelectionKeepsWhatItCovered;
+var
+  B: TTyRichBuilder;
+begin
+  FRich.Lines.Text := 'one two three';
+  B := TTyRichBuilder.Create;
+  try
+    B.Text('XYZ');
+    // at its start
+    FRich.SelStart := 4;
+    FRich.SelLength := 3;
+    FRich.InsertContent(4, B);
+    AssertEquals('the text', 'one XYZtwo three', FRich.Lines[0]);
+    AssertEquals('at its start: after what went in', 7, FRich.SelStart);
+    AssertEquals('the same length', 3, FRich.SelLength);
+    AssertEquals('what it covered', 'two', FRich.SelText);
+    FRich.Undo;
+    AssertEquals('undone', 'one two three', FRich.Lines[0]);
+    // before it
+    FRich.SelStart := 4;
+    FRich.SelLength := 3;
+    FRich.InsertContent(1, B);
+    AssertEquals('before it: moved', 'two', FRich.SelText);
+    FRich.Undo;
+    // inside it
+    FRich.SelStart := 4;
+    FRich.SelLength := 3;
+    FRich.InsertContent(5, B);
+    AssertEquals('inside it: grown', 'tXYZwo', FRich.SelText);
+    FRich.Undo;
+    // at its end: not in it
+    FRich.SelStart := 4;
+    FRich.SelLength := 3;
+    FRich.InsertContent(7, B);
+    AssertEquals('at its end: as it was', 'two', FRich.SelText);
+    AssertEquals('there', 4, FRich.SelStart);
   finally
     B.Free;
   end;

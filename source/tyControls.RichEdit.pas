@@ -13732,7 +13732,8 @@ begin
     FDoc.Formats.ParaFormat(FDoc.DefaultParaFormatId), FDoc.TextWidthTwips);
 end;
 
-// (one of the content's commands: refused, nothing more is done)
+{ (one of the content's commands: refused, nothing more is done. The document owns ACmd from
+  the call on, also when it refuses it: a caller hands what ACmd took over to it first.) }
 procedure RunContent(ADoc: TTyRichDocument; ACmd: TTyRichCommand; const AReason: string);
 begin
   if not ADoc.Execute(ACmd) then
@@ -13743,6 +13744,7 @@ end;
 procedure TTyCustomRichEdit.SetContent(ABuilder: TTyRichBuilder);
 var
   src: TTyRichDocument;
+  cmd: TTyRichCommand;
   s: TTyRichDocSettings;
   n: Integer;
 begin
@@ -13769,8 +13771,10 @@ begin
       end;
       if src <> nil then
       begin
-        RunContent(FDoc, TTyRichInsertFragment.Create(0, src, True), RefusalReason);
+        // the command takes the content over: it is not this method's to free from here on
+        cmd := TTyRichInsertFragment.Create(0, src, True);
         src := nil;
+        RunContent(FDoc, cmd, RefusalReason);
         // the empty paragraph Clear left goes, unless a table ends the content
         n := FDoc.Text.ParaCount;
         if (n > 1) and (FDoc.Text.ParaLength(n - 1) = 0) and (FDoc.CellAt(n - 2) = nil) then
@@ -13791,12 +13795,15 @@ end;
 procedure TTyCustomRichEdit.AppendContent(ABuilder: TTyRichBuilder);
 var
   src: TTyRichDocument;
+  cmd: TTyRichCommand;
   n: Integer;
+  state: Int64;
 begin
   if ABuilder = nil then raise ETyRichEdit.Create('AppendContent: no builder');
   if ABuilder.IsEmpty then Exit;
   if RefusalReason <> '' then raise ETyRichEdit.Create(RefusalReason);
   src := ABuilder.MakeDocument;
+  state := FDoc.ContentState;
   try
     FDoc.BeginUpdate(rsRichUndoInsertContent);
     try
@@ -13806,9 +13813,9 @@ begin
         RunContent(FDoc, TTyRichInsertText.Create(FDoc.Text.Length, #10, TyRichInheritFormat,
           False), RefusalReason);
       n := FDoc.Text.ParaCount;
-      RunContent(FDoc, TTyRichInsertFragment.Create(FDoc.Text.ParaStart(n - 1), src, True),
-        RefusalReason);
+      cmd := TTyRichInsertFragment.Create(FDoc.Text.ParaStart(n - 1), src, True);
       src := nil;
+      RunContent(FDoc, cmd, RefusalReason);
       // the empty paragraph after it goes (unless a table ends the content)
       n := FDoc.Text.ParaCount;
       if (n > 1) and (FDoc.Text.ParaLength(n - 1) = 0) and (FDoc.CellAt(n - 2) = nil) then
@@ -13816,8 +13823,11 @@ begin
     finally
       FDoc.EndUpdate;
     end;
-  finally
+  except
     src.Free;
+    // refused part way (the paragraph mark went in, the content did not): nothing stays
+    if (FDoc.ContentState <> state) and FDoc.CanUndo and not FDoc.Updating then FDoc.Undo;
+    raise;
   end;
 end;
 
@@ -13825,6 +13835,7 @@ procedure TTyCustomRichEdit.InsertContent(APos: TTyRichPos; ABuilder: TTyRichBui
 var
   src: TTyRichDocument;
   atStart: Boolean;
+  s, n, len0: TTyRichPos;
 begin
   if ABuilder = nil then raise ETyRichEdit.Create('InsertContent: no builder');
   if (APos < 0) or (APos > FDoc.Text.Length) then
@@ -13833,13 +13844,21 @@ begin
   if ABuilder.IsEmpty then Exit;
   if RefusalReason <> '' then raise ETyRichEdit.Create(RefusalReason);
   atStart := FDoc.Text.ParaStart(FDoc.Text.ParaOfPos(APos)) = APos;
+  s := GetSelStart;
+  n := GetSelLength;
+  len0 := FDoc.Text.Length;
   src := ABuilder.MakeDocument;
-  try
-    // whole paragraphs before the one at a paragraph's start; in line elsewhere
-    RunContent(FDoc, TTyRichInsertFragment.Create(APos, src, atStart), RefusalReason);
-    src := nil;
-  finally
-    src.Free;
+  // whole paragraphs before the one at a paragraph's start; in line elsewhere (the command
+  // takes the content over, refused or not)
+  RunContent(FDoc, TTyRichInsertFragment.Create(APos, src, atStart), RefusalReason);
+  { At the selection's very start the selection does not take the content in: it covers what
+    it covered, after it (an insert before it moves it, one inside it grows it). }
+  if (n > 0) and (s = APos) and not FDoc.Updating then
+  begin
+    s := s + FDoc.Text.Length - len0;
+    Select(s, s + n, False);
+    CaretMoved;
+    DoSelectionChange;
   end;
 end;
 
