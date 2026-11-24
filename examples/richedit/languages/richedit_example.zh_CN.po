@@ -307,14 +307,6 @@ msgstr "列(&O)"
 msgid "&Table"
 msgstr "表格(&T)"
 
-#: tmainform.actclearcells.caption
-msgid "Cell &Contents"
-msgstr "单元格内容(&C)"
-
-#: tmainform.actclearcells.hint
-msgid "Clear what the selected cells hold"
-msgstr "清空选中单元格的内容"
-
 #: tmainform.actaligntop.caption
 msgid "Align &Top"
 msgstr "顶端对齐(&T)"

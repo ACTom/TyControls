@@ -350,7 +350,7 @@ type
     ActSelectRow: TTyRichEditSelectRow;
     ActSelectColumn: TTyRichEditSelectColumn;
     ActSelectTable: TTyRichEditSelectTable;
-    ActClearCells: TAction;
+    ActClearCells: TTyRichEditClearCells;
     ActAutoFit: TTyRichEditAutoFitColumn;
     ActFitWindow: TTyRichEditFitTableToWindow;
     ActDistributeRows: TTyRichEditDistributeRows;
@@ -495,8 +495,6 @@ type
     procedure ReplaceReplaced(Sender: TObject; ACount: Integer);
     procedure TableChooseSize(Sender: TObject; var ARows, AColumns: Integer;
       var AInsert: Boolean);
-    procedure ActClearCellsExecute(Sender: TObject);
-    procedure ActClearCellsUpdate(Sender: TObject);
     procedure BorderBeforeExecute(Sender: TObject; var APreset: TTyRichBorderPreset;
       var ABorder: TTyRichBorder; var AAllow: Boolean);
     procedure ActShadingNoneExecute(Sender: TObject);
@@ -508,10 +506,9 @@ type
     { The actions' record of the rich edit, and how many times it had asked when the boxes
       were last filled from it. }
     FBoxesAt: Integer;
-    { The same for the table's state: the caret is in a table, cells are selected (what the
-      select and clear actions and the status bar show). }
+    { The same for the table's state: the caret is in a table (what the status bar shows). }
     FTableAt: Integer;
-    FInTable, FCellsSelected: Boolean;
+    FInTable: Boolean;
     procedure AppIdle(Sender: TObject; var Done: Boolean);
     procedure ShowTableState;
     procedure ShowFormatInBoxes;
@@ -620,7 +617,6 @@ begin
   if st.Refreshes = FTableAt then Exit;
   FTableAt := st.Refreshes;
   FInTable := Editor.InTable;
-  FCellsSelected := FInTable and Editor.SelectedCells.InTable;
   if FInTable then Status.Panels[1].Text := TableSelectionText(Editor)
   else Status.Panels[1].Text := '';
 end;
@@ -850,19 +846,6 @@ begin
 end;
 
 { ---- the table ---- }
-
-{ Delete > Cell Contents: the selected cells emptied, the cells kept - what the Delete key does
-  to them (ClearSelection is the key's door). }
-procedure TMainForm.ActClearCellsExecute(Sender: TObject);
-begin
-  Editor.ClearSelection;
-end;
-
-procedure TMainForm.ActClearCellsUpdate(Sender: TObject);
-begin
-  ShowTableState;
-  ActClearCells.Enabled := FCellsSelected and not Editor.ReadOnly and Editor.Enabled;
-end;
 
 { A preset from the borders drop-down or the Borders menu: the drop-down's button keeps it, so
   a click on the button gives the same lines again (as Word's). }

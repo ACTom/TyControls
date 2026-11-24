@@ -1083,12 +1083,9 @@ object MainForm: TMainForm
       Caption = '&Table'
       RichEdit = Editor
     end
-    object ActClearCells: TAction
+    object ActClearCells: TTyRichEditClearCells
       Category = 'Rich edit'
-      Caption = 'Cell &Contents'
-      Hint = 'Clear what the selected cells hold'
-      OnExecute = ActClearCellsExecute
-      OnUpdate = ActClearCellsUpdate
+      RichEdit = Editor
     end
     object ActAutoFit: TTyRichEditAutoFitColumn
       Category = 'Rich edit'
