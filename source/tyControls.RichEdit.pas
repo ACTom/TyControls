@@ -78,7 +78,7 @@ uses
   tyControls.RichEdit.TextIO, tyControls.RichEdit.RtfRead, tyControls.RichEdit.RtfWrite,
   tyControls.RichEdit.Layout, tyControls.RichEdit.Attrs, tyControls.RichEdit.Find,
   tyControls.RichEdit.Bookmarks, tyControls.RichEdit.Builder, tyControls.RichEdit.TableSel,
-  tyControls.RichEdit.RowFormat, tyControls.RichEdit.TableProps;
+  tyControls.RichEdit.RowFormat, tyControls.RichEdit.TableProps, tyControls.RichEdit.Grid;
 
 const
   CRichZoomMin = 10;
@@ -1461,6 +1461,17 @@ type
     { The caret place at layout x AX, view y AY (raster pixels) among the held blocks (the
       first or last one above or below them), and its affinity; -1 when none is held. }
     function HitRaster(AX, AY: Int64; out AAtEnd: Boolean): TTyRichPos;
+    { Paragraph APara is a covered cell's: an empty cell that continues a vertical merge (the
+      cell above reaches over it; Word keeps such a cell, empty, in the row's text). It shows
+      nothing, takes no caret and is no place of the Tab order. One that holds something (a
+      file may put text, even a nested table, there) stays a cell of its own: nothing it shows
+      is out of reach. Reads inside a read scope of its own. }
+    function CoveredPara(APara: Integer): Boolean;
+    { APos, or - when it is in a covered cell - the end of the text of the cell that covers it
+      (a click, a hit anywhere in a span lands in the cell the span starts with). }
+    function SpanOwnerPos(APos: TTyRichPos): TTyRichPos;
+    { APos, or - in a covered cell - the first place past it (AForward) or before it. }
+    function PastCovered(APos: TTyRichPos; AForward: Boolean): TTyRichPos;
     function HitClient(X, Y: Integer; out AAtEnd: Boolean): TTyRichPos;
     { The caret place at layout x AX on the first (ADown) or the last line of the block after
       (before) held block AK, laid out here when it is not held; -1 when there is none. }
@@ -2896,6 +2907,12 @@ type
       table (RTF, or tab-separated text) with the caret in a cell fills cell by cell from
       it, adding rows below and leaving out what passes the columns (told once). }
     function SelectedCells: TTyRichCellRange;
+    { The grid of the table at ATablePos (nil: no table there): its columns are the union of
+      every cell's edges, each cell covers one or more of them and one or more rows - merge
+      marks and Word's wide cells read as one thing (tyControls.RichEdit.Grid). Made on
+      demand by one walk of the table's rows - linear in them: what keys, the caret and a
+      paint need never makes it. The caller frees it. }
+    function TableGrid(ATablePos: TTyRichPos): TTyRichGrid;
     function CaretCell(out ATablePos: TTyRichPos; out ARow, ACol: Integer): Boolean;
     function SelectCell: Boolean;
     function SelectRow: Boolean;
@@ -5321,6 +5338,97 @@ begin
     FBlocks[k].Layout.PosAtPoint(Integer(AX), Integer(by), AAtEnd);
 end;
 
+function TTyCustomRichEdit.CoveredPara(APara: Integer): Boolean;
+var
+  c, p: TTyRichCell;
+  f, l: Integer;
+begin
+  Result := False;
+  if (APara < 0) or (APara >= FDoc.Text.ParaCount) then Exit;
+  FDoc.BeginRead;
+  try
+    c := FDoc.CellAt(APara);
+    if (c = nil) or (TyRichCellVMerge(c.Row, c.Index) <> Ord(rcmContinue)) then Exit;
+    // (a row that holds a nested table is its file's bytes only: as it is shown)
+    if c.Row.HoldsNestedTable then Exit;
+    // (empty: one paragraph, no character)
+    if not TyRichCellParasOf(FDoc, APara, f, l) or (f <> l) or (FDoc.Text.ParaLength(f) <> 0) then Exit;
+    // (a mark that continues nothing - the table's first row - is an ordinary cell)
+    if not TyRichRowParas(FDoc, APara, f, l) or (f = 0) then Exit;
+    p := FDoc.CellAt(f - 1);
+    Result := (p <> nil) and (p.Table = c.Table);
+  finally
+    FDoc.EndRead;
+  end;
+end;
+
+function TTyCustomRichEdit.SpanOwnerPos(APos: TTyRichPos): TTyRichPos;
+var
+  t: TTyRichText;
+  k, f, l, pf, pl, o, i, fo, lo, n: Integer;
+  c, p: TTyRichCell;
+begin
+  Result := APos;
+  t := FDoc.Text;
+  if (APos < 0) or (APos > t.Length) then Exit;
+  k := t.ParaOfPos(APos);
+  if not CoveredPara(k) then Exit;
+  FDoc.BeginRead;
+  try
+    n := 0;
+    while CoveredPara(k) and (n < CRichMaxTableRows) do
+    begin
+      Inc(n);
+      c := FDoc.CellAt(k);
+      if not TyRichRowParas(FDoc, k, f, l) then Break;
+      p := FDoc.CellAt(f - 1);
+      if not TyRichRowParas(FDoc, f - 1, pf, pl) then Break;
+      o := TyRichFacingCell(c.Row.CellEdges, c.Row.Format.Row.LeftTwips, c.Index,
+        p.Row.CellEdges, p.Row.Format.Row.LeftTwips);
+      if o < 0 then Break;
+      fo := -1;
+      lo := -1;
+      for i := pf to pl do
+        if FDoc.CellAt(i).Index = o then
+        begin
+          if fo < 0 then fo := i;
+          lo := i;
+        end;
+      if lo < 0 then Break;
+      k := lo;
+    end;
+    Result := t.ParaStart(k) + t.ParaLength(k);
+  finally
+    FDoc.EndRead;
+  end;
+end;
+
+function TTyCustomRichEdit.PastCovered(APos: TTyRichPos; AForward: Boolean): TTyRichPos;
+var
+  t: TTyRichText;
+  k, f, l, n: Integer;
+begin
+  Result := APos;
+  t := FDoc.Text;
+  n := 0;
+  while (Result >= 0) and (Result <= t.Length) and (n < CRichMaxTableRows) do
+  begin
+    k := t.ParaOfPos(Result);
+    if not CoveredPara(k) or not TyRichCellParasOf(FDoc, k, f, l) then Exit;
+    Inc(n);
+    if AForward then
+    begin
+      if l + 1 >= t.ParaCount then Exit;
+      Result := t.ParaStart(l + 1);
+    end
+    else
+    begin
+      if f = 0 then Exit;
+      Result := t.ParaStart(f) - 1;
+    end;
+  end;
+end;
+
 function TTyCustomRichEdit.HitNeighbour(AK: Integer; ADown: Boolean; AX: Integer;
   out AAtEnd: Boolean): TTyRichPos;
 var
@@ -6087,9 +6195,10 @@ end;
 
 procedure TTyCustomRichEdit.MoveVertical(ADown, AExtend: Boolean);
 var
-  r: TRect;
-  q: TTyRichPos;
-  atEnd: Boolean;
+  r, r2: TRect;
+  q, q2: TTyRichPos;
+  atEnd, atEnd2: Boolean;
+  n: Integer;
 begin
   ScrollCaretIntoView;
   Settle;
@@ -6101,6 +6210,24 @@ begin
   end;
   q := LineFrom(r, ADown, atEnd);
   if q < 0 then Exit;
+  { Into a covered cell: on in the same direction, by position, past the span (down: the row
+    below it; up: the cell the span starts with) - bounded by the span's rows. }
+  n := 0;
+  while (q >= 0) and CoveredPara(FDoc.Text.ParaOfPos(q)) and (n < CRichMaxTableRows) do
+  begin
+    Inc(n);
+    if not CaretRaster(q, atEnd, r2) then Break;
+    q2 := LineFrom(r2, ADown, atEnd2);
+    if (q2 < 0) or (q2 = q) then Break;
+    q := q2;
+    atEnd := atEnd2;
+  end;
+  if (q >= 0) and CoveredPara(FDoc.Text.ParaOfPos(q)) then
+  begin
+    if ADown then Exit;
+    q := SpanOwnerPos(q);
+    atEnd := False;
+  end;
   if AExtend then Select(FSelAnchor, q, atEnd) else Select(q, q, atEnd);
 end;
 
@@ -12597,6 +12724,7 @@ var
     cell := AFrom;
     while (cell >= 0) and (cell < row.CellCount) do
     begin
+      // (merged away across, or covered by the cell above: no place of the Tab order)
       if not row.Cells[cell].Hidden then
       begin
         fp := -1;
@@ -12606,7 +12734,8 @@ var
             if fp < 0 then fp := AB.FirstPara + i;
             lp := AB.FirstPara + i;
           end;
-        if fp >= 0 then Exit(True);
+        if (fp >= 0) and not ((row.Cells[cell].VMerge = rcmContinue) and CoveredPara(fp)) then
+          Exit(True);
       end;
       if AForward then Inc(cell) else Dec(cell);
     end;
@@ -17707,6 +17836,12 @@ begin
   area := TextArea(Rect(0, 0, Width, Height), ViewPPI);
   Result := HitRaster((Int64(X) - area.Left) * FScale + FScrollX, (Int64(Y) - area.Top) * FScale,
     AAtLineEnd);
+  // (anywhere in a span: the cell it starts with)
+  if (Result >= 0) and CoveredPara(FDoc.Text.ParaOfPos(Result)) then
+  begin
+    Result := SpanOwnerPos(Result);
+    AAtLineEnd := False;
+  end;
 end;
 
 function TTyCustomRichEdit.PositionRect(APos: TTyRichPos; AAtLineEnd: Boolean): TRect;
@@ -21043,6 +21178,13 @@ begin
   ATablePos := FDoc.Text.ParaStart(k);
 end;
 
+function TTyCustomRichEdit.TableGrid(ATablePos: TTyRichPos): TTyRichGrid;
+begin
+  Result := nil;
+  if ViewBehind or (ATablePos < 0) or (ATablePos > FDoc.Text.Length) then Exit;
+  Result := TyRichTableGrid(FDoc, ATablePos);
+end;
+
 { The paragraph the caret's cell is read from - the table of this selection, the one every
   table door and its Can... answer go by: the caret's own, or - a selection running forward to
   a paragraph's start, as one of whole cells does (after the last cell's end mark) - the
@@ -23752,6 +23894,8 @@ begin
         begin
           if byWord then q := WordStep(FCaret, Key = VK_RIGHT)
           else q := CaretStep(FCaret, Key = VK_RIGHT);
+          // (a covered cell takes no caret: passed over)
+          q := PastCovered(q, Key = VK_RIGHT);
           if ext then Select(FSelAnchor, q, False) else Select(q, q, False);
         end;
         Moved(False);

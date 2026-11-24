@@ -14,7 +14,10 @@ unit tyControls.RichEdit.TableSel;
     corner cells (from the left edge of the one more to the left to the right edge of the
     one more to the right). In a table whose rows all have the same edges that is cells
     Col0 .. Col1 of every row; in one whose rows differ (Word's wide cells, merged cells) it
-    is what lies under the span. (A table read as a grid will redo this on its columns.)
+    is what lies under the span. A rectangle that touches a merged cell grows to hold it
+    whole - a cell merged across reaches as far as its merge does, one merged down brings its
+    rows - until nothing more joins (the grid's rule, read off the rows around the area:
+    tyControls.RichEdit.Grid). So does a merged cell selected whole on its own.
   - One end outside the table: every cell of the rows the selection touches.
   - Anything else (both ends outside, ends in two tables): no cell range - a text
     selection.
@@ -30,7 +33,7 @@ interface
 
 uses
   SysUtils, tyControls.RichEdit.Text, tyControls.RichEdit.Model, tyControls.RichEdit.Commands,
-  tyControls.RichEdit.RowFormat, tyControls.RichEdit.TableProps;
+  tyControls.RichEdit.RowFormat, tyControls.RichEdit.TableProps, tyControls.RichEdit.Grid;
 
 type
   TTyRichCellRange = record
@@ -65,7 +68,8 @@ function TyRichCellInArea(const AArea: TTyRichCellArea; ARow: TTyRichRow; ACell:
 function TyRichRowParas(ADoc: TTyRichDocument; APara: Integer; out AFirst, ALast: Integer): Boolean;
 function TyRichCellParasOf(ADoc: TTyRichDocument; APara: Integer; out AFirst, ALast: Integer): Boolean;
 { A cell's horizontal extent in twips: from its left edge (the row's left for the first) to
-  its right edge. }
+  its right edge - for a cell merged across with the marks (\clmgf / \clmrg), the extent of
+  the merged box it is part of. }
 procedure TyRichCellExtent(ARow: TTyRichRow; ACell: Integer; out ALeft, ARight: Int64);
 { The area's rows are whole: every cell of each of them is in it. }
 function TyRichAreaWholeRows(ADoc: TTyRichDocument; const AArea: TTyRichCellArea): Boolean;
@@ -938,6 +942,7 @@ end;
 procedure TyRichCellExtent(ARow: TTyRichRow; ACell: Integer; out ALeft, ARight: Int64);
 var
   e: TTyRichEdges;
+  a, b: Integer;
 begin
   e := ARow.CellEdges;
   if (ACell < 0) or (ACell > High(e)) then
@@ -946,8 +951,81 @@ begin
     ARight := 0;
     Exit;
   end;
-  if ACell = 0 then ALeft := ARow.Format.Row.LeftTwips else ALeft := e[ACell - 1];
-  ARight := e[ACell];
+  // (merged across with the marks: the box from the first cell to the last continuing it)
+  a := ACell;
+  while (a > 0) and (TyRichCellHMerge(ARow, a) = Ord(rcmContinue)) do Dec(a);
+  b := ACell;
+  if (TyRichCellHMerge(ARow, a) = Ord(rcmFirst)) or (a < ACell) then
+    while (b < High(e)) and (TyRichCellHMerge(ARow, b + 1) = Ord(rcmContinue)) do Inc(b);
+  if a = 0 then ALeft := ARow.Format.Row.LeftTwips else ALeft := e[a - 1];
+  ARight := e[b];
+end;
+
+{ The area grown over the merged cells it touches: across to every merged cell's whole
+  extent, down and up to the rows a vertical merge it touches takes, until nothing more
+  joins. Reads the rows of the area and the one above and below it each round. }
+procedure GrowOverSpans(ADoc: TTyRichDocument; var AArea: TTyRichCellArea);
+var
+  changed: Boolean;
+  k, f, l, i, pf, pl, nf, nl, o: Integer;
+  c, nc: TTyRichCell;
+  row: TTyRichRow;
+  cl, cr: Int64;
+  vm: Integer;
+begin
+  if AArea.AllCells or (AArea.FirstPara < 0) then Exit;
+  repeat
+    changed := False;
+    k := AArea.FirstPara;
+    while k <= AArea.LastPara do
+    begin
+      c := ADoc.CellAt(k);
+      if (c = nil) or not TyRichRowParas(ADoc, k, f, l) then Break;
+      row := c.Row;
+      for i := 0 to row.CellCount - 1 do
+      begin
+        if not TyRichCellInArea(AArea, row, i) then Continue;
+        TyRichCellExtent(row, i, cl, cr);
+        if cl < AArea.X0 then
+        begin
+          AArea.X0 := cl;
+          changed := True;
+        end;
+        if cr > AArea.X1 then
+        begin
+          AArea.X1 := cr;
+          changed := True;
+        end;
+        vm := TyRichCellVMerge(row, i);
+        // continues the cell above: that row joins
+        if (f = AArea.FirstPara) and (vm = Ord(rcmContinue)) and (f > 0) then
+        begin
+          nc := ADoc.CellAt(f - 1);
+          if (nc <> nil) and (nc.Table = c.Table) and TyRichRowParas(ADoc, f - 1, pf, pl) then
+          begin
+            AArea.FirstPara := pf;
+            changed := True;
+          end;
+        end;
+        // goes on in the row below: that row joins
+        if (l = AArea.LastPara) and (vm <> Ord(rcmNone)) and (l + 1 < ADoc.Text.ParaCount) then
+        begin
+          nc := ADoc.CellAt(l + 1);
+          if (nc <> nil) and (nc.Table = c.Table) and TyRichRowParas(ADoc, l + 1, nf, nl) then
+          begin
+            o := TyRichFacingCell(row.CellEdges, row.Format.Row.LeftTwips, i, nc.Row.CellEdges,
+              nc.Row.Format.Row.LeftTwips);
+            if (o >= 0) and (TyRichCellVMerge(nc.Row, o) = Ord(rcmContinue)) then
+            begin
+              AArea.LastPara := nl;
+              changed := True;
+            end;
+          end;
+        end;
+      end;
+      k := l + 1;
+    end;
+  until not changed;
 end;
 
 function TyRichRowParas(ADoc: TTyRichDocument; APara: Integer; out AFirst, ALast: Integer): Boolean;
@@ -1093,7 +1171,19 @@ begin
       TyRichRowParas(ADoc, ka, f, l);
       Result.FirstPara := f;
       Result.LastPara := l;
-      Result.Range.TablePos := t.ParaStart(f);
+      // (a merged cell: the rows it takes)
+      GrowOverSpans(ADoc, Result);
+      Result.Range.TablePos := t.ParaStart(Result.FirstPara);
+      if Result.FirstPara <> f then
+      begin
+        ADoc.TableRowIndex(Result.FirstPara, ra, n);
+        Result.Range.Row0 := ra;
+      end;
+      if Result.LastPara <> l then
+      begin
+        ADoc.TableRowIndex(Result.LastPara, ra, n);
+        Result.Range.Row1 := ra;
+      end;
       Result.Range.WholeTable := (n = 1) and (ca.Row.CellCount = 1);
       Exit;
     end;
@@ -1154,6 +1244,8 @@ begin
       Result.Range.Col1 := c.Row.CellCount - 1;
     end;
     Result.Range.InTable := True;
+    // (a rectangle that touches a merged cell: grown to hold it whole)
+    GrowOverSpans(ADoc, Result);
     Result.Range.TablePos := t.ParaStart(Result.FirstPara);
     ADoc.TableRowIndex(Result.FirstPara, ra, n);
     ADoc.TableRowIndex(Result.LastPara, rb, n);

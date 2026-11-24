@@ -491,7 +491,9 @@ begin
     st.Free;
   end;
   d := FRich.Document;
-  // from a1 (1440..2880) to b0 (0..2160): the span 0..2880
+  { from a1 (1440..2880) to b0 (0..2160): the span 0..2880 - and b1 (2160..4320), a cell over
+    two of the grid's columns, reaches past it: the rectangle grows to hold b1 whole (the
+    grid's rule: a wide cell is a merged cell), and a2 is under it then }
   Sel(d.Text.ParaStart(1) + 1, d.Text.ParaStart(3) + 1);
   area := TyRichCellArea(d, FRich.SelStart, FRich.SelStart + FRich.SelLength);
   d.BeginRead;
@@ -499,20 +501,21 @@ begin
     AssertTrue('cells', area.Range.InTable);
     AssertTrue('a0', InAt(0, 0));
     AssertTrue('a1', InAt(1, 1));
-    AssertFalse('a2 (2880..4320) is not', InAt(2, 2));
+    AssertTrue('a2 (2880..4320): under b1, which the area grows to hold', InAt(2, 2));
     AssertTrue('b0', InAt(3, 0));
     AssertTrue('b1 (2160..4320) overlaps it', InAt(4, 1));
   finally
     d.EndRead;
   end;
-  // from a2 (2880..4320) to b1 (2160..4320): a1 (1440..2880) reaches into that span
+  { from a2 (2880..4320) to b1 (2160..4320): a1 (1440..2880) reaches into that span - the
+    area grows to hold it, and then b0 (0..2160) is under it, and a0 }
   Sel(d.Text.ParaStart(2) + 1, d.Text.ParaStart(4) + 1);
   area := TyRichCellArea(d, FRich.SelStart, FRich.SelStart + FRich.SelLength);
   d.BeginRead;
   try
     AssertTrue('a1 overlaps it', InAt(1, 1));
-    AssertFalse('a0 does not', InAt(0, 0));
-    AssertFalse('b0 (0..2160) ends where it starts', InAt(3, 0));
+    AssertTrue('a0, as the area grew', InAt(0, 0));
+    AssertTrue('b0, as the area grew', InAt(3, 0));
   finally
     d.EndRead;
   end;
