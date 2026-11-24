@@ -82,6 +82,7 @@ type
     procedure TestAColumnSelectionPaintsOnlyVisibleRows;
     procedure TestAPartOfALongFileSelectsRowsNotColumns;
     procedure TestSelectingReadsOnlyTheRowsItNeeds;
+    procedure TestMarksAtACellsEdgesDecideNothing;
   end;
 
 implementation
@@ -935,6 +936,189 @@ begin
   Sel(CellStart(0, 0), CellEnd(1, 1));
   FRich.Key(VK_DELETE);
   AssertFalse('all of it cleared: no lone mark', Lone);
+end;
+
+{ Bookmark marks at a cell's start or end - zero-width - decide nothing about whether a cell
+  is covered: a selection that covers all of a cell's text and its end mark covers the cell,
+  wherever among the marks at its start it begins (a place set at a bookmark's start rests
+  after its opening mark). Row 0's first cell begins with a bookmark's start and ends with its
+  end; row 1's last cell likewise; in row 2 a bookmark starts at the end of cell 0 and ends at
+  the start of cell 1. The select methods, a selection by positions and Shift+arrows select
+  what they say; deleting, cutting and the cell formats work; no lone mark is left. }
+procedure TTyRichTableSelTest.TestMarksAtACellsEdgesDecideNothing;
+var
+  B: TTyRichBuilder;
+  info: TTyRichTableInfo;
+  counts: string;
+  s0, e0: TTyRichPos;
+
+  procedure Build;
+  begin
+    B := TTyRichBuilder.Create;
+    try
+      B.Text('before').Paragraph;
+      B.Table([1440, 1440, 1440]);
+      B.Cell.BookmarkStart('a').Text('r0c0').BookmarkEnd('a').Cell.Text('r0c1').Cell.Text('r0c2');
+      B.Row.Cell.Text('r1c0').Cell.Text('r1c1').Cell.BookmarkStart('b').Text('r1c2').BookmarkEnd('b');
+      B.Row.Cell.Text('r2c0').BookmarkStart('c').Cell.BookmarkEnd('c').Text('r2c1').Cell.Text('r2c2');
+      B.EndTable;
+      B.Text('after');
+      FRich.SetContent(B);
+    finally
+      B.Free;
+    end;
+    FRich.Document.ClearUndo;
+    FRich.UpdateView;
+  end;
+
+  // as many bookmark starts as ends
+  function NoLone: Boolean;
+  var
+    k, j, st, en: Integer;
+    runs: TTyRunArray;
+    t: TTyRichText;
+  begin
+    st := 0;
+    en := 0;
+    t := FRich.Document.Text;
+    for k := 0 to t.ParaCount - 1 do
+    begin
+      runs := FRich.Document.RunsOf(k);
+      for j := 0 to High(runs) do
+        if runs[j].Obj is TTyRichBookmarkMark then
+          if TTyRichBookmarkMark(runs[j].Obj).Kind = rbmStart then Inc(st) else Inc(en);
+    end;
+    counts := Format('%d starts, %d ends', [st, en]);
+    Result := st = en;
+  end;
+
+  function Rows: Integer;
+  begin
+    AssertTrue('a table', FRich.Document.TableInfoAt(1, info));
+    Result := info.RowCount;
+  end;
+
+  // a selection by positions, as code sets one: the length from where the start rests
+  procedure SelTo(AAnchor, ACaret: TTyRichPos);
+  begin
+    FRich.SelStart := AAnchor;
+    FRich.SelLength := ACaret - FRich.SelStart;
+  end;
+
+  procedure Caret(ARow, ACol: Integer);
+  begin
+    SelTo(CellStart(ARow, ACol) + 2, CellStart(ARow, ACol) + 2);
+  end;
+
+begin
+  Build;
+  // the select methods
+  Caret(0, 0);
+  AssertTrue('a cell', FRich.SelectCell);
+  CheckRange('SelectCell, a bookmark at its start and end', 0, 0, 0, 0);
+  AssertTrue('a row', FRich.SelectRow);
+  CheckRange('SelectRow', 0, 0, 0, 2);
+  Caret(0, 0);
+  AssertTrue('a column', FRich.SelectColumn);
+  CheckRange('SelectColumn', 0, 0, 2, 0);
+  AssertTrue('the table', FRich.SelectTable);
+  CheckRange('SelectTable', 0, 0, 2, 2);
+  Caret(1, 2);
+  AssertTrue('the last cell', FRich.SelectCell);
+  CheckRange('SelectCell, the row''s last', 1, 2, 1, 2);
+  Caret(2, 1);
+  AssertTrue('a cell beginning with an end mark', FRich.SelectCell);
+  CheckRange('SelectCell after a bookmark''s end', 2, 1, 2, 1);
+  Caret(2, 0);
+  AssertTrue('a cell ending with a start mark', FRich.SelectCell);
+  CheckRange('SelectCell before a bookmark''s start', 2, 0, 2, 0);
+  // by positions: from before or after the marks at the start, to the end mark
+  SelTo(CellStart(0, 0), CellEnd(0, 0));
+  CheckRange('positions: from the cell''s start', 0, 0, 0, 0);
+  SelTo(CellStart(0, 0) + 1, CellEnd(0, 0));
+  CheckRange('positions: from after the opening mark', 0, 0, 0, 0);
+  SelTo(CellEnd(0, 0), CellStart(0, 0) + 1);
+  CheckRange('positions: backwards', 0, 0, 0, 0);
+  SelTo(CellStart(2, 1) + 1, CellEnd(2, 1));
+  CheckRange('positions: after a closing mark', 2, 1, 2, 1);
+  SelTo(CellStart(0, 0) + 2, CellEnd(0, 0));
+  AssertFalse('positions: from inside its text - text', FRich.SelectedCells.InTable);
+  // Shift+arrows from the cell's start
+  SelTo(CellStart(0, 0), CellStart(0, 0));
+  FRich.Key(VK_END, [ssShift]);
+  FRich.Key(VK_RIGHT, [ssShift]);
+  CheckRange('Shift+End, Shift+Right', 0, 0, 0, 0);
+  FRich.Key(VK_RIGHT, [ssShift]);
+  CheckRange('one more', 0, 0, 0, 1);
+  FRich.Key(VK_DOWN, [ssShift]);
+  CheckRange('Shift+Down', 0, 0, 1, 1);
+  SelTo(CellStart(1, 2), CellStart(1, 2));
+  FRich.Key(VK_END, [ssShift]);
+  FRich.Key(VK_RIGHT, [ssShift]);
+  CheckRange('the last cell, a bookmark''s end before its end mark', 1, 2, 1, 2);
+  // a bookmark from the end of cell 2,0 to the start of cell 2,1
+  SelTo(CellStart(2, 0), CellStart(2, 0));
+  FRich.Key(VK_END, [ssShift]);
+  FRich.Key(VK_RIGHT, [ssShift]);
+  CheckRange('Shift: the cell ending with a bookmark''s start', 2, 0, 2, 0);
+  FRich.Key(VK_RIGHT, [ssShift]);
+  CheckRange('Shift: into the cell beginning with its end', 2, 0, 2, 1);
+  // row 0 cut, selected by positions from its start
+  SelTo(CellStart(0, 0), CellEnd(0, 2));
+  FRich.CutToClipboard;
+  AssertEquals('row 0 cut', 2, Rows);
+  AssertTrue('no lone mark (row 0 cut): ' + counts, NoLone);
+  FRich.Undo;
+  AssertEquals('row 0 back', 3, Rows);
+  // a row deleted by a selection from the row's start, Backspace
+  SelTo(CellStart(0, 0), CellEnd(0, 2));
+  CheckRange('row 0 by positions', 0, 0, 0, 2);
+  FRich.Key(VK_BACK);
+  AssertEquals('row 0 deleted', 2, Rows);
+  AssertTrue('no lone mark: ' + counts, NoLone);
+  FRich.Undo;
+  AssertEquals('back', 3, Rows);
+  // SelectRow then Backspace, on the row whose last cell ends with one
+  Caret(1, 2);
+  AssertTrue('row 1', FRich.SelectRow);
+  FRich.Key(VK_BACK);
+  AssertEquals('row 1 deleted', 2, Rows);
+  AssertTrue('no lone mark (row 1): ' + counts, NoLone);
+  FRich.Undo;
+  // row 2 cut: the bookmark across its cells goes with it whole
+  Caret(2, 1);
+  AssertTrue('row 2', FRich.SelectRow);
+  FRich.CutToClipboard;
+  AssertEquals('row 2 cut', 2, Rows);
+  AssertTrue('no lone mark (row 2): ' + counts, NoLone);
+  FRich.Undo;
+  AssertEquals('back again', 3, Rows);
+  // cells cleared: the bookmark stays whole
+  Caret(2, 1);
+  AssertTrue('cell 2,1', FRich.SelectCell);
+  FRich.Key(VK_DELETE);
+  // (its text gone; the bookmark's closing mark stays, the bookmark whole)
+  AssertEquals('cleared', 0, Pos('r2c1', CellText(2, 1)));
+  AssertTrue('the bookmark kept', FRich.FindBookmark('c', s0, e0));
+  AssertTrue('no lone mark (a cell cleared): ' + counts, NoLone);
+  FRich.Undo;
+  Caret(0, 0);
+  FRich.SelectCell;
+  FRich.Key(VK_DELETE);
+  AssertTrue('no lone mark (the first cell cleared): ' + counts, NoLone);
+  FRich.Undo;
+  // the cell-format doors
+  Caret(0, 0);
+  AssertTrue('a row', FRich.SelectRow);
+  AssertTrue('shading on the row', FRich.SetCellShading(clYellow));
+  AssertEquals('every cell of it', clYellow, FRich.Document.CellProps(CellStart(0, 0), 0, 2).Shading);
+  AssertTrue('borders on the row', FRich.SetCellBorders(rbpAll, TyRichBorder(rbsDouble, 30, clRed)));
+  Caret(2, 1);
+  AssertTrue('cell 2,1', FRich.SelectCell);
+  AssertTrue('shading on it', FRich.SetCellShading(clAqua));
+  AssertEquals('that cell', clAqua, FRich.Document.CellProps(CellStart(0, 0), 2, 1).Shading);
+  AssertEquals('not the one before', clNone, FRich.Document.CellProps(CellStart(0, 0), 2, 0).Shading);
+  AssertTrue('no lone mark at the end: ' + counts, NoLone);
 end;
 
 { ---- painting ---- }

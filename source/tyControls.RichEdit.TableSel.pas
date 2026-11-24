@@ -989,6 +989,21 @@ begin
   else Result := (l < AArea.X1) and (r > AArea.X0);
 end;
 
+{ Every character of AFrom .. ATo - 1 is a zero-width mark: a bookmark's or a field's (none:
+  True). Call it inside a read scope. }
+function MarksOnly(ADoc: TTyRichDocument; AFrom, ATo: TTyRichPos): Boolean;
+var
+  p: TTyRichPos;
+  o: TTyRichObject;
+begin
+  for p := AFrom to ATo - 1 do
+  begin
+    o := ADoc.ObjectAt(p);
+    if not ((o is TTyRichBookmarkMark) or (o is TTyRichFieldMark)) then Exit(False);
+  end;
+  Result := True;
+end;
+
 function TyRichCellArea(ADoc: TTyRichDocument; AAnchor, ACaret: TTyRichPos): TTyRichCellArea;
 var
   t: TTyRichText;
@@ -1014,21 +1029,31 @@ begin
     e := AAnchor;
   end;
   if (s < 0) or (e > t.Length) then Exit;
-  // the paragraphs of the first and the last selected character (a paragraph's end mark is
-  // its last character)
-  ka := t.ParaOfPos(s);
-  kb := t.ParaOfPos(e - 1);
   wholeRows := False;
   ADoc.BeginRead;
   try
+    { Zero-width marks (a bookmark's, a field's) at the start of the paragraph the selection
+      ends in are none of its characters: a place set after a bookmark's closing mark at a
+      cell's start rests after it, and the selection still ends with the cell before. }
+    kb := t.ParaOfPos(e - 1);
+    if (t.ParaStart(kb) > s) and (t.ParaStart(kb) < e) and MarksOnly(ADoc, t.ParaStart(kb), e) then
+      e := t.ParaStart(kb);
+    // the paragraphs of the first and the last selected character (a paragraph's end mark is
+    // its last character)
+    ka := t.ParaOfPos(s);
+    kb := t.ParaOfPos(e - 1);
     ca := ADoc.CellAt(ka);
     cb := ADoc.CellAt(kb);
     if (ca = nil) and (cb = nil) then Exit;
     if (ca <> nil) and (ca = cb) then
     begin
-      // one cell: whole from its first character to its end mark, or text inside it
+      { one cell: whole from its first character to its end mark, or text inside it - the
+        zero-width marks at its start (a bookmark's, a field's) decide nothing: a place set at
+        a bookmark's start rests after its opening mark }
       if not TyRichCellParasOf(ADoc, ka, f, l) then Exit;
-      if (s <> t.ParaStart(f)) or (e - 1 <> t.ParaStart(l) + t.ParaLength(l)) then Exit;
+      if (s < t.ParaStart(f)) or not MarksOnly(ADoc, t.ParaStart(f), s) or
+         (e - 1 <> t.ParaStart(l) + t.ParaLength(l)) then
+        Exit;
       Result.Range.InTable := True;
       Result.Table := ca.Table;
       TyRichCellExtent(ca.Row, ca.Index, Result.X0, Result.X1);

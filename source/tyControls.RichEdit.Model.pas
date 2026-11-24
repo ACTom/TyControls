@@ -1980,6 +1980,9 @@ type
     { [AFrom, ATo) is whole rows of one table: from a row's first paragraph's start to the
       start of the paragraph after a row (never the text's end). Call it inside a read scope. }
     function WholeRows(AFrom, ATo: TTyRichPos): Boolean;
+    { APos is the start of its paragraph, or only zero-width marks (a bookmark's, a field's)
+      lie between that start and it - where a place set at a bookmark's start rests. }
+    function AtParaStart(APos: TTyRichPos): Boolean;
 
     { Why AEdit cannot be made (TTyRichTableRefusal; rtrNone: it can) - what a table
       command's CanExecute asks, and what a view greys its table actions by. Reads inside
@@ -5790,6 +5793,26 @@ begin
   Result := True;
 end;
 
+function TTyRichDocument.AtParaStart(APos: TTyRichPos): Boolean;
+var
+  p, p0: TTyRichPos;
+  o: TTyRichObject;
+begin
+  if (APos < 0) or (APos > FText.Length) then Exit(False);
+  p0 := FText.ParaStart(FText.ParaOfPos(APos));
+  BeginRead;
+  try
+    for p := p0 to APos - 1 do
+    begin
+      o := ObjectAt(p);
+      if not ((o is TTyRichBookmarkMark) or (o is TTyRichFieldMark)) then Exit(False);
+    end;
+  finally
+    EndRead;
+  end;
+  Result := True;
+end;
+
 function TTyRichDocument.UserRangeAllowed(var AStart, ALen: TTyRichPos): Boolean;
 var
   k, m: Integer;
@@ -5824,6 +5847,15 @@ begin
     { One that crosses a cell's or a row's edge is refused: the engine would merge paragraphs
       of two cells and leave a cell with no paragraph, no place for the caret. Whole rows,
       from a row's start to a row's end, the engine deletes cleanly. }
+    { Whole rows from after the zero-width marks at a row's start (a place set at a
+      bookmark's start rests after its opening mark): from the row's start - the marks go
+      with the row. }
+    if (ck <> cm) and (AStart > FText.ParaStart(k)) and AtParaStart(AStart) and
+       WholeRows(FText.ParaStart(k), AStart + ALen) then
+    begin
+      Inc(ALen, AStart - FText.ParaStart(k));
+      AStart := FText.ParaStart(k);
+    end;
     if (ck <> cm) and not WholeRows(AStart, AStart + ALen) then Result := False;
   finally
     EndRead;

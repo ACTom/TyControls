@@ -11638,7 +11638,7 @@ end;
 function TTyCustomRichEdit.CaretTablePara: Integer;
 var
   t: TTyRichText;
-  q: TTyRichPos;
+  q, a: TTyRichPos;
   ka, m, i: Integer;
   ca, cb, cl, cn: TTyRichCell;
   run: Boolean;
@@ -11659,7 +11659,13 @@ begin
     Exit;
   m := Result;
   ka := t.ParaOfPos(FSelAnchor);
-  if FSelAnchor <> t.ParaStart(ka) then Exit;
+  // (from after the zero-width marks at a row's start: from the row's start)
+  a := FSelAnchor;
+  if a <> t.ParaStart(ka) then
+  begin
+    if not FDoc.AtParaStart(a) then Exit;
+    a := t.ParaStart(ka);
+  end;
   { Whole rows are told by the anchor's paragraph and the one before it, and the caret's and
     the one before it: when one of them is not read yet, nothing is read just to answer -
     the caret's own paragraph, and the answer is not kept. }
@@ -11670,7 +11676,7 @@ begin
   end;
   FDoc.BeginRead;
   try
-    if FDoc.WholeRows(FSelAnchor, q) then
+    if FDoc.WholeRows(a, q) then
       Dec(Result)
     else
     begin
