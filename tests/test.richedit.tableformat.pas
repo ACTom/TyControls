@@ -39,6 +39,7 @@ type
     FCtl: TTyStyleController;
     FRich: TFmtRich;
     FBordersAsked, FPropsAsked: Integer;
+    FGot: TTyRichTableProperties;
     procedure MakeTable(ARows, ACols: Integer);
     function CellStart(ARow, ACol: Integer): TTyRichPos;
     function CellEnd(ARow, ACol: Integer): TTyRichPos;
@@ -58,6 +59,8 @@ type
     procedure BordersAsk(Sender: TObject; var APreset: TTyRichBorderPreset;
       var ABorder: TTyRichBorder; var AAllow: Boolean);
     procedure PropsAsk(Sender: TObject; var AProps: TTyRichTableProperties; var AAllow: Boolean);
+    procedure PropsOk(Sender: TObject; var AProps: TTyRichTableProperties; var AAllow: Boolean);
+    procedure PropsVAlign(Sender: TObject; var AProps: TTyRichTableProperties; var AAllow: Boolean);
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -78,6 +81,9 @@ type
     procedure TestACellBelowGetsTheLineOnlyWhenItLiesUnderIt;
     procedure TestARowWithANestedTableIsLeftAsItIs;
     procedure TestDistributeRowsShowsTheWaitCursorWhenLong;
+    procedure TestTablePropertiesApplyOnlyWhatChanged;
+    procedure TestTableAlignLeavesTheIndent;
+    procedure TestTheBuildersRowIsInTwipsAndMisuseRaises;
   end;
 
 implementation
@@ -564,7 +570,7 @@ begin
   Inc(FPropsAsked);
   AssertEquals('the row as it is', 0, AProps.RowHeight);
   AssertEquals('the padding as it is', 108, AProps.Pad[rcsLeft]);
-  AProps.Valid := [tpfRowHeight, tpfShading, tpfVAlign];
+  AProps.Changed := [tpfRowHeight, tpfShading, tpfVAlign];
   AProps.RowHeight := 700;
   AProps.Shading := clAqua;
   AProps.VAlign := rcvCenter;
@@ -652,8 +658,8 @@ begin
     B.Cell.Text('a').Shading(clYellow).CellBorders([rcsTop, rcsBottom], rbsDouble, 30, clRed);
     B.Cell.Text('b').CellPadding(200, 60, 150, 90).CellVAlign(rcvBottom);
     B.Cell.Text('c');
-    B.Row(30, True).Cell.Text('d').CellVAlign(rcvCenter).Cell.Text('e').Cell.Text('f');
-    B.Row(20).Cell.Text('g').Cell.Text('h').Cell.Text('i').EndTable;
+    B.Row(600, True).Cell.Text('d').CellVAlign(rcvCenter).Cell.Text('e').Cell.Text('f');
+    B.Row(400).Cell.Text('g').Cell.Text('h').Cell.Text('i').EndTable;
     B.Text('after');
     FRich.SetContent(B);
   finally
@@ -1035,6 +1041,154 @@ begin
   FRich.DistributeRows;
   AssertEquals('above it: shown', 1, FRich.Waits);
   AssertEquals('and put back', 1, FRich.WaitsEnded);
+end;
+
+// OK on the form with nothing changed
+procedure TTyRichTableFormatTest.PropsOk(Sender: TObject; var AProps: TTyRichTableProperties;
+  var AAllow: Boolean);
+begin
+  FGot := AProps;
+end;
+
+// only the vertical alignment changed
+procedure TTyRichTableFormatTest.PropsVAlign(Sender: TObject; var AProps: TTyRichTableProperties;
+  var AAllow: Boolean);
+begin
+  FGot := AProps;
+  AProps.VAlign := rcvBottom;
+  AProps.Changed := [tpfVAlign];
+end;
+
+{ The properties action hands the selection's values over with the fields alike over every
+  selected cell (Uniform); only the fields the handler changed (Changed) are applied - none:
+  nothing, no undo step. }
+procedure TTyRichTableFormatTest.TestTablePropertiesApplyOnlyWhatChanged;
+var
+  list: TActionList;
+  pr: TTyRichEditTableProperties;
+  before: RawByteString;
+begin
+  list := TActionList.Create(nil);
+  try
+    pr := TTyRichEditTableProperties.Create(list);
+    pr.RichEdit := FRich;
+    MakeTable(2, 2);
+    FRich.SelStart := CellStart(0, 0);
+    FRich.SetCellShading(clYellow);
+    FRich.SelStart := CellStart(1, 1);
+    FRich.SetCellShading(clAqua);
+    FRich.SetCellPadding(300, -1, -1, -1);
+    FRich.Document.ClearUndo;
+    before := SaveRtf;
+    FRich.SelectTable;
+    pr.OnBeforeExecute := @PropsOk;
+    pr.Execute;
+    AssertFalse('the shading is mixed', tpfShading in FGot.Uniform);
+    AssertFalse('the padding is mixed', tpfPadding in FGot.Uniform);
+    AssertTrue('the alignment is alike', tpfVAlign in FGot.Uniform);
+    AssertTrue('the rows'' height is alike', tpfRowHeight in FGot.Uniform);
+    AssertTrue('nothing changed yet', FGot.Changed = []);
+    AssertEquals('OK without a change: no step', 0, FRich.Document.UndoDepth);
+    AssertTrue('OK without a change: the bytes as they were', before = SaveRtf);
+    // one field changed: only that one
+    FRich.SelectTable;
+    pr.OnBeforeExecute := @PropsVAlign;
+    pr.Execute;
+    AssertEquals('one step', 1, FRich.Document.UndoDepth);
+    AssertTrue('every cell at the bottom', (Cell(0, 0).VAlign = rcvBottom) and (Cell(1, 1).VAlign = rcvBottom));
+    AssertEquals('its own shading kept', clYellow, Cell(0, 0).Shading);
+    AssertEquals('its own shading kept too', clAqua, Cell(1, 1).Shading);
+    AssertEquals('its own padding kept', 300, Cell(1, 1).Pad[rcsLeft]);
+    AssertEquals('the other''s padding kept', 108, Cell(0, 0).Pad[rcsLeft]);
+    // the door itself: nothing changed, nothing done
+    FGot.Changed := [];
+    AssertTrue('nothing to apply', FRich.ApplyTableProperties(FGot));
+    AssertEquals('still one step', 1, FRich.Document.UndoDepth);
+  finally
+    list.Free;
+  end;
+end;
+
+{ SetTableAlign(align) and the alignment action leave the indent as it is - a Word table's
+  -108 twips stays -; SetTableAlign(align, indent) sets both. }
+procedure TTyRichTableFormatTest.TestTableAlignLeavesTheIndent;
+const
+  WordRtf = '{\rtf1\ansi{\fonttbl{\f0 Arial;}}\pard before\par' +
+    '\trowd\trgaph108\trleft-108\cellx1440\cellx2880\pard\intbl a0\cell a1\cell\row' +
+    '\pard after\par}';
+var
+  st: TStringStream;
+  list: TActionList;
+  al: TTyRichEditTableAlign;
+begin
+  st := TStringStream.Create(WordRtf);
+  try
+    FRich.LoadFromStream(st);
+  finally
+    st.Free;
+  end;
+  FRich.SelStart := CellStart(0, 0) + 1;
+  AssertEquals('Word''s indent', -108, RowP(0).LeftTwips);
+  AssertTrue('centred', FRich.SetTableAlign(rraCenter));
+  AssertTrue('left again', FRich.SetTableAlign(rraLeft));
+  AssertEquals('the indent as it was', -108, RowP(0).LeftTwips);
+  list := TActionList.Create(nil);
+  try
+    al := TTyRichEditTableAlign.Create(list);
+    al.RichEdit := FRich;
+    al.Align := rraRight;
+    al.Execute;
+    AssertTrue('the action: right', RowP(0).Align = rraRight);
+    AssertEquals('the action: the indent as it was', -108, RowP(0).LeftTwips);
+  finally
+    list.Free;
+  end;
+  AssertTrue('both', FRich.SetTableAlign(rraLeft, 0));
+  AssertEquals('the indent set', 0, RowP(0).LeftTwips);
+end;
+
+{ The builder's Row takes twips, as every table measure; a negative height, width or padding
+  raises its misuse error. }
+procedure TTyRichTableFormatTest.TestTheBuildersRowIsInTwipsAndMisuseRaises;
+var
+  B: TTyRichBuilder;
+  k: Integer;
+  raised: Boolean;
+begin
+  B := TTyRichBuilder.Create;
+  try
+    B.Text('before').Paragraph;
+    B.Table([1440, 1440]).Cell.Text('a').Cell.Text('b');
+    B.Row(600).Cell.Text('c').Cell.Text('d');
+    B.Row(500, True).Cell.Text('e').Cell.Text('f').EndTable;
+    B.Text('after');
+    FRich.SetContent(B);
+  finally
+    B.Free;
+  end;
+  AssertEquals('at least 600 twips', 600, RowP(1).HeightTwips);
+  AssertEquals('exactly 500 twips', -500, RowP(2).HeightTwips);
+  for k := 0 to 2 do
+  begin
+    raised := False;
+    B := TTyRichBuilder.Create;
+    try
+      try
+        B.Table([1440]).Cell.Text('a');
+        case k of
+          0: B.Row(-5);
+          1: B.CellPadding(-7, 0, 0, 0);
+        else
+          B.CellBorders([rcsTop], rbsSingle, -1);
+        end;
+      except
+        on E: ETyRichEdit do raised := True;
+      end;
+    finally
+      B.Free;
+    end;
+    AssertTrue(Format('%d: a negative measure raises', [k]), raised);
+  end;
 end;
 
 initialization

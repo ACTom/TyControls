@@ -611,22 +611,34 @@ type
   end;
   TTyRichColumnEdges = array of TTyRichColumnEdge;
 
-  { What the table properties set (TTyCustomRichEdit.ApplyTableProperties; the table
-    properties action asks an application's form for it): the fields Valid names. RowHeight
-    twips (0: as high as its content), RowExact; ColumnWidth twips; Align and Indent (twips
-    from the margin) the table's; Pad twips (-1: a side as it is); VAlign; Shading (clNone:
-    none). }
+  { The table properties of the selected cells (else the caret's cell), their rows and their
+    table: GetTableProperties fills them in, a form changes some, ApplyTableProperties sets
+    those (the table properties action does the three). Two sets that must not be confused:
+    Uniform - the control's answer: the fields whose value is the same over every selected
+    cell (row); a field not in it is mixed, its value then the first cell's - and Changed -
+    the form's: the fields it changed, the only ones applied (none: nothing happens, no undo
+    step). }
   TTyRichTablePropField = (tpfRowHeight, tpfColumnWidth, tpfAlign, tpfPadding, tpfVAlign,
-    tpfShading);
+    tpfShading, tpfIndent);
+  TTyRichTablePropFields = set of TTyRichTablePropField;
   TTyRichTableProperties = record
-    Valid: set of TTyRichTablePropField;
+    Uniform: TTyRichTablePropFields;
+    Changed: TTyRichTablePropFields;
+    // twips; 0: as high as its content (tpfRowHeight: with RowExact)
     RowHeight: Integer;
+    // exactly RowHeight, else at least
     RowExact: Boolean;
+    // twips: the caret cell's column (the columns right of it shift)
     ColumnWidth: Integer;
+    // the table's alignment (all its rows)
     Align: TTyRowAlign;
+    { twips: the table's left edge from the margin - \trleft, its first cell's left line (Word's
+      dialog shows the text's edge: this and the cell's left padding) }
     Indent: Integer;
+    // twips, each side (-1 when changed: that side as it is)
     Pad: array[TTyRowCellSide] of Integer;
     VAlign: TTyRowCellVAlign;
+    // clNone: none
     Shading: TColor;
   end;
 
@@ -1940,6 +1952,7 @@ type
     function CellTarget(out ATablePos: TTyRichPos; out ARow0, ACol0, ARow1, ACol1: Integer;
       ATell: Boolean): Boolean;
     function RunCellProps(ACmd: TTyRichCommand; ASkipped: Integer = 0): Boolean;
+    function TableAlignDoor(AAlign: TTyRowAlign; AIndentTwips: Integer; ASetIndent: Boolean): Boolean;
     procedure TellSkipped;
     function EdgeRowsWhole(APara: Integer; out ATablePos: TTyRichPos;
       out ARow0, ARow1: Integer): Boolean;
@@ -2876,11 +2889,18 @@ type
     function SetCellBorders(APreset: TTyRichBorderPreset; const ABorder: TTyRichBorder): Boolean;
     function SetCellPadding(ALeft, ATop, ARight, ABottom: Integer): Boolean;
     function SetCellVAlign(AAlign: TTyRowCellVAlign): Boolean;
-    function SetTableAlign(AAlign: TTyRowAlign; AIndentTwips: Integer = 0): Boolean;
+    { The table's alignment, its indent as it is; with AIndentTwips the indent too (the
+      table's left edge from the margin, TTyRichTableProperties.Indent). }
+    function SetTableAlign(AAlign: TTyRowAlign): Boolean; overload;
+    function SetTableAlign(AAlign: TTyRowAlign; AIndentTwips: Integer): Boolean; overload;
     function CanFormatCells: Boolean;
-    { The table properties AProps names (Valid) as one undo step - the selected cells' (else the
-      caret cell's) padding, alignment and shading, their rows' height, the caret cell's column
-      width (the columns right of it shift), the table's alignment and indent. }
+    { The table properties of the selected cells (else the caret's cell): the values, Uniform
+      the fields alike over all of them, Changed empty. False outside a table. }
+    function GetTableProperties(out AProps: TTyRichTableProperties): Boolean;
+    { The table properties AProps.Changed names as one undo step - the selected cells' (else
+      the caret cell's) padding, alignment and shading, their rows' height, the caret cell's
+      column width (the columns right of it shift), the table's alignment and indent. Changed
+      empty: nothing, True. }
     function ApplyTableProperties(const AProps: TTyRichTableProperties): Boolean;
     // the row guide's client y, -1 none (what a test reads)
     property GuideRow: Integer read FGuideY;
@@ -23002,7 +23022,18 @@ end;
 { Every row of the caret's table: aligned left, centred or right, AIndentTwips its start
   (Word's indent from the margin; only when it is another than the first row's: a table with
   merged cells keeps its start). }
+function TTyCustomRichEdit.SetTableAlign(AAlign: TTyRowAlign): Boolean;
+begin
+  Result := TableAlignDoor(AAlign, 0, False);
+end;
+
 function TTyCustomRichEdit.SetTableAlign(AAlign: TTyRowAlign; AIndentTwips: Integer): Boolean;
+begin
+  Result := TableAlignDoor(AAlign, AIndentTwips, True);
+end;
+
+function TTyCustomRichEdit.TableAlignDoor(AAlign: TTyRowAlign; AIndentTwips: Integer;
+  ASetIndent: Boolean): Boolean;
 var
   p, c, r0, r1: Integer;
   pos: TTyRichPos;
@@ -23023,7 +23054,7 @@ begin
   rp := Default(TTyRichRowProps);
   rp.Valid := [rrpAlign];
   rp.Align := AAlign;
-  if AIndentTwips <> lft then
+  if ASetIndent and (AIndentTwips <> lft) then
   begin
     Include(rp.Valid, rrpLeft);
     rp.LeftTwips := AIndentTwips;
@@ -23077,12 +23108,14 @@ var
   w: Integer;
 begin
   Result := False;
+  // nothing changed: nothing to do, no undo step
+  if AProps.Changed = [] then Exit(True);
   if not UserTableDoorOpen then Exit;
   if not CellTarget(pos, r0, c0, r1, c1, True) then Exit;
   if not CaretEdgePara(p, c, True) then Exit;
   comp := TTyRichCompositeCommand.Create(rsRichUndoTableProps);
   try
-    if tpfRowHeight in AProps.Valid then
+    if tpfRowHeight in AProps.Changed then
     begin
       rp := Default(TTyRichRowProps);
       rp.Valid := [rrpHeight];
@@ -23090,9 +23123,13 @@ begin
       else rp.HeightTwips := Math.Max(0, AProps.RowHeight);
       comp.Add(TTyRichSetRowHeight.Create(pos, r0, r1, rp));
     end;
-    if (tpfColumnWidth in AProps.Valid) and (AProps.ColumnWidth > 0) then
+    if (tpfColumnWidth in AProps.Changed) and (AProps.ColumnWidth > 0) then
     begin
-      if not EdgeRows(p, True, wpos, wr0, wr1) then Exit;
+      if not EdgeRows(p, True, wpos, wr0, wr1) then
+      begin
+        comp.Free;
+        Exit;
+      end;
       FDoc.BeginRead;
       try
         row := FDoc.CellAt(p).Row;
@@ -23105,27 +23142,34 @@ begin
       if lft + w <> edges[c] then
         comp.Add(TTyRichSetColumnEdge.Create(wpos, edges[c], lft + w, wr0, wr1, True));
     end;
-    if tpfAlign in AProps.Valid then
+    if (tpfAlign in AProps.Changed) or (tpfIndent in AProps.Changed) then
     begin
-      if not EdgeRowsWhole(p, wpos, wr0, wr1) then Exit;
+      if not EdgeRowsWhole(p, wpos, wr0, wr1) then
+      begin
+        comp.Free;
+        Exit;
+      end;
       rp := Default(TTyRichRowProps);
-      rp.Valid := [rrpAlign];
-      rp.Align := AProps.Align;
+      if tpfAlign in AProps.Changed then
+      begin
+        Include(rp.Valid, rrpAlign);
+        rp.Align := AProps.Align;
+      end;
       FDoc.BeginRead;
       try
         lft := FDoc.CellAt(p).Row.Format.Row.LeftTwips;
       finally
         FDoc.EndRead;
       end;
-      if AProps.Indent <> lft then
+      if (tpfIndent in AProps.Changed) and (AProps.Indent <> lft) then
       begin
         Include(rp.Valid, rrpLeft);
         rp.LeftTwips := AProps.Indent;
       end;
-      comp.Add(TTyRichSetRowProps.Create(wpos, wr0, wr1, rp));
+      if rp.Valid <> [] then comp.Add(TTyRichSetRowProps.Create(wpos, wr0, wr1, rp));
     end;
     cp := Default(TTyRichCellProps);
-    if tpfPadding in AProps.Valid then
+    if tpfPadding in AProps.Changed then
     begin
       if AProps.Pad[rcsLeft] >= 0 then Include(cp.Valid, rcpPadLeft);
       if AProps.Pad[rcsTop] >= 0 then Include(cp.Valid, rcpPadTop);
@@ -23133,12 +23177,12 @@ begin
       if AProps.Pad[rcsBottom] >= 0 then Include(cp.Valid, rcpPadBottom);
       cp.Pad := AProps.Pad;
     end;
-    if tpfVAlign in AProps.Valid then
+    if tpfVAlign in AProps.Changed then
     begin
       Include(cp.Valid, rcpVAlign);
       cp.VAlign := AProps.VAlign;
     end;
-    if tpfShading in AProps.Valid then
+    if tpfShading in AProps.Changed then
     begin
       Include(cp.Valid, rcpShading);
       cp.Shading := AProps.Shading;
@@ -23154,6 +23198,69 @@ begin
     Exit(True);
   end;
   Result := RunCellProps(comp);
+end;
+
+{ The values of the selected cells (else the caret's), their rows and their table, and which
+  of them are alike over all. }
+function TTyCustomRichEdit.GetTableProperties(out AProps: TTyRichTableProperties): Boolean;
+var
+  pos: TTyRichPos;
+  r0, c0, r1, c1, r, c: Integer;
+  cp, cp0: TTyRichCellProps;
+  rp, rp0: TTyRichRowProps;
+  first: Boolean;
+  sd: TTyRowCellSide;
+  u: TTyRichTablePropFields;
+begin
+  AProps := Default(TTyRichTableProperties);
+  Result := False;
+  if not CellTarget(pos, r0, c0, r1, c1, False) then Exit;
+  u := [Low(TTyRichTablePropField)..High(TTyRichTablePropField)];
+  first := True;
+  cp0 := Default(TTyRichCellProps);
+  rp0 := Default(TTyRichRowProps);
+  for r := r0 to r1 do
+  begin
+    rp := FDoc.RowProps(pos, r);
+    if rp.Valid = [] then Continue;
+    c := c0;
+    while c <= c1 do
+    begin
+      cp := FDoc.CellProps(pos, r, c);
+      // (past the row's last cell)
+      if cp.Valid = [] then Break;
+      if first then
+      begin
+        cp0 := cp;
+        rp0 := rp;
+        first := False;
+      end
+      else
+      begin
+        if (rp.HeightTwips <> rp0.HeightTwips) then Exclude(u, tpfRowHeight);
+        if cp.WidthTwips <> cp0.WidthTwips then Exclude(u, tpfColumnWidth);
+        if rp.Align <> rp0.Align then Exclude(u, tpfAlign);
+        if rp.LeftTwips <> rp0.LeftTwips then Exclude(u, tpfIndent);
+        for sd := Low(TTyRowCellSide) to High(TTyRowCellSide) do
+          if cp.Pad[sd] <> cp0.Pad[sd] then Exclude(u, tpfPadding);
+        if cp.VAlign <> cp0.VAlign then Exclude(u, tpfVAlign);
+        if cp.Shading <> cp0.Shading then Exclude(u, tpfShading);
+      end;
+      Inc(c);
+    end;
+  end;
+  if first then Exit;
+  AProps.Uniform := u;
+  AProps.Changed := [];
+  AProps.RowHeight := Abs(rp0.HeightTwips);
+  AProps.RowExact := rp0.HeightTwips < 0;
+  AProps.ColumnWidth := cp0.WidthTwips;
+  AProps.Align := rp0.Align;
+  AProps.Indent := rp0.LeftTwips;
+  for sd := Low(TTyRowCellSide) to High(TTyRowCellSide) do AProps.Pad[sd] := cp0.Pad[sd];
+  AProps.VAlign := cp0.VAlign;
+  AProps.Shading := cp0.Shading;
+  Result := True;
 end;
 
 { ---- keyboard and wheel ---- }

@@ -721,7 +721,7 @@ begin
     B.Text('before');
     B.Table([]).Cell.Text('a1').Paragraph.Text('a2').Link('l', 'http://x.test');
     B.Cell.Shading(clYellow).Text('b').Cell.Text('c');
-    B.Row(30).Cell.Cell.Cell.Text('last');
+    B.Row(600).Cell.Cell.Cell.Text('last');
     B.EndTable.Text('after');
     FRich.SetContent(B);
   finally
@@ -945,7 +945,7 @@ begin
     B.Table([1440, 2880]).TableAlign(rraCenter);
     B.Cell.Text('a').Shading(clYellow).CellBorders([rcsLeft, rcsTop, rcsRight, rcsBottom], rbsDouble, 30, clRed);
     B.Cell.Text('b').CellPadding(200, 60, 150, 90).CellVAlign(rcvBottom);
-    B.Row(40, True).Cell.Text('c').CellVAlign(rcvCenter).Cell.Text('d');
+    B.Row(800, True).Cell.Text('c').CellVAlign(rcvCenter).Cell.Text('d');
     B.EndTable.Text('after');
     FRich.SetContent(B);
   finally

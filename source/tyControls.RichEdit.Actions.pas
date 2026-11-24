@@ -903,11 +903,10 @@ type
     property Align: TTyRowCellVAlign read FAlign write FAlign default rcvTop;
   end;
 
-  { The caret's table aligned (SetTableAlign): Align, Indent (twips from the margin). }
+  { The caret's table aligned (SetTableAlign): Align; its indent stays as it is. }
   TTyRichEditTableAlign = class(TTyRichEditAction)
   private
     FAlign: TTyRowAlign;
-    FIndent: Integer;
   protected
     procedure UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
     procedure ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
@@ -915,12 +914,13 @@ type
     constructor Create(AOwner: TComponent); override;
   published
     property Align: TTyRowAlign read FAlign write FAlign default rraCenter;
-    property Indent: Integer read FIndent write FIndent default 0;
   end;
 
-  { Before the table properties go on: AProps holds what the caret's cell, row and table have
-    now (Valid: every field); a handler shows its own form, changes them and says which to set
-    (Valid), or AAllow False: nothing. }
+  { Before the table properties go on: AProps holds the selected cells' values, their rows' and
+    their table's (TTyCustomRichEdit.GetTableProperties), Uniform the fields alike over all of
+    them (the others are mixed), Changed empty. A handler shows its own form, sets the values
+    the person changed and names them in Changed - only those are applied; none: nothing
+    happens -, or AAllow False: nothing. }
   TTyRichTablePropertiesEvent = procedure(Sender: TObject; var AProps: TTyRichTableProperties;
     var AAllow: Boolean) of object;
 
@@ -1773,7 +1773,7 @@ end;
 
 procedure TTyRichEditTableAlign.ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState);
 begin
-  if AState.CanFormatCells then ARich.SetTableAlign(FAlign, FIndent);
+  if AState.CanFormatCells then ARich.SetTableAlign(FAlign);
 end;
 
 constructor TTyRichEditTableProperties.Create(AOwner: TComponent);
@@ -1793,30 +1793,13 @@ procedure TTyRichEditTableProperties.ExecuteOn(ARich: TTyCustomRichEdit; AState:
 var
   v: TTyRichTableProperties;
   go: Boolean;
-  pos: TTyRichPos;
-  r, c: Integer;
-  cp: TTyRichCellProps;
-  rp: TTyRichRowProps;
-  sd: TTyRowCellSide;
 begin
   if not AState.CanFormatCells or not Assigned(FOnBeforeExecute) then Exit;
-  if not ARich.CaretCell(pos, r, c) then Exit;
-  // what the caret's cell, row and table have now
-  cp := ARich.Document.CellProps(pos, r, c);
-  rp := ARich.Document.RowProps(pos, r);
-  v := Default(TTyRichTableProperties);
-  v.Valid := [tpfRowHeight, tpfColumnWidth, tpfAlign, tpfPadding, tpfVAlign, tpfShading];
-  v.RowHeight := Abs(rp.HeightTwips);
-  v.RowExact := rp.HeightTwips < 0;
-  v.ColumnWidth := cp.WidthTwips;
-  v.Align := rp.Align;
-  v.Indent := rp.LeftTwips;
-  for sd := Low(TTyRowCellSide) to High(TTyRowCellSide) do v.Pad[sd] := cp.Pad[sd];
-  v.VAlign := cp.VAlign;
-  v.Shading := cp.Shading;
+  if not ARich.GetTableProperties(v) then Exit;
   go := True;
   FOnBeforeExecute(Self, v, go);
-  if not go or (csDestroying in ARich.ComponentState) or (v.Valid = []) then Exit;
+  // nothing changed: no command, no undo step
+  if not go or (csDestroying in ARich.ComponentState) or (v.Changed = []) then Exit;
   // one undo step
   ARich.ApplyTableProperties(v);
 end;

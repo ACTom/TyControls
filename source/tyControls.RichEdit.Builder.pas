@@ -61,8 +61,8 @@ type
         Props: TTyRichCellProps;
       end;
       TBRow = record
-        HeightPt: Double;              // 0: automatic
-        Exact: Boolean;                // exactly HeightPt, else at least
+        HeightTwips: Integer;          // 0: automatic
+        Exact: Boolean;                // exactly HeightTwips, else at least
         Cells: array of TBCell;
         CellCount: Integer;
       end;
@@ -72,6 +72,7 @@ type
         RowCount: Integer;
         HasAlign: Boolean;
         Align: TTyRowAlign;
+        HasIndent: Boolean;
         IndentTwips: Integer;
       end;
       TBStyle = record
@@ -233,20 +234,22 @@ type
       equal columns over the text width). Its first row is open; Cell opens each cell, Row
       the next row, EndTable ends it. A table inside a cell is not made (raises). }
     function Table(const AColWidthsTwips: array of Integer): TTyRichBuilder;
-    { The next row: as high as its content (AHeightPt 0), at least AHeightPt points, or exactly
-      (AExact). }
-    function Row(AHeightPt: Double = 0; AExact: Boolean = False): TTyRichBuilder;
+    { The next row: as high as its content (AHeightTwips 0), at least AHeightTwips, or exactly
+      (AExact) - twips, as every table measure. A negative height raises. }
+    function Row(AHeightTwips: Integer = 0; AExact: Boolean = False): TTyRichBuilder;
     { The open cell's lines on ASides: AStyle (rbsNone: none), AWidthTwips wide (Word's ½ pt
       is 10), AColor (clDefault: automatic). }
     function CellBorders(ASides: TTyRowCellSides; AStyle: TTyRichBorderStyle;
       AWidthTwips: Integer; AColor: TColor = clDefault): TTyRichBuilder;
-    { The open cell's own padding, twips; -1 leaves a side to the row's (108 left and right, 0
-      above and below: Word's). }
+    { The open cell's own padding on each side, twips, 0 or more (a negative one raises); a
+      cell without it takes the row's: 108 left and right, 0 above and below (Word's). }
     function CellPadding(ALeft, ATop, ARight, ABottom: Integer): TTyRichBuilder;
     { Where the open cell's content sits: at its top, in its middle, at its bottom. }
     function CellVAlign(AAlign: TTyRowCellVAlign): TTyRichBuilder;
-    { The table's alignment (all its rows) and its start from the margin, twips. }
-    function TableAlign(AAlign: TTyRowAlign; AIndentTwips: Integer = 0): TTyRichBuilder;
+    { The table's alignment (all its rows); with AIndentTwips its left edge from the margin
+      too, twips (\trleft: the first cell's left line). }
+    function TableAlign(AAlign: TTyRowAlign): TTyRichBuilder; overload;
+    function TableAlign(AAlign: TTyRowAlign; AIndentTwips: Integer): TTyRichBuilder; overload;
     { The next cell of the row: what follows is its content (paragraphs, links, pictures). }
     function Cell: TTyRichBuilder;
     { The table ends; what follows is a paragraph after it (a Paragraph right after EndTable
@@ -940,18 +943,19 @@ begin
     Misuse(ACall, Format('row %d has no cell', [t^.RowCount - 1]));
 end;
 
-function TTyRichBuilder.Row(AHeightPt: Double; AExact: Boolean): TTyRichBuilder;
+function TTyRichBuilder.Row(AHeightTwips: Integer; AExact: Boolean): TTyRichBuilder;
 var
   t: ^TBTable;
 begin
   Result := Self;
   if FTable < 0 then Misuse('Row', 'no table: call Table first');
+  if AHeightTwips < 0 then Misuse('Row', 'a height is 0 or more');
   CloseRow('Row');
   t := @FTables[FTable];
   if t^.RowCount = Length(t^.Rows) then SetLength(t^.Rows, t^.RowCount * 2);
   t^.Rows[t^.RowCount] := Default(TBRow);
-  t^.Rows[t^.RowCount].HeightPt := Max(0, AHeightPt);
-  t^.Rows[t^.RowCount].Exact := AExact and (AHeightPt > 0);
+  t^.Rows[t^.RowCount].HeightTwips := AHeightTwips;
+  t^.Rows[t^.RowCount].Exact := AExact and (AHeightTwips > 0);
   Inc(t^.RowCount);
   FCellOpen := -1;
 end;
@@ -999,11 +1003,11 @@ begin
     pos := ADoc.Text.ParaStart(first[t]);
     for r := 0 to FTables[t].RowCount - 1 do
     begin
-      if FTables[t].Rows[r].HeightPt > 0 then
+      if FTables[t].Rows[r].HeightTwips > 0 then
       begin
         rp := Default(TTyRichRowProps);
         rp.Valid := [rrpHeight];
-        rp.HeightTwips := Max(1, Round(FTables[t].Rows[r].HeightPt * 20));
+        rp.HeightTwips := FTables[t].Rows[r].HeightTwips;
         if FTables[t].Rows[r].Exact then rp.HeightTwips := -rp.HeightTwips;
         Run(TTyRichSetRowProps.Create(pos, r, r, rp));
       end;
@@ -1039,7 +1043,7 @@ begin
       rp := Default(TTyRichRowProps);
       rp.Valid := [rrpAlign];
       rp.Align := FTables[t].Align;
-      if FTables[t].IndentTwips <> 0 then
+      if FTables[t].HasIndent then
       begin
         Include(rp.Valid, rrpLeft);
         rp.LeftTwips := FTables[t].IndentTwips;
@@ -1092,7 +1096,7 @@ var
 
   procedure One(ASide: TTyRowCellSide; AProp: TTyRichCellProp; AValue: Integer);
   begin
-    if AValue < 0 then Exit;
+    if AValue < 0 then Misuse('CellPadding', 'a padding is 0 or more');
     Include(c^.Props.Valid, AProp);
     c^.Props.Pad[ASide] := AValue;
   end;
@@ -1118,14 +1122,20 @@ begin
   FTouched := True;
 end;
 
-function TTyRichBuilder.TableAlign(AAlign: TTyRowAlign; AIndentTwips: Integer): TTyRichBuilder;
+function TTyRichBuilder.TableAlign(AAlign: TTyRowAlign): TTyRichBuilder;
 begin
   Result := Self;
   if FTable < 0 then Misuse('TableAlign', 'no table: call it inside Table .. EndTable');
   FTables[FTable].HasAlign := True;
   FTables[FTable].Align := AAlign;
-  FTables[FTable].IndentTwips := AIndentTwips;
   FTouched := True;
+end;
+
+function TTyRichBuilder.TableAlign(AAlign: TTyRowAlign; AIndentTwips: Integer): TTyRichBuilder;
+begin
+  Result := TableAlign(AAlign);
+  FTables[FTable].HasIndent := True;
+  FTables[FTable].IndentTwips := AIndentTwips;
 end;
 
 function TTyRichBuilder.Cell: TTyRichBuilder;
