@@ -65,6 +65,9 @@ type
     procedure TestALinkOnAShadedGroundIsTheLinkColour;
     procedure TestClickFiresOnAnInsertedLink;
     procedure TestTheActionsAskAndRun;
+    procedure TestSetLinkKeepsTheOtherSwitches;
+    procedure TestTheCommandRefusesALineBreakItself;
+    procedure TestALinkEndedMidParagraphColoursNoMore;
   end;
 
 implementation
@@ -982,6 +985,128 @@ begin
     rem.Free;
     ins.Free;
   end;
+end;
+
+{ SetLink keeps what the instruction says besides the address: the target and the place (\l)
+  replaced, every other switch and its argument byte for byte in its place - \o and \t, one
+  the control does not know, an argument with no quotes, one holding \\ and \"; an address
+  made a place of the document and back. On a link read from a file: saved and read back with
+  its switches, also with a new text; undone to the file's bytes. }
+procedure TTyRichLinksTest.TestSetLinkKeepsTheOtherSwitches;
+const
+  Q = '"';
+var
+  before, saved: RawByteString;
+  m: TTyRichFieldMark;
+
+  procedure Check(const AOld, AURL, AWant: string);
+  begin
+    AssertEquals(AOld + ' with ' + AURL, AWant, TyRichReplaceLinkAddress(AOld, AURL));
+  end;
+
+begin
+  Check('HYPERLINK "http://a/b" \o "tip" \t "_blank"', 'http://new/',
+    'HYPERLINK "http://new/" \o "tip" \t "_blank"');
+  Check('HYPERLINK \l "sec"', '#other', 'HYPERLINK \l "other"');
+  Check('HYPERLINK "page.htm" \l "sec" \t "_top"', 'x.htm#y', 'HYPERLINK "x.htm" \l "y" \t "_top"');
+  Check('HYPERLINK  "http://a"  \x "arg"  \h ', 'http://b', 'HYPERLINK  "http://b"  \x "arg"  \h ');
+  Check('HYPERLINK http://a/b \o tip', 'http://c', 'HYPERLINK "http://c" \o tip');
+  Check('HYPERLINK "http://a" \o "say \"hi\" \\ there"', 'http://b',
+    'HYPERLINK "http://b" \o "say \"hi\" \\ there"');
+  Check('HYPERLINK "http://a" \o "t"', 'C:\dir\' + Q + 'q', 'HYPERLINK "C:\\dir\\' + '\' + Q + 'q" \o "t"');
+  // an address made a place, and a place made an address
+  Check('HYPERLINK "http://a" \o "tip"', '#sec', 'HYPERLINK \l "sec" \o "tip"');
+  Check('HYPERLINK \l "sec" \o "tip"', 'http://a', 'HYPERLINK "http://a" \o "tip"');
+  Check('HYPERLINK "a" \o "t"', 'b#s', 'HYPERLINK "b" \l "s" \o "t"');
+  Check('HYPERLINK \l "s1" \o "t"', 'b#s2', 'HYPERLINK "b" \l "s2" \o "t"');
+  Check('HYPERLINK "a" \l "s" \o "t"', 'http://c', 'HYPERLINK "http://c" \o "t"');
+  // not one this reads: '' (the command makes its own then)
+  Check('HYPERLINK "open', 'http://c', '');
+  Check('PAGE', 'http://c', '');
+  // a file's link
+  Load(Rtf(Head + 'ab {\field{\*\fldinst HYPERLINK "http://a/b" \\o "tip" \\t "_blank"}' +
+    '{\fldrslt {\ul\cf1 one}}} cd\par}'));
+  before := SaveRtf;
+  AssertEquals('read', 'HYPERLINK "http://a/b" \o "tip" \t "_blank"', Instruction(5));
+  FRich.SelStart := 5;
+  AssertTrue('changed', FRich.SetLink('http://new/'));
+  m := OpenMark(3);
+  AssertTrue('a new mark', (m <> nil) and m.Owned);
+  AssertEquals('its switches kept', 'HYPERLINK "http://new/" \o "tip" \t "_blank"',
+    m.Instruction);
+  saved := SaveRtf;
+  AssertTrue('written with them', Pos(Rtf('HYPERLINK "http://new/" \\o "tip" \\t "_blank"'), saved) > 0);
+  Reload(saved);
+  AssertEquals('read back: the target', 'http://new/', UrlAt(5));
+  AssertEquals('read back: the switches', 'HYPERLINK "http://new/" \o "tip" \t "_blank"',
+    Instruction(5));
+  Load(before);
+  FRich.SelStart := 5;
+  FRich.SetLink('http://new/');
+  FRich.Undo;
+  AssertTrue('undone: the file''s bytes', SaveRtf = before);
+  // with a new text; then a place of the document
+  FRich.SelStart := 5;
+  AssertTrue('changed with a text', FRich.SetLink('http://n2/', 'NEW'));
+  AssertEquals('a text: the switches kept', 'HYPERLINK "http://n2/" \o "tip" \t "_blank"',
+    OpenMark(3).Instruction);
+  AssertTrue('the text', TextOf(4, 3) = 'NEW');
+  FRich.Undo;
+  AssertTrue('undone: the file''s bytes', SaveRtf = before);
+  FRich.SelStart := 5;
+  AssertTrue('a place', FRich.SetLink('#sec'));
+  AssertEquals('a place: the switches kept', 'HYPERLINK \l "sec" \o "tip" \t "_blank"',
+    OpenMark(3).Instruction);
+  AssertEquals('its target', '#sec', UrlAt(5));
+  FRich.SelStart := 5;
+  AssertTrue('an address again', FRich.SetLink('http://back/'));
+  AssertEquals('back: the switches kept', 'HYPERLINK "http://back/" \o "tip" \t "_blank"',
+    OpenMark(3).Instruction);
+  FRich.Undo;
+  FRich.Undo;
+  AssertTrue('undone twice: the file''s bytes', SaveRtf = before);
+end;
+
+{ The command's own rule, asked by a document directly (not through the control): a text with
+  a paragraph's end in it is refused, nothing changes. }
+procedure TTyRichLinksTest.TestTheCommandRefusesALineBreakItself;
+var
+  before: RawByteString;
+begin
+  Load(PlainDoc);
+  before := SaveRtf;
+  AssertFalse('a text over two paragraphs refused', Doc.Execute(TTyRichInsertLink.Create(3, 0,
+    'http://x.test/', 'one' + #10 + 'two', rllWordBlue)));
+  AssertFalse('so over a selection', Doc.Execute(TTyRichInsertLink.Create(3, 4,
+    'http://x.test/', 'a' + #13#10 + 'b', rllWordBlue)));
+  AssertTrue('nothing changed', SaveRtf = before);
+  AssertEquals('no step', 0, Doc.UndoDepth);
+  AssertTrue('a text of one paragraph is taken', Doc.Execute(TTyRichInsertLink.Create(3, 0,
+    'http://x.test/', 'one', rllWordBlue)));
+end;
+
+{ A link that began in an earlier paragraph and ends in this one, inside a field that is no
+  link (a contents' entry): the text after its close mark is the field's, painted in the text
+  colour - only the link's own text is in the link colour. }
+procedure TTyRichLinksTest.TestALinkEndedMidParagraphColoursNoMore;
+var
+  px: TBGRAPixel;
+  p2: TTyRichPos;
+begin
+  Load(Rtf(HeadNoColour + '{\field{\*\fldinst TOC}{\fldrslt {\field{\*\fldinst HYPERLINK ' +
+    '"http://x.test"}{\fldrslt first\par linked}} plain\par}}after\par}'));
+  FRich.UpdateView;
+  p2 := Doc.Text.ParaStart(1);
+  AssertTrue('the link''s close mark', (Doc.ObjectAt(p2 + 6) is TTyRichFieldMark) and
+    (TTyRichFieldMark(Doc.ObjectAt(p2 + 6)).Kind = rfmClose));
+  AssertFalse('the link colour is not the text colour', SamePx(LinkInk, TextInkOfTheme));
+  AssertTrue('a glyph of the link''s first paragraph', Ink(3, px));
+  AssertTrue('in the link colour ' + PxText(px), SamePx(px, LinkInk));
+  AssertTrue('a glyph of its second', Ink(p2 + 1, px));
+  AssertTrue('in the link colour too ' + PxText(px), SamePx(px, LinkInk));
+  AssertTrue('a glyph after its close mark', Ink(p2 + 9, px));
+  AssertTrue('the field''s text after it in the text colour ' + PxText(px),
+    SamePx(px, TextInkOfTheme));
 end;
 
 initialization

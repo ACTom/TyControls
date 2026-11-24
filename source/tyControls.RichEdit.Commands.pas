@@ -415,7 +415,9 @@ type
   { The field whose open mark is at AFieldPos becomes a link to AURL: with AText '' its
     content stays as it is (its formats, pictures, the fields in it) and only its marks are
     new; with AText the whole field is replaced by a link holding AText, in the format of the
-    first text of the old result (the look the link had). One undo step. Refused (CanExecute
+    first text of the old result (the look the link had). The new instruction is the old one
+    with its target and its place (\l) those of AURL (TyRichReplaceLinkAddress): its other
+    switches (\o "tip", \t "_blank", ...) stay as they were. One undo step. Refused (CanExecute
     False): no field's open mark at AFieldPos; AURL empty or '#'; a paragraph separator in
     AURL or AText; a field inside another field's result, or where the text cannot change. }
   TTyRichSetLink = class(TTyRichCommand)
@@ -423,6 +425,8 @@ type
     FPos: TTyRichPos;
     FURL, FText: UTF8String;
     FOpen, FClose: TTyRichFieldMark;
+    FMade: Boolean;
+    procedure MakeInstruction(ADoc: TTyRichDocument);
   protected
     procedure DoExecute(ADoc: TTyRichDocument); override;
   public
@@ -517,6 +521,13 @@ function TyRichIsLinkColor(AColor: TColor): Boolean;
   \l "name"), anything else a target (HYPERLINK "target"); \ and " in an argument written
   \\ and \" (the field code's own escapes). }
 function TyRichLinkInstruction(const AURL: UTF8String): UTF8String;
+{ AOld, a HYPERLINK field's instruction, with its target and its place (\l and its argument)
+  those of AURL (as TyRichLinkInstruction reads AURL): every other switch and argument and
+  the spaces between them kept byte for byte, in their places; a target or a \l AURL has and
+  AOld has not put in where Word writes them (the target after HYPERLINK, \l after the
+  target), one AOld has and AURL has not taken out. '' when AOld is no HYPERLINK instruction
+  this can read (a quote not closed). }
+function TyRichReplaceLinkAddress(const AOld, AURL: UTF8String): UTF8String;
 
 function TyRichRange(APos, ALen: TTyRichPos): TTyRichRange;
 { Why ACmd, a built-in command whose CanExecute said no, was refused by ADoc's rules: the
@@ -1534,6 +1545,177 @@ begin
     Result := 'HYPERLINK ' + LinkArgument(AURL);
 end;
 
+function TyRichReplaceLinkAddress(const AOld, AURL: UTF8String): UTF8String;
+type
+  TEdit = record
+    A, B: Integer;      // [A, B) of AOld replaced by S
+    S: UTF8String;
+  end;
+var
+  i, n, kwEnd, gA, gB, lA, lB, lArgA, lArgB, p, k, j: Integer;
+  ta, tb: Integer;
+  quoted, bad: Boolean;
+  sw: Char;
+  target, name: UTF8String;
+  edits: array of TEdit;
+  e: TEdit;
+  extraL: array of TEdit;   // the \l after the first: they go
+
+  function IsSpace(C: Char): Boolean;
+  begin
+    Result := C in [' ', #9, #10, #13];
+  end;
+
+  // the next token's span [ta, tb), as the control's LinkTarget reads one
+  function NextToken: Boolean;
+  begin
+    while (i <= n) and IsSpace(AOld[i]) do Inc(i);
+    if i > n then Exit(False);
+    ta := i;
+    quoted := AOld[i] = '"';
+    if quoted then
+    begin
+      Inc(i);
+      while (i <= n) and (AOld[i] <> '"') do
+      begin
+        if (AOld[i] = '\') and (i < n) and (AOld[i + 1] in ['\', '"']) then Inc(i);
+        Inc(i);
+      end;
+      if i > n then bad := True;
+      Inc(i);
+    end
+    else
+      while (i <= n) and not IsSpace(AOld[i]) do Inc(i);
+    tb := i;
+    if tb > n + 1 then tb := n + 1;
+    Result := True;
+  end;
+
+  // the span [A, B) with the spaces before it
+  function WithSpaces(A, B: Integer): TEdit;
+  begin
+    while (A > kwEnd) and IsSpace(AOld[A - 1]) do Dec(A);
+    Result.A := A;
+    Result.B := B;
+    Result.S := '';
+  end;
+
+  procedure AddEdit(A, B: Integer; const S: UTF8String);
+  begin
+    SetLength(edits, Length(edits) + 1);
+    edits[High(edits)].A := A;
+    edits[High(edits)].B := B;
+    edits[High(edits)].S := S;
+  end;
+
+begin
+  Result := '';
+  n := Length(AOld);
+  i := 1;
+  bad := False;
+  if not NextToken or quoted or not SameText(Copy(AOld, ta, tb - ta), 'HYPERLINK') then Exit;
+  kwEnd := tb;
+  gA := -1;
+  gB := -1;
+  lA := -1;
+  lB := -1;
+  lArgA := -1;
+  lArgB := -1;
+  extraL := nil;
+  while NextToken do
+  begin
+    if bad then Exit;
+    if not quoted and (tb - ta >= 2) and (AOld[ta] = '\') then
+    begin
+      sw := LowerCase(AOld[ta + 1]);
+      if sw in ['l', 'o', 't'] then
+      begin
+        p := ta;
+        if not NextToken or bad then Exit;
+        if sw = 'l' then
+          if lA < 0 then
+          begin
+            lA := p;
+            lB := tb;
+            lArgA := ta;
+            lArgB := tb;
+          end
+          else
+          begin
+            SetLength(extraL, Length(extraL) + 1);
+            extraL[High(extraL)] := WithSpaces(p, tb);
+          end;
+      end;
+      Continue;
+    end;
+    if gA < 0 then
+    begin
+      gA := ta;
+      gB := tb;
+    end;
+  end;
+  if bad then Exit;
+  // AURL's target and place, as TyRichLinkInstruction reads them
+  target := AURL;
+  name := '';
+  p := Pos('#', AURL);
+  if p = 1 then
+  begin
+    target := '';
+    name := Copy(AURL, 2, MaxInt);
+  end
+  else if (p > 1) and (p < Length(AURL)) then
+  begin
+    target := Copy(AURL, 1, p - 1);
+    name := Copy(AURL, p + 1, MaxInt);
+  end;
+  edits := nil;
+  // the target
+  if target <> '' then
+  begin
+    if gA >= 0 then AddEdit(gA, gB, LinkArgument(target))
+    else AddEdit(kwEnd, kwEnd, ' ' + LinkArgument(target));
+  end
+  else if gA >= 0 then
+  begin
+    e := WithSpaces(gA, gB);
+    AddEdit(e.A, e.B, '');
+  end;
+  // the place
+  if name <> '' then
+  begin
+    if lA >= 0 then AddEdit(lArgA, lArgB, LinkArgument(name))
+    else if (gA >= 0) and (target <> '') then AddEdit(gB, gB, ' \l ' + LinkArgument(name))
+    else if target <> '' then
+      // (after the target put in after HYPERLINK: one edit with it)
+      edits[High(edits)].S := edits[High(edits)].S + ' \l ' + LinkArgument(name)
+    else AddEdit(kwEnd, kwEnd, ' \l ' + LinkArgument(name));
+  end
+  else if lA >= 0 then
+  begin
+    e := WithSpaces(lA, lB);
+    AddEdit(e.A, e.B, '');
+  end;
+  for k := 0 to High(extraL) do AddEdit(extraL[k].A, extraL[k].B, '');
+  { the last first: the places before an edit stay where they are (at one place, what is taken
+    out before what is put in: the removal's span is of AOld) }
+  for k := 1 to High(edits) do
+  begin
+    e := edits[k];
+    j := k - 1;
+    while (j >= 0) and ((edits[j].A < e.A) or ((edits[j].A = e.A) and
+      (edits[j].B = edits[j].A) and (e.B > e.A))) do
+    begin
+      edits[j + 1] := edits[j];
+      Dec(j);
+    end;
+    edits[j + 1] := e;
+  end;
+  Result := AOld;
+  for k := 0 to High(edits) do
+    Result := Copy(Result, 1, edits[k].A - 1) + edits[k].S + Copy(Result, edits[k].B, MaxInt);
+end;
+
 function LinkAddressOk(const AURL: UTF8String): Boolean;
 begin
   Result := (AURL <> '') and (AURL <> '#') and not HasSeparator(AURL);
@@ -1724,6 +1906,26 @@ begin
   inherited Destroy;
 end;
 
+{ The new open mark's instruction from the old one's (its other switches kept): the first time
+  the command runs (a redo runs on the field an undo put back, with the marks made then). }
+procedure TTyRichSetLink.MakeInstruction(ADoc: TTyRichDocument);
+var
+  o: TTyRichObject;
+  inst: UTF8String;
+  id: Int64;
+begin
+  if FMade then Exit;
+  FMade := True;
+  o := ADoc.ObjectAt(FPos);
+  if not (o is TTyRichFieldMark) then Exit;
+  inst := TyRichReplaceLinkAddress(TyRichFieldInstruction(ADoc, TTyRichFieldMark(o)), FURL);
+  if (inst = '') or (inst = FOpen.Instruction) then Exit;
+  id := FOpen.Id;
+  FOpen.Release;
+  FOpen := TTyRichFieldMark.CreateOwned(rfmOpen, id, inst);
+  FOpen.AddRef;
+end;
+
 function TTyRichSetLink.CanExecute(ADoc: TTyRichDocument): Boolean;
 begin
   Result := LinkAddressOk(FURL) and not HasSeparator(FText) and
@@ -1738,6 +1940,7 @@ var
   markFmt, textFmt: TTyCharFormatId;
   found: Boolean;
 begin
+  MakeInstruction(ADoc);
   if FText = '' then
   begin
     ReplaceFieldMarks(ADoc, FPos, FOpen, FClose);

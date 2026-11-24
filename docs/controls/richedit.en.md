@@ -220,7 +220,7 @@ end;
 A link is a Word HYPERLINK field; its address is one of `'target'`, `'#name'` (a bookmark of this document) or `'target#name'`. The user's methods:
 
 - `InsertLink(url, text)`: a selection becomes the link's text as it is; `text` given goes in its place; neither, the address itself is the text. The address comes first because the text is optional; the builder's `Link(text, url)` takes the text first, in reading order - mind the order when moving code between them.
-- `SetLink(url, text)`: the link the caret or the selection is in gets the new address; with `text`, its text is replaced too.
+- `SetLink(url, text)`: the link the caret or the selection is in gets the new address; with `text`, its text is replaced too. The rest of what the link says stays as it was: a ScreenTip (`\o`), a target frame (`\t`) and any other switch.
 - `RemoveLink`: the link stops being one; its text stays, without the link's look.
 - `CanInsertLink`, `CanEditLink` say whether these would be taken now; `LinkAtSelection` gives the link's place and address.
 
