@@ -590,6 +590,21 @@ type
     Para, LastPara: Integer;
   end;
 
+  { An edge of the caret's row (TTyCustomRichEdit.CaretRowEdges), for a ruler: Index -1 the
+    row's left, else the cell whose right edge it is; Twips where the row's format puts it;
+    Offset its place in twips from the caret paragraph's zero (where a ruler's zero is);
+    MinOffset / MaxOffset how far a drag may take it, ShiftMinOffset / ShiftMaxOffset with the
+    rest of the row following (Shift); Hidden: inside a merged box, not one to drag. }
+  TTyRichColumnEdge = record
+    Index: Integer;
+    Twips: Integer;
+    Offset: Integer;
+    MinOffset, MaxOffset: Integer;
+    ShiftMinOffset, ShiftMaxOffset: Integer;
+    Hidden: Boolean;
+  end;
+  TTyRichColumnEdges = array of TTyRichColumnEdge;
+
   { The editor. ITyTextEditActions: the package's text menu (the editing items answer "not
     available" while ReadOnly). ITyImeEditable: Cocoa's input method bridge (a composition
     shown in the text; read-only while ReadOnly). }
@@ -1848,7 +1863,42 @@ type
     function GetGuideLine: Integer;
     procedure SetGuideLine(AValue: Integer);
     function GuideLineRect: TRect;
-    procedure DrawGuideLine(ACanvas: TCanvas);
+  private
+    { Column widths and row heights: an edge's drag (CEdgeColumn / CEdgeRow, 0 none) - the
+      row's first paragraph, the edge (-1 a row's left), where the row's format has it (twips)
+      and where it was laid out (raster), its limits as it is and with the rest following, the
+      top of the dragged row, where the drag has it now, Shift held - and the horizontal guide
+      a row drag shows (client y). }
+    FEdgeDrag: Integer;
+    FEdgePara, FEdgeIndex, FEdgeTwips: Integer;
+    FEdgeRaster, FEdgeLo, FEdgeHi, FEdgeShiftLo, FEdgeShiftHi, FEdgeNow, FEdgeTop: Int64;
+    FEdgeShift: Boolean;
+    FGuideRowOn: Boolean;
+    FGuideY: Integer;
+    function EdgeBand: Integer;
+    function RasterOfTwips(ATwips: Int64): Int64;
+    function TwipsOfRaster(ARaster: Int64): Integer;
+    function EdgeRowOf(ABlock: Integer): TTyRichRow;
+    function EdgesOpen: Boolean;
+    function EdgeAt(X, Y: Integer; out AKind, ABlock, AIndex: Integer): Boolean;
+    function MinCellTwips(ARow: TTyRichRow; ACell: Integer): Integer;
+    procedure EdgeLimits(ARow: TTyRichRow; AIndex: Integer; out ALo, AHi, AShiftLo,
+      AShiftHi: Integer);
+    function EdgeRows(APara: Integer; AWhole: Boolean; out ATablePos: TTyRichPos;
+      out ARow0, ARow1: Integer): Boolean;
+    function RunEdgeCommand(ACmd: TTyRichTablePropsCommand): Boolean;
+    function PropsRefusalText(AWhy: TTyRichTableRefusal; const AEdit: TTyRichPropEdit): string;
+    procedure SetGuideRow(AValue: Integer);
+    function GuideRowRect: TRect;
+    function EdgePress(X, Y: Integer; AShift: TShiftState): Boolean;
+    procedure ShowEdgeGuide;
+    procedure EdgeMove(X, Y: Integer; AShift: TShiftState);
+    procedure CancelEdgeDrag;
+    procedure EdgeRelease(X, Y: Integer; AShift: TShiftState);
+    function WidestRun(APara: Integer): Integer;
+    function FitColumnAt(APara, ACell: Integer): Boolean;
+    function CaretEdgePara(out APara, ACell: Integer; ATell: Boolean): Boolean;
+    function UserTableDoorOpen: Boolean;
   private
     { Cell selection (tyControls.RichEdit.TableSel): the cells the selection covers, kept
       for the anchor, the caret and the document's state they were read for; the rows a
@@ -1891,6 +1941,9 @@ type
     { Whether the user may select at all: False, the table's zones and handle do not show
       and the Select... methods do nothing. AllowSelection here. }
     function SelectionAllowed: Boolean; virtual;
+    { The guides a ruler's drag (GuideLine) and a table edge's drag show, over the blit as the
+      caret is (Paint draws them; a test's picture can too). }
+    procedure DrawGuideLine(ACanvas: TCanvas);
     { (the parents a paragraph view hearer's Enabled follows are watched again) }
     procedure SetParent(NewParent: TWinControl); override;
     function GetStyleTypeKey: string; override;
@@ -2722,6 +2775,44 @@ type
     function SelectTable: Boolean;
     // the table rows the last paints highlighted as selected cells (a count for tests)
     property CellRowsPainted: Int64 read FCellRowsPainted write FCellRowsPainted;
+    { Column widths and row heights. With the pointer on a column's edge (the east-west cursor)
+      a drag moves that edge: only a guide line follows the pointer, and the release runs ONE
+      command - the cells either side trade width and the table keeps its width; with Shift the
+      cell to its left changes and everything right of it moves (the table's width changes);
+      the table's right edge changes the last column and the table's width; its left edge
+      moves the table's start and the first column's width follows. With cells selected only
+      their rows change, otherwise every row with an edge there (edges within
+      CRichSharedEdgeTwips are one; a row without one is left alone). A cell is never
+      narrower than its padding and one average character; Esc, or a release where nothing
+      moved, changes nothing. A double click on a column's edge: the column left of it takes
+      its widest content's width (AutoFitColumn). On a row's bottom (the north-south cursor) a
+      drag sets that row - the selected rows - at least that high, never lower than its
+      content. A row holding a nested table does not move; a whole-column change of a table a
+      reader gives in parts is refused and told.
+      The user's doors (ReadOnly does nothing; a refusal is told once; each one step):
+      SetColumnWidth - the caret's cell's column, the columns right of it shifting;
+      SetRowHeight - the caret's row (the selected rows) at least / exactly ATwips (0 with
+      AExact False: as high as its content); AutoFitColumn - the caret's column to its widest
+      content; DistributeColumns - each row's cells equally wide; DistributeRows - the rows as
+      high as their average; FitTableToWindow - the table as wide as the text. CanResize...
+      say whether an action may run now. }
+    function CanResizeColumns: Boolean;
+    function CanResizeRows: Boolean;
+    function SetColumnWidth(AWidthTwips: Integer): Boolean;
+    function SetRowHeight(ATwips: Integer; AExact: Boolean): Boolean;
+    function AutoFitColumn: Boolean;
+    function DistributeColumns: Boolean;
+    function DistributeRows: Boolean;
+    function FitTableToWindow: Boolean;
+    { For a ruler: the caret's row's edges, placed from the caret paragraph's zero (False: the
+      caret is in no row the view holds), and one of them moved there (the same command and
+      rules as a drag, the rows a drag takes). }
+    function CaretRowEdges(out AEdges: TTyRichColumnEdges): Boolean;
+    function MoveCaretRowEdge(AIndex, AOffsetTwips: Integer; AShiftRest: Boolean): Boolean;
+    // a drag of a table's edge is under way
+    function EdgeDragging: Boolean;
+    // the row guide's client y, -1 none (what a test reads)
+    property GuideRow: Integer read FGuideY;
     { Pictures: the user's actions for a toolbar, a menu or an action, as the table actions
       (an open composition ends first; ReadOnly, disabled or inside the document's update:
       nothing, nothing told, False; a refusal told once through EditRefused, never raised).
@@ -3666,10 +3757,18 @@ uses
   {$IFDEF UNIX}BaseUnix,{$ENDIF}
   RTLConsts, Clipbrd, InterfaceBase, LazUTF8, FPImage, BGRAReadPng, BGRAReadBMP, BGRAReadTiff,
   BGRAReadJpeg, BGRAWritePNG, tyControls.StrConsts, tyControls.FontUnits,
-  tyControls.RichEdit.RowFormat,
+  tyControls.RichEdit.RowFormat, tyControls.RichEdit.TableProps,
   tyControls.PlatformWS, tyControls.Animation
   {$IFDEF LCLCocoa}, tyControls.CocoaWS{$ENDIF}
   {$IFDEF LCLWin32}, tyControls.RichEdit.OleDrop{$ENDIF};
+
+const
+  // what an edge drag does: none, a column's edge, a row's bottom
+  CEdgeNone = 0;
+  CEdgeColumn = 1;
+  CEdgeRow = 2;
+  // how far a drag may take an edge past the table (twips; a sheet is never this wide)
+  CEdgeFar = 31680;
 
 function TyRichGonePasses(const ALife: TTyRichLife): Boolean; forward;
 procedure HandlerReturned(const ALife: TTyRichLife); forward;
@@ -6010,13 +6109,18 @@ function TTyCustomRichEdit.CursorAt(X, Y: Integer): TCursor;
 var
   h: TTyRichHandle;
   url: string;
-  zone, zp: Integer;
+  zone, zp, ek: Integer;
 begin
   // a handle's size cursor, also where it reaches over the text beside the object
   if FResizing then Exit(HandleCursor(FResizeHandle));
   // the control's own drag of the selection: what a release would do
   if OwnDragging then Exit(DropCursor(FDropEffect));
   if not ViewBehind and ObjectHandleAt(X, Y, h) then Exit(HandleCursor(h));
+  // a table's edge: dragged, or under the pointer
+  if FEdgeDrag = CEdgeColumn then Exit(crSizeWE);
+  if FEdgeDrag = CEdgeRow then Exit(crSizeNS);
+  if not ViewBehind and not FDragging and EdgeAt(X, Y, zone, zp, ek) then
+    if zone = CEdgeColumn then Exit(crSizeWE) else Exit(crSizeNS);
   // a table's zones: an arrow for a cell or a row, down for a column, the table's handle
   if not ViewBehind and not FDragging and TableZoneAt(X, Y, zone, zp) then
     case zone of
@@ -6169,6 +6273,8 @@ begin
   end;
   // a link's click (LinkClickFires): nothing else - no caret, no selection, no object
   if (Button = mbLeft) and LinkPress(Button, Shift, X, Y) then Exit;
+  // a table's edge: its drag (Shift: the rest follows), a double click's fit
+  if (Button = mbLeft) and EdgePress(X, Y, Shift) then Exit;
   // a table's zones: a cell, a row, a column, the whole table (and a drag over more)
   if (Button = mbLeft) and not (ssShift in Shift) and TableZonePress(X, Y) then Exit;
   // an object under the press: its click on the release, its double click now
@@ -7448,6 +7554,12 @@ begin
   else
     FOverHandle := crDefault;
   if inherited GetCursor = crIBeam then SetTempCursor(GetCursor);
+  // a table edge's drag: its guide follows, nothing else
+  if FEdgeDrag <> CEdgeNone then
+  begin
+    if not ViewBehind then EdgeMove(X, Y, Shift);
+    Exit;
+  end;
   // a drag of a handle: the outline follows, nothing else
   if FResizing then
   begin
@@ -7518,6 +7630,12 @@ var
   procedure Work;
   begin
     FCellDrag := 0;
+    // a table edge's drag: its one command
+    if FEdgeDrag <> CEdgeNone then
+    begin
+      EdgeRelease(X, Y, Shift);
+      Exit;
+    end;
     // a press on a link: its click, on the same link (nothing else)
     if FLinkPressed then
     begin
@@ -7581,6 +7699,10 @@ begin
   if FResizing and not MouseCapture then
     if LeftButtonHeld then CancelResize
     else FinishResize(FResizeLast.X, FResizeLast.Y, FResizeShift);
+  // (a table edge's drag: the same)
+  if (FEdgeDrag <> CEdgeNone) and not MouseCapture then
+    if LeftButtonHeld then CancelEdgeDrag
+    else EdgeRelease(FPointerAt.X, FPointerAt.Y, FPointerShift);
   { The same for a drag of the selection: taken away with the button down, it ends with
     nothing done; let go by the release itself, the release is done here - the drop at the
     pointer's last place with the keys last known (or the click a press without a drag
@@ -7940,12 +8062,13 @@ end;
 
 function TTyCustomRichEdit.OwnDragRunning: Boolean;
 begin
-  Result := FResizing or FDragPending or OwnDragging;
+  Result := FResizing or FDragPending or OwnDragging or (FEdgeDrag <> 0);
 end;
 
 procedure TTyCustomRichEdit.EndOwnDrag;
 begin
   FPressClickOwed := False;
+  CancelEdgeDrag;
   CancelResize;
   CancelSelectionDrag;
 end;
@@ -10630,8 +10753,9 @@ var
   atEnd, ok: Boolean;
   marks: TTyRichStepMarks;
   refusal, cannot: string;
-  lateWhy: Boolean;
+  lateWhy, propsWhy: Boolean;
   edit: TTyRichTableEdit;
+  pedit: TTyRichPropEdit;
   xfer: Boolean;
   xFrom, xLen, xTo: TTyRichPos;
   xMove: Boolean;
@@ -10657,12 +10781,16 @@ begin
   lateWhy := (ACmd.ClassType = TTyRichInsertTable) or (ACmd.ClassType = TTyRichInsertRow) or
     (ACmd.ClassType = TTyRichDeleteRow) or (ACmd.ClassType = TTyRichInsertColumn) or
     (ACmd.ClassType = TTyRichDeleteColumn);
+  { A table properties command reads the rows it changes for its reason as for its work (a
+    column's edge in ten thousand rows): the reason is asked only when it was refused. }
+  propsWhy := ACmd is TTyRichTablePropsCommand;
+  if propsWhy then pedit := TTyRichTablePropsCommand(ACmd).Edit;
   if lateWhy then
   begin
     edit := TTyRichTableCommand(ACmd).Edit;
     cannot := '';
   end
-  else if xfer then
+  else if xfer or propsWhy then
     cannot := ''
   else
     cannot := CommandRefusal(ACmd);
@@ -10723,6 +10851,7 @@ begin
     PayModifiedOwed;
     // CanExecute said no: the reason that holds for that command (asked of one like it)
     if lateWhy then cannot := LateTableRefusal(edit);
+    if propsWhy then cannot := PropsRefusalText(FDoc.TablePropsRefusal(pedit), pedit);
     if xfer then cannot := LateTransferRefusal(xFrom, xLen, xTo, xMove);
     Refuse(cannot, AUser);
     Exit;
@@ -16411,14 +16540,18 @@ begin
   hiOld := lo + Math.Max(AChange.OldParaCount, 1) - 1;
   delta := AChange.NewParaCount - AChange.OldParaCount;
   { The anchor follows its paragraph. One the change took in goes to the change's start: the
-    view is laid out again from there (what was on screen is no longer the same blocks). }
+    view is laid out again from there (what was on screen is no longer the same blocks) - but
+    a change of formats only (the same paragraphs, their text as it was: a column's edge in
+    every row of a long table) keeps it at its paragraph's top: that paragraph is still
+    there, and the view does not jump to where the change began. }
   anchorMoved := False;
   if FAnchorPara > hiOld then
     Inc(FAnchorPara, delta)
   else if FAnchorPara > lo then
   begin
-    // its paragraph is gone: the view starts at the top of what replaced it
-    FAnchorPara := lo;
+    if (delta <> 0) or (rckText in AChange.Kinds) then
+      // its paragraph is gone: the view starts at the top of what replaced it
+      FAnchorPara := lo;
     FAnchorOffset := 0;
     FAnchorShareDen := 0;
     anchorMoved := True;
@@ -21179,7 +21312,7 @@ end;
 function TTyCustomRichEdit.TableZoneAt(X, Y: Integer; out AZone, APara: Integer): Boolean;
 var
   area: TRect;
-  rx, ry, z: Int64;
+  rx, ry, z, e: Int64;
   k, i, kb: Integer;
   r: TTyRowLayout;
   first: Boolean;
@@ -21195,6 +21328,8 @@ begin
   rx := (Int64(X) - area.Left) * FScale + FScrollX;
   ry := (Int64(Y) - area.Top) * FScale;
   z := Math.Max(2, MulDiv(4, ViewPPI, 96)) * FScale;
+  // (the band an edge takes, beside the zones: TableZoneAt's zones start past it)
+  e := EdgeBand;
   // the handle
   if FHandlePara >= 0 then
     for k := 0 to FBlockCount - 1 do
@@ -21215,14 +21350,14 @@ begin
   begin
     r := TTyRowLayout(FBlocks[k].Layout);
     for i := 0 to r.CellCount - 1 do
-      if not r.Cells[i].Hidden and (rx >= r.Cells[i].Left) and (rx < r.Cells[i].Left + z) and
+      if not r.Cells[i].Hidden and (rx >= r.Cells[i].Left) and (rx < r.Cells[i].Left + z + e) and
          (rx < r.Cells[i].Right) and (r.Cells[i].ItemCount > 0) then
       begin
         AZone := CZoneCell;
         APara := FBlocks[k].FirstPara + r.Cells[i].FirstItem;
         Exit(True);
       end;
-    if (rx >= r.Cells[0].Left - 3 * z) and (rx < r.Cells[0].Left) then
+    if (rx >= r.Cells[0].Left - 3 * z - e) and (rx < r.Cells[0].Left) then
     begin
       AZone := CZoneRow;
       APara := FBlocks[k].FirstPara;
@@ -21471,6 +21606,818 @@ begin
       finally
         ABitmap.ClipRect := old;
       end;
+      Exit;
+    end;
+end;
+
+{ A / B rounded down (B > 0). }
+function EdgeFloorDiv(A: Int64; B: Integer): Int64;
+begin
+  Result := A div B;
+  if (A mod B <> 0) and (A < 0) then Dec(Result);
+end;
+
+{ ---- column widths and row heights ---- }
+
+function TTyCustomRichEdit.EdgeBand: Integer;
+begin
+  Result := Math.Max(1, MulDiv(2, ViewPPI, 96)) * Math.Max(1, FScale);
+end;
+
+function TTyCustomRichEdit.RasterOfTwips(ATwips: Int64): Int64;
+begin
+  if (FLayoutPPI <= 0) or (FLayoutZoom <= 0) then Exit(0);
+  Result := Round(ATwips * FLayoutPPI * Double(FLayoutZoom) / 1440);
+end;
+
+function TTyCustomRichEdit.TwipsOfRaster(ARaster: Int64): Integer;
+var
+  d: Double;
+begin
+  Result := 0;
+  if (FLayoutPPI <= 0) or (FLayoutZoom <= 0) then Exit;
+  d := ARaster * 1440.0 / (FLayoutPPI * Double(FLayoutZoom));
+  if d > MaxInt div 2 then d := MaxInt div 2;
+  if d < -(MaxInt div 2) then d := -(MaxInt div 2);
+  Result := Round(d);
+end;
+
+{ A row the view holds whose edges a person may move: a row of a table, laid out, not one that
+  holds a nested table (the file's bytes), in a control that edits. }
+function TTyCustomRichEdit.EdgeRowOf(ABlock: Integer): TTyRichRow;
+var
+  c: TTyRichCell;
+begin
+  Result := nil;
+  if (ABlock < 0) or (ABlock >= FBlockCount) or not (FBlocks[ABlock].Layout is TTyRowLayout) then
+    Exit;
+  FDoc.BeginRead;
+  try
+    c := FDoc.CellAt(FBlocks[ABlock].FirstPara);
+    if (c <> nil) and not c.Row.HoldsNestedTable then Result := c.Row;
+  finally
+    FDoc.EndRead;
+  end;
+end;
+
+function TTyCustomRichEdit.EdgesOpen: Boolean;
+begin
+  // (a page whose text is not to be taken shows no resize cursor either: AllowSelection)
+  Result := not FReadOnly and FAllowSelection and IsEnabled and not ViewBehind and
+    (FBlockCount > 0) and not (csDesigning in ComponentState) and not PlainTextDocument;
+end;
+
+{ An edge under client point X, Y of the rows the view holds: a column's (AKind CEdgeColumn;
+  AIndex -1 the row's left, else the cell whose right edge it is) - the line between two cells
+  that are not one merged box - or a row's bottom (CEdgeRow), within EdgeBand of it. Only the
+  laid-out rows are asked: nothing is read for it. }
+function TTyCustomRichEdit.EdgeAt(X, Y: Integer; out AKind, ABlock, AIndex: Integer): Boolean;
+var
+  area: TRect;
+  rx, ry, e, best, d: Int64;
+  k, i, n: Integer;
+  r: TTyRowLayout;
+begin
+  AKind := CEdgeNone;
+  ABlock := -1;
+  AIndex := 0;
+  Result := False;
+  if not EdgesOpen then Exit;
+  area := TextArea(Rect(0, 0, Width, Height), ViewPPI);
+  rx := (Int64(X) - area.Left) * FScale + FScrollX;
+  ry := (Int64(Y) - area.Top) * FScale;
+  e := EdgeBand;
+  k := 0;
+  while (k < FBlockCount - 1) and (ry >= FBlocks[k].Top + FBlocks[k].Height) do Inc(k);
+  // a column's edge in the row under the point
+  if (ry >= FBlocks[k].Top) and (ry < FBlocks[k].Top + FBlocks[k].Height) and
+     (EdgeRowOf(k) <> nil) then
+  begin
+    r := TTyRowLayout(FBlocks[k].Layout);
+    n := r.CellCount;
+    best := e + 1;
+    if (n > 0) and (Abs(rx - r.Cells[0].Left) < best) then
+    begin
+      best := Abs(rx - r.Cells[0].Left);
+      AIndex := -1;
+    end;
+    for i := 0 to n - 1 do
+    begin
+      // inside a merged box: no edge there
+      if (i < n - 1) and r.Cells[i + 1].Hidden then Continue;
+      d := Abs(rx - r.Cells[i].Right);
+      if d < best then
+      begin
+        best := d;
+        AIndex := i;
+      end;
+    end;
+    if best <= e then
+    begin
+      AKind := CEdgeColumn;
+      ABlock := k;
+      Exit(True);
+    end;
+  end;
+  // a row's bottom: the row it ends (the one above when the point is just below it)
+  for i := Math.Max(0, k - 1) to Math.Min(FBlockCount - 1, k + 1) do
+    if (Abs(ry - (FBlocks[i].Top + FBlocks[i].Height)) <= e) and (EdgeRowOf(i) <> nil) then
+    begin
+      r := TTyRowLayout(FBlocks[i].Layout);
+      if (r.CellCount > 0) and (rx >= r.Cells[0].Left - e) and
+         (rx <= r.Cells[r.CellCount - 1].Right + e) then
+      begin
+        AKind := CEdgeRow;
+        ABlock := i;
+        AIndex := 0;
+        Exit(True);
+      end;
+    end;
+end;
+
+{ The narrowest a cell may be: its padding on both sides and one average character of the
+  default font (half its size). }
+function TTyCustomRichEdit.MinCellTwips(ARow: TTyRichRow; ACell: Integer): Integer;
+var
+  p: TTyRichCellProps;
+  edges: TTyRichEdges;
+  w: Integer;
+begin
+  edges := ARow.CellEdges;
+  if (ACell < 0) or (ACell >= Length(edges)) then Exit(1);
+  if ACell = 0 then w := edges[0] - ARow.Format.Row.LeftTwips else w := edges[ACell] - edges[ACell - 1];
+  p := TyRichEffectiveCellProps(ARow.Format, ACell, w);
+  Result := Math.Max(0, p.Pad[rcsLeft]) + Math.Max(0, p.Pad[rcsRight]) +
+    Math.Max(20, FDoc.DefaultCharFormat.SizeHalfPt * 5);
+end;
+
+{ The limits of row ARow's edge AIndex (-1 its left), in twips: kept as they are (ALo, AHi) and
+  with the rest of the row following (AShiftLo, AShiftHi). }
+procedure TTyCustomRichEdit.EdgeLimits(ARow: TTyRichRow; AIndex: Integer; out ALo, AHi,
+  AShiftLo, AShiftHi: Integer);
+var
+  edges: TTyRichEdges;
+  lft, n, at: Integer;
+begin
+  edges := ARow.CellEdges;
+  lft := ARow.Format.Row.LeftTwips;
+  n := Length(edges);
+  if AIndex < 0 then
+  begin
+    ALo := lft - CEdgeFar;
+    if n > 0 then AHi := edges[0] - MinCellTwips(ARow, 0) else AHi := lft;
+    AShiftLo := lft - CEdgeFar;
+    AShiftHi := lft + CEdgeFar;
+    Exit;
+  end;
+  at := edges[AIndex];
+  if AIndex = 0 then ALo := lft + MinCellTwips(ARow, 0)
+  else ALo := edges[AIndex - 1] + MinCellTwips(ARow, AIndex);
+  AShiftLo := ALo;
+  AShiftHi := at + CEdgeFar;
+  if AIndex < n - 1 then AHi := edges[AIndex + 1] - MinCellTwips(ARow, AIndex + 1)
+  else AHi := at + CEdgeFar;
+  if AHi < ALo then AHi := ALo;
+end;
+
+{ The rows an edge change of the row paragraph APara is in takes: the selected cells' rows
+  when cells of its table are selected, else - AWhole - every row of its table (refused and
+  told for a table a reader gives in parts), or its own row. }
+function TTyCustomRichEdit.EdgeRows(APara: Integer; AWhole: Boolean; out ATablePos: TTyRichPos;
+  out ARow0, ARow1: Integer): Boolean;
+var
+  area: TTyRichCellArea;
+  c: TTyRichCell;
+  ri, n: Integer;
+  cut: Boolean;
+begin
+  Result := False;
+  cut := False;
+  ATablePos := FDoc.Text.ParaStart(APara);
+  ARow0 := 0;
+  ARow1 := -1;
+  FDoc.BeginRead;
+  try
+    c := FDoc.CellAt(APara);
+    if c = nil then Exit;
+    area := CellArea;
+    if TyRichCellsEditable(area) and (area.Table = c.Table) then
+    begin
+      ATablePos := area.Range.TablePos;
+      ARow0 := area.Range.Row0;
+      ARow1 := area.Range.Row1;
+      Exit(True);
+    end;
+    cut := AWhole and c.Table.Cut;
+  finally
+    FDoc.EndRead;
+  end;
+  // (told once the read scope is closed: a handler may load another document)
+  if cut then
+  begin
+    EditRefused(rsRichEditRefusedResizeNotWhole);
+    Exit;
+  end;
+  if not FDoc.TableRowIndex(APara, ri, n) then Exit;
+  if AWhole then
+  begin
+    ARow0 := 0;
+    ARow1 := n - 1;
+  end
+  else
+  begin
+    ARow0 := ri;
+    ARow1 := ri;
+  end;
+  Result := True;
+end;
+
+{ A table edge command run as the user's: refused (told once, with the reason that fits a
+  resize: PropsRefusalText) or one step; the selection stays. }
+function TTyCustomRichEdit.PropsRefusalText(AWhy: TTyRichTableRefusal;
+  const AEdit: TTyRichPropEdit): string;
+begin
+  // a resize's own words where it has them
+  if AEdit.OfRows and ((AEdit.EdgeKind <> rekNone) or (rrpHeight in AEdit.Row.Valid)) then
+    case AWhy of
+      rtrNestedTable: Exit(rsRichEditRefusedResizeNested);
+      rtrMergedCells: Exit(rsRichEditRefusedDistributeMerged);
+      rtrNotWhole: Exit(rsRichEditRefusedResizeNotWhole);
+    end;
+  Result := TableRefusalText(AWhy, TyRichTableEdit(rtkInsertColumn, AEdit.Pos, 0));
+end;
+
+function TTyCustomRichEdit.RunEdgeCommand(ACmd: TTyRichTablePropsCommand): Boolean;
+var
+  place: TTyRichEditPlace;
+  keep: Boolean;
+begin
+  Result := False;
+  if FReadOnly or not IsEnabled or ViewBehind then
+  begin
+    ACmd.Free;
+    Exit;
+  end;
+  // (refused: the reason is asked then, and told once - RunEdit)
+  place := Default(TTyRichEditPlace);
+  place.Anchor := CRichPlaceStays;
+  place.Caret := CRichPlaceStays;
+  { The view stays where it is: the edge or the row the person moved is where they look, and
+    the rows above it may have changed their heights (a scroll to the caret would lay the
+    screen out once for the old place and again for the new one). }
+  keep := FNoEditScroll;
+  FNoEditScroll := True;
+  try
+    Result := RunMade(ACmd, place, True);
+  finally
+    FNoEditScroll := keep;
+  end;
+end;
+
+{ The horizontal guide of a row drag: a line across the text at client y AValue (-1: none),
+  drawn as the column guide is (over the blit). }
+procedure TTyCustomRichEdit.SetGuideRow(AValue: Integer);
+var
+  r: TRect;
+begin
+  if AValue < 0 then
+  begin
+    if not FGuideRowOn then Exit;
+  end
+  else if FGuideRowOn and (AValue = FGuideY) then Exit;
+  r := GuideRowRect;
+  if not IsRectEmpty(r) then InvalidateArea(r);
+  FGuideRowOn := AValue >= 0;
+  if FGuideRowOn then FGuideY := AValue;
+  r := GuideRowRect;
+  if not IsRectEmpty(r) then InvalidateArea(r);
+end;
+
+function TTyCustomRichEdit.GuideRowRect: TRect;
+var
+  tw: TRect;
+begin
+  Result := Rect(0, 0, 0, 0);
+  if not FGuideRowOn then Exit;
+  tw := TextWindowRect;
+  Result := Rect(tw.Left, FGuideY, tw.Right, FGuideY + Math.Max(1, MulDiv(1, ViewPPI, 96)));
+  if not IntersectRect(Result, Result, tw) then Result := Rect(0, 0, 0, 0);
+end;
+
+function TTyCustomRichEdit.EdgeDragging: Boolean;
+begin
+  Result := FEdgeDrag <> CEdgeNone;
+end;
+
+{ A press on an edge: a drag begins (the guide shows where the edge is), or - a double click on
+  a column's edge - the column left of it takes its content's width. }
+function TTyCustomRichEdit.EdgePress(X, Y: Integer; AShift: TShiftState): Boolean;
+var
+  kind, k, idx: Integer;
+  row: TTyRichRow;
+  area: TRect;
+  edges: TTyRichEdges;
+  r: TTyRowLayout;
+  lo, hi, slo, shi: Integer;
+begin
+  Result := EdgeAt(X, Y, kind, k, idx);
+  if not Result then Exit;
+  row := EdgeRowOf(k);
+  if row = nil then Exit(False);
+  r := TTyRowLayout(FBlocks[k].Layout);
+  if (ssDouble in AShift) and (kind = CEdgeColumn) then
+  begin
+    if idx >= 0 then FitColumnAt(FBlocks[k].FirstPara, idx);
+    Exit;
+  end;
+  area := TextArea(Rect(0, 0, Width, Height), ViewPPI);
+  FEdgeDrag := kind;
+  FEdgePara := FBlocks[k].FirstPara;
+  FEdgeIndex := idx;
+  FEdgeShift := ssShift in AShift;
+  FDoc.BeginRead;
+  try
+    edges := row.CellEdges;
+    if kind = CEdgeColumn then
+    begin
+      if idx < 0 then
+      begin
+        FEdgeTwips := row.Format.Row.LeftTwips;
+        FEdgeRaster := r.Cells[0].Left;
+      end
+      else
+      begin
+        FEdgeTwips := edges[idx];
+        FEdgeRaster := r.Cells[idx].Right;
+      end;
+      EdgeLimits(row, idx, lo, hi, slo, shi);
+      FEdgeLo := FEdgeRaster + RasterOfTwips(Int64(lo) - FEdgeTwips);
+      FEdgeHi := FEdgeRaster + RasterOfTwips(Int64(hi) - FEdgeTwips);
+      FEdgeShiftLo := FEdgeRaster + RasterOfTwips(Int64(slo) - FEdgeTwips);
+      FEdgeShiftHi := FEdgeRaster + RasterOfTwips(Int64(shi) - FEdgeTwips);
+    end
+    else
+    begin
+      // a row's bottom: never above its content's own height
+      FEdgeTop := FBlocks[k].Top;
+      FEdgeRaster := FBlocks[k].Top + FBlocks[k].Height;
+      FEdgeLo := FBlocks[k].Top + r.NaturalHeight;
+      FEdgeHi := FEdgeRaster + RasterOfTwips(CEdgeFar);
+      FEdgeShiftLo := FEdgeLo;
+      FEdgeShiftHi := FEdgeHi;
+    end;
+  finally
+    FDoc.EndRead;
+  end;
+  FEdgeNow := FEdgeRaster;
+  ShowEdgeGuide;
+end;
+
+procedure TTyCustomRichEdit.ShowEdgeGuide;
+var
+  area: TRect;
+  s: Integer;
+begin
+  area := TextArea(Rect(0, 0, Width, Height), ViewPPI);
+  s := Math.Max(1, FScale);
+  if FEdgeDrag = CEdgeColumn then
+    SetGuideLine(Math.Max(0, area.Left + Integer(EdgeFloorDiv(FEdgeNow - FScrollX, s))))
+  else if FEdgeDrag = CEdgeRow then
+    SetGuideRow(Math.Max(0, area.Top + Integer(EdgeFloorDiv(FEdgeNow, s))));
+end;
+
+{ A drag's move: the edge follows the pointer within its limits (those with the rest following
+  while Shift is held); only the guide is drawn - nothing is laid out. }
+procedure TTyCustomRichEdit.EdgeMove(X, Y: Integer; AShift: TShiftState);
+var
+  area: TRect;
+  v, lo, hi: Int64;
+begin
+  if FEdgeDrag = CEdgeNone then Exit;
+  FEdgeShift := ssShift in AShift;
+  area := TextArea(Rect(0, 0, Width, Height), ViewPPI);
+  if FEdgeDrag = CEdgeColumn then v := (Int64(X) - area.Left) * FScale + FScrollX
+  else v := (Int64(Y) - area.Top) * FScale;
+  if FEdgeShift then
+  begin
+    lo := FEdgeShiftLo;
+    hi := FEdgeShiftHi;
+  end
+  else
+  begin
+    lo := FEdgeLo;
+    hi := FEdgeHi;
+  end;
+  if v < lo then v := lo;
+  if v > hi then v := hi;
+  FEdgeNow := v;
+  ShowEdgeGuide;
+end;
+
+procedure TTyCustomRichEdit.CancelEdgeDrag;
+begin
+  if FEdgeDrag = CEdgeNone then Exit;
+  FEdgeDrag := CEdgeNone;
+  SetGuideLine(-1);
+  SetGuideRow(-1);
+end;
+
+{ The release: ONE command where the edge moved, nothing where it did not. }
+procedure TTyCustomRichEdit.EdgeRelease(X, Y: Integer; AShift: TShiftState);
+var
+  kind, r0, r1, h: Integer;
+  pos: TTyRichPos;
+  d: Int64;
+  rp: TTyRichRowProps;
+begin
+  if FEdgeDrag = CEdgeNone then Exit;
+  EdgeMove(X, Y, AShift);
+  kind := FEdgeDrag;
+  CancelEdgeDrag;
+  d := FEdgeNow - FEdgeRaster;
+  if d = 0 then Exit;
+  if kind = CEdgeColumn then
+  begin
+    if not EdgeRows(FEdgePara, True, pos, r0, r1) then Exit;
+    RunEdgeCommand(TTyRichSetColumnEdge.Create(pos, FEdgeTwips, FEdgeTwips + TwipsOfRaster(d),
+      r0, r1, FEdgeShift));
+  end
+  else
+  begin
+    if not EdgeRows(FEdgePara, False, pos, r0, r1) then Exit;
+    h := Math.Max(1, TwipsOfRaster(FEdgeNow - FEdgeTop));
+    rp := Default(TTyRichRowProps);
+    rp.Valid := [rrpHeight];
+    rp.HeightTwips := h;
+    RunEdgeCommand(TTyRichSetRowHeight.Create(pos, r0, r1, rp));
+  end;
+end;
+
+{ The widest unbreakable run of paragraph APara (raster pixels): its fragments laid out on one
+  line, the widths between spaces, tabs and breaks added up. }
+function TTyCustomRichEdit.WidestRun(APara: Integer): Integer;
+var
+  L: TTyParaLayout;
+  i, run: Integer;
+  f: TTyRichFragment;
+begin
+  Result := 0;
+  L := FLayouter.LayoutPara(FDoc, APara, CRichNoWrap, FLayoutPPI, FLayoutZoom);
+  try
+    run := 0;
+    for i := 0 to L.FragmentCount - 1 do
+    begin
+      f := L.Fragments[i];
+      if f.Kind in [rfkSpace, rfkTab, rfkBreak] then run := 0
+      else
+      begin
+        Inc(run, f.Natural);
+        if run > Result then Result := run;
+      end;
+    end;
+  finally
+    L.Release;
+  end;
+end;
+
+{ The column of cell ACell of the row paragraph APara is in takes the width of its widest
+  content - the longest unbreakable run of its cells (in the selected rows, else every row)
+  and their padding, at most the text's width - and the columns right of it shift. One step. }
+function TTyCustomRichEdit.FitColumnAt(APara, ACell: Integer): Boolean;
+var
+  info: TTyRichTableInfo;
+  pos: TTyRichPos;
+  r0, r1, k, ri, n, w, widest, lft, cap: Integer;
+  c, rc: TTyRichCell;
+  row, cur: TTyRichRow;
+  edges: TTyRichEdges;
+  p: TTyRichCellProps;
+begin
+  Result := False;
+  if not EdgesOpen or (FLayoutPPI <= 0) then Exit;
+  if not EdgeRows(APara, True, pos, r0, r1) then Exit;
+  if not FDoc.TableInfoAt(APara, info) then Exit;
+  widest := 0;
+  FDoc.BeginRead;
+  try
+    row := FDoc.CellAt(APara).Row;
+    edges := row.CellEdges;
+    if (ACell < 0) or (ACell >= Length(edges)) then Exit;
+    // the rows r0 .. r1 of the table, counted as its paragraphs go
+    ri := -1;
+    cur := nil;
+    for k := info.First to info.Last do
+    begin
+      rc := FDoc.CellAt(k);
+      if rc = nil then Continue;
+      if rc.Row <> cur then
+      begin
+        cur := rc.Row;
+        Inc(ri);
+      end;
+      if ri < r0 then Continue;
+      if ri > r1 then Break;
+      if rc.Index <> ACell then Continue;
+      w := WidestRun(k);
+      if ACell = 0 then n := cur.CellEdges[0] - cur.Format.Row.LeftTwips
+      else if ACell < cur.CellCount then n := cur.CellEdges[ACell] - cur.CellEdges[ACell - 1]
+      else n := 1;
+      p := TyRichEffectiveCellProps(cur.Format, Math.Min(ACell, cur.CellCount - 1), n);
+      w := TwipsOfRaster(w) + Math.Max(0, p.Pad[rcsLeft]) + Math.Max(0, p.Pad[rcsRight]);
+      if w > widest then widest := w;
+    end;
+    if ACell = 0 then lft := row.Format.Row.LeftTwips else lft := edges[ACell - 1];
+    widest := Math.Max(widest, MinCellTwips(row, ACell));
+    cap := TwipsOfRaster(Math.Max(1, FLayoutWidth));
+    if (FLayoutWidth > 0) and (widest > cap) then widest := cap;
+    c := FDoc.CellAt(APara);
+    n := edges[ACell];
+  finally
+    FDoc.EndRead;
+  end;
+  if c = nil then Exit;
+  if lft + widest = n then Exit;
+  Result := RunEdgeCommand(TTyRichSetColumnEdge.Create(pos, n, lft + widest, r0, r1, True));
+end;
+
+{ ---- the user's doors ---- }
+
+{ The caret's cell (its paragraph, its index) for a door that resizes: False - told once,
+  ATell - when the caret is in no table, or in a row that holds a nested table. }
+function TTyCustomRichEdit.CaretEdgePara(out APara, ACell: Integer; ATell: Boolean): Boolean;
+var
+  c: TTyRichCell;
+  why: string;
+begin
+  Result := False;
+  APara := CaretCellPara;
+  ACell := -1;
+  why := '';
+  FDoc.BeginRead;
+  try
+    c := FDoc.CellAt(APara);
+    if c = nil then why := rsRichEditRefusedNoTable
+    else if c.Row.HoldsNestedTable then why := rsRichEditRefusedResizeNested
+    else ACell := c.Index;
+  finally
+    FDoc.EndRead;
+  end;
+  if why <> '' then
+  begin
+    if ATell then EditRefused(why);
+    Exit;
+  end;
+  Result := True;
+end;
+
+function TTyCustomRichEdit.CanResizeColumns: Boolean;
+var
+  p, c: Integer;
+begin
+  Result := TableActionsOpen and CaretEdgePara(p, c, False);
+end;
+
+function TTyCustomRichEdit.CanResizeRows: Boolean;
+var
+  p, c: Integer;
+begin
+  Result := TableActionsOpen and CaretEdgePara(p, c, False);
+end;
+
+function TTyCustomRichEdit.UserTableDoorOpen: Boolean;
+begin
+  Result := False;
+  EndOwedLoad;
+  EndCompositionForUser;
+  if not IsEnabled or ViewBehind or FReadOnly then Exit;
+  if PlainTextDocument then
+  begin
+    EditRefused(rsRichEditRefusedPlainTable);
+    Exit;
+  end;
+  Result := True;
+end;
+
+function TTyCustomRichEdit.SetColumnWidth(AWidthTwips: Integer): Boolean;
+var
+  p, c, r0, r1, lft: Integer;
+  pos: TTyRichPos;
+  row: TTyRichRow;
+  edges: TTyRichEdges;
+begin
+  Result := False;
+  if not UserTableDoorOpen then Exit;
+  if not CaretEdgePara(p, c, True) then Exit;
+  if AWidthTwips < 1 then
+  begin
+    EditRefused(rsRichEditRefusedRange);
+    Exit;
+  end;
+  if not EdgeRows(p, True, pos, r0, r1) then Exit;
+  FDoc.BeginRead;
+  try
+    row := FDoc.CellAt(p).Row;
+    edges := row.CellEdges;
+    if c = 0 then lft := row.Format.Row.LeftTwips else lft := edges[c - 1];
+    AWidthTwips := Math.Max(AWidthTwips, MinCellTwips(row, c));
+  finally
+    FDoc.EndRead;
+  end;
+  if lft + AWidthTwips = edges[c] then Exit(True);
+  Result := RunEdgeCommand(TTyRichSetColumnEdge.Create(pos, edges[c], lft + AWidthTwips, r0, r1, True));
+end;
+
+function TTyCustomRichEdit.SetRowHeight(ATwips: Integer; AExact: Boolean): Boolean;
+var
+  p, c, r0, r1: Integer;
+  pos: TTyRichPos;
+  rp: TTyRichRowProps;
+begin
+  Result := False;
+  if not UserTableDoorOpen then Exit;
+  if not CaretEdgePara(p, c, True) then Exit;
+  if (ATwips < 0) or (AExact and (ATwips = 0)) then
+  begin
+    EditRefused(rsRichEditRefusedRange);
+    Exit;
+  end;
+  if not EdgeRows(p, False, pos, r0, r1) then Exit;
+  rp := Default(TTyRichRowProps);
+  rp.Valid := [rrpHeight];
+  if AExact then rp.HeightTwips := -ATwips else rp.HeightTwips := ATwips;
+  Result := RunEdgeCommand(TTyRichSetRowHeight.Create(pos, r0, r1, rp));
+end;
+
+function TTyCustomRichEdit.AutoFitColumn: Boolean;
+var
+  p, c: Integer;
+begin
+  Result := False;
+  if not UserTableDoorOpen then Exit;
+  if not CaretEdgePara(p, c, True) then Exit;
+  Result := FitColumnAt(p, c);
+end;
+
+function TTyCustomRichEdit.DistributeColumns: Boolean;
+var
+  p, c, r0, r1: Integer;
+  pos: TTyRichPos;
+begin
+  Result := False;
+  if not UserTableDoorOpen then Exit;
+  if not CaretEdgePara(p, c, True) then Exit;
+  if not EdgeRows(p, True, pos, r0, r1) then Exit;
+  Result := RunEdgeCommand(TTyRichSetRowWidths.CreateDistribute(pos, r0, r1));
+end;
+
+{ The rows (selected, else the table's) as high as their average now, each at least that. }
+function TTyCustomRichEdit.DistributeRows: Boolean;
+var
+  p, c, r0, r1, k, ri, cnt: Integer;
+  pos: TTyRichPos;
+  info: TTyRichTableInfo;
+  rc: TTyRichCell;
+  cur: TTyRichRow;
+  b: TTyBlockLayout;
+  total: Int64;
+  rp: TTyRichRowProps;
+begin
+  Result := False;
+  if not UserTableDoorOpen then Exit;
+  if not CaretEdgePara(p, c, True) then Exit;
+  if not EdgeRows(p, True, pos, r0, r1) then Exit;
+  if (FLayoutPPI <= 0) or not FDoc.TableInfoAt(p, info) then Exit;
+  total := 0;
+  cnt := 0;
+  ri := -1;
+  cur := nil;
+  k := info.First;
+  while k <= info.Last do
+  begin
+    FDoc.BeginRead;
+    try
+      rc := FDoc.CellAt(k);
+    finally
+      FDoc.EndRead;
+    end;
+    if (rc <> nil) and (rc.Row <> cur) then
+    begin
+      cur := rc.Row;
+      Inc(ri);
+      if ri > r1 then Break;
+      if ri >= r0 then
+      begin
+        b := FLayouter.LayoutBlock(FDoc, k, FLayoutWidth, FLayoutPPI, FLayoutZoom);
+        try
+          Inc(total, b.Height);
+          Inc(cnt);
+          k := b.LastPara + 1;
+        finally
+          b.Release;
+        end;
+        Continue;
+      end;
+    end;
+    Inc(k);
+  end;
+  if cnt = 0 then Exit;
+  rp := Default(TTyRichRowProps);
+  rp.Valid := [rrpHeight];
+  rp.HeightTwips := Math.Max(1, TwipsOfRaster(total div cnt));
+  Result := RunEdgeCommand(TTyRichSetRowHeight.Create(pos, r0, r1, rp));
+end;
+
+function TTyCustomRichEdit.FitTableToWindow: Boolean;
+var
+  p, c, r0, r1: Integer;
+  pos: TTyRichPos;
+begin
+  Result := False;
+  if not UserTableDoorOpen then Exit;
+  if not CaretEdgePara(p, c, True) then Exit;
+  if (FLayoutPPI <= 0) or (FLayoutWidth <= 0) then Exit;
+  if not EdgeRows(p, True, pos, r0, r1) then Exit;
+  Result := RunEdgeCommand(TTyRichSetRowWidths.CreateFit(pos, r0, r1, TwipsOfRaster(FLayoutWidth)));
+end;
+
+{ ---- for a ruler ---- }
+
+function TTyCustomRichEdit.CaretRowEdges(out AEdges: TTyRichColumnEdges): Boolean;
+var
+  v: TTyRichParaView;
+  k, i, n, lo, hi, slo, shi, x: Integer;
+  row: TTyRichRow;
+  r: TTyRowLayout;
+  item: TTyRichRowItem;
+  edges: TTyRichEdges;
+  t: TTyRichText;
+  caret: TTyRichPos;
+  zero: Int64;
+begin
+  AEdges := nil;
+  Result := False;
+  if not ParagraphView(v) or not v.InCell then Exit;
+  t := FDoc.Text;
+  caret := t.ParaStart(v.Para);
+  k := HeldBlockOf(caret);
+  row := EdgeRowOf(k);
+  if row = nil then Exit;
+  r := TTyRowLayout(FBlocks[k].Layout);
+  i := r.ItemAt(caret - t.ParaStart(FBlocks[k].FirstPara));
+  if i < 0 then Exit;
+  item := r.Items[i];
+  zero := item.X;
+  FDoc.BeginRead;
+  try
+    edges := row.CellEdges;
+    n := Length(edges);
+    SetLength(AEdges, n + 1);
+    for i := -1 to n - 1 do
+    begin
+      if i < 0 then x := r.Cells[0].Left else x := r.Cells[i].Right;
+      AEdges[i + 1].Index := i;
+      AEdges[i + 1].Offset := TwipsOfRaster(x - zero);
+      if i < 0 then AEdges[i + 1].Twips := row.Format.Row.LeftTwips
+      else AEdges[i + 1].Twips := edges[i];
+      AEdges[i + 1].Hidden := (i < n - 1) and (i + 1 < r.CellCount) and r.Cells[i + 1].Hidden;
+      EdgeLimits(row, i, lo, hi, slo, shi);
+      AEdges[i + 1].MinOffset := AEdges[i + 1].Offset + (lo - AEdges[i + 1].Twips);
+      AEdges[i + 1].MaxOffset := AEdges[i + 1].Offset + (hi - AEdges[i + 1].Twips);
+      AEdges[i + 1].ShiftMinOffset := AEdges[i + 1].Offset + (slo - AEdges[i + 1].Twips);
+      AEdges[i + 1].ShiftMaxOffset := AEdges[i + 1].Offset + (shi - AEdges[i + 1].Twips);
+    end;
+  finally
+    FDoc.EndRead;
+  end;
+  Result := True;
+end;
+
+function TTyCustomRichEdit.MoveCaretRowEdge(AIndex, AOffsetTwips: Integer; AShiftRest: Boolean): Boolean;
+var
+  e: TTyRichColumnEdges;
+  i, v, r0, r1: Integer;
+  pos: TTyRichPos;
+  pv: TTyRichParaView;
+begin
+  Result := False;
+  if not UserTableDoorOpen then Exit;
+  if not CaretRowEdges(e) then
+  begin
+    EditRefused(rsRichEditRefusedNoTable);
+    Exit;
+  end;
+  for i := 0 to High(e) do
+    if e[i].Index = AIndex then
+    begin
+      if AShiftRest then
+        v := Math.Min(Math.Max(AOffsetTwips, e[i].ShiftMinOffset), e[i].ShiftMaxOffset)
+      else
+        v := Math.Min(Math.Max(AOffsetTwips, e[i].MinOffset), e[i].MaxOffset);
+      if v = e[i].Offset then Exit;
+      ParagraphView(pv);
+      if not EdgeRows(pv.Para, True, pos, r0, r1) then Exit;
+      Result := RunEdgeCommand(TTyRichSetColumnEdge.Create(pos, e[i].Twips,
+        e[i].Twips + (v - e[i].Offset), r0, r1, AShiftRest));
       Exit;
     end;
 end;
@@ -21944,11 +22891,12 @@ var
   r: TRect;
 begin
   // over the blit, as the caret: the theme's text colour
-  r := GuideLineRect;
-  if IsRectEmpty(r) then Exit;
   ACanvas.Brush.Style := bsSolid;
   ACanvas.Brush.Color := TyColorToLCL(CurrentStyle.TextColor);
-  ACanvas.FillRect(r);
+  r := GuideLineRect;
+  if not IsRectEmpty(r) then ACanvas.FillRect(r);
+  r := GuideRowRect;
+  if not IsRectEmpty(r) then ACanvas.FillRect(r);
 end;
 
 function TTyCustomRichEdit.ApplyParagraphFormat(AMask: TTyParaFormatMask;

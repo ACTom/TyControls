@@ -71,6 +71,7 @@ type
     procedure TestListItemsMadeInA100MBRtfSaveAsAKeyDoes;
     procedure TestATableCellPropertyAndARowInALongTable;
     procedure TestAScreenOfALongStyledTable;
+    procedure TestAColumnEdgeOfALongTable;
   private
     procedure SaveBesideFields(ABytes: Int64; ANest: Integer);
   end;
@@ -2419,6 +2420,59 @@ begin
     Report('styled table: the same screen again', again);
     AssertTrue(Format('the first time in %.1f ms', [first]), first <= CScrollMs);
     AssertTrue(Format('again in %.1f ms', [again]), again <= CKeystrokeMs);
+  finally
+    bmp.Free;
+  end;
+end;
+
+{ A table of 10,000 rows: a column's edge moved in every row (the rich edit's own door, what a
+  drag's release runs - one command), to the end of the paint after it; and a row's height. }
+procedure TTyRichEditPerfTest.TestAColumnEdgeOfALongTable;
+const
+  Rows = 10000;
+  // the suite's line for a whole column's change
+  CColumnMs = 150;
+var
+  bmp: TBitmap;
+  d: TTyRichDocument;
+  t: TTyRichText;
+  k: Integer;
+  t0, col, again, row: Double;
+  e: TTyRichColumnEdges;
+begin
+  bmp := TBitmap.Create;
+  try
+    bmp.PixelFormat := pf32bit;
+    bmp.SetSize(FRich.Width, FRich.Height);
+    FRich.Lines.Text := 'before' + LineEnding + 'after';
+    d := FRich.Document;
+    t := d.Text;
+    AssertTrue('a long table', d.Execute(TTyRichInsertTable.Create(t.ParaStart(1), Rows, 3)));
+    k := 1 + 3 * (Rows div 2);
+    FRich.SelStart := t.ParaStart(k);
+    TPerfRich(FRich).PaintInto(bmp);
+    AssertTrue('the edges', FRich.CaretRowEdges(e) and (Length(e) = 4));
+    t0 := Clock;
+    AssertTrue('a column''s edge', FRich.MoveCaretRowEdge(e[1].Index, e[1].Offset + 300, False));
+    TPerfRich(FRich).PaintInto(bmp);
+    col := Clock - t0;
+    Report(Format('table of %d rows: a column''s edge in every row, to the end of its paint', [Rows]), col);
+    AssertEquals('every row', d.CellAt(1).Row.CellEdges[0], d.CellAt(3 * (Rows - 1) + 1).Row.CellEdges[0]);
+    // again, the next edge with the rest following
+    t0 := Clock;
+    AssertTrue('again', FRich.MoveCaretRowEdge(e[2].Index, e[2].Offset - 200, True));
+    TPerfRich(FRich).PaintInto(bmp);
+    again := Clock - t0;
+    Report('table: another edge with the rest following, to the end of its paint', again);
+    // one row's height
+    t0 := Clock;
+    AssertTrue('a height', FRich.SetRowHeight(600, False));
+    TPerfRich(FRich).PaintInto(bmp);
+    row := Clock - t0;
+    Report('table: one row''s height, to the end of its paint', row);
+    AssertTrue(Format('a column in %.1f ms', [col]), col <= CColumnMs);
+    AssertTrue(Format('again in %.1f ms', [again]), again <= CColumnMs);
+    AssertTrue(Format('a row in %.1f ms', [row]), row <= CKeystrokeMs);
   finally
     bmp.Free;
   end;

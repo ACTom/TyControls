@@ -1112,6 +1112,10 @@ msgstr ""
 msgid "This table is too large, or not complete in its file, to be deleted as a whole."
 msgstr ""
 
+#: tycontrols.strconsts.rsricheditrefuseddistributemerged
+msgid "This table has merged cells: its columns cannot be made equally wide."
+msgstr ""
+
 #: tycontrols.strconsts.rsricheditrefusedfield
 msgid "This text is a field's result (a link, a page number, a table of contents). It cannot be changed here; select the whole field to delete it."
 msgstr ""
@@ -1221,6 +1225,14 @@ msgstr ""
 msgid "This part of the document cannot be edited."
 msgstr ""
 
+#: tycontrols.strconsts.rsricheditrefusedresizenested
+msgid "This row holds a table inside one of its cells: its columns and its height cannot be changed."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditrefusedresizenotwhole
+msgid "This table is too large, or not complete in its file, for a whole column to be resized."
+msgstr ""
+
 #: tycontrols.strconsts.rsricheditrefusedsaving
 msgid "The document is being saved: it cannot be changed meanwhile."
 msgstr ""
@@ -1274,6 +1286,10 @@ msgstr ""
 
 #: tycontrols.strconsts.rsrichundocharformat
 msgid "Font formatting"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichundocolumnwidth
+msgid "Column width"
 msgstr ""
 
 #: tycontrols.strconsts.rsrichundocopy
@@ -1370,6 +1386,10 @@ msgstr ""
 
 #: tycontrols.strconsts.rsrichundoresizeobject
 msgid "Resize object"
+msgstr ""
+
+#: tycontrols.strconsts.rsrichundorowheight
+msgid "Row height"
 msgstr ""
 
 #: tycontrols.strconsts.rsrichundorowprops

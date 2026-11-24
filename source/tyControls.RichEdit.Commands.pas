@@ -433,6 +433,36 @@ type
     function Description: string; override;
   end;
 
+  { A column's edge dragged: in rows ARow0 .. ARow1 of the table ATablePos is in, the edge at
+    AEdgeTwips (a row's left, or a cell's right edge; rows whose edges differ by at most
+    CRichSharedEdgeTwips share one, a row with none there is left as it is) goes to
+    ANewTwips. The cells on either side trade width and the table keeps its width; the last
+    edge changes the last cell and the table's width; the left edge moves the row's start and
+    its first cell's width follows. AShiftRest: the cell to its left changes and everything
+    to its right moves with the edge (the left edge: the whole row moves). }
+  TTyRichSetColumnEdge = class(TTyRichTablePropsCommand)
+  public
+    constructor Create(ATablePos: TTyRichPos; AEdgeTwips, ANewTwips: Integer; ARow0, ARow1: Integer;
+      AShiftRest: Boolean);
+    function Description: string; override;
+  end;
+
+  { TTyRichSetRowProps named as a row height's change (a drag of a row's bottom, SetRowHeight). }
+  TTyRichSetRowHeight = class(TTyRichSetRowProps)
+  public
+    function Description: string; override;
+  end;
+
+  { Rows ARow0 .. ARow1: every cell of a row as wide as its others (CreateDistribute; not in a
+    table with merged cells), or each row's cells widened or narrowed in proportion to make the
+    row AWidthTwips wide (CreateFit). The row's start stays. }
+  TTyRichSetRowWidths = class(TTyRichTablePropsCommand)
+  public
+    constructor CreateDistribute(ATablePos: TTyRichPos; ARow0, ARow1: Integer);
+    constructor CreateFit(ATablePos: TTyRichPos; ARow0, ARow1, AWidthTwips: Integer);
+    function Description: string; override;
+  end;
+
   { How a new link's text looks: underlined, and coloured - rllTheme in the automatic colour,
     which the control paints in its theme's link colour (a file keeps no colour for it: in
     Word such a link is the text's own colour); rllWordBlue in Word's link blue
@@ -2414,6 +2444,59 @@ end;
 function TTyRichSetRowProps.Description: string;
 begin
   Result := rsRichUndoRowProps;
+end;
+
+constructor TTyRichSetColumnEdge.Create(ATablePos: TTyRichPos; AEdgeTwips, ANewTwips: Integer;
+  ARow0, ARow1: Integer; AShiftRest: Boolean);
+begin
+  inherited Create;
+  FEdit := Default(TTyRichPropEdit);
+  FEdit.Pos := ATablePos;
+  FEdit.Row0 := ARow0;
+  FEdit.Row1 := ARow1;
+  FEdit.OfRows := True;
+  FEdit.EdgeKind := rekMove;
+  FEdit.EdgeFrom := AEdgeTwips;
+  FEdit.EdgeTo := ANewTwips;
+  FEdit.EdgeShift := AShiftRest;
+end;
+
+function TTyRichSetColumnEdge.Description: string;
+begin
+  Result := rsRichUndoColumnWidth;
+end;
+
+function TTyRichSetRowHeight.Description: string;
+begin
+  Result := rsRichUndoRowHeight;
+end;
+
+constructor TTyRichSetRowWidths.CreateDistribute(ATablePos: TTyRichPos; ARow0, ARow1: Integer);
+begin
+  inherited Create;
+  FEdit := Default(TTyRichPropEdit);
+  FEdit.Pos := ATablePos;
+  FEdit.Row0 := ARow0;
+  FEdit.Row1 := ARow1;
+  FEdit.OfRows := True;
+  FEdit.EdgeKind := rekDistribute;
+end;
+
+constructor TTyRichSetRowWidths.CreateFit(ATablePos: TTyRichPos; ARow0, ARow1, AWidthTwips: Integer);
+begin
+  inherited Create;
+  FEdit := Default(TTyRichPropEdit);
+  FEdit.Pos := ATablePos;
+  FEdit.Row0 := ARow0;
+  FEdit.Row1 := ARow1;
+  FEdit.OfRows := True;
+  FEdit.EdgeKind := rekFit;
+  FEdit.FitWidth := AWidthTwips;
+end;
+
+function TTyRichSetRowWidths.Description: string;
+begin
+  Result := rsRichUndoColumnWidth;
 end;
 
 end.

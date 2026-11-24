@@ -752,11 +752,31 @@ type
   TTyRichTableRefusal = (rtrNone, rtrReadOnly, rtrNoTable, rtrInTable, rtrMergedCells,
     rtrNestedTable, rtrNotWhole, rtrIrregularRows, rtrOutOfRange, rtrInField);
 
+const
+  { Two rows share an edge when their edges are at most this far apart (twips): a Word table's
+    rows often differ by a few twips where a person sees one line. }
+  CRichSharedEdgeTwips = 15;
+
+type
+
   { An edit of table properties (TTyRichDocument.TablePropsRefusal, EditTableProps; the
     commands TTyRichSetCellProps and TTyRichSetRowProps make them): the table a position is
     in, rows ARow0 .. ARow1 counted as the table edits count them, and for a cell edit cells
     ACol0 .. ACol1 of each (a row with fewer cells has those it has). Only the fields Valid
     names change. }
+  { What a change of the rows' edges does (TTyRichPropEdit.EdgeKind):
+    rekNone        no edge moves (but those a width or a left in the properties moves);
+    rekMove        the edge at EdgeFrom (twips; a row's edge within CRichSharedEdgeTwips of
+                   it - its left, or a cell's right edge) moves by EdgeTo - EdgeFrom: the
+                   cells on either side trade width (a row's left: its first cell's width
+                   follows, its right side stays; its last edge: the last cell and the row's
+                   width change), or with EdgeShift the cell to its left changes and every edge
+                   after it moves too (a left: the whole row moves). A row with no edge there
+                   is left as it is. A cell never becomes narrower than a twip;
+    rekDistribute  every cell of a row as wide as the others, the row's width kept;
+    rekFit         a row's widths in proportion, the row FitWidth twips wide. }
+  TTyRichEdgeKind = (rekNone, rekMove, rekDistribute, rekFit);
+
   TTyRichPropEdit = record
     Pos: TTyRichPos;
     Row0, Row1, Col0, Col1: Integer;
@@ -764,6 +784,10 @@ type
     OfRows: Boolean;
     Cell: TTyRichCellProps;
     Row: TTyRichRowProps;
+    // a change of the edges (a row edit: OfRows True)
+    EdgeKind: TTyRichEdgeKind;
+    EdgeFrom, EdgeTo, FitWidth: Integer;
+    EdgeShift: Boolean;
   end;
 
   { Where a paragraph is in its table (TTyRichDocument.TableInfoAt): the table's paragraphs,
@@ -1563,6 +1587,13 @@ type
     FBaseFontName: string;
     FTableParaVisits: Int64;
     FTableEditSteps: Int64;
+    { The rows a property edit's refusal read (a TTyRichShape on the heap, nil none), for the
+      edit itself when it runs at once after it - a command's CanExecute and then its work, with
+      nothing changed between (ContentState as it was, the same edit): a column's edge in ten
+      thousand rows reads them once. }
+    FPropShape: Pointer;
+    FPropShapeState: Int64;
+    FPropShapeEdit: TTyRichPropEdit;
     { A command's pair of field marks is going in or out (TTyRichCommand.WrapInField and its
       siblings, which ask the field rule themselves first): the primitives do not refuse a
       mark or a place for the field rule meanwhile - only for a row's. }
@@ -4741,10 +4772,13 @@ begin
   NoteModified;
 end;
 
+procedure DropPropShape(ADoc: TTyRichDocument); forward;
+
 destructor TTyRichDocument.Destroy;
 var
   d: TTyRichParaData;
 begin
+  DropPropShape(Self);
   // the history first: its records hold references to the values disposed below
   ClearHistory;
   FreeAndNil(FObjHolds);
@@ -8595,6 +8629,17 @@ begin
       raise ETyRichModel.Create('A table''s row is not in its place');
   end;
   if not AEdit.OfRows and (AEdit.Col0 >= most) then Exit(rtrOutOfRange);
+  { The edges moved where rows share them (an edge drag, a fit to a width): merged cells keep
+    their place among the edges, so a table with them takes it - not one with a nested table,
+    which is the file's bytes. Every cell made as wide as its row's others would part a merged
+    cell from the cells it lines up with. }
+  if AEdit.OfRows and (AEdit.EdgeKind <> rekNone) then
+  begin
+    if (AEdit.EdgeKind = rekFit) and (AEdit.FitWidth < 1) then Exit(rtrOutOfRange);
+    if t.FContentLocked and HasNestedRow(t) then Exit(rtrNestedTable);
+    if (AEdit.EdgeKind = rekDistribute) and t.FContentLocked then Exit(rtrMergedCells);
+    Exit(rtrNone);
+  end;
   // what moves edges: a table with merged cells keeps them where they are
   if ((not AEdit.OfRows and (rcpWidth in AEdit.Cell.Valid)) or
       (AEdit.OfRows and (rrpLeft in AEdit.Row.Valid))) and t.FContentLocked then
@@ -8605,15 +8650,125 @@ begin
   Result := rtrNone;
 end;
 
+type
+  PTyRichShape = ^TTyRichShape;
+
+procedure DropPropShape(ADoc: TTyRichDocument);
+begin
+  if ADoc.FPropShape = nil then Exit;
+  Dispose(PTyRichShape(ADoc.FPropShape));
+  ADoc.FPropShape := nil;
+end;
+
+function SamePropEdit(const A, B: TTyRichPropEdit): Boolean;
+begin
+  Result := CompareByte(A, B, SizeOf(TTyRichPropEdit)) = 0;
+end;
+
 function TTyRichDocument.TablePropsRefusal(const AEdit: TTyRichPropEdit): TTyRichTableRefusal;
 var
   s: TTyRichShape;
 begin
+  DropPropShape(Self);
   BeginRead;
   try
     Result := PropsRefusal(Self, AEdit, s);
   finally
     EndRead;
+  end;
+  // (kept for the edit that may follow at once: a window of rows only, never a loader's part)
+  if (Result = rtrNone) and s.Window then
+  begin
+    New(PTyRichShape(FPropShape));
+    PTyRichShape(FPropShape)^ := s;
+    FPropShapeState := FState;
+    FPropShapeEdit := AEdit;
+  end;
+end;
+
+function EMin(A, B: Integer): Integer; inline;
+begin
+  if A < B then Result := A else Result := B;
+end;
+
+function EMax(A, B: Integer): Integer; inline;
+begin
+  if A > B then Result := A else Result := B;
+end;
+
+{ ARow's edges and left after an edge change (AEdit.EdgeKind, which says what each does). }
+procedure EdgesMoved(ARow: TTyRichRow; const AEdit: TTyRichPropEdit; out AEdges: TTyRichEdges;
+  out ALeft: Integer);
+var
+  i, k, n, left, d, best, dist, lo, hi, w: Integer;
+  old: TTyRichEdges;
+begin
+  old := ARow.CellEdges;
+  AEdges := Copy(old);
+  left := ARow.Format.Row.LeftTwips;
+  ALeft := left;
+  n := Length(old);
+  if n = 0 then Exit;
+  case AEdit.EdgeKind of
+    rekMove:
+      begin
+        d := AEdit.EdgeTo - AEdit.EdgeFrom;
+        // the row's edge nearest EdgeFrom, within the shared distance (-1: its left)
+        best := -2;
+        dist := CRichSharedEdgeTwips + 1;
+        if Abs(left - AEdit.EdgeFrom) < dist then
+        begin
+          best := -1;
+          dist := Abs(left - AEdit.EdgeFrom);
+        end;
+        for i := 0 to n - 1 do
+          if Abs(old[i] - AEdit.EdgeFrom) < dist then
+          begin
+            best := i;
+            dist := Abs(old[i] - AEdit.EdgeFrom);
+          end;
+        if (best = -2) or (d = 0) then Exit;
+        if best = -1 then
+        begin
+          if AEdit.EdgeShift then
+          begin
+            ALeft := left + d;
+            for i := 0 to n - 1 do Inc(AEdges[i], d);
+          end
+          else
+            // its first cell's width follows: never narrower than a twip
+            ALeft := EMin(left + d, old[0] - 1);
+          Exit;
+        end;
+        if best = 0 then lo := left + 1 else lo := old[best - 1] + 1;
+        if AEdit.EdgeShift or (best = n - 1) then
+        begin
+          k := EMax(old[best] + d, lo);
+          d := k - old[best];
+          for i := best to n - 1 do Inc(AEdges[i], d);
+        end
+        else
+        begin
+          hi := old[best + 1] - 1;
+          AEdges[best] := EMin(EMax(old[best] + d, lo), hi);
+        end;
+      end;
+    rekDistribute:
+      begin
+        w := old[n - 1] - left;
+        for i := 0 to n - 2 do AEdges[i] := left + Int64(w) * (i + 1) div n;
+      end;
+    rekFit:
+      begin
+        w := old[n - 1] - left;
+        if w <= 0 then Exit;
+        for i := 0 to n - 1 do
+          AEdges[i] := left + Int64(old[i] - left) * AEdit.FitWidth div w;
+        // (never two edges at one place)
+        for i := 0 to n - 1 do
+          if i = 0 then AEdges[0] := EMax(AEdges[0], left + 1)
+          else AEdges[i] := EMax(AEdges[i], AEdges[i - 1] + 1);
+      end;
   end;
 end;
 
@@ -8627,6 +8782,11 @@ begin
   old := ARow.CellEdges;
   Result := Copy(old);
   left := ARow.Format.Row.LeftTwips;
+  if AEdit.OfRows and (AEdit.EdgeKind <> rekNone) then
+  begin
+    EdgesMoved(ARow, AEdit, Result, d);
+    Exit;
+  end;
   if AEdit.OfRows then
   begin
     if not (rrpLeft in AEdit.Row.Valid) then Exit;
@@ -8656,11 +8816,42 @@ var
   edges, old: TTyRichEdges;
   cells: array of TTyRichCell;
   moved: Boolean;
-  i: Integer;
+  i, newLeft: Integer;
+  rp: TTyRichRowProps;
+  // a run of changed rows next to each other, whose paragraphs and places are set at once
+  runRows: array of TTyRichRow;
+  runCells: array of TTyRichCell;
+  runFirst, runAt, nRows, nCells: Integer;
+  runTable: TTyRichTable;
+
+  procedure FlushRun;
+  begin
+    if nRows = 0 then Exit;
+    Result.AddPart(ed.SetCells(runFirst, Copy(runCells, 0, nCells), [rckFormat]));
+    Result.AddPart(SpliceRows(runTable, runAt, nRows, Copy(runRows, 0, nRows), runTable.FRowsValid));
+    nRows := 0;
+    nCells := 0;
+  end;
+
 begin
+  nRows := 0;
+  nCells := 0;
+  runFirst := 0;
+  runAt := 0;
+  runTable := nil;
+  runRows := nil;
+  runCells := nil;
   BeginRead;
   try
-    why := PropsRefusal(Self, AEdit, s);
+    // the rows the refusal just read, when nothing changed since (see FPropShape)
+    if (FPropShape <> nil) and (FPropShapeState = FState) and SamePropEdit(FPropShapeEdit, AEdit) then
+    begin
+      s := PTyRichShape(FPropShape)^;
+      why := rtrNone;
+    end
+    else
+      why := PropsRefusal(Self, AEdit, s);
+    DropPropShape(Self);
     if why <> rtrNone then
       raise ETyRichRefused.CreateFmt('The table edit is refused (%s)', [RefusalName(why)]);
     Result := NewUndo(Default(TTyRichChange));
@@ -8671,9 +8862,29 @@ begin
         for rr := AEdit.Row0 - s.Base to AEdit.Row1 - s.Base do
         begin
           row := s.Rows[rr].Row;
-          if AEdit.OfRows then f := TyRichWithRowProps(row.Format, AEdit.Row)
-          else f := TyRichWithCellProps(row.Format, AEdit.Col0, AEdit.Col1, AEdit.Cell);
-          edges := EdgesAfter(row, AEdit);
+          if AEdit.OfRows and (AEdit.EdgeKind <> rekNone) then
+          begin
+            // the edges, and the left when it moved (in the row's format)
+            EdgesMoved(row, AEdit, edges, newLeft);
+            if newLeft <> row.Format.Row.LeftTwips then
+            begin
+              rp := Default(TTyRichRowProps);
+              rp.Valid := [rrpLeft];
+              rp.LeftTwips := newLeft;
+              f := TyRichWithRowProps(row.Format, rp);
+            end
+            else
+            begin
+              f := row.Format;
+              f.AddRef;
+            end;
+          end
+          else
+          begin
+            if AEdit.OfRows then f := TyRichWithRowProps(row.Format, AEdit.Row)
+            else f := TyRichWithCellProps(row.Format, AEdit.Col0, AEdit.Col1, AEdit.Cell);
+            edges := EdgesAfter(row, AEdit);
+          end;
           old := row.CellEdges;
           moved := False;
           for i := 0 to High(edges) do
@@ -8682,6 +8893,7 @@ begin
           begin
             // nothing of this row changes
             f.Release;
+            FlushRun;
             Continue;
           end;
           try
@@ -8695,17 +8907,31 @@ begin
           finally
             f.Release;
           end;
-          // its paragraphs: the same cells of the new row
-          cells := nil;
-          SetLength(cells, s.Rows[rr].Last - s.Rows[rr].First + 1);
+          { Its paragraphs: the same cells of the new row. Rows next to each other - their
+            paragraphs and their places in the table - are set as one run: one change told,
+            one splice (a column's edge in ten thousand rows is two parts, not twenty
+            thousand). }
+          if (nRows > 0) and ((row.FTable <> runTable) or (row.FIndex <> runAt + nRows) or
+             (s.Rows[rr].First <> runFirst + nCells)) then
+            FlushRun;
+          if nRows = 0 then
+          begin
+            runTable := row.FTable;
+            runAt := row.FIndex;
+            runFirst := s.Rows[rr].First;
+          end;
+          if nRows >= Length(runRows) then SetLength(runRows, 2 * nRows + 16);
+          runRows[nRows] := nr;
+          Inc(nRows);
           for k := s.Rows[rr].First to s.Rows[rr].Last do
           begin
             Inc(FTableEditSteps);
-            cells[k - s.Rows[rr].First] := nr.FCells[s.Cells[k - s.First].FIndex];
+            if nCells >= Length(runCells) then SetLength(runCells, 2 * nCells + 16);
+            runCells[nCells] := nr.FCells[s.Cells[k - s.First].FIndex];
+            Inc(nCells);
           end;
-          Result.AddPart(ed.SetCells(s.Rows[rr].First, cells, [rckFormat]));
-          Result.AddPart(SpliceRows(row.FTable, row.FIndex, 1, [nr], row.FTable.FRowsValid));
         end;
+        FlushRun;
         Result.SealParts;
       except
         Revert(Result);

@@ -544,13 +544,15 @@ begin
   FRich.UpdateView;
   a := CellRect(1, 1);
   // just inside the cell's left edge: the cell; dragged to the next one: both
-  AssertEquals('the cell''s zone', crArrow, FRich.CursorAtPoint(a.Left + 1, a.Top + 5));
+  // (past the band of the cell's edge, which resizes the column)
+  AssertEquals('the cell''s edge', crSizeWE, FRich.CursorAtPoint(a.Left + 1, a.Top + 5));
+  AssertEquals('the cell''s zone', crArrow, FRich.CursorAtPoint(a.Left + 4, a.Top + 5));
   AssertEquals('the text beside it', crIBeam, FRich.CursorAtPoint(a.Left + 12, a.Top + 5));
-  FRich.Press(a.Left + 1, a.Top + 5);
-  FRich.Release(a.Left + 1, a.Top + 5);
+  FRich.Press(a.Left + 4, a.Top + 5);
+  FRich.Release(a.Left + 4, a.Top + 5);
   CheckRange('a click in the cell''s zone', 1, 1, 1, 1);
   b := CellRect(2, 2);
-  FRich.Press(a.Left + 1, a.Top + 5);
+  FRich.Press(a.Left + 4, a.Top + 5);
   FRich.MoveTo(b.Left + 30, b.Top + 5);
   FRich.Release(b.Left + 30, b.Top + 5);
   CheckRange('a drag from it', 1, 1, 2, 2);

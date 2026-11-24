@@ -304,6 +304,8 @@ resourcestring
   rsRichUndoDeleteTable  = 'Delete table';
   rsRichUndoCellProps    = 'Cell properties';
   rsRichUndoRowProps     = 'Row properties';
+  rsRichUndoColumnWidth  = 'Column width';
+  rsRichUndoRowHeight    = 'Row height';
   rsRichUndoInsertPicture = 'Insert picture';
   rsRichUndoResizeObject = 'Resize object';
   rsRichUndoSettings     = 'Document settings';
@@ -376,6 +378,9 @@ resourcestring
   rsRichEditRefusedTableNotWhole = 'This table is too large, or not complete in its file, for its rows and columns to be inserted or deleted.';
   rsRichEditRefusedDeleteNotWhole = 'This table is too large, or not complete in its file, to be deleted as a whole.';
   rsRichEditRefusedSelectNotWhole = 'This table is too large, or not complete in its file, for a whole column or the whole table to be selected.';
+  rsRichEditRefusedResizeNotWhole = 'This table is too large, or not complete in its file, for a whole column to be resized.';
+  rsRichEditRefusedResizeNested = 'This row holds a table inside one of its cells: its columns and its height cannot be changed.';
+  rsRichEditRefusedDistributeMerged = 'This table has merged cells: its columns cannot be made equally wide.';
   rsRichEditPasteCellsDropped = 'Some of the pasted cells did not fit in the table''s columns and were left out.';
   rsRichEditRefusedIrregularRows = 'The rows of this table do not all have the same number of cells: its columns cannot be inserted or deleted.';
   rsRichEditRefusedTableSize     = 'A table can have 1 to %d rows and 1 to %d columns.';

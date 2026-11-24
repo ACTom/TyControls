@@ -809,6 +809,7 @@ type
     FItems: array of TTyRichRowItem;
     // the cells a cell selection has (SetCellHighlight; for the next paints)
     FHighlight: array of Boolean;
+    FNatural: Integer;
     function GetCell(AIndex: Integer): TTyRichCellBox;
     function GetItem(AIndex: Integer): TTyRichRowItem;
     function CellAtX(AX: Integer): Integer;
@@ -837,6 +838,9 @@ type
     { The item (paragraph) position APos is in: the last that starts at or before it. }
     function ItemAt(APos: TTyRichPos): Integer;
     function CellCount: Integer;
+    { The row's height for its content alone - its tallest cell's lines, padding and content,
+      before the height its format asks (at least / exactly) - raster pixels. }
+    function NaturalHeight: Integer;
     property Cells[AIndex: Integer]: TTyRichCellBox read GetCell;
     { The cells a cell selection has in this row (ACells[i]: cell i; none: no cell
       selected): each is painted whole in the selection's colour - over its shading, its
@@ -3030,6 +3034,11 @@ end;
 function TTyRowLayout.CellCount: Integer;
 begin
   Result := System.Length(FCells);
+end;
+
+function TTyRowLayout.NaturalHeight: Integer;
+begin
+  Result := FNatural;
 end;
 
 function TTyRowLayout.ItemCount: Integer;
@@ -7312,6 +7321,7 @@ begin
       if rcsBottom in bx^.Sides then Inc(padB, bx^.LinePx[rcsBottom]);
       rowH := Max(rowH, SatAdd(SatAdd(padT, bx^.ContentHeight), padB));
     end;
+    R.FNatural := Max(1, rowH);
     if R.FDisplay.Height > 0 then rowH := Max(rowH, Px(R.FDisplay.Height))
     else if R.FDisplay.Height < 0 then rowH := Px(-Int64(R.FDisplay.Height));
     rowH := Max(1, rowH);

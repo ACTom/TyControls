@@ -886,6 +886,14 @@ msgstr "单元格属性"
 msgid "Row properties"
 msgstr "行属性"
 
+#: tycontrols.strconsts.rsrichundocolumnwidth
+msgid "Column width"
+msgstr "列宽"
+
+#: tycontrols.strconsts.rsrichundorowheight
+msgid "Row height"
+msgstr "行高"
+
 #: tycontrols.strconsts.rsrichundoinsertpicture
 msgid "Insert picture"
 msgstr "插入图片"
@@ -1094,6 +1102,18 @@ msgstr "这个表格太大，或者在文件里不完整，不能整个删除。
 #: tycontrols.strconsts.rsricheditrefusedselectnotwhole
 msgid "This table is too large, or not complete in its file, for a whole column or the whole table to be selected."
 msgstr "这个表格太大，或者在文件里不完整，不能选中整列或整个表格。"
+
+#: tycontrols.strconsts.rsricheditrefusedresizenotwhole
+msgid "This table is too large, or not complete in its file, for a whole column to be resized."
+msgstr "这个表格太大，或者在文件里不完整，不能调整整列的宽度。"
+
+#: tycontrols.strconsts.rsricheditrefusedresizenested
+msgid "This row holds a table inside one of its cells: its columns and its height cannot be changed."
+msgstr "这一行的单元格里有表格：不能改它的列宽和行高。"
+
+#: tycontrols.strconsts.rsricheditrefuseddistributemerged
+msgid "This table has merged cells: its columns cannot be made equally wide."
+msgstr "这个表格有合并的单元格：不能把各列调成一样宽。"
 
 #: tycontrols.strconsts.rsricheditpastecellsdropped
 msgid "Some of the pasted cells did not fit in the table's columns and were left out."

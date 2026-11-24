@@ -27,6 +27,13 @@ unit tyControls.RichEdit.Ruler;
   the whole paragraph, each keeping its own offset (Delphi's FirstIndent), the right marker
   the right indent, a tab stop the tab stops.
 
+  In a table the ruler shows the caret's row's column edges too (CaretRowEdges, placed from
+  the cell paragraph's zero like everything else): a box across the strip at each, which a
+  drag moves as the rich edit's own edge drag does - the guide line through the text, the
+  rich edit's limits (Shift: the rest of the row follows), ONE command at the release
+  (MoveCaretRowEdge: the selected rows, else every row with an edge there), Esc or no move
+  nothing. The indent markers keep meaning the cell's paragraph.
+
   Nothing may be dragged - the markers show, in the theme's disabled look, and do not move -
   while the rich edit is read-only, disabled, loading (or incomplete, or saving), inside its
   document's update, in the designer, with no rich edit linked, or where the rich edit would
@@ -67,9 +74,10 @@ type
   TTyRulerUnit = (ruAuto, ruCentimeters, ruInches);
 
   { What a marker is: the first line's indent, the other lines' (hanging), the box that moves
-    both, the right indent, a tab stop. }
+    both, the right indent, a tab stop, a table column's edge (ATab: its place in the edges the
+    ruler shows; values from the cell paragraph's zero, twips). }
   TTyRulerMarker = (rmkNone, rmkFirstIndent, rmkHangingIndent, rmkLeftIndent, rmkRightIndent,
-    rmkTabStop);
+    rmkTabStop, rmkColumnEdge);
 
   TTyRulerMarkerState = (rmsNormal, rmsHover, rmsDragged, rmsDisabled);
 
@@ -120,6 +128,9 @@ type
     FDragOld, FDragNew: Integer;
     FDragGrab: Integer;
     FDragOff: Boolean;
+    FDragShift: Boolean;
+    // the caret's row's column edges (none outside a table)
+    FEdges: TTyRichColumnEdges;
     FKeysHooked: Boolean;
     FHoverMarker: TTyRulerMarker;
     FHoverTab: Integer;
@@ -225,6 +236,7 @@ type
     property DragMarker: TTyRulerMarker read FDragMarker;
     property DragValue: Integer read FDragNew;
     property DragOff: Boolean read FDragOff;
+    property Edges: TTyRichColumnEdges read FEdges;
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -405,17 +417,45 @@ begin
     (A.Editable = B.Editable) and A.Format.Equals(B.Format);
 end;
 
+function SameEdges(const A, B: TTyRichColumnEdges): Boolean;
+var
+  i: Integer;
+begin
+  Result := Length(A) = Length(B);
+  if not Result then Exit;
+  for i := 0 to High(A) do
+    if (A[i].Index <> B[i].Index) or (A[i].Twips <> B[i].Twips) or (A[i].Offset <> B[i].Offset) or
+       (A[i].MinOffset <> B[i].MinOffset) or (A[i].MaxOffset <> B[i].MaxOffset) or
+       (A[i].Hidden <> B[i].Hidden) then
+      Exit(False);
+end;
+
 procedure TTyCustomRichEditRuler.CheckView;
 var
   v: TTyRichParaView;
   has, same, ends: Boolean;
+  e: TTyRichColumnEdges;
 begin
   Inc(FViewChecks);
   if FRichEdit = nil then has := False
   else has := FRichEdit.ParagraphView(v);
   if not has then v := Default(TTyRichParaView);
-  same := (has = FHasView) and (not has or SameParaView(v, FView));
+  e := nil;
+  if has and v.InCell then FRichEdit.CaretRowEdges(e);
+  same := (has = FHasView) and (not has or SameParaView(v, FView)) and SameEdges(e, FEdges);
   if same and (v.Para = FView.Para) then Exit;
+  // (a column edge's drag is of the edges it began on)
+  if FDragging and (FDragMarker = rmkColumnEdge) and not SameEdges(e, FEdges) then
+  begin
+    FEdges := e;
+    FView := v;
+    FHasView := has;
+    FinishDrag(False, False);
+    Inc(FViewChanges);
+    Invalidate;
+    Exit;
+  end;
+  FEdges := e;
   { A drag is of the paragraph and the format it began on: another paragraph under the caret,
     or the format changed by someone else, ends it with nothing changed. A scroll or a zoom
     does not (the line follows). }
@@ -577,6 +617,11 @@ end;
 function TTyCustomRichEditRuler.ValueOf(const AFormat: TTyParaFormat; AMarker: TTyRulerMarker;
   ATab: Integer): Integer;
 begin
+  if AMarker = rmkColumnEdge then
+  begin
+    if (ATab >= 0) and (ATab < Length(FEdges)) then Exit(FEdges[ATab].Offset);
+    Exit(0);
+  end;
   case AMarker of
     rmkFirstIndent: Result := AFormat.LeftIndent + AFormat.FirstIndent;
     rmkHangingIndent, rmkLeftIndent: Result := AFormat.LeftIndent;
@@ -641,6 +686,11 @@ begin
     rmkTabStop:
       if (ATab >= 0) and (ATab < Length(f.Tabs)) then Result := ClientOfRaster(Px(f.Tabs[ATab].Position))
       else Result := 0;
+    rmkColumnEdge:
+      if FDragging and (FDragMarker = rmkColumnEdge) and (ATab = FDragTab) then
+        Result := XOfTwips(FDragNew)
+      else if (ATab >= 0) and (ATab < Length(FEdges)) then Result := XOfTwips(FEdges[ATab].Offset)
+      else Result := 0;
   else
     Result := 0;
   end;
@@ -662,6 +712,8 @@ begin
     if (ATab < 0) or (ATab >= Length(f.Tabs)) then Exit;
     if FDragging and FDragOff and (FDragMarker = rmkTabStop) and (ATab = FDragTab) then Exit;
   end;
+  if AMarker = rmkColumnEdge then
+    if (ATab < 0) or (ATab >= Length(FEdges)) or FEdges[ATab].Hidden then Exit;
   x := MarkerX(AMarker, ATab);
   m := MarkerSize;
   half := m div 2;
@@ -671,6 +723,8 @@ begin
     rmkHangingIndent, rmkRightIndent: ARect := Rect(x - half, h - 2 * m, x + half + 1, h - m);
     rmkLeftIndent: ARect := Rect(x - half, h - m, x + half + 1, h);
     rmkTabStop: ARect := Rect(x - half, StripBottom - m, x + half + 1, StripBottom);
+    // across the strip, half a marker wide: the stops' feet stay clear of it
+    rmkColumnEdge: ARect := Rect(x - half div 2, StripTop, x + half div 2 + 1, StripBottom);
   end;
   Result := True;
 end;
@@ -696,6 +750,12 @@ begin
     begin
       ATab := i;
       Exit(rmkTabStop);
+    end;
+  for i := High(FEdges) downto 0 do
+    if MarkerRect(rmkColumnEdge, i, r) and PtInRect(r, Point(X, Y)) then
+    begin
+      ATab := i;
+      Exit(rmkColumnEdge);
     end;
 end;
 
@@ -883,6 +943,13 @@ begin
   DoMarkerChanging(m, tab, old, nw, allow);
   if AGone or not allow or (FRichEdit = nil) or not CanDrag then Exit;
   after := tab;
+  if m = rmkColumnEdge then
+  begin
+    if (tab < 0) or (tab >= Length(FEdges)) then Exit;
+    if not FRichEdit.MoveCaretRowEdge(FEdges[tab].Index, nw, FDragShift) or AGone then Exit;
+    DoMarkerChanged(m, after, old, nw);
+    Exit;
+  end;
   v := TyDefaultParaFormat;
   case m of
     rmkFirstIndent:
@@ -1045,6 +1112,8 @@ begin
     Exit;
   end;
   if m = rmkNone then Exit;
+  if (m = rmkColumnEdge) and not FRichEdit.CanResizeColumns then Exit;
+  FDragShift := ssShift in Shift;
   FDragMarker := m;
   FDragTab := tab;
   FDragOld := ValueOf(FView.Format, m, tab);
@@ -1076,7 +1145,18 @@ begin
     // the marker's place snaps to the scale; the right indent is counted from the text's end
     v := Snap(TwipsOfX(X - FDragGrab), Shift);
     if FDragMarker = rmkRightIndent then v := WidthTwips - v;
-    v := ClampValue(FDragMarker, v);
+    if FDragMarker = rmkColumnEdge then
+    begin
+      // the rich edit's limits: as it is, or with the rest of the row following (Shift)
+      FDragShift := ssShift in Shift;
+      if (FDragTab >= 0) and (FDragTab < Length(FEdges)) then
+        if FDragShift then
+          v := Math.Max(FEdges[FDragTab].ShiftMinOffset, Math.Min(FEdges[FDragTab].ShiftMaxOffset, v))
+        else
+          v := Math.Max(FEdges[FDragTab].MinOffset, Math.Min(FEdges[FDragTab].MaxOffset, v));
+    end
+    else
+      v := ClampValue(FDragMarker, v);
     off := (FDragMarker = rmkTabStop) and ((Y < -Height) or (Y >= 2 * Height));
     if (v = FDragNew) and (off = FDragOff) then Exit;
     FDragNew := v;
@@ -1297,6 +1377,7 @@ begin
         end;
       end;
       f := ShownFormat;
+      for i := 0 to High(FEdges) do One(rmkColumnEdge, i);
       for i := 0 to High(f.Tabs) do One(rmkTabStop, i);
       One(rmkLeftIndent, -1);
       One(rmkHangingIndent, -1);
@@ -1370,6 +1451,13 @@ begin
       end;
     rmkLeftIndent:
       begin
+        APainter.BeginPath;
+        APainter.RectPath(l + 0.5, t + 0.5, r - 0.5, b - 0.5);
+        APainter.FillAndStrokePath(fill, ink, 1);
+      end;
+    rmkColumnEdge:
+      begin
+        // a column's edge: a box across the strip, filled, in the outline's ink
         APainter.BeginPath;
         APainter.RectPath(l + 0.5, t + 0.5, r - 0.5, b - 0.5);
         APainter.FillAndStrokePath(fill, ink, 1);
