@@ -222,7 +222,7 @@ uses
 - **把 `Integer` 变量传给 `GetStyleRange` 或 `GetParaRange`** 编译不过：改声明为 `TTyRichPos`。
 - **控件不保存的属性**:`Protected`、`Disabled`、`Hidden`、`Link`、`Offset`、`Pitch`、`RevAuthor`、`UseForAllText` 以及 `ConsistentAttributes` 里对应的成员(`caProtected` ……)。RTF 文件里的这些内容按原字节保留，保存时写回。
 - **多行文本框的成员**:控件不是 `TCustomMemo`,所以没有 `WordWrap`(用 `WrapMode`)、`Alignment`(按段落设:`Paragraph.Alignment`)、`MaxLength`、`WantReturns`(回车总是新起一段)、`BorderStyle`、`Color` 和 `ParentColor`(颜色来自主题，用 `StyleOverride` 改)、`HideSelection`、`HideScrollBars`、`GetSelTextBuf`、`SetSelTextBuf`;`is TCustomEdit` 判断和 LCL 的标准编辑动作也认不出它，本库自己的动作(`tyControls.RichEdit.Actions`,见下)认得。右键菜单是本库的文本菜单。
-- **Delphi 的其他成员**:`OnProtectChange`、`OnResizeRequest`、`OnSaveClipboard`、`EnableURLs`、`ShowURLHint`、`SelectionStreamMode`、`SpellChecking`、`ShowSpellCheckMenu`、`Transparent`、`EditMargins`、`ActiveLineNo`、`ScrollPosition`(用 `ScrollY`,视图顶端的像素位置，可以写入;`ScrollX` 读出水平偏移)、`Print`、`RenderRange`、`PageRect`、`DefaultConverter`、`RegisterConversionFormat` 和 `SetSelTextToFriendlyURL`。
+- **Delphi 的其他成员**:`OnProtectChange`、`OnSaveClipboard`、`EnableURLs`、`ShowURLHint`、`SelectionStreamMode`、`SpellChecking`、`ShowSpellCheckMenu`、`Transparent`、`EditMargins`、`ActiveLineNo`、`ScrollPosition`(用 `ScrollY`,视图顶端的像素位置，可以写入;`ScrollX` 读出水平偏移)、`Print`、`RenderRange`、`PageRect`、`DefaultConverter`、`RegisterConversionFormat` 和 `SetSelTextToFriendlyURL`。
 - **RichMemo 的其他成员**:`isLink`、`OnLinkAction`、`Print`、`OnPrintAction`、`InDelInline`、`InitParaNumber`、`InitParaBullet`、第二个 `InitTabStopList`、`GetFontParams`、`InitPrintParams` 和 `InitTextUIParams`。
 - **替换当前匹配**:用 `SelText :=` 或 `InDelText`。
 - **`SetLink` 不是 RichMemo 的那个。** RichMemo 的 `SetLink(TextStart, TextLength, AIsLink, ALinkRef)` 标记一段范围；这里的 `SetLink(AURL, AText)` 改插入点所在的链接,`InsertLink(AURL, AText)` 用选区新建链接,`RemoveLink` 取消链接(见下面的"新增")。按 RichMemo 的写法调用编译不过。
@@ -244,7 +244,8 @@ uses
 | `ImeMode`、`ImeName` | 不用设：输入法由系统决定 |
 | `EditMargins` | 主题的内边距;用 `StyleOverride` |
 | `EnableURLs`、`ShowURLHint`、`SelectionStreamMode`、`SpellChecking`、`Transparent`、`Touch` | 没有对应 |
-| `OnProtectChange`、`OnResizeRequest`、`OnSaveClipboard`、`OnGesture`、`OnMouseActivate`、`OnStartDock`、`OnEndDock` | 没有对应;处理方法留在单元里，不再挂上 |
+| `OnResizeRequest` | `OnContentSizeChange`，在里面读 `ContentHeight` / `ContentWidth`(内容需要的尺寸)——或者用 `AutoHeight`，由它自己设高度 |
+| `OnProtectChange`、`OnSaveClipboard`、`OnGesture`、`OnMouseActivate`、`OnStartDock`、`OnEndDock` | 没有对应;处理方法留在单元里，不再挂上 |
 - **RichMemo 的 `TTyParaNumbering` 只保留 `Style` 和 `NumberStart`**:`pnCustomChar` 变成项目符号,`Indent`、`CustomChar`、`SepChar`、`ForceNewNum` 读出 0、`#0` 或 `False`。
 - **竖线制表位**:`tabWordBar` 按左对齐制表位写入。
 
@@ -276,7 +277,7 @@ uses
 - **用户改格式的门**:`ApplyCharacterFormat` 和 `ApplyParagraphFormat` 像用户的编辑一样改格式(只读或禁用时什么都不做，被拒绝时通过 `OnEditRefused` 告诉，不抛异常),`SelAttributes` 和 `Paragraph` 则是程序的写(不管只读，被拒绝时抛异常);`CanFormatCharacters`、`CanFormatParagraphs` 事先告诉会不会被接受。
 - **链接和书签**:`InsertLink`、`SetLink`、`RemoveLink`、`CanInsertLink`、`CanEditLink`、`LinkAtSelection`;`BookmarkCount`、`BookmarkName`、`FindBookmark`、`GoToBookmark`、`AddBookmark`、`DeleteBookmark`、`RenameBookmark`、`CanEditBookmarks`;`FollowBookmarkLinks`、`OnFollowLink`;`OnObjectClick`、`OnObjectDblClick`、`ObjectAtPoint`(见 [richedit.md](controls/richedit.md) §7)。
 - **用代码搭内容**:`NewBuilder` 和 `TTyRichBuilder`(`tyControls.RichEdit.Builder`)、`SetContent`、`AppendContent`、`InsertContent`(那一页的 §5)。
-- **当展示页用**:`ReadOnlyCaret`、`AllowSelection`、`FocusOnClick`、`AutoHeight`、`ContentHeight`、`ContentWidth`、`OnContentSizeChange`(那一页的 §6);Delphi 的 `TRichEdit` 没有这些开关。
+- **当展示页用**:`CaretWhenReadOnly`、`AllowSelection`、`FocusOnClick`、`AutoHeight`、`ContentHeight`、`ContentWidth`、`ContentSizeIsEstimate`、`OnContentSizeChange`(那一页的 §6);`OnContentSizeChange` 加 `ContentHeight` 就是 Delphi 的 `OnResizeRequest` 原来的用处;Delphi 的 `TRichEdit` 没有这些开关。
 - **更多段落和文档成员**:`Paragraph.ListLevel`、`ListStart`、`BulletText`、`Shading`、`LineSpacingMultiple`、带对齐方式和前导符的 `SetTab`;`SelAttributes.SizeF`(半磅);`ApplyParagraphSpacing`、`SetPageSetup`、`SetDefaultFormats`、`DocumentColor`。
 - **动作**:Delphi 的 `TRichEditBold`、`TRichEditItalic`、`TRichEditUnderline`、`TRichEditStrikeOut`、`TRichEditBullets`、`TRichEditAlignLeft`、`TRichEditAlignRight`、`TRichEditAlignCenter`(Vcl.ExtActns)在 `tyControls.RichEdit.Actions` 里是 `TTyRichEditBold` …… `TTyRichEditAlignCenter`,另外还有剪切、复制、粘贴、全选、字体、字号、文字颜色和突出显示、清除格式、上标、下标、两端对齐、编号、缩进、行距、段落间距、图片、表格和它的行列、链接、查找、替换、撤销、重做、缩放;见 [richedit.md](controls/richedit.md)。
 - **标尺**:`TTyRichEditRuler`(`tyControls.RichEdit.Ruler`)显示并拖动缩进和制表位;Delphi 没有。

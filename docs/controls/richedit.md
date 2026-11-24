@@ -44,6 +44,8 @@ RichEdit1.SaveToFile('说明.rtf');
 - 文件：`LoadFromFile`、`LoadFromStream`、`SaveToFile`、`SaveToStream`、`PlainText`。
 - 其他：`Zoom`、`ReadOnly`、`Modified`、`Undo`、`Redo`、`CanUndo`、`CanPaste`、剪贴板的几个方法。
 
+单位：字符和段落的成员(字号、缩进、间距、制表位)用磅，和 Delphi 一样；页面和表格的尺寸(`SetPageSetup`、构建器的 `PageSetup` 和 `Table` 列宽、`Document.Settings`)用缇，1 英寸 1440 缇，和文件里一样。
+
 这一层的每一次写都是文档的一个命令，也就是一步撤销。它是给程序用的：`ReadOnly` 只挡用户，不挡这些调用。文档正在载入或保存的时候写会抛 `ETyRichEdit`。
 
 能编译、做的事却和 Delphi 或 RichMemo 不一样的地方，逐条列在 [LCL 差异](../lcl-differences.md)的最后一节里。最常碰到的几条：
@@ -106,7 +108,7 @@ RichEdit1.SaveToFile('说明.rtf');
 - **字体和字号**:`TTyRichEditFontName` 设 `FontName`,`TTyRichEditFontSize` 按整磅设 `Size`(字号框要给半磅，可以通过 `ApplyCharacterFormat` 写 `SizeHalfPt`)。增大、减小字号从选区的字号走到常用字号表(8、9、10、11、12、14 …… 72)的下一档。
 - **颜色**:`TTyRichEditTextColor`、`TTyRichEditHighlightColor` 套用自己的 `Color`(默认红色、黄色;`clDefault` 是主题的文字颜色,`clNone` 是不突出显示)。先触发 `OnChooseColor`：程序可以在这里问用户(用本库的 `TySelectColor`)、改颜色或者取消；选中的颜色记下来，下次接着用。
 - **清除格式**把选区里字符的格式恢复成默认：字体、字号、样式、上下标和颜色；段落格式不动。
-- **行距**给选区碰到的段落设 `Spacing`(单倍、1.15、1.5、双倍)，`Multiple` 大于 0 时设成那个倍数(任意倍数，比如 1.08、3);和对齐一样，一种行距一个动作。**段落间距**设段前 `Before`、段后 `After`(磅；默认 -1，表示那一边不动)，可以只设一边，也可以两边都设——Word 菜单里的 0、6、12 磅就是这样。行高和 Word 的排法一致：单倍是字体自己的行高(西文字体是字高加上字体要求的行间空隙，空隙在文字上方；宋体、微软雅黑这类东亚字体是字高的 1.3 倍，多出的部分上下各一半),1.15、1.5、双倍是它的倍数，多出的高度在文字下方；小于 1 的倍数把整行按比例压低，上下一起少，字照原样画全、会压到上一行上(最小 0.1 倍)；“最小值”不足时补在文字上方；固定行距就是那个值，基线在行高的五分之四处。段前、段后间距在行的外面。
+- **行距**给选区碰到的段落设 `Spacing`(单倍、1.15、1.5、双倍)，`Multiple` 大于 0 时设成那个倍数(任意倍数，比如 1.08、3);和对齐一样，一种行距一个动作。**段落间距**设段前 `Before`、段后 `After`(磅，精确到缇，7.5 也行；默认 -1，表示那一边不动)，可以只设一边，也可以两边都设——Word 菜单里的 0、6、12 磅就是这样；段落正好是这些磅数时打勾。行高和 Word 的排法一致：单倍是字体自己的行高(西文字体是字高加上字体要求的行间空隙，空隙在文字上方；宋体、微软雅黑这类东亚字体是字高的 1.3 倍，多出的部分上下各一半),1.15、1.5、双倍是它的倍数，多出的高度在文字下方；小于 1 的倍数把整行按比例压低，上下一起少，字照原样画全、会压到上一行上(最小 0.1 倍)；“最小值”不足时补在文字上方；固定行距就是那个值，基线在行高的五分之四处。段前、段后间距在行的外面。每一行的高度取整到设备像素，所以长文本可能比 Word 里短百分之一左右。
 - **链接**:`TTyRichEditInsertLink` 通过 `OnGetLink` 询问地址和文字(没有处理程序就什么都不做：由程序去问用户)；插入点在链接里时改这个链接(`SetLink`)，否则新建一个(`InsertLink`)。`TTyRichEditRemoveLink` 就是 `RemoveLink`。见 §7。
 - **表格操作**在插入点所在行的上方或下方插入一行，在所在列的左侧或右侧插入一列，或者删除这一行、这一列、整个表格；插入点进到新的行或列。控件说不行的地方就是灰的(不在表格里、有合并单元格的表格、含嵌套表格的行、各行单元格数不同时的列)。
 - **缩进**把插入点所在段落的首行移到下一个(上一个)半英寸处，不越过左边距；选了几个段落时都移到那个位置，各自保留自己的悬挂距离(和标尺的规则一样)。
@@ -115,7 +117,7 @@ RichEdit1.SaveToFile('说明.rtf');
 - **查找、替换**显示本库自己的查找、替换对话框(`Dialog`)。"查找下一个"就是控件的 `FindNext`(区分大小写、全字匹配、向上向下，到头了从另一头接着找)；"替换"替换选中的那个匹配再找下一个；"全部替换"是 `ReplaceAll`，一步撤销，`OnReplaced` 告诉替换了几处。没找到时触发 `OnNotFound`，没有处理程序就弹本库的消息框。替换的方法属于程序那一层，不挡只读，所以动作只在用户能改的地方替换。
 - **快捷键**是动作的默认值，可以改。同一个键不会两边都处理：LCL 先把键交给有焦点的控件，富文本自己处理 Ctrl+Z、Ctrl+Y(撤销、重做)，动作的 Ctrl+Z、Ctrl+Y 只在焦点不在富文本上、又设了 `RichEdit` 的时候起作用；Ctrl+B 这类富文本不处理的键归动作。
 
-**更新的代价。** 程序空闲时 LCL 会更新每个动作，一个动作连着菜单项和按钮时还不止一次。动作不每次都去问控件：每个富文本有一份记录(`TTyRichEditActionState`)，它在选区、内容、格式、视图、只读或可用状态变了以后问控件一次——听的是标尺也在听的通知(`AddHandlerOnParagraphView`)，不是程序的事件——所有动作都读这份记录。所以不管选区多长、文档多大，一轮空闲更新都不问控件。变了以后那一次要问格式 API 整个选区是不是一致：控件给这一步设了上限(约 30 毫秒的遍历，超出部分按"不一致"算)，还按选区和内容记住答案。100 MB 全选时的实测见 §9。
+**更新的代价。** 程序空闲时 LCL 会更新每个动作，一个动作连着菜单项和按钮时还不止一次。动作不每次都去问控件：每个富文本有一份记录(`TTyRichEditActionState`)，它在选区、内容、格式、视图、只读或可用状态变了以后问控件一次——听的是标尺也在听的通知(`AddHandlerOnParagraphView`)，不是程序的事件——所有动作都读这份记录。所以不管选区多长、文档多大，一轮空闲更新都不问控件——剪贴板的五个动作除外：它们每次更新都问控件的文字回答(`TeHasSelection`、`TeHasText`、`TeIsReadOnly`)，和 LCL 自己的编辑动作一样；粘贴问 `CanPaste`，它要看系统剪贴板上有哪些格式。变了以后那一次要问格式 API 整个选区是不是一致：控件给这一步设了上限(约 30 毫秒的遍历，超出部分按"不一致"算)，还按选区和内容记住答案。100 MB 全选时的实测见 §9。
 
 ## 5. 用代码搭内容
 
@@ -156,7 +158,7 @@ end;
 - **文字**:`Text`(`#9` 是制表符,`#10` 是段内换行)。
 - **列表**:`Bullet(级别, 符号)`、`Numbered(级别, 起始编号)`;0 级是最外层，每一级有自己的悬挂缩进。
 - **制表位**:`Tab(位置, 对齐, 前导符)`，比如目录行用 `Tab(300, rtaRight, rtlDot)`。
-- **链接和书签**:`Link(文字, 地址)`、`Bookmark(名字)`(一个点)、`BookmarkStart` / `BookmarkEnd`(一段范围)。指向 `'#名字'` 的链接点了就跳到那个书签，不用写代码(见 §7)。
+- **链接和书签**:`Link(文字, 地址)`——文字在前，按页面的阅读顺序，和 `Text` 一样；控件的 `InsertLink(地址, 文字)` 地址在前，因为文字可以不给——`Bookmark(名字)`(一个点)、`BookmarkStart` / `BookmarkEnd`(一段范围)。指向 `'#名字'` 的链接点了就跳到那个书签，不用写代码(见 §7)。
 - **图片**:`Picture` 可以来自 `TGraphic`、文件、流、图像列表加下标,`PictureResource` 来自程序的资源；大小用磅，给 0 就是它自己的大小(按 96 dpi 算像素)。PNG 和 JPEG 原样保存字节，其他格式转成 PNG。
 - **表格**:`Table(列宽)`(空数组就是平分正文宽度)，每个单元格的内容前面先 `Cell`,`Row` 开始下一行,`EndTable` 结束。每一行的单元格数必须和列数相同。紧跟在 `EndTable` 后面的 `Paragraph` 就是表格后面的那一段，不会多出一段。
 - **样式**:`DefineStyle(名字)` 把当前的字符格式和段落格式记在一个名字下,`Style(名字)` 两样一起套用。它们只是搭页面时的方便，不会进文档。
@@ -164,7 +166,7 @@ end;
 
 调用的地方不对——表格外面调 `Cell`、单元格里再建表格、Word 不接受的地址或书签名、读不了的图片——会抛 `ETyRichEdit`，消息里写着是哪个调用("TTyRichBuilder.Cell: …")。
 
-**放进控件的三种方式。** 三个都是代码对文档的修改，不看 `ReadOnly`，所以只读的页面也能用。构建器还是你的，内容不变，可以再放一次。文档正在载入或保存时抛 `ETyRichEdit`。
+**放进控件的三种方式。** 三个都是代码对文档的修改，不看 `ReadOnly`，所以只读的页面也能用。构建器还是你的，内容不变，可以再放一次。文档还在载入时，`SetContent` 结束载入、换掉文档；正在保存时抛 `ETyRichEdit`。`AppendContent`、`InsertContent` 遇到正在载入或保存的文档时抛 `ETyRichEdit`。
 
 | 调用 | 做什么 |
 |---|---|
@@ -183,18 +185,18 @@ end;
 | 属性 | 作用 |
 |---|---|
 | `ReadOnly` | True：用户不能输入、不能修改；代码照样能写。 |
-| `ReadOnlyCaret` | False:`ReadOnly` 时不显示插入点。选区照常画。 |
-| `AllowSelection` | False：用户选不了任何东西——不能拖选、双击，不能 Shift+方向键，Ctrl+A 和复制不起作用；指针在文字上是箭头，在链接上是手形。 |
+| `CaretWhenReadOnly` | False:`ReadOnly` 时不显示插入点。选区照常画。 |
+| `AllowSelection` | False：用户选不了任何东西——不能拖选、双击，不能 Shift+方向键，Ctrl+A 和复制不起作用；指针在文字上是箭头，在链接上是手形。同时是 `ReadOnly` 时，右键不弹控件自己的菜单(里面每一项都会是灰的)；`PopupMenu` 和 `OnContextPopup` 和别的控件一样能用。 |
 | `FocusOnClick` | False：点击不拿焦点(滚轮和链接照常)；再把 `TabStop` 设成 False，就永远不会拿到焦点。 |
-| `ScrollBars` | `ssNone`：从不显示自己的滚动条(滚轮和按键照样能滚)；其他值只在内容放不下时才显示滚动条。 |
-| `AutoHeight` | True：内容、宽度、缩放、PPI 或主题变了，`Height` 就跟着 `ContentHeight` 变(受 `Constraints` 限制)。`Align`(`alClient`、`alLeft`、`alRight`)或上下两个锚点决定高度时，它不起作用。 |
+| `ScrollBars` | `ssNone`：从不显示自己的滚动条；按键照样能滚，滚轮交给父控件。其他值只在内容放不下时才显示滚动条。滚轮只在控件能滚的方向上归控件(那个方向可以有滚动条，内容又放不下)——滚到头了也还是它的；否则交给父控件，所以放在滚动框里的页面跟着滚动框滚。Ctrl+滚轮总是缩放。 |
+| `AutoHeight` | True：内容、宽度、缩放、PPI 或主题变了，`Height` 就跟着 `ContentHeight` 变(受 `Constraints` 限制)。`Align`(`alClient`、`alLeft`、`alRight`)或上下两个锚点决定高度时，它不起作用；内容尺寸还是估计值时(`ContentSizeIsEstimate`：文件还在载入，或者段落多于整篇测量的数目)也不起作用——控件保持现在的高度。它设的高度不超过 `CRichAutoHeightLimit`(32,000 像素)：远超这个值窗口就出错。它是给页面用的，不是给文件用的：控件保留一块和自己一样大的绘制表面，一个页面占宽 × 高 × 4 字节；比这个上限还长的文档，应该放在自己滚动的控件里。 |
 
 `ContentHeight`、`ContentWidth` 是在当前宽度、缩放和主题下内容需要的客户区像素；`ContentSizeIsEstimate` 说明它们是不是估计值(没有整篇排版的大文档)。每次变化触发一次 `OnContentSizeChange`。
 
 两种常用组合，和示例的页面窗体(`examples/richedit/upageform.lfm`)一样：
 
-- **帮助页**——能阅读、选中、复制，自己滚动：`ReadOnly := True; ReadOnlyCaret := False;`,`Align := alClient`。`AllowSelection` 和 `ScrollBars` 保持默认值(True、`ssBoth`)。
-- **首页**——高度跟着内容，放在 `TTyScrollBox` 里，和别的控件一起作为一整页滚动：`ReadOnly := True; ReadOnlyCaret := False; AllowSelection := False; FocusOnClick := False; TabStop := False; ScrollBars := ssNone; AutoHeight := True;`，在滚动框里 `Align := alTop`。
+- **帮助页**——能阅读、选中、复制，自己滚动：`ReadOnly := True; CaretWhenReadOnly := False;`,`Align := alClient`。`AllowSelection` 和 `ScrollBars` 保持默认值(True、`ssBoth`)。
+- **首页**——高度跟着内容，放在 `TTyScrollBox` 里，和别的控件一起作为一整页滚动：`ReadOnly := True; CaretWhenReadOnly := False; AllowSelection := False; FocusOnClick := False; TabStop := False; ScrollBars := ssNone; AutoHeight := True;`，在滚动框里 `Align := alTop`。`FocusOnClick` 为 False 让点击不拿焦点；`TabStop` 为 False 让 Tab 不停在它上面——首页两个都要。鼠标在页面上滚滚轮，滚动的是滚动框；右键不弹页面自己的菜单。`AcceptDrops` 仍是 True：拖到页面上的文件归控件(它是只读的，什么都不发生)，到不了窗体——窗体要接收拖进来的文件时，把它设成 False。
 
 **页面上的链接。** 只读的页面，或者 `AllowSelection` 为 False 的页面，左键单击(或中键单击)链接就触发 `OnLinkClick`；可编辑的页面要 Ctrl+单击，和 Word 一样。控件自己从不打开地址：网址在 `OnLinkClick` 里打开(`OpenURL`)。指向 `'#名字'` 的链接由控件自己跟过去(`FollowBookmarkLinks`，默认 True)：书签所在的那一行来到视图顶部，已经在视图上面三分之一里的就不动。首页上的富文本高度就是内容的高度，它自己没有可滚的；要动的是外面的滚动框，可以在 `OnFollowLink` 里做：
 
@@ -217,7 +219,7 @@ end;
 
 链接就是 Word 的 HYPERLINK 域，地址是 `'目标'`、`'#名字'`(本文档的书签)或 `'目标#名字'` 之一。用户这一层的方法：
 
-- `InsertLink(地址, 文字)`：有选区时选区原样成为链接的文字；给了文字就用它替换；都没有就用地址本身作文字。
+- `InsertLink(地址, 文字)`：有选区时选区原样成为链接的文字；给了文字就用它替换；都没有就用地址本身作文字。地址在前，因为文字可以不给；构建器的 `Link(文字, 地址)` 按阅读顺序文字在前——在两者之间搬代码时留意参数顺序。
 - `SetLink(地址, 文字)`：插入点或选区所在的链接换成新地址；给了文字，链接的文字也换掉。
 - `RemoveLink`：链接不再是链接，文字留下，去掉链接的外观。
 - `CanInsertLink`、`CanEditLink` 回答现在做不做得了；`LinkAtSelection` 给出链接的位置和地址。
@@ -230,7 +232,7 @@ end;
 
 **跟随链接。** 点击链接触发 `OnLinkClick(Sender, URL, Button)`，和 Delphi 一样。`'#名字'` 的链接接着会被跟过去：先触发 `OnFollowLink(Sender, Name, var Allow)`,`Allow := False` 就不跳；然后 `GoToBookmark`。书签不存在就什么都不做。`'目标#名字'` 和其他地址，控件从不自己跟过去。
 
-**对象。** 点击或双击图片、或者显示图片的块(公式、嵌入对象)时，触发 `OnObjectClick`、`OnObjectDblClick`(对象、它的位置、鼠标键、按键、`var Handled`);`Handled := True` 就不再做点击原本接着要做的事。`ObjectAtPoint(X, Y, Pos)` 找出某个点下面的对象。图片可以按它自己的大小交给 `TPicture` 或 `TBitmap`(`Picture.Assign(TheObject)`),`TTyRichPicture.SaveImageToStream` 写出它的文件字节。示例里看大图的窗体(`uviewerform.pas`)就是这样处理双击的。
+**对象。** 点击或双击图片、或者显示图片的块(公式、嵌入对象)时，触发 `OnObjectClick`、`OnObjectDblClick`:`procedure(Sender: TObject; const AClick: TTyRichObjectClick; var AHandled: Boolean)`。这个记录里有对象(`RichObject`)、它的位置(`Pos`)、鼠标键、按键(`Shift`)、客户区像素的点(`Point`)和对象在客户区里的框(`Bounds`)；`PointInPicture(宽, 高)` 把这个点换算到那个大小的图片里——首页上的图片热区就这样做。用记录是为了以后加成员不会让已有的处理程序编译不过。`AHandled := True` 就不再做点击原本接着要做的事。`ObjectAtPoint(X, Y, Pos)` 找出某个点下面的对象。图片可以按它自己的大小交给 `TPicture` 或 `TBitmap`(`Picture.Assign(TheObject)`),`TTyRichPicture.SaveImageToStream` 写出它的文件字节。示例里看大图的窗体(`uviewerform.pas`)就是这样处理双击的。
 
 ## 8. 文件
 
@@ -277,7 +279,7 @@ end;
 - 位置是码点，不是 UTF-16 单元；
 - `ReadOnly` 只挡用户，程序的写照样能改；用户的操作(`CutToClipboard`、`Undo` ……)在只读时什么都不做，和 Delphi 一样；
 - `PlainText` 是文档的状态，载入文本文件会把它设成 `True`；
-- 没有 `OnProtectChange`、`OnResizeRequest`、`OnSaveClipboard`；多了 `OnEditRefused`、`OnObjectResize`、`OnDropFiles`、`OnFallbackFont`、后台查找的事件；
+- 没有 `OnProtectChange`、`OnSaveClipboard`,`OnResizeRequest` 换成 `OnContentSizeChange` 加 `ContentHeight`(§6)；多了 `OnEditRefused`、`OnObjectResize`、`OnDropFiles`、`OnFallbackFont`、后台查找的事件；
 - RichMemo 的 `Search` 向后找的规则照 RichMemo 的后端来；`ZoomFactor` 是 `Zoom / 100`。
 
 ## 11. 扩展点
