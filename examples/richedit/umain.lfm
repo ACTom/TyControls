@@ -643,6 +643,7 @@ object MainForm: TMainForm
       Align = alClient
       PopupMenu = PopEditor
       TabOrder = 0
+      WantTabs = True
       WrapMode = rwmWindow
       OnEditRefused = EditorEditRefused
       OnLinkClick = EditorLinkClick
