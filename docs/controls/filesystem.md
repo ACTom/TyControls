@@ -59,7 +59,7 @@ TTyFsFilterSpecArray = array of TTyFsFilterSpec;
 | `TyFsParent(path)` | 父目录;根处稳定。 |
 | `TyFsBreadcrumb(path)` | **累积可导航路径,根在前**:`/home/tom` → `['/','/home','/home/tom']`;`C:\Users\Tom` → `['C:\','C:\Users','C:\Users\Tom']`。盘符根保留尾分隔符,其余不带。保留输入路径自身的分隔符(主机无关)。 |
 | `TyFsResolveSaveName(dir, typed, defaultExt)` | Save 名解析:裸名对 `dir` 展开;无扩展名补 `defaultExt`;已有扩展名不动。 |
-| `TyFsTypeName(entry)` | 启发式种类标签(`'Folder'` / `'PNG File'` / `'File'`)。 |
+| `TyFsTypeName(entry)` | 启发式种类标签(`'Folder'` / `'PNG File'` / `'File'`)。三个词是资源串(`rsFdTypeFolder` / `rsFdTypeFileOf` / `rsFdTypeFile`),应用加载了库的翻译就是译文(#249,3.0.5),所以别拿返回值和英文字面量比较,判断目录用 `entry.IsDir`。 |
 
 ## 设计取舍 / 搁置
 

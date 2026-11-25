@@ -86,6 +86,11 @@ Shell.OnFileActivate := @FileChosen;     // 双击文件 / Enter;双击文件夹
 - **大小列的单位是可翻译资源串。** `'B'` / `'KB'` / `'MB'` / `'GB'` / `'TB'` 取自 `tyControls.StrConsts` 的
   `rsTyFileSize*`,不再是写死的英文 —— 否则一堆已翻译的列头中间夹着一个英文单位。格式化函数
   `TyFormatFileSize(ABytes: Int64): string` 是纯函数并**已导出**:够不着它的测试也就证不出资源串是真在用、而不只是声明了。
+- **列头和类型名也是可翻译资源串(#249,3.0.5)。** 四个列头取自 `tyControls.StrConsts` 的 `rsFdColName` /
+  `rsFdColSize` / `rsFdColType` / `rsFdColModified`;「类型」一列的值(也是按类型分组时的组标题)由
+  `TyFsTypeName` 给出,用的是 `rsFdTypeFolder` / `rsFdTypeFile` / `rsFdTypeFileOf`(`'%s File'`,`%s` 是大写的扩展名)。
+  之前都是写死的英文,加载了翻译的应用里这一行和这一列仍是英文。列头在**建列表时**读一次,之后就是普通的列文字,
+  应用照样可以改;所以翻译目录要在建列表之前加载(对话框每次打开都新建,不受影响)。
 - **`GetItemCount` 从不碰盘** —— 它每帧每次滚动排序都被调,读 `Length(FEntries)`。读盘只在 `LoadDirectory`。
 - **F2 重命名是真的重命名磁盘文件**(`RenameFileUTF8`);改名前先问 `OnEdited`(handler 可以改名字,清空则放弃),改成功后触发 `OnChange(ctText)`,和普通列表视图一样;空名 / 同名 / 带路径分隔符的名静默放弃;
   目标已存在时重命名失败(不覆盖),视图不刷新。

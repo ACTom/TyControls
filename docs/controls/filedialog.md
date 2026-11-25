@@ -73,6 +73,8 @@ if Dlg.Execute then
   Open 收集选中集;两种对话框都照 LCL 的 `CheckFile` 先查 `fdoPathMustExist`(文件夹)、再查 `fdoFileMustExist`(文件),
   Open 多选时文件名框里的名字和每个选中的文件都查;不通过就报错并返回 False,把对话框留住。
 - **Open 手敲优先**:文件名框非空时以它为准(带路径原样、裸名对当前目录展开),空框才回落到列表选中项。
+- **文件列表的列头和类型名走库的翻译(#249,3.0.5)**:名称 / 大小 / 类型 / 修改日期,以及类型一列里的
+  「文件夹」「TXT 文件」。之前是写死的英文,见 [shelllistview.md](shelllistview.md)。
 - **打开时焦点在文件名框**(打开和保存都是),可以直接输入文件名。Tab 按排布的顺序走:查找范围、视图、
   目录树、文件列表、文件名、文件类型,最后才是按钮(#243,3.0.5;之前焦点在「打开」按钮上,文件类型排在文件名前面)。
 - **Save 存名解析**(`TyFileDialogResolveName` → `TyFsResolveSaveName`):裸名对当前目录展开,无扩展名补 `DefaultExt`,已有扩展名不动。

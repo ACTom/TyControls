@@ -240,7 +240,9 @@ function TyFsResolveSaveName(const ADir, ATyped, ADefaultExt: string): string;
 
 { A heuristic kind label for AEntry: 'Folder' for a directory, else
   UpperCase(extension-without-dot)+' File' when there is an extension, else
-  'File'. Not an OS-registered type description. }
+  'File'. Not an OS-registered type description. The three are resource strings
+  (rsFdTypeFolder, rsFdTypeFileOf, rsFdTypeFile), so a translated application gets them in
+  its language (#249). }
 function TyFsTypeName(const AEntry: TTyFsEntry): string;
 
 implementation
@@ -271,15 +273,15 @@ var
   ext: string;
 begin
   if AEntry.IsDir then
-    Exit('Folder');
+    Exit(rsFdTypeFolder);
   ext := ExtractFileExt(AEntry.Name);
   if (ext <> '') and (ext <> '.') then
   begin
     Delete(ext, 1, 1);                { drop the leading dot }
-    Result := UpperCase(ext) + ' File'
+    Result := Format(rsFdTypeFileOf, [UpperCase(ext)])
   end
   else
-    Result := 'File';
+    Result := rsFdTypeFile;
 end;
 
 function TyFsMatchesFilter(const AName, APatterns: string; ACaseSens: Boolean): Boolean;
