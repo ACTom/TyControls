@@ -1792,6 +1792,16 @@ begin
     AssertEquals('grown: to row 2', 2, FRich.SelectedCells.Row1);
     AssertEquals('its extent across: the four columns', 4 * 1440,
       FRich.SelectedCells.RightTwips - FRich.SelectedCells.LeftTwips);
+    if k = 0 then
+    begin
+      // (a column's extent: where it is)
+      FRich.SelStart := CellStart(0, 3);
+      AssertTrue('a column', FRich.SelectColumn);
+      AssertEquals('its left: three columns in', 3 * 1440, FRich.SelectedCells.LeftTwips -
+        FRich.Document.CellAt(FRich.Document.Text.ParaOfPos(CellStart(0, 0))).Row.Format.Row.LeftTwips);
+      FRich.SelStart := CellStart(2, 0);
+      AssertTrue('the row again', FRich.SelectRow);
+    end;
     case k of
       0: AssertTrue('deleted', FRich.DeleteRow);
       1: FRich.CutToClipboard;
