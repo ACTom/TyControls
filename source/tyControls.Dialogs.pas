@@ -6,7 +6,7 @@ uses
   tyControls.Types, tyControls.Form, tyControls.Base, tyControls.Controller,
   tyControls.Button, tyControls.Panel,
   tyControls.TyLabel, tyControls.Edit, tyControls.Memo, tyControls.Painter,
-  tyControls.ListBox, tyControls.Component, tyControls.StrConsts;
+  tyControls.ListBox, tyControls.SpinEdit, tyControls.Component, tyControls.StrConsts;
 
 { Right-aligns caption buttons in a bar: index 0 is the RIGHTMOST (primary), each successive
   button sits to its left, ASpacing apart, AMargin from the right edge. Pure. }
@@ -64,6 +64,16 @@ type
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
     procedure Paint; override;
     procedure LayoutContent; virtual;
+    { #248: how wide AControl has to be for what it shows -- a label's caption, a button's --
+      and never less than ADesigned, the 96-PPI number its layout was drawn with. In device
+      px. The designed numbers were chosen for the classic font; at modern density the font
+      is larger and a translation is as long as it is, and a width that asks neither cuts
+      the text off. Asked afresh on every call: the theme may have changed since the last. }
+    function WidthToShow(AControl: TControl; ADesigned: Integer): Integer;
+    { The same for a number box: how wide ABox has to be to show any number of ADigits
+      digits whole, whichever digit its font draws widest, and never less than ADesigned. A
+      box that is narrower scrolls the number under its left edge: 255 read as 55. }
+    function WidthForDigits(ABox: TTySpinEdit; ADigits, ADesigned: Integer): Integer;
     procedure Resize; override;
     procedure TextChanged; override;   // keep the title bar caption in sync with the form caption
     procedure DoShow; override;        // fires for ShowModal + modeless Show: adopt the app's theme
@@ -659,6 +669,34 @@ begin
   Result.Default := ADefault;
   Result.Cancel := ACancel;
   LayoutButtonBar;
+end;
+
+function TTyDialog.WidthToShow(AControl: TControl; ADesigned: Integer): Integer;
+var
+  w, h: Integer;
+begin
+  w := 0;
+  h := 0;
+  AControl.InvalidatePreferredSize;   { LCL keeps the last answer; flags only, nothing moves }
+  AControl.GetPreferredSize(w, h, True);
+  Result := Px(ADesigned);
+  if w > Result then Result := w;
+end;
+
+type
+  TNumberBoxAccess = class(TTySpinEdit);
+
+function TTyDialog.WidthForDigits(ABox: TTySpinEdit; ADigits, ADesigned: Integer): Integer;
+var
+  d: Char;
+  w: Integer;
+begin
+  Result := Px(ADesigned);
+  for d := '0' to '9' do
+  begin
+    w := TNumberBoxAccess(ABox).FieldWidthFor(StringOfChar(d, ADigits));
+    if w > Result then Result := w;
+  end;
 end;
 
 function TTyDialog.Px(ALogical: Integer): Integer;

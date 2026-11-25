@@ -413,6 +413,46 @@ var
   hexLbl: TTyLabel;
   hexLblW, hexLblH: Integer;
 
+  { #248: the channel grid was drawn with 14 px for a letter and 56 px for a box, at the
+    classic font. At modern density a box showed 255 as 55 and the M lost its right leg.
+    Both are measured now, on a label and a box made for the purpose and freed again --
+    the grid needs the two numbers before it places its first cell -- and the designed
+    numbers are what they are never smaller than. }
+  function LetterWidth: Integer;
+  const
+    Letters = 'RGBCMYK';
+  var
+    probe: TTyLabel;
+    i: Integer;
+  begin
+    Result := Px(14);
+    probe := TTyLabel.Create(Self);
+    try
+      probe.Parent := Self;
+      for i := 1 to Length(Letters) do
+      begin
+        probe.Caption := Letters[i];
+        Result := Max(Result, WidthToShow(probe, 14));
+      end;
+    finally
+      probe.Free;
+    end;
+  end;
+
+  { Wide enough for any number of three digits: 0..255 and 0..100 are what the boxes hold. }
+  function ChannelBoxWidth: Integer;
+  var
+    probe: TTySpinEdit;
+  begin
+    probe := TTySpinEdit.Create(Self);
+    try
+      probe.Parent := Self;
+      Result := WidthForDigits(probe, 3, 56);
+    finally
+      probe.Free;
+    end;
+  end;
+
   function MkLabel(const ACaption: string; ALeft, ATop, AWidth: Integer): TTyLabel;
   begin
     Result := TTyLabel.Create(Self);
@@ -451,8 +491,8 @@ begin
   y0 := r.Top + Px(TyDlgPad);
   // Spin/edit height follows the density axis: classic 30 (= TyDlgEditH), modern --control-height.
   { Every number below is a 96-PPI design number and goes through Px: see TTyDialog.Px. }
-  spinW := Px(56); spinH := Px(TyDensityHeight(nil, TyDlgEditH)); rowH := spinH + Px(RowGap);
-  labelW := Px(14);
+  spinW := ChannelBoxWidth; spinH := Px(TyDensityHeight(nil, TyDlgEditH)); rowH := spinH + Px(RowGap);
+  labelW := LetterWidth;
   // labels are 20px tall; nudge them so their text baseline centres against the (density) spin.
   labelTop := (spinH - Px(20)) div 2;
   cellW := labelW + Px(LblGap) + spinW;                 // full width of one label+spin cell

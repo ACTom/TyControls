@@ -116,6 +116,12 @@ type
     function GetStyleTypeKey: string; override;
     { The button column at the right of the text area, and the two arrows painted in it. }
     function RightReserve(APPI: Integer): Integer; override;
+    { #248: the width at which the field shows AText whole and unscrolled -- both paddings,
+      the text at the field's font, the button column. The inverse of the view the edit lays
+      out (ClampScrollX), in physical px at the control's own PPI: one pixel narrower and
+      the number scrolls under the left edge. A layout whose box must show every value of
+      its range asks this for the longest one instead of typing a number. }
+    function FieldWidthFor(const AText: string): Integer;
     procedure PaintTrailing(APainter: TTyPainter; const AZone: TRect;
       const AStyle: TTyStyleSet); override;
     { False: the spin buttons keep their own arrow cursor (TTySpinButtons). }
@@ -773,6 +779,23 @@ begin
   { Read the metric live, so the button column tracks the theme's density and lines up with
     a combo box's drop button and the float spin edit's arrows. }
   Result := MulDiv(ActiveController.Metric('--field-button-width', TyFieldButtonWidth), APPI, 96);
+end;
+
+function TTyCustomSpinEdit.FieldWidthFor(const AText: string): Integer;
+var
+  S: TTyStyleSet;
+  ppi: Integer;
+begin
+  ppi := Font.PixelsPerInch;
+  if ppi <= 0 then ppi := 96;
+  S := CurrentStyle;
+  { The edit's view, turned round: the text scrolls once it is wider than the client width
+    less both paddings and what RightReserve keeps for the buttons. Measured as the edit
+    measures its own text -- TyConfigureTextFont and TextSize, which is what
+    TyMeasureRenderedTextWidth does. }
+  Result := MulDiv(S.Padding.Left, ppi, 96)
+    + TyMeasureRenderedTextWidth(AText, S.FontName, ResolveFontSize(S), S.FontWeight, ppi)
+    + MulDiv(S.Padding.Right, ppi, 96) + RightReserve(ppi);
 end;
 
 function TTyCustomSpinEdit.TrailingShowsArrow: Boolean;

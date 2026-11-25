@@ -122,15 +122,21 @@ end;
 procedure TTyStructureEditorForm.LayoutContent;
 const
   Gap = 8;
-  BtnW = 120;
+  BtnW = 120;   { floor only -- the column is as wide as its widest button needs (#248) }
 var
   r: TRect;
-  x, y, treeW, btnH, i: Integer;
+  x, y, treeW, btnH, colW, i: Integer;
 begin
   if (FTree = nil) or (Length(FButtons) = 0) then Exit;  { resize during construction }
   r := ContentRect;
   btnH := Px(TyDensityHeight(nil, TyDlgEditH));
-  treeW := (r.Right - r.Left) - 2 * Px(TyDlgPad) - Px(BtnW) - Px(Gap);
+  { #248: one width for the whole column, taken from the button that needs most. Given 120 px
+    each, the one whose caption needed more was raised to its own floor by LCL inside
+    SetBounds and stood wider than the rest, into the dialog's right margin. }
+  colW := Px(BtnW);
+  for i := 0 to High(FButtons) do
+    if WidthToShow(FButtons[i], BtnW) > colW then colW := WidthToShow(FButtons[i], BtnW);
+  treeW := (r.Right - r.Left) - 2 * Px(TyDlgPad) - colW - Px(Gap);
   FTree.SetBounds(r.Left + Px(TyDlgPad), r.Top + Px(TyDlgPad),
     treeW, (r.Bottom - r.Top) - 2 * Px(TyDlgPad));
 
@@ -142,7 +148,7 @@ begin
     a tight column beats buttons hidden behind the action strip. }
   for i := 0 to High(FButtons) do
   begin
-    FButtons[i].SetBounds(x, y, Px(BtnW), Max(btnH, FButtons[i].ComfortableHeight));   // #241: never under its comfortable height
+    FButtons[i].SetBounds(x, y, colW, Max(btnH, FButtons[i].ComfortableHeight));   // #241: never under its comfortable height
     y := FButtons[i].Top + FButtons[i].Height + Px(Gap) div 2;
     if y > r.Bottom - Px(TyDlgPad) then y := r.Bottom - Px(TyDlgPad);
   end;

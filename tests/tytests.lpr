@@ -186,6 +186,7 @@ uses
   test.shell.places,
   test.filedialog.places,
   test.shell.i18n,
+  test.fieldwidth,
   test.tabset,
   test.columns.compat,
   test.listview.layout,
