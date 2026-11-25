@@ -29,7 +29,7 @@ unit tyControls.FileSystem;
 interface
 
 uses
-  SysUtils, LazFileUtils, FileUtil, Masks, LazUTF8
+  Classes, SysUtils, LazFileUtils, FileUtil, Masks, LazUTF8
   {$IFDEF MSWINDOWS}, Windows{$ENDIF},
   tyControls.StrConsts;
 
@@ -84,7 +84,16 @@ type
   { A navigable "place": a Windows drive, the Unix root, the user home, a
     mounted volume, or a curated place. }
   TTyFsRootKind = (rkDrive, rkRoot, rkHome, rkVolume, rkPlace);
-  TTyFsRoot     = record Path, Display: string; Kind: TTyFsRootKind; end;
+  { #246. The picture a place is listed with. fpiByKind is the zero value, so that a place
+    nobody gave a picture is right as it stands: its Kind decides (TyFsPlaceIconOf). The
+    common folders carry their own. }
+  TTyFsPlaceIcon = (fpiByKind, fpiFolder, fpiDrive, fpiHome, fpiDesktop, fpiDocuments,
+    fpiDownloads, fpiPictures, fpiMusic, fpiVideos);
+  TTyFsRoot     = record
+    Path, Display: string;
+    Kind: TTyFsRootKind;
+    Icon: TTyFsPlaceIcon;
+  end;
   TTyFsRootArray = array of TTyFsRoot;
 
   { One parsed segment of an LCL filter string: a human caption and the
@@ -210,6 +219,35 @@ function TyFsParseUserDirs(const AText, AHome: string): TTyFsRootArray;
 { ACandidates less the entries whose folder does not exist and the repeats of a folder
   already listed (compared as file names), in the same order; trailing delimiters removed. }
 function TyFsExistingPlaces(const ACandidates: TTyFsRootArray): TTyFsRootArray;
+
+{ #246. The picture APlace is listed with, never fpiByKind: its own when it has one, else
+  what its Kind says -- the house for the home folder, a folder for a curated place, a drive
+  for the rest (a drive, the file system's root, a mounted volume). }
+function TyFsPlaceIconOf(const APlace: TTyFsRoot): TTyFsPlaceIcon;
+
+{ #246. The folders the file dialogs were last accepted in, the latest first: ONE list for
+  the process, which every file dialog shows as its recent places and adds to when it is
+  accepted. Full paths, no trailing delimiter.
+
+  The library keeps it in memory and nowhere else -- it writes no settings file. A program
+  that wants the list to outlive the run reads it where it reads its other settings and
+  writes it where it writes them:
+
+    TyRecentFolders.LoadFromFile(...) / TyRecentFolders.Text := ...   at start-up
+    TyRecentFolders.SaveToFile(...)   / ... := TyRecentFolders.Text   on the way out
+
+  A folder that is no longer there stays in the list (a drive may be unplugged for now) and
+  is left out of what a dialog shows. }
+function TyRecentFolders: TStrings;
+
+{ Puts AFolder at the head of TyRecentFolders -- moved there when it is already listed, as
+  file names compare -- and drops what is then beyond TyRecentFoldersLimit. '' is ignored. }
+procedure TyNoteRecentFolder(const AFolder: string);
+
+var
+  { How many folders TyRecentFolders keeps, and so how many recent places a dialog lists.
+    0 keeps none. }
+  TyRecentFoldersLimit: Integer = 5;
 
 { True when APath contains at least one subdirectory. Stops at the FIRST one
   found via FindFirstUTF8 with faDirectory (skipping '.'/'..') -- it never
@@ -688,6 +726,9 @@ end;
 
 procedure AddKnownFolder(var AList: TTyFsRootArray; const APath: string;
   AFolder: TTyKnownFolder);
+const
+  cKnownFolderIcon: array[TTyKnownFolder] of TTyFsPlaceIcon = (fpiDesktop, fpiDocuments,
+    fpiDownloads, fpiPictures, fpiMusic, fpiVideos);
 var
   n: Integer;
 begin
@@ -697,6 +738,7 @@ begin
   AList[n].Path    := APath;
   AList[n].Display := KnownFolderName(AFolder);
   AList[n].Kind    := rkPlace;
+  AList[n].Icon    := cKnownFolderIcon[AFolder];
 end;
 
 function TyFsParseUserDirs(const AText, AHome: string): TTyFsRootArray;
@@ -922,6 +964,45 @@ begin
   Result := TyFsExistingPlaces(c);
 end;
 
+function TyFsPlaceIconOf(const APlace: TTyFsRoot): TTyFsPlaceIcon;
+begin
+  Result := APlace.Icon;
+  if Result <> fpiByKind then Exit;
+  case APlace.Kind of
+    rkHome:  Result := fpiHome;
+    rkPlace: Result := fpiFolder;
+  else
+    Result := fpiDrive;
+  end;
+end;
+
+var
+  GRecentFolders: TStringList = nil;
+
+function TyRecentFolders: TStrings;
+begin
+  if GRecentFolders = nil then
+    GRecentFolders := TStringList.Create;
+  Result := GRecentFolders;
+end;
+
+procedure TyNoteRecentFolder(const AFolder: string);
+var
+  p: string;
+  list: TStrings;
+  i: Integer;
+begin
+  p := ChompPathDelim(Trim(AFolder));   // a root keeps its delimiter
+  if p = '' then Exit;
+  list := TyRecentFolders;
+  for i := list.Count - 1 downto 0 do
+    if CompareFilenames(ChompPathDelim(list[i]), p) = 0 then
+      list.Delete(i);
+  list.Insert(0, p);
+  while (list.Count > 0) and (list.Count > TyRecentFoldersLimit) do
+    list.Delete(list.Count - 1);
+end;
+
 function TyFsPlaces: TTyFsRootArray;
 var
   roots: TTyFsRootArray;
@@ -1065,5 +1146,8 @@ begin
     Result := Result + defExt;
   end;
 end;
+
+finalization
+  FreeAndNil(GRecentFolders);
 
 end.

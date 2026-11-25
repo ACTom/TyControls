@@ -2,7 +2,7 @@ unit umain;
 
 { File-dialog demo -- all six variants live here:
 
-  Plain    TTyOpenDialog / TTySaveDialog                 (tree + list + look-in + filter + file name)
+  Plain    TTyOpenDialog / TTySaveDialog                 (places + list + look-in + filter + file name)
   Picture  TTyOpenPictureDialog / TTySavePictureDialog   (image preview on the right)
   Preview  TTyOpenPreviewDialog / TTySavePreviewDialog   (image/text preview on the right + custom OnPreview)
 
@@ -15,6 +15,11 @@ unit umain;
   starts on the second filter (FilterIndex = 2) and logs its OnShow / OnClose.
   "Save" demonstrates a default extension, overwrite confirmation (ofOverwritePrompt), a pre-filled
   FileName -- and OnCanClose, which can refuse the OK and keep the dialog open (tick the check box).
+  The left pane of every dialog is the places pane; three of its switches are shown too: "Open"
+  adds a heading of its own to the places (OnPlaces), "Save" pins a folder (PinnedFolders, a
+  runtime path, so set in FormCreate) and "Save picture" asks for the folder tree of 3.x instead
+  (LeftPane = fdpFolderTree, in the .lfm). The folder a dialog is accepted in shows up under
+  "Recent" in the next one.
   "Open Preview" hooks up a custom OnPreview covering three of the preview box's render entry points:
   ShowMessage (a 0-byte file), ShowCustom + OnPaintPreview (owner-drawn, for .exe/.zip and friends)
   and ShowText (any other format with no built-in previewer).
@@ -87,6 +92,7 @@ type
     procedure DlgOpenShow(Sender: TObject);
     procedure DlgOpenClose(Sender: TObject; var CloseAction: TCloseAction);
     procedure DlgSaveCanClose(Sender: TObject; var CanClose: Boolean);
+    procedure DlgOpenPlaces(Sender: TObject; APlaces: TTyFilePlaces);
     procedure PreviewCustom(Sender: TObject; const AFileName: string;
       APreview: TTyPreviewBox; var AHandled: Boolean);
     procedure ThemeComboChange(Sender: TObject);
@@ -123,6 +129,9 @@ resourcestring
   rsOnShow  = '--- OnShow: the Open dialog is up ---';
   rsOnClose = '--- OnClose: the Open dialog is gone ---';
   rsVetoed  = 'Save: OnCanClose returned False — the dialog stays open';
+  { OnPlaces: a heading of the example's own in the places pane, and the place under it. }
+  rsPlacesGroup   = 'This example';
+  rsPlaceProgram  = 'Program folder';
   rsFilterAll  = 'All files (*.*)|*.*';
   rsFilterText = 'Text (*.txt)|*.txt|All files (*.*)|*.*';
 
@@ -175,8 +184,17 @@ begin
   DlgSavePic.InitialDir  := home;
   DlgOpenPrev.InitialDir := home;
   DlgSavePrev.InitialDir := home;
+  { A pinned folder is a runtime path too. It is listed under "Pinned" in the Save dialog. }
+  DlgSave.PinnedFolders.Add(ExcludeTrailingPathDelimiter(GetTempDir));
 
   ApplyChromeTheme(TyDefaultController);
+end;
+
+{ The Open dialog has listed its places and is about to show them: the example puts its own
+  folder first, under a heading of its own. APlaces can be added to, removed from, reordered. }
+procedure TMainForm.DlgOpenPlaces(Sender: TObject; APlaces: TTyFilePlaces);
+begin
+  APlaces.Insert(0, ExtractFileDir(ExpandFileName(ParamStr(0))), rsPlacesGroup, rsPlaceProgram);
 end;
 
 { Custom preview: the built-in path recognizes images and common text; here we demonstrate taking over the

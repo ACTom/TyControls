@@ -877,19 +877,23 @@ procedure TLookInPlacesTest.TheFileDialogsTurnBothSwitchesOn;
 var
   d: TTyFileDialogForm;
 begin
+  { On main the left pane is the places pane (#246) and the folder box lists the pane's
+    places; the tree is there on request, and then lists the places as on the 3.0 line. }
   d := TyBuildFileDialog(False, False, '');
   try
+    d.LeftPane := fdpFolderTree;
     AssertTrue('the tree of the open dialog lists the places', d.ShellTree.ShowPlaces);
-    AssertTrue('and so does its folder box', d.LookInBox.ShowPlaces);
     AssertEquals('the tree: the known folders above the roots',
       Length(TyFsKnownFolders) + Length(TyFsRoots), TTreeCount(d.ShellTree).RootNodeCount);
+    AssertTrue('the folder box lists them too: after the chain, the places',
+      d.LookInBox.Items.Count >= Length(TyFsKnownFolders) + Length(TyFsRoots));
   finally
     d.Free;
   end;
   d := TyBuildFileDialog(True, True, '');
   try
+    d.LeftPane := fdpFolderTree;
     AssertTrue('the save dialog, with a preview: the tree', d.ShellTree.ShowPlaces);
-    AssertTrue('and the folder box', d.LookInBox.ShowPlaces);
   finally
     d.Free;
   end;

@@ -592,6 +592,10 @@ type
       Normalising an out-of-range value into the implicit bucket is the ORDER BUILDER's policy,
       not this accessor's, so a TTyShellListView override can just return its natural group id. }
     function GetItemGroup(AItemIndex: Integer): Integer; virtual;
+    { #246. What group AGroup's band says: its caption and, in brackets, how many items it
+      holds. Virtual: a list whose groups are headings rather than counted buckets (the
+      places of a file dialog) says the caption alone. }
+    function GroupHeaderCaption(AGroup: Integer): string; virtual;
 
     { Write the check state for an ITEM index. Collection mode writes lisChecked into
       Items[AIndex].States; OwnerData does NOTHING — the control caches no check state, the
@@ -3781,6 +3785,11 @@ end;
 { One group's header band: the 'TyListViewGroupHeader' style, the caption with a
   ' (count)' suffix, and a collapse chevron (right = collapsed, down = expanded). The band is
   full-width and does not scroll horizontally; TyListGroupHeaderRect already folds in AScrollY. }
+function TTyCustomListView.GroupHeaderCaption(AGroup: Integer): string;
+begin
+  Result := FGroups[AGroup].Caption + ' (' + IntToStr(FGroupMap.Groups[AGroup].Count) + ')';
+end;
+
 procedure TTyCustomListView.RenderGroupHeader(P: TTyPainter; const M: TTyListMetrics; AGroup: Integer);
 var
   band, tri, tr: TRect;
@@ -3804,7 +3813,7 @@ begin
   if tpTextColor in hb.Present then tc := hb.TextColor else tc := S.TextColor;
 
   grp := FGroups[AGroup];
-  cap := grp.Caption + ' (' + IntToStr(FGroupMap.Groups[AGroup].Count) + ')';
+  cap := GroupHeaderCaption(AGroup);
 
   { collapse chevron, boxed at the band's left edge }
   triSz := band.Bottom - band.Top;

@@ -39,6 +39,7 @@ uses
   tyControls.TyLabel, tyControls.PreviewBox, tyControls.ComboBox,
   tyControls.Panel, tyControls.Splitter,
   tyControls.ListView, tyControls.ListView.Layout, tyControls.FileSystem,
+  tyControls.ShellPlaces, tyControls.ShellPlacesView,
   tyControls.Component, tyControls.StrConsts;
 
 { ---------------------------------------------------------------------------
@@ -83,6 +84,20 @@ function TyFileDialogCheck(ASaveMode: Boolean; const AFileName: string;
   AOptions: TOpenOptions): TTyFileDialogCheck;
 
 type
+  { #246. The list of places and the event that hands it over, under their own names here
+    too: an OnPlaces handler the IDE writes then compiles with this unit alone, without
+    tyControls.ShellPlaces having to be added to the form's uses by hand. }
+  TTyFilePlaces = tyControls.ShellPlaces.TTyFilePlaces;
+  TTyFilePlacesEvent = tyControls.ShellPlaces.TTyFilePlacesEvent;
+
+  { #246. What is to the left of the file list. }
+  TTyFileDialogLeftPane = (
+    fdpPlaces,       // the places: the common folders, the drives, what the program pinned,
+                     // where the user was last -- one click each
+    fdpFolderTree,   // the folder tree, as in 3.x (the places are its top level)
+    fdpNone          // nothing: the file list has the whole width
+  );
+
   { Fires as the preview refreshes for AFileName (the focused selection; '' or a
     directory when nothing previewable is focused). Draw into APreview yourself
     (ShowImage / ShowText / ShowMessage / ShowCustom) and set AHandled := True to
@@ -105,8 +120,9 @@ type
       action button built for EVERY mode in TyBuildFileDialog. }
     FLookIn:       TTyShellComboBox;
     FMidPanel:     TTyPanel;         { invisible layout host for the tree|list|preview band }
-    FTree:         TTyShellTreeView;
-    FSplitTree:    TTySplitter;      { drag: resize the tree (its left neighbour) }
+    FPlacesView:   TTyShellPlacesView;  { LeftPane = fdpPlaces; nil until asked for }
+    FTree:         TTyShellTreeView;    { LeftPane = fdpFolderTree; nil until asked for }
+    FSplitTree:    TTySplitter;      { drag: resize the left pane (its left neighbour) }
     FList:         TTyShellListView;
     FSplitPrev:    TTySplitter;      { drag: resize the preview (its right neighbour); PreviewMode }
     FFilter:       TTyFilterComboBox;
@@ -131,6 +147,17 @@ type
     FOptions:    TOpenOptions;
     FPreviewAllowsText: Boolean;   { seeds FPreview.AllowText each refresh (picture=False) }
     FOnPreview:  TTyFileDialogPreviewEvent;
+    { #246: the left pane and the places. }
+    FLeftPane:   TTyFileDialogLeftPane;
+    FPlaces:     TTyFilePlaces;   { the places as RefreshPlaces last listed them }
+    FPinned:     TStrings;        { folders the program pins, one a line (a TStringList) }
+    FShowRecent: Boolean;
+    FOnPlaces:   TTyFilePlacesEvent;
+    procedure SetLeftPane(AValue: TTyFileDialogLeftPane);
+    procedure SetPinnedFolders(AValue: TStrings);
+    { Builds the pane FLeftPane names if it is not there yet, shows it and hides the other. }
+    procedure ApplyLeftPane;
+    procedure PlacesSelectPath(Sender: TObject);
     { Flag setters -- create/toggle the conditional children. }
     procedure SetSaveMode(AValue: Boolean);
     procedure SetPreviewMode(AValue: Boolean);
@@ -181,8 +208,29 @@ type
     // test seams: the file-name box and the file list, as the user types into and picks from them
     function NameEdit: TTyEdit;
     function ShellList: TTyShellListView;
+    { nil unless LeftPane is fdpFolderTree. }
     function ShellTree: TTyShellTreeView;
+    { nil unless LeftPane is fdpPlaces. }
+    function PlacesView: TTyShellPlacesView;
     function LookInBox: TTyShellComboBox;
+    { #246. What is left of the file list; fdpPlaces unless told otherwise. }
+    property LeftPane: TTyFileDialogLeftPane read FLeftPane write SetLeftPane;
+    { Folders the program pins among the places, one a line; those that do not exist are
+      left out. Takes effect with the next RefreshPlaces. }
+    property PinnedFolders: TStrings read FPinned write SetPinnedFolders;
+    { Whether the dialog lists the recent folders (TyRecentFolders) among its places, and
+      adds the folder it is accepted in to them. Takes effect with the next RefreshPlaces. }
+    property ShowRecentFolders: Boolean read FShowRecent write FShowRecent;
+    { The places are listed and about to be shown: the program's to change. Sender is
+      ResultTarget when there is one, else this form. }
+    property OnPlaces: TTyFilePlacesEvent read FOnPlaces write FOnPlaces;
+    { Lists the places again -- the standard ones of this machine, PinnedFolders, the recent
+      folders, then OnPlaces -- into the pane and the folder drop-down. TyBuildFileDialog and
+      the dialog components call it once the form is set up; call it after changing one of
+      the three on a form you built yourself. }
+    procedure RefreshPlaces;
+    { The places as RefreshPlaces last listed them, brought together by heading. }
+    function Places: TTyFilePlaces;
     { Two-flag configuration (write = mode; read = current). SaveMode drives the OK
       caption/validation + New-Folder visibility; PreviewMode adds the preview pane. }
     property SaveMode: Boolean read FSaveMode write SetSaveMode;
@@ -228,7 +276,12 @@ type
     FOnCanClose: TCloseQueryEvent;
     FOnPreview: TTyFileDialogPreviewEvent;
     FOnHelpClicked: TNotifyEvent;
+    FLeftPane: TTyFileDialogLeftPane;
+    FPinnedFolders: TStrings;
+    FShowRecentFolders: Boolean;
+    FOnPlaces: TTyFilePlacesEvent;
     procedure FormHelpClick(Sender: TObject);
+    procedure SetPinnedFolders(AValue: TStrings);
   protected
     { Subclasses override to pick the variant. }
     function SaveMode: Boolean; virtual;
@@ -268,6 +321,17 @@ type
       otherwise lose bits it never had. }
     property Options: TOpenOptions read FOptions write FOptions default [];
     property Files: TStrings read FFiles;   { read-only result set }
+    { #246. What is left of the file list: the places (the default), the folder tree of 3.x,
+      or nothing. }
+    property LeftPane: TTyFileDialogLeftPane read FLeftPane write FLeftPane default fdpPlaces;
+    { Folders of the program's own among the places, under "Pinned": one full path a line.
+      A folder that does not exist is left out when the dialog opens. }
+    property PinnedFolders: TStrings read FPinnedFolders write SetPinnedFolders;
+    { Whether the dialog lists the folders file dialogs were last accepted in, under
+      "Recent", and adds its own to them. The list is TyRecentFolders (tyControls.FileSystem):
+      one for the program, kept in memory -- load and save it with your settings to keep it
+      from run to run. }
+    property ShowRecentFolders: Boolean read FShowRecentFolders write FShowRecentFolders default True;
     property OnShow: TNotifyEvent read FOnShow write FOnShow;
     property OnClose: TCloseEvent read FOnClose write FOnClose;
     property OnCanClose: TCloseQueryEvent read FOnCanClose write FOnCanClose;
@@ -276,6 +340,10 @@ type
     property OnPreview: TTyFileDialogPreviewEvent read FOnPreview write FOnPreview;
     { The Help button (shown with ofShowHelp) was clicked. Sender is this component. }
     property OnHelpClicked: TNotifyEvent read FOnHelpClicked write FOnHelpClicked;
+    { #246. The dialog has listed its places -- the standard ones, PinnedFolders, the recent
+      folders -- and is about to show them, in the left pane and in the folder drop-down:
+      add to APlaces, remove from it, reorder it. Fires each time the dialog is built. }
+    property OnPlaces: TTyFilePlacesEvent read FOnPlaces write FOnPlaces;
   end;
 
   { Open a single/multiple existing file(s). }
@@ -433,12 +501,12 @@ begin
 
   FLookIn := TTyShellComboBox.Create(Self);
   FLookIn.Parent := Self;
-  { #245: Desktop, Documents, Downloads ... one click away, here and at the top of the tree.
-    The dialog knew no folder but the drives. }
-  FLookIn.ShowPlaces := True;
+  { The places -- Desktop, Documents, Downloads ..., the drives, pinned and recent folders --
+    are one click away here too, after the levels of the current path: RefreshPlaces hands
+    the drop-down the list the pane shows (#245, #246). }
   FLookIn.OnSelectPath := @LookInSelectPath;
 
-  { The tree | list | preview band lives inside an invisible host panel so LCL alignment
+  { The left pane | list | preview band lives inside an invisible host panel so LCL alignment
     + TTySplitter give draggable dividers. The host keeps the theme surface fill (same as
     the dialog, so it does not read as a box) but drops the panel padding + border, and the
     aligned children cover it edge-to-edge anyway. Explicit Left values order the same-align
@@ -447,20 +515,15 @@ begin
   FMidPanel.Parent := Self;
   FMidPanel.StyleOverride := 'padding: 0; border-width: 0;';
 
-  FTree := TTyShellTreeView.Create(Self);
-  FTree.Parent := FMidPanel;
-  FTree.Align := alLeft;
-  FTree.Width := Px(190);         { narrow-ish -> more room for the file list }
-  FTree.Left := 0;
-  FTree.ShowPlaces := True;       { #245; before the event is wired: this rebuilds the top level }
-  FTree.OnPathChange := @TreePathChange;
-
+  { The left pane itself -- the places, or the folder tree -- is built by ApplyLeftPane, at
+    the end of this constructor and whenever LeftPane changes: only the one that is shown
+    is ever created. }
   FSplitTree := TTySplitter.Create(Self);
   FSplitTree.Parent := FMidPanel;
   FSplitTree.Align := alLeft;
-  FSplitTree.Left := Px(190);     { sorts after the tree -> sits to its right }
+  FSplitTree.Left := Px(190);     { sorts after the left pane -> sits to its right }
   FSplitTree.Width := Px(6);
-  FSplitTree.MinSize := 120;      { min tree width }
+  FSplitTree.MinSize := 120;      { min width of the left pane }
 
   FList := TTyShellListView.Create(Self);
   FList.Parent := FMidPanel;
@@ -514,8 +577,15 @@ begin
 
   UpdateNavButtons;   { Back+Forward start disabled -> no history yet }
 
+  { #246: the places, unless and until LeftPane says otherwise. }
+  FPlaces := TTyFilePlaces.Create;
+  FPinned := TStringList.Create;
+  FShowRecent := True;
+  FLeftPane := fdpPlaces;
+  ApplyLeftPane;
+
   { #243. Tab walks the content as it is laid out -- the folder box and the view box of the
-    top row, the tree and the list, then the file name and the file type -- not as the lines
+    top row, the left pane and the list, then the file name and the file type -- not as the lines
     above happen to create it (the type box before the name box left of it, the view box last
     of all). The button strip follows by itself (TTyDialog.InsertControl).
     And the dialog opens in the file name box, the open dialog as the save one: that is where
@@ -533,7 +603,108 @@ begin
   FFiles.Free;   { child controls are owned by the form and freed with it }
   FHistBack.Free;
   FHistFwd.Free;
+  FPinned.Free;
+  FPlaces.Free;
   inherited Destroy;
+end;
+
+{ ---------------------------------------------------------------------------
+  #246: the left pane and the places
+  --------------------------------------------------------------------------- }
+
+procedure TTyFileDialogForm.ApplyLeftPane;
+var
+  pane: TWinControl;
+begin
+  pane := nil;
+  case FLeftPane of
+    fdpPlaces:
+      begin
+        if FPlacesView = nil then
+        begin
+          FPlacesView := TTyShellPlacesView.Create(Self);
+          FPlacesView.Parent := FMidPanel;
+          FPlacesView.Align := alLeft;
+          FPlacesView.Width := Px(180);
+          FPlacesView.OnSelectPath := @PlacesSelectPath;
+        end;
+        pane := FPlacesView;
+      end;
+    fdpFolderTree:
+      begin
+        if FTree = nil then
+        begin
+          FTree := TTyShellTreeView.Create(Self);
+          FTree.Parent := FMidPanel;
+          FTree.Align := alLeft;
+          FTree.Width := Px(190);
+          FTree.ShowPlaces := True;       { #245; before the event is wired: this rebuilds the top level }
+          FTree.ShowHidden := ofForceShowHidden in FOptions;
+          FTree.OnPathChange := @TreePathChange;
+        end;
+        pane := FTree;
+      end;
+  end;
+  if FPlacesView <> nil then FPlacesView.Visible := FLeftPane = fdpPlaces;
+  if FTree <> nil then FTree.Visible := FLeftPane = fdpFolderTree;
+  FSplitTree.Visible := pane <> nil;
+  if pane = nil then Exit;
+  { First of the band for Tab, whenever it was built. (For docking nothing is needed: a pane
+    built now is at Left 0, left of the splitter, and one shown again is where it was.) }
+  pane.TabOrder := 0;
+  { The tree is told where the list is only while it is the pane shown -- walking a hidden
+    tree down every folder the user enters reads the disk for nothing -- so it is brought up
+    to date here. The places pane is told always (ListDirectoryChange): that costs nothing. }
+  if FLeftPane = fdpFolderTree then
+  begin
+    FSyncing := True;
+    try
+      FTree.SelectPath(FList.Directory);
+    finally
+      FSyncing := False;
+    end;
+  end;
+end;
+
+procedure TTyFileDialogForm.SetLeftPane(AValue: TTyFileDialogLeftPane);
+begin
+  if FLeftPane = AValue then Exit;
+  FLeftPane := AValue;
+  ApplyLeftPane;
+end;
+
+procedure TTyFileDialogForm.SetPinnedFolders(AValue: TStrings);
+begin
+  if AValue = nil then FPinned.Clear else FPinned.Assign(AValue);
+end;
+
+procedure TTyFileDialogForm.RefreshPlaces;
+var
+  from: TObject;
+begin
+  TyFillFilePlaces(FPlaces, FPinned, FShowRecent);
+  if Assigned(FOnPlaces) then
+  begin
+    if FResultTarget <> nil then from := FResultTarget else from := Self;
+    FOnPlaces(from, FPlaces);
+  end;
+  FPlaces.GroupTogether;
+  if FPlacesView <> nil then FPlacesView.SetPlaces(FPlaces);
+  FLookIn.SetPlaces(FPlaces);
+end;
+
+function TTyFileDialogForm.Places: TTyFilePlaces;
+begin
+  Result := FPlaces;
+end;
+
+procedure TTyFileDialogForm.PlacesSelectPath(Sender: TObject);
+begin
+  { A user action, like a pick in the folder box: ListDirectoryChange brings the other
+    views along. }
+  NavigateTo(FPlacesView.SelectedPath);
+  { A place that could not be gone to -- a drive since unplugged -- is not where we are. }
+  FPlacesView.CurrentPath := FList.Directory;
 end;
 
 { ---------------------------------------------------------------------------
@@ -700,9 +871,12 @@ begin
     is actually showing one (it starts disabled, before any navigation). }
   if FBtnNewFolder <> nil then
     FBtnNewFolder.Enabled := FList.Directory <> '';
+  { The place that is this directory, if it is one, is the highlighted one. }
+  if FPlacesView <> nil then
+    FPlacesView.CurrentPath := FList.Directory;
   { Reveal the directory in the tree -- but only when the change did NOT originate
     from a tree/look-in navigation (else FSyncing is set and this would loop). }
-  if not FSyncing then
+  if (not FSyncing) and (FTree <> nil) and (FLeftPane = fdpFolderTree) then
   begin
     FSyncing := True;
     try
@@ -863,6 +1037,9 @@ begin
     Exit(False);               { LCL resets ModalResult, the dialog stays open }
   if FResultTarget <> nil then FResultTarget.TakeResult(Self);
   Result := inherited CloseQuery;
+  { #246: accepted for good -- the folder of the choice heads the recent folders. }
+  if Result and FShowRecent then
+    TyNoteRecentFolder(ExtractFileDir(FResultName));
 end;
 
 function TTyFileDialogForm.CheckChosenFile(const AFileName: string): Boolean;
@@ -969,6 +1146,11 @@ begin
   Result := FTree;
 end;
 
+function TTyFileDialogForm.PlacesView: TTyShellPlacesView;
+begin
+  Result := FPlacesView;
+end;
+
 function TTyFileDialogForm.LookInBox: TTyShellComboBox;
 begin
   Result := FLookIn;
@@ -1029,7 +1211,7 @@ begin
   FNameEdit.SetBounds(nameX, yRow, nameW, fieldH);
 
   { Middle band: the host panel fills between the look-in row and the single name/type row;
-    LCL alignment + the two splitters lay out tree | list | preview inside it. }
+    LCL alignment + the two splitters lay out left pane | list | preview inside it. }
   { Below the look-in row AS IT IS: the fields may have been raised to their own floor. }
   midTop := y + Math.Max(fieldH, FLookIn.Height) + Px(Gap);
   midH := (yRow - Px(Gap)) - midTop;
@@ -1041,13 +1223,25 @@ end;
   Builder + globals
   --------------------------------------------------------------------------- }
 
-function TyBuildFileDialog(ASaveMode, APreviewMode: Boolean; const ATitle: string): TTyFileDialogForm;
+{ The builder behind TyBuildFileDialog and TTyCustomFileDialog.BuildForm. ADialog -- nil for
+  the former -- is the component the form is built for: what it says about the left pane and
+  the places is in the form BEFORE the places are listed, so they are listed once. }
+function BuildFileDialogFor(ASaveMode, APreviewMode: Boolean; const ATitle: string;
+  ADialog: TTyCustomFileDialog): TTyFileDialogForm;
 var
   btn: TTyButton;
 begin
   Result := TTyFileDialogForm.CreateNew(Application);
   Result.SaveMode := ASaveMode;         { OK caption + save-name validation }
   Result.PreviewMode := APreviewMode;   { builds the preview pane }
+  if ADialog <> nil then
+  begin
+    Result.ResultTarget := ADialog;     { #179; and the Sender of OnPlaces }
+    Result.LeftPane := ADialog.FLeftPane;
+    Result.PinnedFolders := ADialog.FPinnedFolders;
+    Result.ShowRecentFolders := ADialog.FShowRecentFolders;
+    Result.OnPlaces := ADialog.FOnPlaces;
+  end;
   { A TTyDialog derives its title-bar text from the form Caption. }
   if ATitle <> '' then
     Result.Caption := ATitle
@@ -1073,11 +1267,19 @@ begin
   { Sizing: open roughly twice as wide as the original (~520 -> ~950) and a little taller,
     because the file list was far too cramped. A preview pane needs room of its own ON TOP of
     that so the list is not squeezed to share the width with the preview. }
+  { #246: 460 rather than 420 high -- the places pane then shows the common folders, a few
+    pinned and recent ones and the first drives without scrolling. }
   if APreviewMode then
-    Result.AutoSizeToContent(Result.Px(920 + 220 + 8), Result.Px(420))
+    Result.AutoSizeToContent(Result.Px(920 + 220 + 8), Result.Px(460))
   else
-    Result.AutoSizeToContent(Result.Px(920), Result.Px(420));
+    Result.AutoSizeToContent(Result.Px(920), Result.Px(460));
   Result.LayoutContent;
+  Result.RefreshPlaces;
+end;
+
+function TyBuildFileDialog(ASaveMode, APreviewMode: Boolean; const ATitle: string): TTyFileDialogForm;
+begin
+  Result := BuildFileDialogFor(ASaveMode, APreviewMode, ATitle, nil);
 end;
 
 function TyOpenDialog(var AFileName: string; const AFilter: string): Boolean;
@@ -1151,12 +1353,21 @@ begin
   FFiles := TStringList.Create;
   FFilterIndex := DefaultFilterIndex;
   FOptions := [];
+  FLeftPane := fdpPlaces;
+  FPinnedFolders := TStringList.Create;
+  FShowRecentFolders := True;
 end;
 
 destructor TTyCustomFileDialog.Destroy;
 begin
+  FPinnedFolders.Free;
   FFiles.Free;
   inherited Destroy;
+end;
+
+procedure TTyCustomFileDialog.SetPinnedFolders(AValue: TStrings);
+begin
+  if AValue = nil then FPinnedFolders.Clear else FPinnedFolders.Assign(AValue);
 end;
 
 function TTyCustomFileDialog.SaveMode: Boolean;
@@ -1183,7 +1394,7 @@ function TTyCustomFileDialog.BuildForm: TTyFileDialogForm;
 var
   btn: TTyButton;
 begin
-  Result := TyBuildFileDialog(SaveMode, PreviewMode, FTitle);
+  Result := BuildFileDialogFor(SaveMode, PreviewMode, FTitle, Self);
   Result.InitialDir := FInitialDir;
   if FFilter <> '' then Result.Filter := FFilter else Result.Filter := DefaultFilter;
   Result.FilterIndex := FFilterIndex;

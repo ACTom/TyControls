@@ -2,9 +2,10 @@ unit tyControls.Dialogs.SelectPath;
 {$mode objfpc}{$H+}
 interface
 uses
-  Classes, SysUtils, Types, Controls, Dialogs, Forms, Graphics, ImgList, LazFileUtils,
+  Classes, SysUtils, Types, Controls, Dialogs, Forms, Graphics, LazFileUtils,
   tyControls.Dialogs, tyControls.TreeView, tyControls.Button, tyControls.Edit,
   tyControls.StrConsts, tyControls.Component, tyControls.FileSystem,
+  tyControls.ImageCollection, tyControls.ShellIcons, tyControls.ShellPlaces,
   tyControls.Controller;
 
 function TySubdirectories(const APath: string): TStringArray;
@@ -36,9 +37,13 @@ type
     FTree:  TTyTreeView;
     FPathEdit: TTyEdit;    // top-of-content path field: shows the selection, accepts typed/pasted paths
     FSyncing:  Boolean;    // guards the edit<->tree two-way sync from re-entering
-    FPaths: TStringList;   // node-data index -> absolute path (owned; freed in dtor)
-    FRoot:  string;        // '' = all drive roots, else a single rooted subtree
-    FIcons: TImageList;    // 16x16 folder glyph(s); owned by the form (Self)
+    FPaths: TStringList;   // node-data index -> absolute path (owned; freed in dtor); its
+                           // Objects hold the node's picture (a TTyFsPlaceIcon)
+    FCaptions: TStringList;   // #246: parallel to FPaths -- the name a place is listed under,
+                              // '' for a node that shows its folder's own name
+    FRoot:  string;        // '' = the places and all drive roots, else a single rooted subtree
+    FIconMasters: TTyImageCollection;   // owned by the form: the place pictures' masters
+    FIcons: TTyVirtualImageList;        // owned by the form: what the tree draws from
     FNewBtn: TTyButton;    // "New Folder" action button; enabled only when a node is selected
     FOptions: TOpenOptions;
     procedure BuildIcons;
@@ -49,7 +54,8 @@ type
     // path, reveal + select it in the tree. Guarded against the tree->edit sync.
     procedure PathEditChanged(Sender: TObject);
     // Node-data helpers (node data = an Integer index into FPaths).
-    function  AddPathNode(AParent: PTyTreeNode; const AFullPath: string): PTyTreeNode;
+    function  AddPathNode(AParent: PTyTreeNode; const AFullPath: string;
+      const ACaption: string = ''; AIcon: TTyFsPlaceIcon = fpiFolder): PTyTreeNode;
     function  NodePath(Node: PTyTreeNode): string;
     procedure PopulateChildren(Node: PTyTreeNode);
     // Tree event handlers.
@@ -65,6 +71,11 @@ type
       writability. False keeps the dialog open. }
     function  AcceptSelection: Boolean;
   protected
+    { #246. The places listed above the drives when the picker is not rooted: the home folder
+      (where the platform has one, under rsFdPlaceHome) and the user's common folders
+      (TyFsKnownFolders). Virtual so a descendant can list places of its own; each is shown
+      under its Display with the picture TyFsPlaceIconOf gives. }
+    function TopPlaces: TTyFsRootArray; virtual;
     procedure LayoutContent; override;
     { Says why OK was refused: an error box. Virtual so a test can read the message instead of
       putting a modal window up. }
@@ -76,7 +87,8 @@ type
     constructor CreateNew(AOwner: TComponent; Num: Integer = 0); override;
     destructor  Destroy; override;
     function  CloseQuery: Boolean; override;
-    // Add one root node per configured source (a single FRoot, else every drive).
+    // Add one root node per configured source: a single FRoot, else the user's common folders
+    // (and the home folder where there is one) and then every drive.
     procedure PopulateRoots;
     function  SelectedPath: string;
     procedure SetDirectory(const APath: string);
@@ -231,6 +243,7 @@ begin
   Constraints.MinWidth  := Px(320);
   Constraints.MinHeight := Px(320);
   FPaths := TStringList.Create;
+  FCaptions := TStringList.Create;
   BuildIcons;
   FTree := TTyTreeView.Create(Self);
   FTree.Parent := Self;
@@ -269,42 +282,20 @@ begin
   ActiveControl := FTree;
 end;
 
-{ Build a single 16x16 manila-folder glyph (amber body + darker back-tab lip,
-  clFuchsia-keyed so it composites transparently on any theme). Ported from
-  the folder glyph in examples/treeview/showcasemain.pas (BuildFileIcons). }
+{ #246. The pictures of the file dialogs' places (tyControls.ShellIcons): a folder, a drive,
+  the home folder and the six common folders, rendered from 128 px masters at whatever size
+  the row asks for. It was one 16x16 folder bitmap for every node, a drive included. }
 procedure TTySelectPathForm.BuildIcons;
-var
-  bmp: TBitmap;
-  C: TCanvas;
 begin
-  FIcons := TImageList.Create(Self);   { Owner = form -> auto-freed }
-  FIcons.Width  := 16;
-  FIcons.Height := 16;
-
-  bmp := TBitmap.Create;
-  try
-    bmp.SetSize(16, 16);
-    bmp.Canvas.Brush.Color := clFuchsia;   { transparency key }
-    bmp.Canvas.FillRect(0, 0, 16, 16);
-    bmp.Canvas.Pen.Style := psSolid;
-    bmp.Canvas.Pen.Width := 1;
-
-    C := bmp.Canvas;
-    C.Brush.Color := $0033B0E8;   { warm amber body (BGR of #E8B033) }
-    C.Pen.Color   := $001E84B8;   { darker amber edge }
-    C.RoundRect(1, 5, 15, 14, 3, 3);
-    { Back tab lip peeking over the top-left. }
-    C.Brush.Color := $0055C8F0;
-    C.Pen.Color   := $001E84B8;
-    C.Polygon([Point(2, 5), Point(2, 3), Point(6, 3), Point(8, 5)]);
-    FIcons.AddMasked(bmp, clFuchsia);
-  finally
-    bmp.Free;
-  end;
+  FIconMasters := TTyImageCollection.Create(Self);   { Owner = form -> auto-freed }
+  FIcons := TTyVirtualImageList.Create(Self);
+  FIcons.Collection := FIconMasters;
+  TyAddPlaceIcons(FIconMasters, FIcons.Names);
 end;
 
 destructor TTySelectPathForm.Destroy;
 begin
+  FCaptions.Free;
   FPaths.Free;    // FTree is owned by the form (Create(Self)) and freed with it
   inherited Destroy;
 end;
@@ -397,10 +388,12 @@ begin
   Result := FPathEdit;
 end;
 
-function TTySelectPathForm.AddPathNode(AParent: PTyTreeNode; const AFullPath: string): PTyTreeNode;
+function TTySelectPathForm.AddPathNode(AParent: PTyTreeNode; const AFullPath: string;
+  const ACaption: string; AIcon: TTyFsPlaceIcon): PTyTreeNode;
 begin
   Result := FTree.AddChild(AParent);
-  PInteger(FTree.GetNodeData(Result))^ := FPaths.Add(AFullPath);
+  PInteger(FTree.GetNodeData(Result))^ := FPaths.AddObject(AFullPath, TObject(PtrInt(Ord(AIcon))));
+  FCaptions.Add(ACaption);
   { Materialise this node now (headless: no paint loop to lazy-init it) so its
     has-children arrow is stamped via OnInitNode based on TyPathHasSubdir. }
   FTree.InitNode(Result);
@@ -428,23 +421,48 @@ begin
 end;
 
 procedure TTySelectPathForm.PopulateRoots;
-var roots: TStringArray; i: Integer;
+var
+  roots: TStringArray;
+  places: TTyFsRootArray;
+  i: Integer;
 begin
   FTree.Clear;
   FPaths.Clear;
+  FCaptions.Clear;
   if (FRoot <> '') and DirectoryExists(FRoot) then
     AddPathNode(nil, FRoot)
   else
   begin
+    { #246: the places first, under the names the file dialogs list them by; a folder
+      inside one is then shown under it, as in the file dialogs' folder tree. Then the
+      drives, as before. }
+    places := TopPlaces;
+    for i := 0 to High(places) do
+      AddPathNode(nil, places[i].Path, places[i].Display, TyFsPlaceIconOf(places[i]));
     roots := TyDriveRoots;
     for i := 0 to High(roots) do
-      AddPathNode(nil, roots[i]);
+      AddPathNode(nil, roots[i], '', fpiDrive);
   end;
 end;
 
-procedure TTySelectPathForm.TreeGetText(Sender: TTyCustomTreeView; Node: PTyTreeNode; var AText: string);
-var p: string;
+function TTySelectPathForm.TopPlaces: TTyFsRootArray;
 begin
+  Result := TyFsHomeAndKnown(TyFsRoots, TyFsKnownFolders);
+end;
+
+procedure TTySelectPathForm.TreeGetText(Sender: TTyCustomTreeView; Node: PTyTreeNode; var AText: string);
+var p: string; idx: Integer;
+begin
+  { A place is listed under its name, whatever its folder is called on disk. }
+  if (Node <> nil) and (FTree.GetNodeData(Node) <> nil) then
+  begin
+    idx := PInteger(FTree.GetNodeData(Node))^;
+    if (idx >= 0) and (idx < FCaptions.Count) and (FCaptions[idx] <> '') then
+    begin
+      AText := FCaptions[idx];
+      Exit;
+    end;
+  end;
   p := NodePath(Node);
   AText := ExtractFileName(ExcludeTrailingPathDelimiter(p));
   if AText = '' then AText := p;   // a drive root like 'C:\' collapses to '' above
@@ -460,10 +478,15 @@ end;
 
 procedure TTySelectPathForm.TreeGetImageIndex(Sender: TTyCustomTreeView; Node: PTyTreeNode;
   Kind: TTyVTImageKind; Column: Integer; var Ghosted: Boolean; var ImageIndex: Integer);
+var
+  idx: Integer;
 begin
-  { Single folder glyph for every node — every entry in this tree is a
-    directory, so there is no file/folder distinction to make. }
-  ImageIndex := 0;
+  { A folder for every node but the top-level ones that are a drive or a place. }
+  ImageIndex := TyPlaceIconIndex(fpiFolder);
+  if (Node = nil) or (FTree.GetNodeData(Node) = nil) then Exit;
+  idx := PInteger(FTree.GetNodeData(Node))^;
+  if (idx >= 0) and (idx < FPaths.Count) then
+    ImageIndex := TyPlaceIconIndex(TTyFsPlaceIcon(PtrInt(FPaths.Objects[idx])));
 end;
 
 procedure TTySelectPathForm.TreeExpanding(Sender: TTyCustomTreeView; Node: PTyTreeNode; var Allowed: Boolean);

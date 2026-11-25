@@ -329,8 +329,9 @@ var
   d: TTyFileDialogForm;
   order: string;
 const
-  { top row: the folder box, the view box; the middle: tree, list; below: name, then type }
-  cContent = 'TTyShellComboBox TTyComboBox TTyShellTreeView TTyShellListView TTyEdit '
+  { top row: the folder box, the view box; the middle: the places (#246), the list; below:
+    name, then type }
+  cContent = 'TTyShellComboBox TTyComboBox TTyShellPlacesView TTyShellListView TTyEdit '
     + 'TTyFilterComboBox ';
 begin
   d := TyBuildFileDialog(True, False, 'Save');

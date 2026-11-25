@@ -750,6 +750,18 @@ Homepage: https://github.com/ACTom/TyControls"/>
         <UnitName Value="tyControls.ShellComboBox"/>
       </Item>
       <Item>
+        <Filename Value="source/tyControls.ShellIcons.pas"/>
+        <UnitName Value="tyControls.ShellIcons"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.ShellPlaces.pas"/>
+        <UnitName Value="tyControls.ShellPlaces"/>
+      </Item>
+      <Item>
+        <Filename Value="source/tyControls.ShellPlacesView.pas"/>
+        <UnitName Value="tyControls.ShellPlacesView"/>
+      </Item>
+      <Item>
         <Filename Value="source/tyControls.PreviewBox.pas"/>
         <UnitName Value="tyControls.PreviewBox"/>
       </Item>

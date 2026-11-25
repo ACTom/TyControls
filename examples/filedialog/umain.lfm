@@ -217,6 +217,7 @@ object MainForm: TMainForm
     Options = [ofAllowMultiSelect, ofPathMustExist, ofFileMustExist]
     OnShow = DlgOpenShow
     OnClose = DlgOpenClose
+    OnPlaces = DlgOpenPlaces
     Left = 480
     Top = 60
   end
@@ -238,6 +239,7 @@ object MainForm: TMainForm
   object DlgSavePic: TTySavePictureDialog
     Title = 'Save picture'
     DefaultExt = 'png'
+    LeftPane = fdpFolderTree
     Left = 560
     Top = 116
   end

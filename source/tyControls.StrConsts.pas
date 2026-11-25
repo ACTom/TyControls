@@ -211,6 +211,13 @@ resourcestring
   rsFdPlacePictures  = 'Pictures';
   rsFdPlaceMusic     = 'Music';
   rsFdPlaceVideos    = 'Videos';
+  // --- File dialogs: the places pane (#246) ---
+  // The home folder as a place (Linux, macOS), and the headings the places are listed under.
+  rsFdPlaceHome      = 'Home';
+  rsFdGroupPlaces    = 'Places';
+  rsFdGroupDevices   = 'Devices';
+  rsFdGroupPinned    = 'Pinned';
+  rsFdGroupRecent    = 'Recent';
   rsFdOverwritePrompt = 'The file "%s" already exists.'#10'Do you want to replace it?';
   rsFdMustExist      = 'The file "%s" does not exist.';
   rsFdPathMustExist  = 'The folder "%s" does not exist.';

@@ -184,6 +184,7 @@ uses
   test.combobox.editfield,
   test.dialogs.focus,
   test.shell.places,
+  test.filedialog.places,
   test.tabset,
   test.columns.compat,
   test.listview.layout,

@@ -190,3 +190,11 @@ msgstr "保存（带预览）"
 #: umain.rsvetoed
 msgid "Save: OnCanClose returned False — the dialog stays open"
 msgstr "保存：OnCanClose 返回 False —— 对话框留在原地"
+
+#: umain.rsplacesgroup
+msgid "This example"
+msgstr "本示例"
+
+#: umain.rsplaceprogram
+msgid "Program folder"
+msgstr "程序所在文件夹"

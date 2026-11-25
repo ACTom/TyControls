@@ -425,6 +425,22 @@ msgstr ""
 msgid "File type:"
 msgstr ""
 
+#: tycontrols.strconsts.rsfdgroupdevices
+msgid "Devices"
+msgstr ""
+
+#: tycontrols.strconsts.rsfdgrouppinned
+msgid "Pinned"
+msgstr ""
+
+#: tycontrols.strconsts.rsfdgroupplaces
+msgid "Places"
+msgstr ""
+
+#: tycontrols.strconsts.rsfdgrouprecent
+msgid "Recent"
+msgstr ""
+
 #: tycontrols.strconsts.rsfdlookin
 msgid "Look in:"
 msgstr ""
@@ -470,6 +486,10 @@ msgstr ""
 
 #: tycontrols.strconsts.rsfdplacedownloads
 msgid "Downloads"
+msgstr ""
+
+#: tycontrols.strconsts.rsfdplacehome
+msgid "Home"
 msgstr ""
 
 #: tycontrols.strconsts.rsfdplacemusic
