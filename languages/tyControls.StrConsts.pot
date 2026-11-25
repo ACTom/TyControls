@@ -201,6 +201,7 @@ msgid "AaBbYyZz 0123"
 msgstr ""
 
 #: tycontrols.strconsts.rsdlgfontsize
+msgctxt "tycontrols.strconsts.rsdlgfontsize"
 msgid "Size"
 msgstr ""
 
@@ -406,6 +407,23 @@ msgstr ""
 msgid "Save"
 msgstr ""
 
+#: tycontrols.strconsts.rsfdcolmodified
+msgid "Modified"
+msgstr ""
+
+#: tycontrols.strconsts.rsfdcolname
+msgid "Name"
+msgstr ""
+
+#: tycontrols.strconsts.rsfdcolsize
+msgctxt "tycontrols.strconsts.rsfdcolsize"
+msgid "Size"
+msgstr ""
+
+#: tycontrols.strconsts.rsfdcoltype
+msgid "Type"
+msgstr ""
+
 #: tycontrols.strconsts.rsfdcommonfilter
 msgid "Common Formats (*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.txt;*.md;*.json;*.xml;*.csv;*.log;*.ini)|*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.txt;*.md;*.json;*.xml;*.csv;*.log;*.ini|All Files (*.*)|*.*"
 msgstr ""
@@ -506,6 +524,19 @@ msgstr ""
 
 #: tycontrols.strconsts.rsfdsavetitle
 msgid "Save As"
+msgstr ""
+
+#: tycontrols.strconsts.rsfdtypefile
+msgid "File"
+msgstr ""
+
+#: tycontrols.strconsts.rsfdtypefileof
+#, object-pascal-format
+msgid "%s File"
+msgstr ""
+
+#: tycontrols.strconsts.rsfdtypefolder
+msgid "Folder"
 msgstr ""
 
 #: tycontrols.strconsts.rsfdup

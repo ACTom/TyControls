@@ -316,6 +316,7 @@ msgid "Family"
 msgstr "字体"
 
 #: tycontrols.strconsts.rsdlgfontsize
+msgctxt "tycontrols.strconsts.rsdlgfontsize"
 msgid "Size"
 msgstr "字号"
 
@@ -420,6 +421,23 @@ msgstr "打开"
 msgid "Save"
 msgstr "保存"
 
+#: tycontrols.strconsts.rsfdcolmodified
+msgid "Modified"
+msgstr "修改日期"
+
+#: tycontrols.strconsts.rsfdcolname
+msgid "Name"
+msgstr "名称"
+
+#: tycontrols.strconsts.rsfdcolsize
+msgctxt "tycontrols.strconsts.rsfdcolsize"
+msgid "Size"
+msgstr "大小"
+
+#: tycontrols.strconsts.rsfdcoltype
+msgid "Type"
+msgstr "类型"
+
 #: tycontrols.strconsts.rsfdcommonfilter
 msgid "Common Formats (*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.txt;*.md;*.json;*.xml;*.csv;*.log;*.ini)|*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.txt;*.md;*.json;*.xml;*.csv;*.log;*.ini|All Files (*.*)|*.*"
 msgstr "常用格式 (*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.txt;*.md;*.json;*.xml;*.csv;*.log;*.ini)|*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.txt;*.md;*.json;*.xml;*.csv;*.log;*.ini|所有文件 (*.*)|*.*"
@@ -497,6 +515,19 @@ msgstr "设备"
 #: tycontrols.strconsts.rsfdsavetitle
 msgid "Save As"
 msgstr "另存为"
+
+#: tycontrols.strconsts.rsfdtypefile
+msgid "File"
+msgstr "文件"
+
+#: tycontrols.strconsts.rsfdtypefileof
+#, object-pascal-format
+msgid "%s File"
+msgstr "%s 文件"
+
+#: tycontrols.strconsts.rsfdtypefolder
+msgid "Folder"
+msgstr "文件夹"
 
 #: tycontrols.strconsts.rsfdup
 msgid "Up"

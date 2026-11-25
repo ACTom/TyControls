@@ -522,10 +522,13 @@ begin
   { These are the AUTHORED proportions AutoSizeColumns scales across the pane (not fixed
     widths): Name is weighted to take the bulk so a wide pane -- e.g. the widened file
     dialog -- grows the Name column rather than leaving Size/Type/Modified looking empty. }
-  AddCol('Name',     320, taLeftJustify);
-  AddCol('Size',      90, taRightJustify);
-  AddCol('Type',     110, taLeftJustify);
-  AddCol('Modified', 150, taLeftJustify);
+  { #249: the headers are the catalogue's words, read when the list is built. They were
+    literals, so a translated application kept this row in English. A column's Text is the
+    application's to change afterwards, as it always was. }
+  AddCol(rsFdColName,     320, taLeftJustify);
+  AddCol(rsFdColSize,      90, taRightJustify);
+  AddCol(rsFdColType,     110, taLeftJustify);
+  AddCol(rsFdColModified, 150, taLeftJustify);
 end;
 
 { Build a small set of BGRA kind glyphs at a 128px master (downsampling stays crisp;

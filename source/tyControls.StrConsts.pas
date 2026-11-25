@@ -203,6 +203,15 @@ resourcestring
   rsFdViewSmallIcon  = 'Small icons';
   rsFdViewLargeIcon  = 'Large icons';
   rsFdViewTile       = 'Tiles';
+  // --- File dialogs: the file list's column headers and the names of its kinds (#249) ---
+  rsFdColName        = 'Name';
+  rsFdColSize        = 'Size';
+  rsFdColType        = 'Type';
+  rsFdColModified    = 'Modified';
+  rsFdTypeFolder     = 'Folder';
+  rsFdTypeFile       = 'File';
+  // %s is the file's extension in capitals: 'TXT File'.
+  rsFdTypeFileOf     = '%s File';
   // --- File dialogs: the user's common folders, listed as places (#245) ---
   // The names shown for them, whatever each folder is called on disk.
   rsFdPlaceDesktop   = 'Desktop';
