@@ -791,9 +791,12 @@ type
     rtrOutOfRange    a row or cell index, a size or a position out of range;
     rtrInField       an insert of a table inside a field's result (it is read-only);
     rtrNotEmpty      a merge of cells whose cells that go (or that become covered) are not
-                     empty: their content would go with them. }
+                     empty: their content would go with them;
+    rtrNotRectangle  a merge of cells whose rows do not each meet the rectangle's left and
+                     right edges (within the slack) with cells that fill it exactly. }
   TTyRichTableRefusal = (rtrNone, rtrReadOnly, rtrNoTable, rtrInTable, rtrMergedCells,
-    rtrNestedTable, rtrNotWhole, rtrIrregularRows, rtrOutOfRange, rtrInField, rtrNotEmpty);
+    rtrNestedTable, rtrNotWhole, rtrIrregularRows, rtrOutOfRange, rtrInField, rtrNotEmpty,
+    rtrNotRectangle);
 
 const
   { Two rows share an edge when their edges are at most this far apart (twips): a Word table's
@@ -7331,7 +7334,7 @@ function RefusalName(R: TTyRichTableRefusal): string;
 const
   Names: array[TTyRichTableRefusal] of string = ('none', 'read-only', 'no table', 'in a table',
     'merged cells', 'nested table', 'not whole', 'irregular rows', 'out of range',
-    'in a field''s result', 'cells not empty');
+    'in a field''s result', 'cells not empty', 'not a rectangle');
 begin
   Result := Names[R];
 end;
@@ -8369,6 +8372,7 @@ var
   p, c, firstFmt: TTyRichRowFormat;
   cf, nf: TTyRichCellFormat;
   firstNew: TTyRichNewParas;
+  oldBottom: TTyRichBorder;
 
   // cell m of the k a cell was split into, from its format cf
   function Part(const ACell: TTyRichCellFormat; AM, AQ: Integer): TTyRichCellFormat;
@@ -8501,6 +8505,13 @@ begin
       // (the span's look is its first row's)
       if q > 0 then cf.Props := Self.Shape.Rows[r0].Row.Format.Cells[Edit.Index].Props;
       for m := 0 to d do c.Cells[j + m] := Part(cf, m, q);
+      { one row split down: the line between its parts is the cell's top - the upper part's
+        bottom as the lower part's top; the last part keeps the cell's bottom }
+      if (add > 0) and (q = 0) then
+      begin
+        oldBottom := cf.Props.Borders[rcsBottom];
+        for m := 0 to d do c.Cells[j + m].Props.Borders[rcsBottom] := cf.Props.Borders[rcsTop];
+      end;
       // one row split down: its other cells reach over the rows that come
       if add > 0 then
         for i := 0 to High(c.Cells) do
@@ -8540,6 +8551,7 @@ begin
               // (the split cell's own rows: no merge down)
               nf.VMerge := rcmNone;
               nf.Props.Borders[rcsTop] := firstFmt.Cells[i].Props.Borders[rcsTop];
+              if a = add then nf.Props.Borders[rcsBottom] := oldBottom;
               c.Cells[i] := nf;
             end
             else
@@ -9201,13 +9213,17 @@ begin
   Result := rtrNone;
 end;
 
-{ A merge of S's rows (S holds them, from Base on): fewer than two cells - rtrOutOfRange; a cell
-  that goes, or one that the merged cell comes to cover (the first of a row below the first),
-  holding more than one empty paragraph - rtrNotEmpty; else rtrNone. }
+{ A merge of S's rows (S holds them, from Base on): a row of Row0 .. Row1 whose cells under
+  X0 .. X1 do not begin at X0 and end at X1 (within the slack) - rtrNotRectangle (the merged
+  cell would not be a rectangle); one cell or none there (a cell merged down counted once) -
+  rtrOutOfRange; a cell that goes, or one that the merged cell comes to cover (the first of a
+  row below the first), holding more than one empty paragraph - rtrNotEmpty; else rtrNone. }
 function MergeRefusal(ADoc: TTyRichDocument; const S: TTyRichShape;
   const AEdit: TTyRichTableEdit): TTyRichTableRefusal;
 var
-  r, a, b, j, n, from: Integer;
+  r, a, b, j, n, from, rows, l: Integer;
+  row: TTyRichRow;
+  e: TTyRichEdges;
 
   function Empty(const C: TTyRichShapeCell): Boolean;
   begin
@@ -9216,17 +9232,29 @@ var
 
 begin
   n := 0;
+  rows := 0;
   Result := rtrNone;
   for r := 0 to S.RowCount - 1 do
-    if (S.Base + r >= AEdit.Row0) and (S.Base + r <= AEdit.Row1) and
-       MergeRun(S.Rows[r].Row, AEdit.X0, AEdit.X1, a, b) then
-    begin
-      Inc(n, b - a + 1);
-      if S.Base + r = AEdit.Row0 then from := a + 1 else from := a;
-      for j := from to b do
-        if (j <= High(S.Rows[r].Cells)) and not Empty(S.Rows[r].Cells[j]) then
-          Result := rtrNotEmpty;
-    end;
+  begin
+    if (S.Base + r < AEdit.Row0) or (S.Base + r > AEdit.Row1) then Continue;
+    Inc(rows);
+    row := S.Rows[r].Row;
+    if not MergeRun(row, AEdit.X0, AEdit.X1, a, b) then Exit(rtrNotRectangle);
+    e := row.CellEdges;
+    if a = 0 then l := row.Format.Row.LeftTwips else l := e[a - 1];
+    if (Abs(l - AEdit.X0) > CRichSharedEdgeTwips) or (Abs(e[b] - AEdit.X1) > CRichSharedEdgeTwips) then
+      Exit(rtrNotRectangle);
+    for j := a to b do
+      // (a cell that continues a merge down from a row of the rectangle: the same cell)
+      if (S.Base + r = AEdit.Row0) or (j >= row.Format.CellCount) or
+         (row.Format.Cells[j].VMerge <> rcmContinue) then
+        Inc(n);
+    if S.Base + r = AEdit.Row0 then from := a + 1 else from := a;
+    for j := from to b do
+      if (j <= High(S.Rows[r].Cells)) and not Empty(S.Rows[r].Cells[j]) then
+        Result := rtrNotEmpty;
+  end;
+  if rows < AEdit.Row1 - AEdit.Row0 + 1 then Exit(rtrOutOfRange);
   if n < 2 then Result := rtrOutOfRange;
 end;
 

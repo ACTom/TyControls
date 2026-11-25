@@ -14,7 +14,7 @@ uses
   tyControls.RichEdit.Text, tyControls.RichEdit.Model, tyControls.RichEdit.Commands,
   tyControls.RichEdit.RtfRead, tyControls.RichEdit.RtfWrite, tyControls.RichEdit.Layout,
   tyControls.RichEdit.TableProps, tyControls.RichEdit.TableSel, tyControls.RichEdit,
-  tyControls.RichEdit.Grid, tyControls.RichEdit.Builder, test.richedit.layoutdevice,
+  tyControls.RichEdit.RowFormat, tyControls.RichEdit.Grid, tyControls.RichEdit.Actions, tyControls.StrConsts, tyControls.RichEdit.Builder, test.richedit.layoutdevice,
   test.richedit.grid;
 
 type
@@ -31,6 +31,7 @@ type
     ClipText: string;
     Refusals: TStringList;
     procedure Refused(Sender: TObject; const AReason: string);
+    procedure Key(AKey: Word);
     destructor Destroy; override;
   end;
 
@@ -45,6 +46,11 @@ type
     function SaveRtf: RawByteString;
     function Grid: TTyRichGrid;
     function CellParas(ARow, ACell: Integer): string;
+    procedure LoadRows(const ARows: RawByteString);
+  public
+    FAskedCell, FAskedSplit: string;
+    procedure SplitAsked(Sender: TObject; ACellColumns, ACellRows: Integer;
+      var AColumns, ARows: Integer; var ASplit: Boolean);
   protected
     procedure SetUp; override;
     procedure TearDown; override;
@@ -73,6 +79,20 @@ type
     procedure TestACopyOfCellsKeepsItsSpans;
     procedure TestAPasteIntoCellsGoesByTheGrid;
     procedure TestABookmarkIsNeverThereTwice;
+    procedure TestACaretInAMergedCellStandsForTheCell;
+    procedure TestWhatIsHighlightedIsWhatTheRowDoorsTake;
+    procedure TestAMergeMustMakeARectangle;
+    procedure TestAContinuationOfAnotherWidthIsACellOfItsOwn;
+    procedure TestMarksAcrossInAMergeDownReadAsOneCell;
+    procedure TestTheSlackIsPinned;
+    procedure TestASplitsInnerEdgeHasOneLine;
+    procedure TestTheMergedCellsBottomIsTheLastRows;
+    procedure TestAutoFitInACellMergedAcrossKeepsTheTableWhole;
+    procedure TestEveryMergeAndSplitRefusalIsToldInItsWords;
+    procedure TestOneCellSelectedWholeDoesNotMerge;
+    procedure TestTheSplitActionStartsFromTheCellColumnsFirst;
+    procedure TestCopiedCellsTextGoesByTheGrid;
+    procedure TestACellForACoveredPlaceNamesTheMistake;
     procedure TestSelectColumnTakesASpanWhole;
     procedure TestEveryRewrittenCellSaysItsOwnWidth;
     procedure TestARandomWalkKeepsTheGridWhole;
@@ -108,6 +128,14 @@ end;
 function TMergeRich.ReadClipboardText: string;
 begin
   Result := ClipText;
+end;
+
+procedure TMergeRich.Key(AKey: Word);
+var
+  k: Word;
+begin
+  k := AKey;
+  KeyDown(k, []);
 end;
 
 procedure TMergeRich.Refused(Sender: TObject; const AReason: string);
@@ -725,6 +753,7 @@ end;
   (TyRichGridListing, from the model: the table the listing's first line names). }
 procedure TTyRichMergeTest.TestWordReadsWhatWeWrite;
 var
+  p: TTyRichCellProps;
   dir: string;
   n: Integer;
 
@@ -921,7 +950,32 @@ begin
   Keep('builder-row-of-three', 0);
   BuildFive(FRich, [Span(1, 0, 3, 1)], True);
   Keep('builder-column-of-three', 0);
-  AssertEquals('every case', 16, n);
+  // a caret in a merged cell: the shading of the cell whole
+  MakeTable(5, 5);
+  SelCells(1, 1, 3, 1);
+  AssertTrue(FRich.MergeCells);
+  FRich.SelStart := CellStart(1, 1);
+  AssertTrue(FRich.SetCellShading(clYellow));
+  Keep('doors-caret-in-merged-cell-shaded', 0);
+  // a cell merged across fitted to its content
+  MakeTable(5, 5);
+  SelCells(1, 1, 3, 2);
+  AssertTrue(FRich.MergeCells);
+  FRich.SelStart := CellStart(1, 1);
+  AssertTrue(FRich.AutoFitColumn);
+  Keep('doors-merged-cell-fitted', 0);
+  // a cell with lines of its own split 2 x 2: the inner lines
+  MakeTable(5, 5);
+  p := Default(TTyRichCellProps);
+  p.Valid := [rcpBorderTop, rcpBorderBottom, rcpBorderLeft];
+  p.Borders[rcsTop] := TyRichBorder(rbsDouble, 30, clRed);
+  p.Borders[rcsBottom] := TyRichBorder(rbsDashed, 20, clBlue);
+  p.Borders[rcsLeft] := TyRichBorder(rbsDotted, 15, clGreen);
+  AssertTrue(FRich.Document.Execute(TTyRichSetCellProps.Create(CellStart(0, 0), 2, 2, 2, 2, p)));
+  FRich.SelStart := CellStart(2, 2);
+  AssertTrue(FRich.SplitCell(2, 2));
+  Keep('doors-split-inner-edges', 0);
+  AssertEquals('every case', 19, n);
 end;
 
 { The command alone merges only cells that are empty but the first (the door moves their
@@ -1067,7 +1121,7 @@ begin
   AssertTrue('may delete', FRich.CanDeleteRow);
   AssertTrue('the first row deleted', FRich.DeleteRow);
   AssertEquals('one step', 1, FRich.Document.UndoDepth);
-  AssertEquals('the next row begins the merge (rcmFirst)', 1, TyRichCellVMerge(
+  AssertTrue('the next row begins the merge', rcmFirst = TyRichCellVMerge(
     FRich.Document.CellAt(FRich.Document.Text.ParaOfPos(CellStart(0, 1))).Row, 1));
   AssertEquals('the content moved down', 'r0c1|r1c1|r2c1', CellParas(0, 1));
   AssertEquals('the row''s own cell went', 'r1c0', CellParas(0, 0));
@@ -1111,7 +1165,7 @@ begin
   finally
     g.Free;
   end;
-  AssertEquals('no mark left (rcmNone)', 0, TyRichCellVMerge(FRich.Document.CellAt(
+  AssertTrue('no mark left', rcmNone = TyRichCellVMerge(FRich.Document.CellAt(
     FRich.Document.Text.ParaOfPos(CellStart(1, 1))).Row, 1));
   AssertTrue('none written', Pos('\clvmgf', SaveRtf) = 0);
 end;
@@ -1504,6 +1558,7 @@ var
   st: TBytesStream;
   a, b: TStringList;
   info: TTyRichTableInfo;
+  e: TTyRichEdges;
 
   function Rows: Integer;
   begin
@@ -1523,9 +1578,9 @@ begin
   MakeTable(6, 5);
   first := SaveRtf;
   RandSeed := 20261125;
-  for step := 1 to 60 do
+  for step := 1 to 300 do
   begin
-    op := Random(9);
+    op := Random(10);
     r0 := Random(Rows);
     c0 := Random(Math.Max(1, CellsOf(r0)));
     case op of
@@ -1564,8 +1619,15 @@ begin
           if CellsOf(r0) > 2 then FRich.DeleteColumn;
         end;
       7: FRich.Undo;
+      8: FRich.Redo;
     else
-      FRich.Redo;
+      begin
+        // one row's edge moved on its own: rows of different edges (Word's irregular tables)
+        e := FRich.Document.CellAt(FRich.Document.Text.ParaOfPos(CellStart(r0, c0))).Row.CellEdges;
+        if c0 < High(e) then
+          FRich.Document.Execute(TTyRichSetColumnEdge.Create(CellStart(0, 0), e[c0],
+            e[c0] + 100 * (Random(9) - 4) + 50, r0, r0, False));
+      end;
     end;
     g := Grid;
     try
@@ -1573,7 +1635,7 @@ begin
     finally
       g.Free;
     end;
-    if step mod 6 = 0 then
+    if step mod 10 = 0 then
     begin
       saved := SaveRtf;
       d := TTyRichDocument.Create;
@@ -1603,6 +1665,605 @@ begin
     Inc(n);
   end;
   AssertTrue('every step undone: the first bytes', SaveRtf = first);
+end;
+
+{ ---- the fix round ---- }
+
+// a document of its own made of RTF rows (ARows: \trowd ... \row each), 'after' below
+procedure TTyRichMergeTest.LoadRows(const ARows: RawByteString);
+var
+  s: RawByteString;
+  st: TBytesStream;
+begin
+  s := '{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}' + ARows + '\pard after\par}';
+  st := TBytesStream.Create;
+  try
+    st.WriteBuffer(s[1], Length(s));
+    st.Position := 0;
+    FRich.LoadFromStream(st, rfRtf);
+  finally
+    st.Free;
+  end;
+  FRich.FinishLoading;
+end;
+
+procedure TTyRichMergeTest.SplitAsked(Sender: TObject; ACellColumns, ACellRows: Integer;
+  var AColumns, ARows: Integer; var ASplit: Boolean);
+begin
+  FAskedCell := Format('%dx%d', [ACellColumns, ACellRows]);
+  FAskedSplit := Format('%dx%d', [AColumns, ARows]);
+end;
+
+{ A caret in a cell merged down stands for the cell: the format doors format every row's cell
+  of it, InsertRow puts as many rows as it covers below its last row or above its first,
+  DeleteRow takes all its rows. }
+procedure TTyRichMergeTest.TestACaretInAMergedCellStandsForTheCell;
+var
+  g: TTyRichGrid;
+  d: TTyRichDocument;
+  tp: TTyRichPos;
+  r: Integer;
+  before: RawByteString;
+begin
+  MakeTable(5, 3);
+  SelCells(1, 1, 3, 1);
+  AssertTrue('a cell over rows 1 .. 3', FRich.MergeCells);
+  d := FRich.Document;
+  tp := CellStart(0, 0);
+  FRich.SelStart := CellStart(1, 1);
+  AssertTrue('shaded', FRich.SetCellShading(clYellow));
+  for r := 1 to 3 do
+    AssertEquals(Format('row %d''s cell of it shaded', [r]), ColorToString(clYellow),
+      ColorToString(d.CellProps(tp, r, 1).Shading));
+  AssertEquals('the cell beside it not', ColorToString(clNone), ColorToString(d.CellProps(tp, 2, 0).Shading));
+  AssertEquals('the row below not', ColorToString(clNone), ColorToString(d.CellProps(tp, 4, 1).Shading));
+  AssertTrue('aligned', FRich.SetCellVAlign(rcvBottom));
+  AssertTrue('the covered row''s cell aligned too', d.CellProps(tp, 3, 1).VAlign = rcvBottom);
+  d.ClearUndo;
+  before := SaveRtf;
+  // below: after its last row, as many rows as it covers
+  FRich.SelStart := CellStart(1, 1);
+  AssertTrue('rows below', FRich.InsertRow(True));
+  g := Grid;
+  try
+    AssertTrue('consistent', g.Consistent);
+    AssertEquals('three rows more', 8, g.RowCount);
+    AssertEquals('the merge as it was', 3, g.Cell(1, 1).RowSpan);
+    AssertFalse('the first new row its own', g.Cell(4, 1).Covered);
+    AssertEquals('the old last row moved down', 'r4c0', CellParas(7, 0));
+  finally
+    g.Free;
+  end;
+  FRich.Undo;
+  AssertTrue('undone', SaveRtf = before);
+  // above: before its first row
+  FRich.SelStart := CellStart(1, 1);
+  AssertTrue('rows above', FRich.InsertRow(False));
+  g := Grid;
+  try
+    AssertEquals('three rows more', 8, g.RowCount);
+    AssertEquals('the merge moved down', 3, g.Cell(4, 1).RowSpan);
+    AssertEquals('row 0 as it was', 'r0c0', CellParas(0, 0));
+    AssertEquals('row 1 is new', '', CellParas(1, 0));
+  finally
+    g.Free;
+  end;
+  FRich.Undo;
+  // deleted: every row it covers
+  FRich.SelStart := CellStart(1, 1);
+  AssertTrue('its rows deleted', FRich.DeleteRow);
+  g := Grid;
+  try
+    AssertTrue('consistent', g.Consistent);
+    AssertEquals('two rows left', 2, g.RowCount);
+    AssertEquals('row 0', 'r0c0', CellParas(0, 0));
+    AssertEquals('row 4 now row 1', 'r4c0', CellParas(1, 0));
+  finally
+    g.Free;
+  end;
+  FRich.Undo;
+  AssertTrue('all undone', SaveRtf = before);
+  // a plain cell's caret: one row, as before
+  FRich.SelStart := CellStart(0, 0);
+  AssertTrue('a row below a plain row', FRich.InsertRow(True));
+  g := Grid;
+  try
+    AssertEquals('one row more', 6, g.RowCount);
+  finally
+    g.Free;
+  end;
+end;
+
+{ SelectRow on a row a merge crosses highlights the grown rows: DeleteRow, Backspace and Cut
+  take those rows. }
+procedure TTyRichMergeTest.TestWhatIsHighlightedIsWhatTheRowDoorsTake;
+var
+  g: TTyRichGrid;
+  k: Integer;
+begin
+  for k := 0 to 2 do
+  begin
+    MakeTable(4, 4);
+    SelCells(1, 1, 2, 2);
+    AssertTrue('a 2 x 2 merge', FRich.MergeCells);
+    FRich.SelStart := CellStart(2, 0);
+    AssertTrue('the row', FRich.SelectRow);
+    AssertEquals('grown: from row 1', 1, FRich.SelectedCells.Row0);
+    AssertEquals('grown: to row 2', 2, FRich.SelectedCells.Row1);
+    AssertEquals('its extent across: the four columns', 4 * 1440,
+      FRich.SelectedCells.RightTwips - FRich.SelectedCells.LeftTwips);
+    case k of
+      0: AssertTrue('deleted', FRich.DeleteRow);
+      1: FRich.CutToClipboard;
+    else
+      FRich.Key(VK_BACK);
+    end;
+    g := Grid;
+    try
+      AssertTrue('consistent', g.Consistent);
+      AssertEquals(Format('%d: both rows went', [k]), 2, g.RowCount);
+      AssertEquals('row 3 now row 1', 'r3c0', CellParas(1, 0));
+    finally
+      g.Free;
+    end;
+  end;
+end;
+
+{ A merge over rows whose cells under the rectangle end at different edges would not be a
+  rectangle: refused, told in its own words, nothing changed. }
+procedure TTyRichMergeTest.TestAMergeMustMakeARectangle;
+var
+  before: RawByteString;
+  g: TTyRichGrid;
+begin
+  LoadRows('\trowd\trleft0\cellx2000\cellx4000\pard\intbl a\cell b\cell\row' +
+    '\trowd\trleft0\cellx2000\cellx3000\pard\intbl c\cell d\cell\row');
+  before := SaveRtf;
+  FRich.SelStart := FRich.Document.Text.ParaStart(1);
+  FRich.SelLength := FRich.Document.Text.ParaStart(3) + 1 - FRich.SelStart;
+  AssertFalse('no rectangle: no merge', FRich.CanMergeCells);
+  FRich.Refusals.Clear;
+  AssertFalse('refused', FRich.MergeCells);
+  AssertEquals('told once', 1, FRich.Refusals.Count);
+  AssertEquals('in its words', rsRichEditRefusedNotRectangle, FRich.Refusals[0]);
+  AssertTrue('nothing changed', SaveRtf = before);
+  g := TyRichTableGrid(FRich.Document, 0);
+  try
+    AssertTrue('consistent', g.Consistent);
+  finally
+    g.Free;
+  end;
+  // rows whose edges meet within the slack: merged
+  LoadRows('\trowd\trleft0\cellx2000\cellx4000\pard\intbl a\cell b\cell\row' +
+    '\trowd\trleft0\cellx2000\cellx4010\pard\intbl c\cell d\cell\row');
+  FRich.SelStart := FRich.Document.Text.ParaStart(1);
+  FRich.SelLength := FRich.Document.Text.ParaStart(3) + 1 - FRich.SelStart;
+  AssertTrue('within the slack: a rectangle', FRich.MergeCells);
+end;
+
+{ A cell that continues the merge above (\clvmrg) at another width, or with nothing above to
+  continue, is a cell of its own; the file opens, saves byte for byte, and the doors work on
+  the grid as read. }
+procedure TTyRichMergeTest.TestAContinuationOfAnotherWidthIsACellOfItsOwn;
+var
+  g: TTyRichGrid;
+  rows, s: RawByteString;
+  st: TBytesStream;
+begin
+  rows := '\trowd\trleft0\clvmgf\cellx2000\cellx4000\pard\intbl a\cell b\cell\row' +
+    '\trowd\trleft0\clvmrg\cellx1000\cellx4000\pard\intbl c\cell d\cell\row' +
+    '\trowd\trleft0\clvmrg\cellx3000\cellx4000\pard\intbl e\cell f\cell\row';
+  LoadRows(rows);
+  g := TyRichTableGrid(FRich.Document, 0);
+  try
+    AssertTrue('consistent as read', g.Consistent);
+    AssertFalse('the narrower one: its own', g.CellOf(1, 0).Covered);
+    AssertFalse('the wider one: its own', g.CellOf(2, 0).Covered);
+    AssertEquals('the start: one row', 1, g.CellOf(0, 0).RowSpan);
+  finally
+    g.Free;
+  end;
+  // (byte for byte)
+  st := TBytesStream.Create;
+  try
+    s := '{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}' + rows + '\pard after\par}';
+    st.WriteBuffer(s[1], Length(s));
+    st.Position := 0;
+    FRich.LoadFromStream(st, rfRtf);
+    FRich.FinishLoading;
+    AssertTrue('saved as read', SaveRtf = s);
+  finally
+    st.Free;
+  end;
+  // a continuation with nothing above it
+  LoadRows('\trowd\trleft0\clvmrg\cellx2000\cellx4000\pard\intbl a\cell b\cell\row' +
+    '\trowd\trleft0\cellx2000\cellx4000\pard\intbl c\cell d\cell\row');
+  g := TyRichTableGrid(FRich.Document, 0);
+  try
+    AssertTrue('consistent', g.Consistent);
+    AssertFalse('its own', g.CellOf(0, 0).Covered);
+  finally
+    g.Free;
+  end;
+  FRich.SelStart := FRich.Document.Text.ParaStart(0);
+  AssertTrue('split into rows', FRich.SplitCell(1, 2));
+  g := TyRichTableGrid(FRich.Document, 0);
+  try
+    AssertTrue('consistent after the split', g.Consistent);
+  finally
+    g.Free;
+  end;
+  // a continuation that starts at another column (ending where the start ends): its own
+  LoadRows('\trowd\trleft0\clvmgf\cellx3000\pard\intbl a\cell\row' +
+    '\trowd\trleft0\cellx1000\clvmrg\cellx3000\pard\intbl b\cell c\cell\row');
+  g := TyRichTableGrid(FRich.Document, 0);
+  try
+    AssertTrue('another start column: consistent', g.Consistent);
+    AssertFalse('another start column: its own', g.CellOf(1, 1).Covered);
+  finally
+    g.Free;
+  end;
+  // the same width: it continues
+  LoadRows('\trowd\trleft0\clvmgf\cellx2000\cellx4000\pard\intbl a\cell b\cell\row' +
+    '\trowd\trleft0\clvmrg\cellx2010\cellx4000\pard\intbl\cell d\cell\row');
+  g := TyRichTableGrid(FRich.Document, 0);
+  try
+    AssertTrue('within the slack: covered', g.CellOf(1, 0).Covered);
+    AssertEquals('a cell over two rows', 2, g.CellOf(0, 0).RowSpan);
+  finally
+    g.Free;
+  end;
+end;
+
+{ A cell merged across in marks (\clmgf, \clmrg) that is merged down too reads as one cell over
+  both rows and both columns; a split beside it (rows added) leaves the grid whole, and so
+  does one in a row of 63 cells with such a pair. }
+procedure TTyRichMergeTest.TestMarksAcrossInAMergeDownReadAsOneCell;
+var
+  g: TTyRichGrid;
+  s: RawByteString;
+  i: Integer;
+begin
+  LoadRows('\trowd\trleft0\clmgf\clvmgf\cellx2000\clmrg\clvmgf\cellx4000\cellx6000\pard\intbl a\cell\cell c\cell\row' +
+    '\trowd\trleft0\clmgf\clvmrg\cellx2000\clmrg\clvmrg\cellx4000\cellx6000\pard\intbl\cell\cell f\cell\row');
+  g := TyRichTableGrid(FRich.Document, 0);
+  try
+    AssertTrue('consistent', g.Consistent);
+    AssertEquals('two columns', 2, g.CellOf(0, 0).ColSpan);
+    AssertEquals('two rows', 2, g.CellOf(0, 0).RowSpan);
+    AssertTrue('the second row''s first: covered', g.CellOf(1, 0).Covered);
+    AssertTrue('... and its second', g.CellOf(1, 1).Covered);
+  finally
+    g.Free;
+  end;
+  // a split that adds rows beside a merge across in marks
+  LoadRows('\trowd\trleft0\clmgf\cellx2000\clmrg\cellx4000\cellx6000\pard\intbl a\cell\cell c\cell\row');
+  FRich.SelStart := FRich.Document.Text.ParaStart(2);
+  AssertTrue('split into two rows', FRich.SplitCell(1, 2));
+  g := TyRichTableGrid(FRich.Document, 0);
+  try
+    AssertTrue('consistent after the split', g.Consistent);
+    AssertEquals('the merge across goes down with the rows', 2, g.CellOf(0, 0).RowSpan);
+  finally
+    g.Free;
+  end;
+  // 63 cells, a pair in marks; a split of each other cell into two rows
+  s := '\trowd\trleft0\clmgf\cellx100\clmrg\cellx200';
+  for i := 3 to 63 do s := s + '\cellx' + IntToStr(i * 100);
+  s := s + '\pard\intbl';
+  for i := 1 to 63 do s := s + ' x\cell';
+  LoadRows(s + '\row');
+  for i := 2 to 62 do
+  begin
+    FRich.SelStart := FRich.Document.Text.ParaStart(i);
+    AssertTrue(Format('cell %d split', [i]), FRich.SplitCell(1, 2));
+    g := TyRichTableGrid(FRich.Document, 0);
+    try
+      AssertTrue(Format('cell %d: consistent', [i]), g.Consistent);
+    finally
+      g.Free;
+    end;
+    FRich.Undo;
+  end;
+end;
+
+{ Edges within the slack of their group's first edge are one; a difference equal to the slack
+  is one edge, one twip more two; edges do not chain. }
+procedure TTyRichMergeTest.TestTheSlackIsPinned;
+
+  function Cols(AEdge: Integer): Integer;
+  var
+    g: TTyRichGrid;
+  begin
+    LoadRows('\trowd\trleft0\cellx1000\cellx3000\pard\intbl a\cell b\cell\row' +
+      '\trowd\trleft0\cellx' + IntToStr(AEdge) + '\cellx3000\pard\intbl c\cell d\cell\row');
+    g := TyRichTableGrid(FRich.Document, 0);
+    try
+      Result := g.ColCount;
+    finally
+      g.Free;
+    end;
+  end;
+
+var
+  g: TTyRichGrid;
+begin
+  AssertEquals('slack - 1: one edge', 2, Cols(1000 + CRichEdgeSlackTwips - 1));
+  AssertEquals('the slack: one edge', 2, Cols(1000 + CRichEdgeSlackTwips));
+  AssertEquals('slack + 1: two', 3, Cols(1000 + CRichEdgeSlackTwips + 1));
+  // 1985 / 2000 / 2015: 1985 and 2000 one edge, 2015 (30 from the group's first) another
+  LoadRows('\trowd\trleft0\cellx1985\cellx3000\pard\intbl a\cell b\cell\row' +
+    '\trowd\trleft0\cellx2000\cellx3000\pard\intbl c\cell d\cell\row' +
+    '\trowd\trleft0\cellx2015\cellx3000\pard\intbl e\cell f\cell\row');
+  g := TyRichTableGrid(FRich.Document, 0);
+  try
+    AssertEquals('no chain: three columns', 3, g.ColCount);
+    AssertEquals('the group''s first edge', 1985, g.Edge(1));
+    AssertEquals('the next group', 2015, g.Edge(2));
+    AssertEquals('2000 is 1985''s: a plain cell', 1, g.CellOf(1, 0).ColSpan);
+    AssertEquals('2015: over both', 2, g.CellOf(2, 0).ColSpan);
+    AssertTrue('consistent', g.Consistent);
+  finally
+    g.Free;
+  end;
+end;
+
+{ A cell split into rows: the line between its parts is its top - the upper part's bottom and
+  the lower part's top alike; the last part keeps its bottom. Between columns: its left. }
+procedure TTyRichMergeTest.TestASplitsInnerEdgeHasOneLine;
+var
+  d: TTyRichDocument;
+  tp: TTyRichPos;
+  p: TTyRichCellProps;
+begin
+  MakeTable(3, 3);
+  d := FRich.Document;
+  tp := CellStart(0, 0);
+  p := Default(TTyRichCellProps);
+  p.Valid := [rcpBorderTop, rcpBorderBottom, rcpBorderLeft];
+  p.Borders[rcsTop] := TyRichBorder(rbsDouble, 30, clRed);
+  p.Borders[rcsBottom] := TyRichBorder(rbsDashed, 20, clBlue);
+  p.Borders[rcsLeft] := TyRichBorder(rbsDotted, 10, clGreen);
+  AssertTrue('the cell''s lines', d.Execute(TTyRichSetCellProps.Create(tp, 1, 1, 1, 1, p)));
+  FRich.SelStart := CellStart(1, 1);
+  AssertTrue('split 2 x 2', FRich.SplitCell(2, 2));
+  // rows 1 and 2 now hold the parts
+  AssertTrue('the upper part''s bottom: the top line', d.CellProps(tp, 1, 1).Borders[rcsBottom].Style = rbsDouble);
+  AssertTrue('the lower part''s top: the top line', d.CellProps(tp, 2, 1).Borders[rcsTop].Style = rbsDouble);
+  AssertTrue('the last part''s bottom kept', d.CellProps(tp, 2, 1).Borders[rcsBottom].Style = rbsDashed);
+  AssertTrue('the first part''s top kept', d.CellProps(tp, 1, 1).Borders[rcsTop].Style = rbsDouble);
+  AssertTrue('between the columns: the left line, right of the first', d.CellProps(tp, 1, 1).Borders[rcsRight].Style = rbsDotted);
+  AssertTrue('... and left of the second', d.CellProps(tp, 1, 2).Borders[rcsLeft].Style = rbsDotted);
+end;
+
+{ A merged cell's bottom line is the last row's: the bottom-left cell's, not the top row's nor
+  the bottom-right's. }
+procedure TTyRichMergeTest.TestTheMergedCellsBottomIsTheLastRows;
+var
+  d: TTyRichDocument;
+  tp: TTyRichPos;
+  p: TTyRichCellProps;
+begin
+  MakeTable(4, 4);
+  d := FRich.Document;
+  tp := CellStart(0, 0);
+  p := Default(TTyRichCellProps);
+  p.Valid := [rcpBorderBottom];
+  p.Borders[rcsBottom] := TyRichBorder(rbsDotted, 10, clGreen);
+  AssertTrue('the top row''s', d.Execute(TTyRichSetCellProps.Create(tp, 1, 1, 1, 2, p)));
+  p.Borders[rcsBottom] := TyRichBorder(rbsDashed, 20, clBlue);
+  AssertTrue('the bottom-left''s', d.Execute(TTyRichSetCellProps.Create(tp, 2, 1, 2, 1, p)));
+  p.Borders[rcsBottom] := TyRichBorder(rbsDouble, 30, clRed);
+  AssertTrue('the bottom-right''s', d.Execute(TTyRichSetCellProps.Create(tp, 2, 2, 2, 2, p)));
+  SelCells(1, 1, 2, 2);
+  AssertTrue('merged', FRich.MergeCells);
+  AssertTrue('the last row''s cell of it: the bottom-left''s bottom',
+    d.CellProps(tp, 2, 1).Borders[rcsBottom].Style = rbsDashed);
+end;
+
+{ Fit to contents with the caret in a cell merged across: the edge moves by one amount in every
+  row that has it, no cell below its content - the table's right edge stays straight. }
+procedure TTyRichMergeTest.TestAutoFitInACellMergedAcrossKeepsTheTableWhole;
+var
+  d: TTyRichDocument;
+  r, right0: Integer;
+  e: TTyRichEdges;
+  g: TTyRichGrid;
+  c: TTyRichCell;
+begin
+  MakeTable(5, 5);
+  SelCells(1, 1, 3, 2);
+  AssertTrue('two columns, three rows', FRich.MergeCells);
+  d := FRich.Document;
+  FRich.SelStart := CellStart(1, 1);
+  AssertTrue('fitted', FRich.AutoFitColumn);
+  right0 := -1;
+  for r := 0 to 4 do
+  begin
+    c := d.CellAt(d.Text.ParaOfPos(CellStart(r, 0)));
+    e := c.Row.CellEdges;
+    if right0 < 0 then right0 := e[High(e)];
+    AssertEquals(Format('row %d: the table''s right edge straight', [r]), right0, e[High(e)]);
+  end;
+  g := Grid;
+  try
+    AssertTrue('consistent', g.Consistent);
+  finally
+    g.Free;
+  end;
+  // the cell beside the edge in rows 0 and 4 keeps its text's width
+  c := d.CellAt(d.Text.ParaOfPos(CellStart(0, 2)));
+  e := c.Row.CellEdges;
+  AssertTrue(Format('r0c2 keeps its text (%d twips)', [e[2] - e[1]]), e[2] - e[1] > 200);
+  FRich.Undo;
+end;
+
+{ Merge and split tell every refusal in their own words: no cells of one table, one cell, a
+  table holding a nested table, numbers below 1 or 1 x 1, rows that do not divide, a row past
+  its cells. SplitCell(1, 1) changes nothing and makes no undo step. }
+procedure TTyRichMergeTest.TestEveryMergeAndSplitRefusalIsToldInItsWords;
+var
+  before: RawByteString;
+  st: TFileStream;
+
+  procedure Told(const AWhat, AText: string; AOk: Boolean);
+  begin
+    AssertFalse(AWhat + ': refused', AOk);
+    AssertEquals(AWhat + ': told once', 1, FRich.Refusals.Count);
+    AssertEquals(AWhat + ': its words', AText, FRich.Refusals[0]);
+    FRich.Refusals.Clear;
+  end;
+
+begin
+  MakeTable(4, 4);
+  FRich.Document.ClearUndo;
+  before := SaveRtf;
+  FRich.Refusals.Clear;
+  FRich.SelStart := CellStart(1, 1);
+  Told('merge: a caret', rsRichEditRefusedMergeWhich, FRich.MergeCells);
+  FRich.SelStart := 0;
+  FRich.SelLength := CellStart(1, 1) + 2;
+  Told('merge: from outside the table', rsRichEditRefusedMergeWhich, FRich.MergeCells);
+  SelCells(1, 1, 1, 1);
+  Told('merge: one cell', rsRichEditRefusedMergeWhich, FRich.MergeCells);
+  FRich.SelStart := CellStart(1, 1);
+  Told('split: 0 columns', rsRichEditRefusedSplitNumbers, FRich.SplitCell(0, 1));
+  Told('split: 0 rows', rsRichEditRefusedSplitNumbers, FRich.SplitCell(1, 0));
+  Told('split: 1 x 1', rsRichEditRefusedSplitNumbers, FRich.SplitCell(1, 1));
+  AssertFalse('1 x 1: no step', FRich.Document.CanUndo);
+  AssertTrue('1 x 1: nothing changed', SaveRtf = before);
+  Told('split: past a row''s cells', Format(rsRichEditRefusedSplitCells, [CRichMaxTableCols]),
+    FRich.SplitCell(CRichMaxTableCols, 1));
+  SelCells(1, 1, 2, 2);
+  AssertTrue('a 2 x 2 merge', FRich.MergeCells);
+  FRich.SelStart := CellStart(1, 1);
+  Told('split: rows that do not divide', Format(rsRichEditRefusedSplitRows, [2]), FRich.SplitCell(1, 3));
+  // a merged cell selected whole: one cell
+  FRich.SelStart := CellStart(1, 1);
+  AssertTrue('the merged cell selected', FRich.SelectCell);
+  AssertFalse('one merged cell: no merge', FRich.CanMergeCells);
+  Told('merge: the merged cell whole', rsRichEditRefusedMergeWhich, FRich.MergeCells);
+  // a table holding a nested table: the doors' own words
+  st := TFileStream.Create(FixtureDir + 'word-table-merged.rtf', fmOpenRead or fmShareDenyWrite);
+  try
+    FRich.LoadFromStream(st, rfRtf);
+  finally
+    st.Free;
+  end;
+  FRich.FinishLoading;
+  FRich.SelStart := FRich.Document.Text.ParaStart(1);
+  Told('split: a nested table', rsRichEditRefusedSplitNested, FRich.SplitCell(2, 1));
+end;
+
+{ One cell selected whole - merged or not - is no merge: CanMergeCells False, no step. }
+procedure TTyRichMergeTest.TestOneCellSelectedWholeDoesNotMerge;
+begin
+  MakeTable(3, 3);
+  FRich.Document.ClearUndo;
+  SelCells(1, 1, 1, 1);
+  AssertFalse('a plain cell', FRich.CanMergeCells);
+  SelCells(0, 0, 1, 1);
+  AssertTrue('merged', FRich.MergeCells);
+  FRich.Document.ClearUndo;
+  FRich.SelStart := CellStart(0, 0);
+  AssertTrue('the merged cell selected', FRich.SelectCell);
+  AssertFalse('the merged cell whole', FRich.CanMergeCells);
+  AssertFalse('no merge', FRich.MergeCells);
+  AssertFalse('no step', FRich.Document.CanUndo);
+end;
+
+{ The split action: its event gets the cell's spans and the numbers prefilled - what the cell
+  covers when it is merged, else the action's Columns x Rows - columns first. }
+procedure TTyRichMergeTest.TestTheSplitActionStartsFromTheCellColumnsFirst;
+var
+  act: TTyRichEditSplitCell;
+  g: TTyRichGrid;
+begin
+  MakeTable(3, 3);
+  act := TTyRichEditSplitCell.Create(nil);
+  try
+    act.Columns := 3;
+    act.Rows := 1;
+    act.OnChooseSize := @SplitAsked;
+    FRich.SelStart := CellStart(1, 1);
+    act.ExecuteTarget(FRich);
+    AssertEquals('a plain cell', '1x1', FAskedCell);
+    AssertEquals('the action''s numbers, columns first', '3x1', FAskedSplit);
+    g := Grid;
+    try
+      AssertEquals('three columns of it', 3, g.CellCountOfRow(1) - 2);
+      AssertEquals('one row still', 3, g.RowCount);
+    finally
+      g.Free;
+    end;
+    FRich.Undo;
+    SelCells(0, 0, 1, 1);
+    AssertTrue('a 2 x 2 merge', FRich.MergeCells);
+    FRich.SelStart := CellStart(0, 0);
+    act.ExecuteTarget(FRich);
+    AssertEquals('its spans', '2x2', FAskedCell);
+    AssertEquals('prefilled with them', '2x2', FAskedSplit);
+    g := Grid;
+    try
+      AssertTrue('split back', not g.CellOf(1, 0).Covered and (g.CellOf(0, 0).ColSpan = 1));
+    finally
+      g.Free;
+    end;
+  finally
+    act.Free;
+  end;
+end;
+
+{ The text of copied cells of a table with merged cells: every row as many fields as the grid
+  has columns under the area, a merged cell's text in its first place. }
+procedure TTyRichMergeTest.TestCopiedCellsTextGoesByTheGrid;
+var
+  lines: TStringList;
+  i: Integer;
+begin
+  MakeTable(4, 4);
+  SelCells(1, 1, 2, 2);
+  AssertTrue('merged', FRich.MergeCells);
+  // (rows 0 .. 2, columns 0 .. 2 - not the whole table, which goes as text; row 2: its
+  // first cell and the covered place, one wide cell)
+  SelCells(0, 0, 2, 1);
+  FRich.CopyToClipboard;
+  lines := TStringList.Create;
+  try
+    lines.Text := FRich.ClipText;
+    AssertEquals('three rows: ' + StringReplace(StringReplace(FRich.ClipText, #9, '<T>', [rfReplaceAll]), LineEnding, '<N>', [rfReplaceAll]), 3, lines.Count);
+    for i := 0 to 2 do
+      AssertEquals(Format('row %d: three fields', [i]), 2, Length(lines[i]) - Length(
+        StringReplace(lines[i], #9, '', [rfReplaceAll])));
+    AssertTrue('the merged cell''s text in its first place: ' + lines[1],
+      Pos(#9'r1c1 r1c2 r2c1 r2c2'#9, lines[1] + #9) > 0);
+    AssertEquals('its covered places empty', 'r2c0'#9#9, lines[2]);
+  finally
+    lines.Free;
+  end;
+end;
+
+{ The builder: a Cell called for a place a span from above covers names the mistake. }
+procedure TTyRichMergeTest.TestACellForACoveredPlaceNamesTheMistake;
+var
+  B: TTyRichBuilder;
+  said: string;
+begin
+  B := TTyRichBuilder.Create;
+  try
+    B.Table([1000, 1000, 1000]);
+    B.Cell(1, 2).Text('a').Cell.Text('b').Cell.Text('c');
+    B.Row;
+    said := '';
+    try
+      B.Cell.Text('x').Cell.Text('y').Cell.Text('z');
+    except
+      on E: Exception do said := E.Message;
+    end;
+    AssertTrue('raised: ' + said, Pos('covered by a cell merged from above', said) > 0);
+  finally
+    B.Free;
+  end;
 end;
 
 initialization

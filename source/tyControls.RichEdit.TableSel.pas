@@ -36,11 +36,17 @@ uses
   tyControls.RichEdit.RowFormat, tyControls.RichEdit.TableProps, tyControls.RichEdit.Grid;
 
 type
+  { Selected cells. Row0 .. Row1: the table's rows (grown over merged cells). Col0, Col1: cell
+    indexes, each counted in the row of the cell it comes from (the selection's two end
+    cells; whole rows: the cells of the first row) - in a table with merged cells or rows of
+    different cells they are not the grid's columns: LeftTwips .. RightTwips is the cells'
+    extent across (twips from the text's left; the grid's columns at it: TableGrid's edges). }
   TTyRichCellRange = record
     InTable: Boolean;
     TablePos: TTyRichPos;
     Row0, Col0, Row1, Col1: Integer;
     WholeTable: Boolean;
+    LeftTwips, RightTwips: Int64;
   end;
 
   { A cell range and what tells its cells: the paragraphs of its rows, the table they are of,
@@ -955,10 +961,10 @@ begin
   end;
   // (merged across with the marks: the box from the first cell to the last continuing it)
   a := ACell;
-  while (a > 0) and (TyRichCellHMerge(ARow, a) = Ord(rcmContinue)) do Dec(a);
+  while (a > 0) and (TyRichCellHMerge(ARow, a) = rcmContinue) do Dec(a);
   b := ACell;
-  if (TyRichCellHMerge(ARow, a) = Ord(rcmFirst)) or (a < ACell) then
-    while (b < High(e)) and (TyRichCellHMerge(ARow, b + 1) = Ord(rcmContinue)) do Inc(b);
+  if (TyRichCellHMerge(ARow, a) = rcmFirst) or (a < ACell) then
+    while (b < High(e)) and (TyRichCellHMerge(ARow, b + 1) = rcmContinue) do Inc(b);
   if a = 0 then ALeft := ARow.Format.Row.LeftTwips else ALeft := e[a - 1];
   ARight := e[b];
 end;
@@ -973,7 +979,7 @@ var
   c, nc: TTyRichCell;
   row: TTyRichRow;
   cl, cr: Int64;
-  vm: Integer;
+  vm: TTyRowCellMerge;
 begin
   if AArea.AllCells or (AArea.FirstPara < 0) then Exit;
   repeat
@@ -1000,7 +1006,7 @@ begin
         end;
         vm := TyRichCellVMerge(row, i);
         // continues the cell above: that row joins
-        if (f = AArea.FirstPara) and (vm = Ord(rcmContinue)) and (f > 0) then
+        if (f = AArea.FirstPara) and (vm = rcmContinue) and (f > 0) then
         begin
           nc := ADoc.CellAt(f - 1);
           if (nc <> nil) and (nc.Table = c.Table) and TyRichRowParas(ADoc, f - 1, pf, pl) then
@@ -1010,14 +1016,14 @@ begin
           end;
         end;
         // goes on in the row below: that row joins
-        if (l = AArea.LastPara) and (vm <> Ord(rcmNone)) and (l + 1 < ADoc.Text.ParaCount) then
+        if (l = AArea.LastPara) and (vm <> rcmNone) and (l + 1 < ADoc.Text.ParaCount) then
         begin
           nc := ADoc.CellAt(l + 1);
           if (nc <> nil) and (nc.Table = c.Table) and TyRichRowParas(ADoc, l + 1, nf, nl) then
           begin
             o := TyRichFacingCell(row.CellEdges, row.Format.Row.LeftTwips, i, nc.Row.CellEdges,
               nc.Row.Format.Row.LeftTwips);
-            if (o >= 0) and (TyRichCellVMerge(nc.Row, o) = Ord(rcmContinue)) then
+            if (o >= 0) and (TyRichCellVMerge(nc.Row, o) = rcmContinue) then
             begin
               AArea.LastPara := nl;
               changed := True;

@@ -2831,9 +2831,8 @@ begin
         // the span is there: the row below covered by the cell above
         c := d.CellAt(d.Text.ParaOfPos(d.Text.ParaStart(3)));
         AssertTrue('a cell', c <> nil);
-        AssertEquals('row 1''s first cell covered', Ord(rcmContinue), TyRichCellVMerge(c.Row, 0));
-        AssertEquals('row 0''s first cell begins it', Ord(rcmFirst),
-          TyRichCellVMerge(d.CellAt(0).Row, 0));
+        AssertTrue('row 1''s first cell covered', rcmContinue = TyRichCellVMerge(c.Row, 0));
+        AssertTrue('row 0''s first cell begins it', rcmFirst = TyRichCellVMerge(d.CellAt(0).Row, 0));
       end;
       ss := TBytesStream.Create;
       try

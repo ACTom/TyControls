@@ -1344,6 +1344,14 @@ msgstr ""
 msgid "This table has merged cells: its rows and columns cannot be inserted or deleted."
 msgstr ""
 
+#: tycontrols.strconsts.rsricheditrefusedmergenested
+msgid "This table has a table inside one of its cells: its cells cannot be merged."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditrefusedmergewhich
+msgid "Select two or more cells of one table to merge them."
+msgstr ""
+
 #: tycontrols.strconsts.rsricheditrefusedmetafile
 msgid "A metafile (WMF or EMF) cannot be inserted as a picture."
 msgstr ""
@@ -1366,6 +1374,10 @@ msgstr ""
 
 #: tycontrols.strconsts.rsricheditrefusednotable
 msgid "The caret is not in a table."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditrefusednotrectangle
+msgid "The selected cells do not form a rectangle: they cannot be merged into one cell."
 msgstr ""
 
 #: tycontrols.strconsts.rsricheditrefusedpage
@@ -1423,6 +1435,33 @@ msgstr ""
 
 #: tycontrols.strconsts.rsricheditrefusedselectnotwhole
 msgid "This table is too large, or not complete in its file, for a whole column or the whole table to be selected."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditrefusedsplitcells
+#, object-pascal-format
+msgid "A row has at most %d cells."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditrefusedsplitnested
+msgid "This table has a table inside one of its cells: its cells cannot be split."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditrefusedsplitnumbers
+msgid "A cell is split into 1 or more columns and 1 or more rows, two parts at least."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditrefusedsplitrows
+#, object-pascal-format
+msgid "The rows must divide the %d rows the cell covers."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditrefusedsplittablerows
+#, object-pascal-format
+msgid "A table has at most %d rows."
+msgstr ""
+
+#: tycontrols.strconsts.rsricheditrefusedsplitwhich
+msgid "Put the caret in a cell, or select one cell, to split it."
 msgstr ""
 
 #: tycontrols.strconsts.rsricheditrefusedtablecolumns

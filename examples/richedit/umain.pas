@@ -507,8 +507,8 @@ type
     procedure ReplaceReplaced(Sender: TObject; ACount: Integer);
     procedure TableChooseSize(Sender: TObject; var ARows, AColumns: Integer;
       var AInsert: Boolean);
-    procedure SplitChooseSize(Sender: TObject; var ARows, AColumns: Integer;
-      var ASplit: Boolean);
+    procedure SplitChooseSize(Sender: TObject; ACellColumns, ACellRows: Integer;
+      var AColumns, ARows: Integer; var ASplit: Boolean);
     procedure BorderBeforeExecute(Sender: TObject; var APreset: TTyRichBorderPreset;
       var ABorder: TTyRichBorder; var AAllow: Boolean);
     procedure ActShadingNoneExecute(Sender: TObject);
@@ -1095,31 +1095,10 @@ end;
 
 { Split Cells asks here: the split form, starting from 2 x 1 - or, for a merged cell, from the
   columns and rows it covers (the table's grid says), so OK splits it back. }
-procedure TMainForm.SplitChooseSize(Sender: TObject; var ARows, AColumns: Integer;
-  var ASplit: Boolean);
-var
-  pos: TTyRichPos;
-  r, c: Integer;
-  grid: TTyRichGrid;
-  cell: TTyRichGridCell;
+procedure TMainForm.SplitChooseSize(Sender: TObject; ACellColumns, ACellRows: Integer;
+  var AColumns, ARows: Integer; var ASplit: Boolean);
 begin
-  if Editor.CaretCell(pos, r, c) then
-  begin
-    grid := Editor.TableGrid(pos);
-    try
-      if grid <> nil then
-      begin
-        cell := grid.CellOf(r, c);
-        if (cell.ColSpan > 1) or (cell.RowSpan > 1) then
-        begin
-          AColumns := cell.ColSpan;
-          ARows := cell.RowSpan;
-        end;
-      end;
-    finally
-      grid.Free;
-    end;
-  end;
+  // (the action starts from what the cell covers when it is merged, else from 2 x 1)
   ASplit := AskSplit(AColumns, ARows);
 end;
 

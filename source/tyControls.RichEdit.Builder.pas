@@ -1271,7 +1271,14 @@ begin
   r := @t^.Rows[ri];
   c := r^.CellCount;
   if (Length(t^.Widths) > 0) and (c + AColSpan > Length(t^.Widths)) then
+  begin
+    { (a row a span from above reaches into: its covered places were taken by themselves -
+      one Cell too many is the call for such a place) }
+    if (ri < Length(t^.Covered)) and (t^.Covered[ri] <> 0) then
+      Misuse('Cell', 'this place is covered by a cell merged from above (a covered place ' +
+        'takes no Cell call)');
     Misuse('Cell', Format('the table has %d columns', [Length(t^.Widths)]));
+  end;
   if c + AColSpan > CRichMaxTableCols then
     Misuse('Cell', Format('a table has %d columns at most', [CRichMaxTableCols]));
   // the places the span covers across must be free of a span from above

@@ -1800,6 +1800,11 @@ type
       stands for the paragraph before it, the last one selected. }
     function CaretTablePara: Integer;
     // the merge the selection asks for (False: it is not cells of one table)
+    function SplitRefusalText(const AEdit: TTyRichTableEdit): string;
+    { The rows the cell of APara covers when it begins a merge down (its extent row by row, as
+      the grid reads it): ASpan of them, the last one's first and last paragraphs. False: no
+      merge down (ASpan 1, APara's own row). }
+    function MergedRowsOf(APara: Integer; out ASpan, ALastFirst, ALastLast: Integer): Boolean;
     function MergeEditOf(out AArea: TTyRichCellArea; out AEdit: TTyRichTableEdit): Boolean;
     { The cell a split takes - the caret's, or the one cell selected -: its row, index, the
       rows it covers, its extent (twips) and the first paragraph of its row. False: none. }
@@ -2040,7 +2045,12 @@ type
     procedure WidthColumns(APara, ACell: Integer; out ACol0, ACol1: Integer);
     { Columns ACol0 .. ACol0 + High(AWidths) of the rows the door takes made AWidths[i] wide,
       the columns after them following: one step. }
-    function SetColumnWidths(APara, ACol0: Integer; const AWidths: array of Integer): Boolean;
+    { Columns ACol0 .. of the row of APara set to AWidths, the rest of each row following. An
+      edge moves in every row that has it, all by the same amount: no further left than every
+      such row's cell before it allows (its narrowest - AKeepContent: and what its content
+      needs, when it holds any), so the rows stay one table. }
+    function SetColumnWidths(APara, ACol0: Integer; const AWidths: array of Integer;
+      AKeepContent: Boolean = False): Boolean;
     function FitWidthOf(APara, ACell: Integer; out AWidth: Integer): Boolean;
     procedure TellSkipped;
     function EdgeRowsWhole(APara: Integer; out ATablePos: TTyRichPos;
@@ -2954,6 +2964,10 @@ type
       cell; the new cells look as it did. ACols 1 .. 63 (a row's cells as well), ARows as
       the table's rows allow. One undo step. False: nothing done (refused: told). Finding C
       reads the table's grid (TableGrid): one walk of its rows. }
+    { The grid columns and rows the caret's cell covers (the cell SplitCell splits; 1 x 1 for
+      one that is not merged). Reads the table's grid: one walk of its rows. False: no such
+      cell. }
+    function CaretCellSpan(out AColumns, ARows: Integer): Boolean;
     function SplitCell(ACols, ARows: Integer): Boolean;
     { A split of the caret's cell (or the one cell selected) may run now: into two cells
       across or two down. }
@@ -5395,7 +5409,7 @@ begin
   FDoc.BeginRead;
   try
     c := FDoc.CellAt(APara);
-    if (c = nil) or (TyRichCellVMerge(c.Row, c.Index) <> Ord(rcmContinue)) then Exit;
+    if (c = nil) or (TyRichCellVMerge(c.Row, c.Index) <> rcmContinue) then Exit;
     // (a row that holds a nested table is its file's bytes only: as it is shown)
     if c.Row.HoldsNestedTable then Exit;
     // (empty: one paragraph, no character)
@@ -11928,7 +11942,11 @@ begin
     rtrNoTable: Result := rsRichEditRefusedNoTable;
     rtrInTable: Result := rsRichEditRefusedTableInTable;
     rtrMergedCells: Result := rsRichEditRefusedMergedCells;
-    rtrNestedTable: Result := rsRichEditRefusedNestedTable;
+    rtrNestedTable:
+      if AEdit.Kind = rtkMergeCells then Result := rsRichEditRefusedMergeNested
+      else if AEdit.Kind = rtkSplitCell then Result := rsRichEditRefusedSplitNested
+      else Result := rsRichEditRefusedNestedTable;
+    rtrNotRectangle: Result := rsRichEditRefusedNotRectangle;
     rtrNotWhole: Result := rsRichEditRefusedTableNotWhole;
     rtrIrregularRows: Result := rsRichEditRefusedIrregularRows;
     rtrInField: Result := rsRichEditRefusedField;
@@ -11938,6 +11956,11 @@ begin
         Result := Format(rsRichEditRefusedTableSize, [CRichMaxTableRows, CRichMaxTableCols])
       else if AEdit.Kind = rtkInsertColumn then
         Result := Format(rsRichEditRefusedTableColumns, [CRichMaxTableCols])
+      else if AEdit.Kind = rtkMergeCells then
+        // (one cell, or a cell merged already, selected whole: nothing to merge)
+        Result := rsRichEditRefusedMergeWhich
+      else if AEdit.Kind = rtkSplitCell then
+        Result := SplitRefusalText(AEdit)
       else
         Result := rsRichEditRefusedRange;
   else
@@ -12244,6 +12267,19 @@ begin
             while (p2 < t.ParaCount - 1) and (FDoc.CellAt(p2 + 1) <> nil) and
               (FDoc.CellAt(p2 + 1).Row = row) do
               Inc(p2);
+          end
+          { The caret in a cell merged down stands for the cell: as many rows as it covers,
+            above its first row or below its last }
+          else if MergedRowsOf(k, m, c1, c2) then
+          begin
+            n := m;
+            if FTableAfter then
+            begin
+              k := c1;
+              pos := t.ParaStart(k);
+              p1 := c1;
+              p2 := c2;
+            end;
           end;
         end;
         // the rows beside the new ones share lines with them
@@ -12356,6 +12392,16 @@ begin
         if p2 < k then p2 := k;
         if FTableKind = CTableDeleteRow then
         begin
+          { What is highlighted is what goes: the cells' rows as the area grew them over merged
+            cells; a caret in a cell merged down stands for every row the cell covers }
+          area := CellArea;
+          if area.Range.InTable and (area.Table = FDoc.CellAt(k).Table) then
+          begin
+            p1 := Math.Max(area.FirstPara, info.First);
+            p2 := Math.Min(area.LastPara, info.Last);
+          end
+          else if (GetSelLength = 0) and MergedRowsOf(k, m, c1, c2) then
+            p2 := Math.Max(p2, c2);
           r1 := RowOf(p1);
           r2 := RowOf(p2);
           // the first paragraph of row r1, and the last of row r2
@@ -21304,8 +21350,16 @@ begin
 end;
 
 function TTyCustomRichEdit.SelectedCells: TTyRichCellRange;
+var
+  a: TTyRichCellArea;
 begin
-  Result := CellArea.Range;
+  a := CellArea;
+  Result := a.Range;
+  if Result.InTable then
+  begin
+    Result.LeftTwips := a.X0;
+    Result.RightTwips := a.X1;
+  end;
 end;
 
 function TTyCustomRichEdit.CaretCell(out ATablePos: TTyRichPos; out ARow, ACol: Integer): Boolean;
@@ -21823,7 +21877,12 @@ begin
   Result := False;
   EndCompositionForUser;
   if not TableActionsOpen then Exit;
-  if not MergeEditOf(area, ed) then Exit;
+  if not MergeEditOf(area, ed) then
+  begin
+    // (a caret, a selection that reaches out of the table or over two tables: told)
+    Refuse(rsRichEditRefusedMergeWhich, True);
+    Exit;
+  end;
   r := FDoc.TableEditRefusal(ed);
   if not (r in [rtrNone, rtrNotEmpty]) then
   begin
@@ -21882,6 +21941,48 @@ begin
   end;
 end;
 
+function TTyCustomRichEdit.MergedRowsOf(APara: Integer; out ASpan, ALastFirst,
+  ALastLast: Integer): Boolean;
+var
+  t: TTyRichText;
+  c, nc: TTyRichCell;
+  f, l, o: Integer;
+  lx, rx, lo, ro: Int64;
+begin
+  Result := False;
+  ASpan := 1;
+  ALastFirst := -1;
+  ALastLast := -1;
+  t := FDoc.Text;
+  FDoc.BeginRead;
+  try
+    c := FDoc.CellAt(APara);
+    if (c = nil) or not TyRichRowParas(FDoc, APara, f, l) then Exit;
+    ALastFirst := f;
+    ALastLast := l;
+    if TyRichCellVMerge(c.Row, c.Index) <> rcmFirst then Exit;
+    TyRichCellExtent(c.Row, c.Index, lx, rx);
+    // down while the cell below continues it, at its extent (the grid's rule)
+    while l + 1 < t.ParaCount do
+    begin
+      nc := FDoc.CellAt(l + 1);
+      if (nc = nil) or (nc.Table <> c.Table) then Break;
+      o := TyRichFacingCell(c.Row.CellEdges, c.Row.Format.Row.LeftTwips, c.Index,
+        nc.Row.CellEdges, nc.Row.Format.Row.LeftTwips);
+      if (o < 0) or (TyRichCellVMerge(nc.Row, o) <> rcmContinue) then Break;
+      TyRichCellExtent(nc.Row, o, lo, ro);
+      if (Abs(lo - lx) > CRichEdgeSlackTwips) or (Abs(ro - rx) > CRichEdgeSlackTwips) then Break;
+      if not TyRichRowParas(FDoc, l + 1, f, l) then Break;
+      Inc(ASpan);
+      ALastFirst := f;
+      ALastLast := l;
+    end;
+    Result := ASpan > 1;
+  finally
+    FDoc.EndRead;
+  end;
+end;
+
 function TTyCustomRichEdit.SplitTarget(out ARow, ACell, ASpan, ALeft, ARight,
   ARowPara: Integer): Boolean;
 var
@@ -21924,18 +22025,8 @@ begin
     ARight := e[ACell];
     if not TyRichRowParas(FDoc, k, f, l) then Exit;
     ARowPara := f;
-    // the rows it covers: down while the cell below continues it
-    if TyRichCellVMerge(c.Row, ACell) = Ord(rcmFirst) then
-      while l + 1 < t.ParaCount do
-      begin
-        nc := FDoc.CellAt(l + 1);
-        if (nc = nil) or (nc.Table <> c.Table) then Break;
-        o := TyRichFacingCell(e, c.Row.Format.Row.LeftTwips, ACell, nc.Row.CellEdges,
-          nc.Row.Format.Row.LeftTwips);
-        if (o < 0) or (TyRichCellVMerge(nc.Row, o) <> Ord(rcmContinue)) then Break;
-        Inc(ASpan);
-        if not TyRichRowParas(FDoc, l + 1, f, l) then Break;
-      end;
+    // the rows it covers: down while the cell below continues it at its extent
+    MergedRowsOf(k, ASpan, f, l);
     Result := True;
   finally
     FDoc.EndRead;
@@ -21989,6 +22080,53 @@ begin
   AEdit.SplitEdges := edges;
 end;
 
+{ What is wrong with split AEdit's numbers, in the person's words: the rows that do not
+  divide the cell's, a row that would pass the cells a row may have, a table that would pass
+  its rows. }
+function TTyCustomRichEdit.SplitRefusalText(const AEdit: TTyRichTableEdit): string;
+var
+  c: TTyRichCell;
+  k, r, n: Integer;
+begin
+  Result := rsRichEditRefusedRange;
+  if (AEdit.Cols < 1) or (AEdit.Rows < 1) then Exit(rsRichEditRefusedSplitNumbers);
+  if (AEdit.SpanRows > 1) and (AEdit.SpanRows mod AEdit.Rows <> 0) then
+    Exit(Format(rsRichEditRefusedSplitRows, [AEdit.SpanRows]));
+  if AEdit.Cols > CRichMaxTableCols then Exit(Format(rsRichEditRefusedSplitCells, [CRichMaxTableCols]));
+  FDoc.BeginRead;
+  try
+    k := FDoc.Text.ParaOfPos(AEdit.Pos);
+    c := FDoc.CellAt(k);
+    if (c <> nil) and (c.Row.CellCount - 1 + AEdit.Cols > CRichMaxTableCols) then
+      Exit(Format(rsRichEditRefusedSplitCells, [CRichMaxTableCols]));
+    if (AEdit.SpanRows <= 1) and (AEdit.Rows > 1) and FDoc.TableRowIndex(k, r, n) and
+       (n + AEdit.Rows - 1 > CRichMaxTableRows) then
+      Exit(Format(rsRichEditRefusedSplitTableRows, [CRichMaxTableRows]));
+    // (another row the cell covers may have more cells)
+    if AEdit.Cols > 1 then Result := Format(rsRichEditRefusedSplitCells, [CRichMaxTableCols]);
+  finally
+    FDoc.EndRead;
+  end;
+end;
+
+function TTyCustomRichEdit.CaretCellSpan(out AColumns, ARows: Integer): Boolean;
+var
+  r, ci, span, xl, xr, rp: Integer;
+  g: TTyRichGrid;
+begin
+  AColumns := 1;
+  ARows := 1;
+  Result := SplitTarget(r, ci, span, xl, xr, rp);
+  if not Result then Exit;
+  ARows := span;
+  g := TableGrid(FDoc.Text.ParaStart(rp));
+  try
+    if g <> nil then AColumns := Math.Max(1, g.CellOf(r, ci).ColSpan);
+  finally
+    g.Free;
+  end;
+end;
+
 function TTyCustomRichEdit.CanSplitCell: Boolean;
 var
   ed: TTyRichTableEdit;
@@ -22009,8 +22147,17 @@ begin
   Result := False;
   EndCompositionForUser;
   if not TableActionsOpen then Exit;
-  if (ACols < 1) or (ARows < 1) or ((ACols = 1) and (ARows = 1)) then Exit;
-  if not SplitEditOf(ACols, ARows, True, ed) then Exit;
+  // (every refusal is told: numbers that make no split too)
+  if (ACols < 1) or (ARows < 1) or ((ACols = 1) and (ARows = 1)) then
+  begin
+    Refuse(rsRichEditRefusedSplitNumbers, True);
+    Exit;
+  end;
+  if not SplitEditOf(ACols, ARows, True, ed) then
+  begin
+    Refuse(rsRichEditRefusedSplitWhich, True);
+    Exit;
+  end;
   r := FDoc.TableEditRefusal(ed);
   if r <> rtrNone then
   begin
@@ -22223,6 +22370,7 @@ var
   dfirst, dcount: Integer;
   de: TTyRichEdges;
   dedges: array of Integer;
+  places: array of string;
 begin
   Result := False;
   ARtf := '';
@@ -22302,6 +22450,8 @@ begin
     d.Execute(TTyRichInsertTable.Create(0, rows, cols));
     edit := TTyRichCellsEdit.Create(0, rsRichUndoPaste);
     txt := '';
+    places := nil;
+    if not plain then SetLength(places, rows * cols);
     for i := 0 to High(g.Cells) do
     begin
       if (g.Cells[i].E > g.Cells[i].S) and (placeRow[i] >= 0) then
@@ -22314,6 +22464,22 @@ begin
       cellTxt := StringReplace(StringReplace(cellTxt, #13#10, ' ', [rfReplaceAll]), #10, ' ', [rfReplaceAll]);
       cellTxt := StringReplace(StringReplace(cellTxt, #13, ' ', [rfReplaceAll]), #9, ' ', [rfReplaceAll]);
       txt := txt + cellTxt;
+      if not plain and (placeRow[i] >= 0) then places[placeRow[i] * cols + placeCol[i]] := cellTxt;
+    end;
+    { (merged cells: a row a line of as many fields as the grid has columns under the area -
+      a merged cell's text in its first place, an empty field for each place it covers) }
+    if not plain then
+    begin
+      txt := '';
+      for rr := 0 to rows - 1 do
+      begin
+        if rr > 0 then txt := txt + LineEnding;
+        for cc := 0 to cols - 1 do
+        begin
+          if cc > 0 then txt := txt + #9;
+          txt := txt + places[rr * cols + cc];
+        end;
+      end;
     end;
     d.Execute(edit);
     if not plain and d.TableRowsAt(0, 0, 0, drows, dfirst, dcount) and (Length(drows) > 0) then
@@ -22419,7 +22585,7 @@ var
         TyRichCellExtent(row, i, l, r);
         if l < x0 - CRichEdgeSlackTwips then Continue;
         // (a covered place: the cell above, or the one before across, reaches over it)
-        if (TyRichCellVMerge(row, i) = Ord(rcmContinue)) or (TyRichCellHMerge(row, i) = Ord(rcmContinue)) then
+        if (TyRichCellVMerge(row, i) = rcmContinue) or (TyRichCellHMerge(row, i) = rcmContinue) then
           Continue;
         if n = AK then Exit(i);
         Inc(n);
@@ -22526,8 +22692,8 @@ begin
                   f := k;
                   while (k + 1 < src.Text.ParaCount) and (src.CellAt(k + 1) = c) do Inc(k);
                   // (the source's covered places are no cells to paste: the grid's k-th cell)
-                  if (TyRichCellVMerge(c.Row, c.Index) <> Ord(rcmContinue)) and
-                     (TyRichCellHMerge(c.Row, c.Index) <> Ord(rcmContinue)) then
+                  if (TyRichCellVMerge(c.Row, c.Index) <> rcmContinue) and
+                     (TyRichCellHMerge(c.Row, c.Index) <> rcmContinue) then
                   begin
                     Fill(r, sk, DocOfRange(src, src.Text.ParaStart(f),
                       src.Text.ParaStart(k) + src.Text.ParaLength(k) - src.Text.ParaStart(f)), '');
@@ -23531,7 +23697,7 @@ var
 begin
   Result := False;
   if not FitWidthOf(APara, ACell, w) then Exit;
-  Result := SetColumnWidths(APara, ACell, [w]);
+  Result := SetColumnWidths(APara, ACell, [w], True);
 end;
 
 { The width column ACell's widest content asks in the rows a width door takes there (its
@@ -23710,21 +23876,80 @@ begin
   end;
 end;
 
-function TTyCustomRichEdit.SetColumnWidths(APara, ACol0: Integer; const AWidths: array of Integer): Boolean;
+function TTyCustomRichEdit.SetColumnWidths(APara, ACol0: Integer; const AWidths: array of Integer;
+  AKeepContent: Boolean): Boolean;
 var
   pos: TTyRichPos;
   r0, r1, i, c, lft, w, shift, old, nw: Integer;
   row: TTyRichRow;
   edges: TTyRichEdges;
   parts: array of TTyRichTablePropsCommand;
+  rows: TTyRichRowList;
+  first, count: Integer;
+  info: TTyRichTableInfo;
+  haveInfo: Boolean;
+
+  { The leftmost the edge at AOld (as the rows had it) may go, moved by AShift already where
+    the rows before it moved: the cell that ends there in each row r0 .. r1 that has it keeps
+    its narrowest - and its content's width, AKeepContent }
+  function Floor(AOld, AShift: Integer): Integer;
+  var
+    r, j, l, k, ri, wc, n: Integer;
+    e: TTyRichEdges;
+    rc: TTyRichCell;
+    cur: TTyRichRow;
+    p: TTyRichCellProps;
+  begin
+    Result := -MaxInt;
+    for r := 0 to High(rows) do
+    begin
+      e := rows[r].CellEdges;
+      for j := 0 to High(e) do
+        if Abs(e[j] - AOld) <= CRichSharedEdgeTwips then
+        begin
+          if j = 0 then l := rows[r].Format.Row.LeftTwips else l := e[j - 1] + AShift;
+          Result := Math.Max(Result, l + MinCellTwips(rows[r], j));
+          Break;
+        end;
+    end;
+    if not AKeepContent or not haveInfo then Exit;
+    // (the content of each such cell: the table's paragraphs of rows r0 .. r1)
+    ri := -1;
+    cur := nil;
+    for k := info.First to info.Last do
+    begin
+      rc := FDoc.CellAt(k);
+      if rc = nil then Continue;
+      if rc.Row <> cur then
+      begin
+        cur := rc.Row;
+        Inc(ri);
+      end;
+      if ri < r0 then Continue;
+      if ri > r1 then Break;
+      e := cur.CellEdges;
+      j := rc.Index;
+      if (j > High(e)) or (Abs(e[j] - AOld) > CRichSharedEdgeTwips) then Continue;
+      if FDoc.Text.ParaLength(k) = 0 then Continue;
+      if j = 0 then l := cur.Format.Row.LeftTwips else l := e[j - 1];
+      n := e[j] - l;
+      if j > 0 then Inc(l, AShift);
+      p := TyRichEffectiveCellProps(cur.Format, j, Math.Max(1, n));
+      wc := TwipsOfRaster(WidestRun(k)) + Math.Max(0, p.Pad[rcsLeft]) + Math.Max(0, p.Pad[rcsRight]);
+      Result := Math.Max(Result, l + wc);
+    end;
+  end;
+
 begin
   Result := False;
   if not EdgeRows(APara, True, pos, r0, r1) then Exit;
+  haveInfo := AKeepContent and FDoc.TableInfoAt(APara, info);
   parts := nil;
   FDoc.BeginRead;
   try
     row := FDoc.CellAt(APara).Row;
     edges := row.CellEdges;
+    if not FDoc.TableRowsAt(pos, r0, r1, rows, first, count) then rows := nil;
     { each edge in turn, the rest of the row following it: an edge after one that moved has
       moved by as much (shift) }
     shift := 0;
@@ -23736,6 +23961,8 @@ begin
       w := Math.Max(AWidths[i], MinCellTwips(row, c));
       old := edges[c] + shift;
       nw := lft + w;
+      // (one floor for every row that has the edge: they all move by as much)
+      if Length(rows) > 0 then nw := Math.Max(nw, Floor(edges[c], shift));
       if nw = old then Continue;
       SetLength(parts, Length(parts) + 1);
       parts[High(parts)] := TTyRichSetColumnEdge.Create(pos, old, nw, r0, r1, True);
@@ -23783,7 +24010,7 @@ begin
   SetLength(widths, c1 - c0 + 1);
   for k := 0 to High(widths) do
     if not FitWidthOf(p, c0 + k, widths[k]) then Exit;
-  Result := SetColumnWidths(p, c0, widths);
+  Result := SetColumnWidths(p, c0, widths, True);
 end;
 
 function TTyCustomRichEdit.DistributeColumns: Boolean;
@@ -24044,7 +24271,7 @@ function TTyCustomRichEdit.CellTarget(out ATablePos: TTyRichPos; out ARow0, ACol
   ACol1: Integer; ATell: Boolean): Boolean;
 var
   area: TTyRichCellArea;
-  p, c: Integer;
+  p, c, n, f, l: Integer;
 begin
   Result := False;
   ATablePos := -1;
@@ -24069,6 +24296,20 @@ begin
   if not CaretCell(ATablePos, ARow0, ACol0) then Exit;
   ARow1 := ARow0;
   ACol1 := ACol0;
+  { A caret in a cell merged down stands for the cell: its rows' cells of it, as a selection
+    of the cell has them }
+  if MergedRowsOf(CaretCellPara, n, f, l) and TyRichCellParasOf(FDoc, CaretCellPara, f, l) then
+  begin
+    area := TyRichCellArea(FDoc, FDoc.Text.ParaStart(f),
+      FDoc.Text.ParaStart(l) + FDoc.Text.ParaLength(l) + 1);
+    if area.Range.InTable then
+    begin
+      ARow0 := area.Range.Row0;
+      ARow1 := area.Range.Row1;
+      ACol0 := area.Range.Col0;
+      ACol1 := area.Range.Col1;
+    end;
+  end;
   Result := True;
 end;
 

@@ -17,7 +17,7 @@ unit tyControls.RichEdit.Grid;
 interface
 
 uses
-  tyControls.RichEdit.Text, tyControls.RichEdit.Model;
+  tyControls.RichEdit.Text, tyControls.RichEdit.Model, tyControls.RichEdit.RowFormat;
 
 type
   { A cell of a table's grid. Row: the row it starts in; Col: the grid column it starts at;
@@ -75,14 +75,14 @@ function TyRichGridBuildCount: Int64;
 
 { A row's cell ACell as a vertical merge has it: rcmFirst, rcmContinue or rcmNone (also for
   a cell the row's format does not have). }
-function TyRichCellVMerge(ARow: TTyRichRow; ACell: Integer): Integer;
-{ ... and across: 0 none, 1 first, 2 continues the cell before. }
-function TyRichCellHMerge(ARow: TTyRichRow; ACell: Integer): Integer;
+function TyRichCellVMerge(ARow: TTyRichRow; ACell: Integer): TTyRowCellMerge;
+{ ... and across: rcmNone, rcmFirst, or rcmContinue (it continues the cell before). }
+function TyRichCellHMerge(ARow: TTyRichRow; ACell: Integer): TTyRowCellMerge;
 
 implementation
 
 uses
-  SysUtils, tyControls.RichEdit.RowFormat, tyControls.RichEdit.TableProps;
+  SysUtils, tyControls.RichEdit.TableProps;
 
 var
   GBuilds: Int64 = 0;
@@ -92,24 +92,24 @@ begin
   Result := GBuilds;
 end;
 
-function TyRichCellVMerge(ARow: TTyRichRow; ACell: Integer): Integer;
+function TyRichCellVMerge(ARow: TTyRichRow; ACell: Integer): TTyRowCellMerge;
 var
   f: TTyRichRowFormat;
 begin
-  Result := 0;
+  Result := rcmNone;
   f := ARow.Format;
   if (ACell < 0) or (ACell >= f.CellCount) then Exit;
-  Result := Ord(f.Cells[ACell].VMerge);
+  Result := f.Cells[ACell].VMerge;
 end;
 
-function TyRichCellHMerge(ARow: TTyRichRow; ACell: Integer): Integer;
+function TyRichCellHMerge(ARow: TTyRichRow; ACell: Integer): TTyRowCellMerge;
 var
   f: TTyRichRowFormat;
 begin
-  Result := 0;
+  Result := rcmNone;
   f := ARow.Format;
   if (ACell < 0) or (ACell >= f.CellCount) then Exit;
-  Result := Ord(f.Cells[ACell].HMerge);
+  Result := f.Cells[ACell].HMerge;
 end;
 
 procedure SortInts(var A: array of Integer; ALo, AHi: Integer);
@@ -294,9 +294,26 @@ var
   n, r, i, k, c0, c1, j, s, prev, left, total: Integer;
   e: TTyRichEdges;
   row: TTyRichRow;
-  l, rt, hm, vm: Integer;
+  l, rt, up, last: Integer;
+  hm, vm: TTyRowCellMerge;
   edges: array of TTyRichEdges;
   lefts: array of Integer;
+
+  // the grid column after cell AI of row AR and the cells its across-merge marks take on
+  function AcrossEnd(AR, AI, AC1: Integer): Integer;
+  var
+    m: Integer;
+  begin
+    Result := AC1;
+    if TyRichCellHMerge(ARows[AR], AI) <> rcmFirst then Exit;
+    m := AI + 1;
+    while (m <= High(edges[AR])) and (TyRichCellHMerge(ARows[AR], m) = rcmContinue) do
+    begin
+      if edges[AR][m] > edges[AR][m - 1] then Result := g.ColAt(edges[AR][m]);
+      Inc(m);
+    end;
+  end;
+
 begin
   Inc(GBuilds);
   g := TTyRichGrid.Create;
@@ -360,6 +377,7 @@ begin
       e := edges[r];
       left := lefts[r];
       prev := -1;
+      last := -1;
       for i := 0 to High(e) do
       begin
         if i = 0 then l := left else l := e[i - 1];
@@ -372,18 +390,27 @@ begin
         hm := TyRichCellHMerge(row, i);
         vm := TyRichCellVMerge(row, i);
         s := -1;
-        if (hm = Ord(rcmContinue)) and (prev >= 0) and (g.FStarts[prev].Row = r) then
+        // (the start above this cell's first column, if any)
+        if r > 0 then up := g.FOwner[(r - 1) * g.FColCount + c0] else up := -1;
+        if (hm = rcmContinue) and (prev >= 0) and (g.FStarts[prev].Row = r) then
         begin
           // across: the cell before reaches over this one
           s := prev;
           if c1 > g.FStarts[s].Col + g.FStarts[s].ColSpan then
             g.FStarts[s].ColSpan := c1 - g.FStarts[s].Col;
         end
-        else if (vm = Ord(rcmContinue)) and (r > 0) and (g.FOwner[(r - 1) * g.FColCount + c0] >= 0) and
-          (g.FStarts[g.FOwner[(r - 1) * g.FColCount + c0]].Col = c0) then
+        else if (hm = rcmContinue) and (last >= 0) and (g.FStarts[last].Row < r) and
+          (c0 >= g.FStarts[last].Col) and (c1 <= g.FStarts[last].Col + g.FStarts[last].ColSpan) then
+          // across, in a row a merge down continues into: the merge's place
+          s := last
+        else if (vm = rcmContinue) and (up >= 0) and (g.FStarts[up].Col = c0) and
+          (g.FStarts[up].Col + g.FStarts[up].ColSpan = AcrossEnd(r, i, c1)) then
         begin
-          // down: the cell above (that starts at this column) reaches into this row
-          s := g.FOwner[(r - 1) * g.FColCount + c0];
+          { down: the cell above reaches into this row - only when it has this cell's extent
+            (its left and right edges, within the slack; a cell merged across in marks: the
+            extent of its marks); a continuation of another width, or of nothing, is a cell of
+            its own (as Word shows such a file: the parts unmerged) }
+          s := up;
           g.FStarts[s].RowSpan := r - g.FStarts[s].Row + 1;
         end
         else
@@ -395,6 +422,7 @@ begin
             if (g.FStarts[s].Row <> r) or (g.FStarts[s].Cell <> i) then g.FOwn[r * g.FColCount + j] := i;
           end;
         if g.FStarts[s].Row = r then prev := s else prev := -1;
+        last := s;
       end;
     end;
     Result := g;

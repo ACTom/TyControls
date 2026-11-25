@@ -1171,6 +1171,42 @@ msgstr "这个表格太大，或者在文件里不完整，不能调整整列的
 msgid "This row holds a table inside one of its cells: its cells' widths, its height and its look cannot be changed."
 msgstr "这一行的单元格里有表格：不能改它的列宽、行高和格式。"
 
+#: tycontrols.strconsts.rsricheditrefusednotrectangle
+msgid "The selected cells do not form a rectangle: they cannot be merged into one cell."
+msgstr "选中的单元格不成矩形，不能合并成一个单元格。"
+
+#: tycontrols.strconsts.rsricheditrefusedmergewhich
+msgid "Select two or more cells of one table to merge them."
+msgstr "请选中同一个表格里的两个或更多单元格再合并。"
+
+#: tycontrols.strconsts.rsricheditrefusedmergenested
+msgid "This table has a table inside one of its cells: its cells cannot be merged."
+msgstr "这个表格的单元格里套着另一个表格，不能合并它的单元格。"
+
+#: tycontrols.strconsts.rsricheditrefusedsplitnested
+msgid "This table has a table inside one of its cells: its cells cannot be split."
+msgstr "这个表格的单元格里套着另一个表格，不能拆分它的单元格。"
+
+#: tycontrols.strconsts.rsricheditrefusedsplitnumbers
+msgid "A cell is split into 1 or more columns and 1 or more rows, two parts at least."
+msgstr "拆分单元格时列数和行数都至少为 1，且至少拆成两部分。"
+
+#: tycontrols.strconsts.rsricheditrefusedsplitrows
+msgid "The rows must divide the %d rows the cell covers."
+msgstr "行数必须能整除这个单元格所跨的 %d 行。"
+
+#: tycontrols.strconsts.rsricheditrefusedsplitcells
+msgid "A row has at most %d cells."
+msgstr "一行最多有 %d 个单元格。"
+
+#: tycontrols.strconsts.rsricheditrefusedsplittablerows
+msgid "A table has at most %d rows."
+msgstr "一个表格最多有 %d 行。"
+
+#: tycontrols.strconsts.rsricheditrefusedsplitwhich
+msgid "Put the caret in a cell, or select one cell, to split it."
+msgstr "请把光标放在一个单元格里，或选中一个单元格，再拆分。"
+
 #: tycontrols.strconsts.rsricheditrefuseddistributemerged
 msgid "This table has merged cells: its columns cannot be made equally wide."
 msgstr "这个表格有合并的单元格：不能把各列调成一样宽。"

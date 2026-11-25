@@ -894,22 +894,30 @@ type
     constructor Create(AOwner: TComponent); override;
   end;
 
-  { The caret's cell split into Columns x Rows (the control's SplitCell); OnChooseSize first,
-    where an application asks the user the numbers (AInsert False: nothing done). Enabled by
-    the control's CanSplitCell. }
+  { Before a cell is split: ACellColumns x ACellRows, the grid columns and rows the cell covers
+    (1 x 1 for a cell that is not merged); AColumns x ARows, the numbers it is split into -
+    columns first, as SplitCell takes them - which the handler may change; ASplit False does
+    nothing. A split is at most CRichMaxTableCols cells a row and CRichMaxTableRows rows a
+    table (tyControls.RichEdit.Model); the rows of a merged cell must divide its rows. }
+  TTyRichSplitSizeEvent = procedure(Sender: TObject; ACellColumns, ACellRows: Integer;
+    var AColumns, ARows: Integer; var ASplit: Boolean) of object;
+
+  { The caret's cell split (the control's SplitCell): into what it covers when it is merged
+    (Word's), else into Columns x Rows; OnChooseSize first, where an application asks the
+    user the numbers. Enabled by the control's CanSplitCell. }
   TTyRichEditSplitCell = class(TTyRichEditAction)
   private
     FRows, FColumns: Integer;
-    FOnChooseSize: TTyRichTableSizeEvent;
+    FOnChooseSize: TTyRichSplitSizeEvent;
   protected
     procedure UpdateOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
     procedure ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState); override;
   public
     constructor Create(AOwner: TComponent); override;
   published
-    property Rows: Integer read FRows write FRows default 1;
     property Columns: Integer read FColumns write FColumns default 2;
-    property OnChooseSize: TTyRichTableSizeEvent read FOnChooseSize write FOnChooseSize;
+    property Rows: Integer read FRows write FRows default 1;
+    property OnChooseSize: TTyRichSplitSizeEvent read FOnChooseSize write FOnChooseSize;
   end;
 
   { The selected cells' contents cleared, the cells kept (the control's ClearCells, what Delete
@@ -2919,14 +2927,28 @@ end;
 
 procedure TTyRichEditSplitCell.ExecuteOn(ARich: TTyCustomRichEdit; AState: TTyRichEditActionState);
 var
-  nRows, nCols: Integer;
+  nRows, nCols, cCols, cRows: Integer;
   go: Boolean;
 begin
   if not AState.CanSplitCell then Exit;
-  nRows := FRows;
-  nCols := FColumns;
+  // (the cell's spans: read here, once, never in the action's update)
+  if not ARich.CaretCellSpan(cCols, cRows) then
+  begin
+    cCols := 1;
+    cRows := 1;
+  end;
+  if (cCols > 1) or (cRows > 1) then
+  begin
+    nCols := cCols;
+    nRows := cRows;
+  end
+  else
+  begin
+    nCols := FColumns;
+    nRows := FRows;
+  end;
   go := True;
-  if Assigned(FOnChooseSize) then FOnChooseSize(Self, nRows, nCols, go);
+  if Assigned(FOnChooseSize) then FOnChooseSize(Self, cCols, cRows, nCols, nRows, go);
   if not go or (csDestroying in ARich.ComponentState) then Exit;
   ARich.SplitCell(nCols, nRows);
 end;

@@ -399,6 +399,15 @@ resourcestring
   rsRichEditRefusedSelectNotWhole = 'This table is too large, or not complete in its file, for a whole column or the whole table to be selected.';
   rsRichEditRefusedResizeNotWhole = 'This table is too large, or not complete in its file, for a whole column to be resized.';
   rsRichEditRefusedResizeNested = 'This row holds a table inside one of its cells: its cells'' widths, its height and its look cannot be changed.';
+  rsRichEditRefusedNotRectangle = 'The selected cells do not form a rectangle: they cannot be merged into one cell.';
+  rsRichEditRefusedMergeWhich    = 'Select two or more cells of one table to merge them.';
+  rsRichEditRefusedMergeNested   = 'This table has a table inside one of its cells: its cells cannot be merged.';
+  rsRichEditRefusedSplitNested   = 'This table has a table inside one of its cells: its cells cannot be split.';
+  rsRichEditRefusedSplitNumbers  = 'A cell is split into 1 or more columns and 1 or more rows, two parts at least.';
+  rsRichEditRefusedSplitRows     = 'The rows must divide the %d rows the cell covers.';
+  rsRichEditRefusedSplitCells    = 'A row has at most %d cells.';
+  rsRichEditRefusedSplitTableRows = 'A table has at most %d rows.';
+  rsRichEditRefusedSplitWhich    = 'Put the caret in a cell, or select one cell, to split it.';
   rsRichEditRefusedDistributeMerged = 'This table has merged cells: its columns cannot be made equally wide.';
   rsRichEditRefusedFormatNotWhole = 'This table is too large, or not complete in its file, for all of its rows to be changed.';
   rsRichEditPasteCellsDropped = 'Some of the pasted cells did not fit in the table''s columns and were left out.';
