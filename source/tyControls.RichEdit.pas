@@ -1190,6 +1190,9 @@ type
     { Every paragraph measured, where a document small enough is whole (ContentHeight's
       exactness): CRichContentExactParas paragraphs at most, never a file still loading. }
     procedure MeasureContent;
+    { The view made and the content measured, the bars as what was measured has them - the
+      content size's questions (ContentHeight, ContentWidth) ask it. }
+    procedure EnsureContentMeasured;
     function ContentInsets(out AH, AV: Integer): Boolean;
     { The content's size against what was last reported: OnContentSizeChange, and AutoHeight's
       height. AQueue: from a place that must not run it now (a paint, a document's change,
@@ -14560,15 +14563,33 @@ begin
   end;
 end;
 
-function TTyCustomRichEdit.ContentHeight: Integer;
+procedure TTyCustomRichEdit.EnsureContentMeasured;
 var
-  ih, iv: Integer;
+  wide: Integer;
+  total: Int64;
 begin
-  if not ViewBehind and not (csDestroying in ComponentState) then
+  if ViewBehind or (csDestroying in ComponentState) then Exit;
+  EnsureView(ViewPPI);
+  wide := FWidestSeen;
+  total := FDoc.Text.TotalHeight;
+  MeasureContent;
+  { What the view never laid out - a table wider than the window below it, heights past their
+    estimate - may bring a bar or take one away, and a bar is in the content's size (its
+    insets): the bars are decided again, as the next paint would, before the size is read. A
+    bar that comes changes no height (horizontal) or makes them estimates at the new width
+    (vertical): measured once more. }
+  if (FWidestSeen <> wide) or (FDoc.Text.TotalHeight <> total) then
   begin
     EnsureView(ViewPPI);
     MeasureContent;
   end;
+end;
+
+function TTyCustomRichEdit.ContentHeight: Integer;
+var
+  ih, iv: Integer;
+begin
+  EnsureContentMeasured;
   ContentInsets(ih, iv);
   Result := Integer(Math.Min(FDoc.Text.TotalHeight div Math.Max(1, FScale), Int64(MaxInt div 2))) + iv;
 end;
@@ -14577,11 +14598,7 @@ function TTyCustomRichEdit.ContentWidth: Integer;
 var
   ih, iv: Integer;
 begin
-  if not ViewBehind and not (csDestroying in ComponentState) then
-  begin
-    EnsureView(ViewPPI);
-    MeasureContent;
-  end;
+  EnsureContentMeasured;
   ContentInsets(ih, iv);
   Result := FWidestSeen div Math.Max(1, FScale) + ih;
 end;

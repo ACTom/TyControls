@@ -60,6 +60,8 @@ type
     procedure TestUpAndAClickIntoAShortMergedCell;
     procedure TestTheCaretGoesIntoAContinuationOfAnotherWidth;
     procedure TestContentHeightAsAFreshLayoutAfterEdits;
+    procedure TestTheIndexAsAFreshControlAfterMergedCellSteps;
+    procedure TestTheContentSizeCountsABarItsMeasureBrings;
   end;
 
   { A cell merged over rows laid out (TTyRichLayouter, the test device, no control): its
@@ -966,6 +968,131 @@ begin
   finally
     ed.Free;
   end;
+end;
+
+{ A table wider than the view, below it: the content's height the control gives at once counts
+  the horizontal bar that measuring the table brings - as a second question does, and as a view
+  that has had the table on screen. The content's width counts it the same way. }
+procedure TTyRichGridControlTest.TestTheContentSizeCountsABarItsMeasureBrings;
+var
+  body: string;
+  i, h1, w1: Integer;
+begin
+  FRich.SetBounds(0, 0, 300, 200);
+  body := '{\rtf1\ansi{\fonttbl{\f0 Arial;}}';
+  for i := 0 to 29 do body := body + 'Line ' + IntToStr(i) + '\par ';
+  body := body + '\trowd\cellx2000\cellx4000\cellx6000\pard\intbl a\cell b\cell c\cell\row ';
+  Load(body + '\pard after\par}');
+  FRich.SelStart := 0;
+  FRich.UpdateView;
+  h1 := FRich.ContentHeight;
+  w1 := FRich.ContentWidth;
+  AssertEquals('the height asked again', FRich.ContentHeight, h1);
+  AssertEquals('the width asked again', FRich.ContentWidth, w1);
+  FRich.SelStart := PS(FRich, 30);
+  FRich.UpdateView;
+  AssertEquals('the height with the table on screen', FRich.ContentHeight, h1);
+end;
+
+{ The view's content height and height index against a fresh control on the saved bytes (same
+  zoom, width, PPI), after each step of a run through a table with a cell merged over three rows:
+  content typed into the merged cell and a plain cell below the view, a row above it, the merged
+  cell brought on screen, a narrower view, zoom 150, the last row grown below the view, an
+  undo. }
+procedure TTyRichGridControlTest.TestTheIndexAsAFreshControlAfterMergedCellSteps;
+const
+  CMW = '\trowd\trgaph108';
+var
+  body: string;
+  i: Integer;
+
+  function Cell(ARow, ACol: Integer): TTyRichPos;
+  var
+    f, l: Integer;
+  begin
+    AssertTrue('the cell', FRich.Document.TableCellParas(60, ARow, ACol, f, l));
+    Result := PS(FRich, f);
+  end;
+
+  procedure Typ(APos: TTyRichPos; const AText: string);
+  begin
+    FRich.Document.Execute(TTyRichInsertText.Create(APos, AText));
+  end;
+
+  procedure Cmp(const AWhat: string);
+  var
+    fr: TGridRich;
+    st: TBytesStream;
+    k, mine, theirs: Integer;
+    diff: string;
+  begin
+    FRich.UpdateView;
+    mine := FRich.ContentHeight;
+    fr := TGridRich.Create(nil);
+    try
+      fr.Controller := FCtl;
+      fr.Font.PixelsPerInch := 96;
+      fr.SetBounds(0, 0, FRich.Width, FRich.Height);
+      fr.Zoom := FRich.Zoom;
+      st := TBytesStream.Create;
+      try
+        FRich.SaveToStream(st, rfRtf);
+        st.Position := 0;
+        fr.LoadFromStream(st, rfRtf);
+      finally
+        st.Free;
+      end;
+      fr.FinishLoading;
+      fr.UpdateView;
+      // (the first answer each gives: none is right only when asked a second time)
+      theirs := fr.ContentHeight;
+      diff := '';
+      for k := 0 to fr.Document.Text.ParaCount - 1 do
+        if fr.Document.Text.ParaHeight(k) <> FRich.Document.Text.ParaHeight(k) then
+          diff := diff + Format(' %d: %d against %d;', [k, FRich.Document.Text.ParaHeight(k),
+            fr.Document.Text.ParaHeight(k)]);
+      AssertEquals(AWhat + ': the paragraphs that differ (this view against a fresh one):' + diff,
+        '', diff);
+      AssertEquals(AWhat + ': the content''s height', theirs, mine);
+    finally
+      fr.Free;
+    end;
+  end;
+
+begin
+  FRich.SetBounds(0, 0, 900, 600);
+  body := '{\rtf1\ansi\ansicpg1252\deff0{\fonttbl{\f0 Arial;}}'#13#10;
+  for i := 0 to 59 do body := body + 'Line ' + IntToStr(i) + ' before the table.\par ';
+  body := body + CMW + '\cellx2000\cellx4000\cellx6000\pard\intbl a\cell b\cell c\cell\row ';
+  body := body + CMW + '\clvmgf\cellx2000\cellx4000\cellx6000\pard\intbl span\cell r1\cell r1\cell\row ';
+  body := body + CMW + '\clvmrg\cellx2000\cellx4000\cellx6000\pard\intbl\cell r2\cell r2\cell\row ';
+  body := body + CMW + '\clvmrg\cellx2000\cellx4000\cellx6000\pard\intbl\cell r3\cell r3\cell\row ';
+  body := body + CMW + '\cellx2000\cellx4000\cellx6000\pard\intbl z\cell z\cell z\cell\row ';
+  for i := 0 to 59 do body := body + '\pard Line ' + IntToStr(i) + ' after the table.\par ';
+  Load(body + '}');
+  FRich.Document.ClearUndo;
+  FRich.SelStart := 0;
+  FRich.UpdateView;
+  Cmp('as loaded, the table below the view');
+  for i := 1 to 15 do Typ(Cell(1, 0) + 1, #13#10 + 'more ' + IntToStr(i));
+  Cmp('15 paragraphs into the merged cell, below the view');
+  for i := 1 to 15 do Typ(Cell(2, 1), 'wider text in the middle row, wrapping around the cell ' + IntToStr(i));
+  Cmp('a plain cell of the middle row grows');
+  Typ(Cell(0, 0), 'above the span: some more words to wrap and wrap and wrap ');
+  Cmp('a row above the merged cell');
+  FRich.SelStart := Cell(1, 0);
+  FRich.UpdateView;
+  Cmp('the merged cell on screen');
+  FRich.SetBounds(0, 0, 500, 600);
+  Cmp('narrower');
+  FRich.Zoom := 150;
+  Cmp('zoom 150');
+  FRich.Zoom := 100;
+  for i := 1 to 10 do Typ(Cell(3, 2), 'last row text grows ' + IntToStr(i) + ' ');
+  FRich.SelStart := 0;
+  Cmp('the last row of the merged cell grows, below the view');
+  FRich.Undo;
+  Cmp('one undo');
 end;
 
 { Word writes one line's cells up to 15 twips apart from row to row: one edge of the grid;
