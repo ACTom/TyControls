@@ -397,6 +397,8 @@ The figures of the performance suite (`TTyRichEditPerfTest`) on this machine:
 
 (Windows 10; the machine's load during the run 3 to 5 %.)
 
+To hold the promise on a machine of your own there is a tool beside the tests: `tools/richedit-bench` makes the 100 MB files (UTF-8 and GBK text, an RTF of text, lists and tables, an RTF of 200 pictures, one of 200,000 links, one of 2,000 equations), takes every figure five times, each in a process of its own, and prints the medians against the promise; its README lists the switches. On the machine above, with the control as it is now, none of its 94 figures is over the line: the first screen comes in 270 to 563 ms (the slowest is the GBK text, converted as it loads), any place in at most 73 ms, a keystroke in at most 2.3 ms, and the peak memory is 2.0 to 2.5 times the file for text and RTF and 1.5 times for the RTF of pictures.
+
 What is slow - what grows with the range it changes:
 
 - A format written over the whole document (Select All, then Bold): the command touches every paragraph, and an RTF file read on demand is parsed whole by it; over a large range the wait cursor shows.
