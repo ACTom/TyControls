@@ -5420,7 +5420,7 @@ begin
     p := FDoc.CellAt(f - 1);
     { (and only the cell above at its column, of its width, as the grid reads it: a mark under
       a cell of another extent is a cell of its own) }
-    Result := (p <> nil) and (p.Table = c.Table) and TyRichCellContinues(p.Row, c.Row, c.Index);
+    Result := (p <> nil) and (p.Table = c.Table) and TyRichCellContinuesAbove(p.Row, c.Row, c.Index);
   finally
     FDoc.EndRead;
   end;

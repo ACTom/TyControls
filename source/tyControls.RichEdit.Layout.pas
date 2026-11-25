@@ -7539,7 +7539,7 @@ var
           oth := CellBorder(AOFmt, m, rcsBottom);
           wins := TyRichLaterLineWins(oth, AOwn);
         end
-        else if TyRichCellContinues(ARow, nextRow, m) then
+        else if TyRichCellContinuesAbove(ARow, nextRow, m) then
           wins := False
         else
         begin
@@ -7668,7 +7668,7 @@ begin
       { top and bottom: by the parts of the edge the box shares with each box of the row
         above and below (a wide cell against several, several against a wide one) }
       // (a cell that continues the one above, as the grid reads it, has no line toward it)
-      if not TyRichCellContinues(prevRow, ARow, i) then
+      if not TyRichCellContinuesAbove(prevRow, ARow, i) then
       begin
         own := CellBorder(fmt, i, rcsTop);
         if prevRow = nil then
@@ -7859,7 +7859,7 @@ begin
   f := ARow.Format;
   if f = nil then Exit;
   for i := 0 to f.CellCount - 1 do
-    if (f.Cells[i].HMerge <> rcmContinue) and TyRichCellContinues(AAbove, ARow, i) then Exit(True);
+    if (f.Cells[i].HMerge <> rcmContinue) and TyRichCellContinuesAbove(AAbove, ARow, i) then Exit(True);
 end;
 
 const
@@ -7929,7 +7929,7 @@ begin
       for i := 0 to fmt.CellCount - 1 do
       begin
         if (fmt.Cells[i].HMerge = rcmContinue) or
-          not TyRichCellContinues(ARows[gi - 1], ARows[gi], i) then
+          not TyRichCellContinuesAbove(ARows[gi - 1], ARows[gi], i) then
           Continue;
         if not EmptyCell(gi, i) then Continue;
         o := BoxCellOf(pfmt, TyRichFacingCell(ARows[gi].CellEdges, fmt.Row.LeftTwips, i,
@@ -7978,7 +7978,7 @@ begin
       for i := 0 to rows[gi].CellCount - 1 do
       begin
         if rows[gi].FCells[i].Hidden or (i >= fmt.CellCount) or
-          not TyRichCellContinues(ARows[gi - 1], ARows[gi], i) then
+          not TyRichCellContinuesAbove(ARows[gi - 1], ARows[gi], i) then
           Continue;
         { (one that holds something - a file's - is a cell of its own, shown: the merge ends
           above it) }

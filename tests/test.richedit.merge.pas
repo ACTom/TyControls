@@ -95,6 +95,7 @@ type
     procedure TestACellForACoveredPlaceNamesTheMistake;
     procedure TestTheContinuationRuleIsOneFunction;
     procedure TestRowsAddedToAFilesTableWriteOneDefinitionEach;
+    procedure TestTheContinuationRuleIsTheGridsInEveryFixture;
     procedure TestSelectColumnTakesASpanWhole;
     procedure TestEveryRewrittenCellSaysItsOwnWidth;
     procedure TestARandomWalkKeepsTheGridWhole;
@@ -2484,6 +2485,89 @@ begin
     while FRich.Document.CanUndo do FRich.Undo;
     AssertTrue(IntToStr(door) + ': undone, the file''s bytes', SaveRtf = first);
   end;
+end;
+
+{ TyRichCellContinuesAbove says what the whole table's grid says - a cell continues the one
+  above iff the grid has it covered by a cell of a row above - for every cell (one merged
+  across in marks too) of every table of the fixtures with merge marks, and of three more: a
+  continuation of another width, one under nothing, a cell merged across in marks and down. }
+procedure TTyRichMergeTest.TestTheContinuationRuleIsTheGridsInEveryFixture;
+const
+  Files: array[0..2] of string = ('hand-word-table-merged.rtf', 'word-table-merged.rtf',
+    'word-table-styled.rtf');
+  More: array[0..2] of RawByteString = (
+    '\trowd\clvmgf\cellx1500\cellx3000\pard\intbl A\cell B\cell\row' +
+    '\trowd\clvmrg\cellx2000\cellx3000\pard\intbl Z\cell D\cell\row',
+    '\trowd\clvmrg\cellx1500\cellx3000\pard\intbl Q\cell R\cell\row',
+    '\trowd\clmgf\clvmgf\cellx1500\clmrg\clvmgf\cellx3000\cellx4500\pard\intbl A\cell\cell B\cell\row' +
+    '\trowd\clmgf\clvmrg\cellx1500\clmrg\clvmrg\cellx3000\cellx4500\pard\intbl\cell\cell D\cell\row');
+var
+  k, p, r, c, n, first, count: Integer;
+  rows: TTyRichRowList;
+  d: TTyRichDocument;
+  t: TTyRichTable;
+  f: TFileStream;
+  s: RawByteString;
+  st: TBytesStream;
+  g: TTyRichGrid;
+  gc: TTyRichGridCell;
+begin
+  n := 0;
+  for k := 0 to High(Files) + Length(More) do
+  begin
+    if k <= High(Files) then
+    begin
+      f := TFileStream.Create(ExtractFilePath(ParamStr(0)) + '..' + PathDelim + 'tests' + PathDelim +
+        'fixtures' + PathDelim + 'rtf' + PathDelim + Files[k], fmOpenRead or fmShareDenyWrite);
+      try
+        s := '';
+        SetLength(s, f.Size);
+        f.ReadBuffer(s[1], f.Size);
+      finally
+        f.Free;
+      end;
+      st := TBytesStream.Create;
+      try
+        st.WriteBuffer(s[1], Length(s));
+        st.Position := 0;
+        FRich.LoadFromStream(st, rfRtf);
+      finally
+        st.Free;
+      end;
+      FRich.FinishLoading;
+    end
+    else
+      LoadRows(More[k - Length(Files)]);
+    d := FRich.Document;
+    p := 0;
+    while p < d.Text.ParaCount do
+    begin
+      t := d.TableAt(p);
+      if (t <> nil) and ((p = 0) or (d.TableAt(p - 1) <> t)) and
+        d.TableRowsAt(d.Text.ParaStart(p), 0, MaxInt, rows, first, count) then
+      begin
+        g := TyRichTableGrid(d, d.Text.ParaStart(p));
+        try
+          for r := 0 to High(rows) do
+            for c := 0 to rows[r].CellCount - 1 do
+            begin
+              gc := g.CellOf(r, c);
+              if r > 0 then
+                AssertEquals(Format('%d: table at %d, row %d cell %d', [k, p, r, c]),
+                  gc.Covered and (gc.Row < r), TyRichCellContinuesAbove(rows[r - 1], rows[r], c))
+              else
+                AssertFalse(Format('%d: table at %d, a first row''s cell %d', [k, p, c]),
+                  TyRichCellContinuesAbove(nil, rows[r], c));
+              Inc(n);
+            end;
+        finally
+          g.Free;
+        end;
+      end;
+      Inc(p);
+    end;
+  end;
+  AssertTrue(Format('cells compared: %d', [n]), n > 30);
 end;
 
 initialization
