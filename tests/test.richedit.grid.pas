@@ -58,6 +58,8 @@ type
     procedure TestALayoutAtAnotherScaleLeavesTheIndex;
     procedure TestAnOffScreenEditInAPlainRowIsMeasured;
     procedure TestUpAndAClickIntoAShortMergedCell;
+    procedure TestTheCaretGoesIntoAContinuationOfAnotherWidth;
+    procedure TestContentHeightAsAFreshLayoutAfterEdits;
   end;
 
   { A cell merged over rows laid out (TTyRichLayouter, the test device, no control): its
@@ -87,6 +89,9 @@ type
     procedure TestASpanOverMoreRowsThanAGroupKeepsItsLook;
     procedure TestAMergedCellIsDrawnByItsFirstCell;
     procedure TestAKeyInALongMergedCellLaysOutWhatChanged;
+    procedure TestAContinuationOfAnotherWidthIsACellOfItsOwn;
+    procedure TestAContinuationOfNothingIsACellOfItsOwn;
+    procedure TestACellMergedAcrossByMarksAndDownIsOneCell;
   end;
 
 { The listing of the grid of the table at ATablePos, in the form of
@@ -844,6 +849,125 @@ begin
     FRich.PositionAtPoint(x, (r.Top + r.Bottom) div 2)));
 end;
 
+const
+  { x | A1 A2 A3 (merge first) B | Z (a merge mark under a cell of another width: 2000 against
+    1500) D: x 0, A 1-3, B 4, Z 5, D 6. }
+  COtherWidth = '{\rtf1\ansi{\fonttbl{\f0 Arial;}}{\colortbl;\red255\green230\blue180;' +
+    '\red200\green230\blue255;}\pard x\par' +
+    '\trowd\clvmgf\clcbpat1\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10' +
+    '\clbrdrr\brdrs\brdrw10\cellx1500\cellx3000\pard\intbl A1\par A2\par A3\cell B\cell\row' +
+    '\trowd\clvmrg\clcbpat2\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10' +
+    '\clbrdrr\brdrs\brdrw10\cellx2000\cellx3000\pard\intbl Z\cell D\cell\row\pard after\par}';
+
+{ The caret goes into a cell whose merge mark continues a cell of another width: it is a cell
+  of its own (a click on it, and Left from the cell after it, land in it). }
+procedure TTyRichGridControlTest.TestTheCaretGoesIntoAContinuationOfAnotherWidth;
+var
+  r: TRect;
+begin
+  Load(COtherWidth);
+  FRich.UpdateView;
+  r := FRich.ParagraphRect(5);
+  AssertEquals('a click on Z', 5, FRich.Document.Text.ParaOfPos(
+    FRich.PositionAtPoint(r.Left + 3, (r.Top + r.Bottom) div 2)));
+  FRich.SelStart := PS(FRich, 6);
+  FRich.Key(VK_LEFT);
+  AssertEquals('Left from D: Z', 5, ParaOfCaret);
+  // empty, it is still a cell of its own: Left from D stops in it
+  Load(StringReplace(COtherWidth, 'intbl Z\cell', 'intbl\cell', []));
+  FRich.UpdateView;
+  FRich.SelStart := PS(FRich, 6);
+  FRich.Key(VK_LEFT);
+  AssertEquals('Left from D: the empty cell', 5, ParaOfCaret);
+end;
+
+{ The content's height against a fresh control on the saved bytes (at the same zoom, laid out
+  as a paint does): after paragraphs typed into a plain table row below the view, and after
+  zoom 150. }
+procedure TTyRichGridControlTest.TestContentHeightAsAFreshLayoutAfterEdits;
+var
+  body: string;
+  i, f, l: Integer;
+  ed: TTyRichEdit;
+  st0: TBytesStream;
+
+  procedure Cmp(const AWhat: string);
+  var
+    fr: TTyRichEdit;
+    st: TBytesStream;
+  begin
+    ed.UpdateView;
+    fr := TTyRichEdit.Create(nil);
+    try
+      fr.Controller := FCtl;
+      fr.Font.PixelsPerInch := 96;
+      fr.SetBounds(0, 0, ed.Width, ed.Height);
+      fr.Zoom := ed.Zoom;
+      st := TBytesStream.Create;
+      try
+        ed.SaveToStream(st, rfRtf);
+        st.Position := 0;
+        fr.LoadFromStream(st, rfRtf);
+      finally
+        st.Free;
+      end;
+      fr.FinishLoading;
+      fr.UpdateView;
+      AssertEquals(AWhat, fr.ContentHeight, ed.ContentHeight);
+    finally
+      fr.Free;
+    end;
+  end;
+
+begin
+  // (the real device: what an application has)
+  ed := TTyRichEdit.Create(nil);
+  try
+  ed.Controller := FCtl;
+  ed.Font.PixelsPerInch := 96;
+  ed.SetBounds(0, 0, 900, 600);
+  body := '{\rtf1\ansi{\fonttbl{\f0 Arial;}}';
+  for i := 0 to 59 do body := body + 'Line ' + IntToStr(i) + ' before the table.\par ';
+  for i := 0 to 4 do
+    body := body + '\trowd\trgaph108\cellx2000\cellx4000\cellx6000\pard\intbl a\cell b\cell c\cell\row ';
+  for i := 0 to 59 do body := body + '\pard Line ' + IntToStr(i) + ' after the table.\par ';
+  st0 := TBytesStream.Create(BytesOf(body + '}'));
+  try
+    ed.LoadFromStream(st0, rfRtf);
+  finally
+    st0.Free;
+  end;
+  ed.FinishLoading;
+  ed.SelStart := 0;
+  ed.UpdateView;
+  Cmp('as loaded');
+  for i := 1 to 15 do
+  begin
+    AssertTrue('the cell', ed.Document.TableCellParas(60, 1, 0, f, l));
+    ed.Document.Execute(TTyRichInsertText.Create(ed.Document.Text.ParaStart(f) + 1,
+      #13#10 + 'more ' + IntToStr(i)));
+  end;
+  Cmp('15 paragraphs into a plain row below the view');
+  for i := 1 to 15 do
+  begin
+    AssertTrue('the cell', ed.Document.TableCellParas(60, 2, 1, f, l));
+    ed.Document.Execute(TTyRichInsertText.Create(ed.Document.Text.ParaStart(f),
+      'wider text in the middle row, wrapping around the cell ' + IntToStr(i)));
+  end;
+  Cmp('a cell of the next row grows below the view');
+  AssertTrue('the cell', ed.Document.TableCellParas(60, 0, 0, f, l));
+  ed.Document.Execute(TTyRichInsertText.Create(ed.Document.Text.ParaStart(f),
+    'above: some more words to wrap and wrap and wrap '));
+  Cmp('a row above');
+  ed.SetBounds(0, 0, 500, 600);
+  Cmp('narrower');
+  ed.Zoom := 150;
+  Cmp('zoom 150');
+  finally
+    ed.Free;
+  end;
+end;
+
 { Word writes one line's cells up to 15 twips apart from row to row: one edge of the grid;
   16 apart, two. }
 procedure TTyRichGridTest.TestEdgesAFewTwipsApartAreOne;
@@ -1354,6 +1478,87 @@ begin
   finally
     fresh.Free;
   end;
+end;
+
+{ A merge mark under a cell of another width continues nothing: the grid has it as a cell of its
+  own, and so does the layout - its rows not tied together, the cell shown with its own text,
+  shading and top line, the cell above with its bottom line. }
+procedure TTyRichSpanLayoutTest.TestAContinuationOfAnotherWidthIsACellOfItsOwn;
+var
+  r0, r1: TTyRowLayout;
+  g: TTyRichGrid;
+begin
+  Open(COtherWidth);
+  g := TyRichTableGrid(FDoc, FDoc.Text.ParaStart(1));
+  try
+    AssertFalse('the grid: a cell of its own', g.CellOf(1, 0).Covered);
+  finally
+    g.Free;
+  end;
+  r0 := Row(1);
+  r1 := Row(5);
+  AssertEquals('the rows not tied together: the first row alone', 4, r0.LastPara);
+  AssertEquals('no merged height', 0, r0.Cells[0].SpanHeight);
+  AssertFalse('not covered', r1.Cells[0].Covered);
+  AssertTrue('its own shading', r1.Cells[0].Shading <> r0.Cells[0].Shading);
+  AssertTrue('its top line, or the bottom of the cell above', (rcsTop in r1.Cells[0].Sides) or
+    (rcsBottom in r0.Cells[0].Sides));
+  AssertTrue('its first row holds the lines of A', r0.Height >= r0.Cells[0].Need);
+end;
+
+{ A merge mark in a table's first row continues nothing: a cell of its own, its top line drawn. }
+procedure TTyRichSpanLayoutTest.TestAContinuationOfNothingIsACellOfItsOwn;
+var
+  r0: TTyRowLayout;
+  g: TTyRichGrid;
+begin
+  Open('{\rtf1\ansi{\fonttbl{\f0 Arial;}}\pard x\par' +
+    '\trowd\clvmrg\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10' +
+    '\clbrdrr\brdrs\brdrw10\cellx1500\cellx3000\pard\intbl Q\cell R\cell\row\pard after\par}');
+  g := TyRichTableGrid(FDoc, FDoc.Text.ParaStart(1));
+  try
+    AssertFalse('the grid: a cell of its own', g.CellOf(0, 0).Covered);
+  finally
+    g.Free;
+  end;
+  r0 := Row(1);
+  AssertFalse('not covered', r0.Cells[0].Covered);
+  AssertTrue('its top line', rcsTop in r0.Cells[0].Sides);
+end;
+
+{ A cell merged across by marks (\clmgf / \clmrg) and down (\clvmgf / \clvmrg) over two rows:
+  one cell over 2 columns x 2 rows for the grid and the layout - drawn once, no line inside
+  it, its last row grown for its content. }
+procedure TTyRichSpanLayoutTest.TestACellMergedAcrossByMarksAndDownIsOneCell;
+const
+  Bd = '\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10';
+var
+  r0, r1: TTyRowLayout;
+  g: TTyRichGrid;
+  c: TTyRichGridCell;
+begin
+  // x 0, A1-A4 1-4, the merged-across part 5, B 6, covered 7 and 8, D 9
+  Open('{\rtf1\ansi{\fonttbl{\f0 Arial;}}\pard x\par' +
+    '\trowd\clmgf\clvmgf' + Bd + '\cellx1500\clmrg\clvmgf' + Bd + '\cellx3000' + Bd + '\cellx4500' +
+    '\pard\intbl A1\par A2\par A3\par A4\cell\cell B\cell\row' +
+    '\trowd\clmgf\clvmrg' + Bd + '\cellx1500\clmrg\clvmrg' + Bd + '\cellx3000' + Bd + '\cellx4500' +
+    '\pard\intbl\cell\cell D\cell\row\pard after\par}');
+  g := TyRichTableGrid(FDoc, FDoc.Text.ParaStart(1));
+  try
+    c := g.CellOf(0, 0);
+    AssertEquals('the grid: two columns', 2, c.ColSpan);
+    AssertEquals('the grid: two rows', 2, c.RowSpan);
+  finally
+    g.Free;
+  end;
+  r0 := Row(1);
+  r1 := Row(7);
+  AssertTrue('one box across', r0.Cells[1].Hidden);
+  AssertEquals('over both rows', r0.Height + r1.Height, r0.Cells[0].SpanHeight);
+  AssertTrue('covered below', r1.Cells[0].Covered);
+  AssertFalse('no line under its first row', rcsBottom in r0.Cells[0].Sides);
+  AssertFalse('none over its second', rcsTop in r1.Cells[0].Sides);
+  AssertTrue('the last row grown', r1.Height > r1.Cells[2].Need);
 end;
 
 initialization

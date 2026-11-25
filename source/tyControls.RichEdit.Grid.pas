@@ -86,6 +86,12 @@ function TyRichCellHMerge(ARow: TTyRichRow; ACell: Integer): TTyRowCellMerge;
   its own. A cell merged across in marks that continues ACell's merge across (rcmContinue
   across) goes where the cell it continues goes: ask for the first of its marks. }
 function TyRichCellContinuesAbove(AAbove, ARow: TTyRichRow; ACell: Integer): Boolean;
+{ Cell ACell of ARow continues the cell above it - AAbove is the row right above - as the grid
+  reads it (TyRichBuildGrid's rule: a merge mark down, and a cell above at its column with its
+  extent; else it is a cell of its own). False for a cell with no mark (no grid made then);
+  else the two rows' grid is made for the answer (not counted in TyRichGridBuildCount: a layout
+  asks it of the rows it lays out). }
+function TyRichCellContinues(AAbove, ARow: TTyRichRow; ACell: Integer): Boolean;
 
 implementation
 
@@ -334,7 +340,36 @@ begin
   Result := True;
 end;
 
+function BuildGridOf(const ARows: TTyRichRowList; ACounted: Boolean): TTyRichGrid; forward;
+
 function TyRichBuildGrid(const ARows: TTyRichRowList): TTyRichGrid;
+begin
+  Result := BuildGridOf(ARows, True);
+end;
+
+function TyRichCellContinues(AAbove, ARow: TTyRichRow; ACell: Integer): Boolean;
+var
+  rows: TTyRichRowList;
+  g: TTyRichGrid;
+  c: TTyRichGridCell;
+begin
+  Result := False;
+  if (AAbove = nil) or (ARow = nil) or (TyRichCellVMerge(ARow, ACell) <> rcmContinue) then Exit;
+  rows := nil;
+  SetLength(rows, 2);
+  rows[0] := AAbove;
+  rows[1] := ARow;
+  g := BuildGridOf(rows, False);
+  try
+    if (ACell < 0) or (ACell >= g.CellCountOfRow(1)) then Exit;
+    c := g.CellOf(1, ACell);
+    Result := c.Covered and (c.Row = 0);
+  finally
+    g.Free;
+  end;
+end;
+
+function BuildGridOf(const ARows: TTyRichRowList; ACounted: Boolean): TTyRichGrid;
 var
   g: TTyRichGrid;
   all: array of Integer;
@@ -362,7 +397,7 @@ var
   end;
 
 begin
-  Inc(GBuilds);
+  if ACounted then Inc(GBuilds);
   g := TTyRichGrid.Create;
   try
     g.FRowCount := Length(ARows);

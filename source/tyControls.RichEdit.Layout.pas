@@ -1340,7 +1340,7 @@ implementation
 
 uses
   Math, LCLType, LCLIntf, BGRAReadPng, BGRAReadJpeg, BGRAReadBMP, tyControls.Types,
-  tyControls.FontUnits, tyControls.Painter, tyControls.StrConsts;
+  tyControls.FontUnits, tyControls.Painter, tyControls.StrConsts, tyControls.RichEdit.Grid;
 
 const
   ckText = 0;
@@ -7539,7 +7539,7 @@ var
           oth := CellBorder(AOFmt, m, rcsBottom);
           wins := TyRichLaterLineWins(oth, AOwn);
         end
-        else if AOFmt.Cells[m].VMerge = rcmContinue then
+        else if TyRichCellContinues(ARow, nextRow, m) then
           wins := False
         else
         begin
@@ -7667,7 +7667,8 @@ begin
       end;
       { top and bottom: by the parts of the edge the box shares with each box of the row
         above and below (a wide cell against several, several against a wide one) }
-      if bx^.VMerge <> rcmContinue then
+      // (a cell that continues the one above, as the grid reads it, has no line toward it)
+      if not TyRichCellContinues(prevRow, ARow, i) then
       begin
         own := CellBorder(fmt, i, rcsTop);
         if prevRow = nil then
@@ -7849,7 +7850,7 @@ begin
 end;
 
 { Row ARow has a cell that continues the one above it (a cell merged over rows). }
-function RowContinues(ARow: TTyRichRow): Boolean;
+function RowContinues(AAbove, ARow: TTyRichRow): Boolean;
 var
   f: TTyRichRowFormat;
   i: Integer;
@@ -7858,7 +7859,7 @@ begin
   f := ARow.Format;
   if f = nil then Exit;
   for i := 0 to f.CellCount - 1 do
-    if f.Cells[i].VMerge = rcmContinue then Exit(True);
+    if (f.Cells[i].HMerge <> rcmContinue) and TyRichCellContinues(AAbove, ARow, i) then Exit(True);
 end;
 
 const
@@ -7927,7 +7928,9 @@ begin
       pfmt := ARows[gi - 1].Format;
       for i := 0 to fmt.CellCount - 1 do
       begin
-        if (fmt.Cells[i].VMerge <> rcmContinue) or (fmt.Cells[i].HMerge = rcmContinue) then Continue;
+        if (fmt.Cells[i].HMerge = rcmContinue) or
+          not TyRichCellContinues(ARows[gi - 1], ARows[gi], i) then
+          Continue;
         if not EmptyCell(gi, i) then Continue;
         o := BoxCellOf(pfmt, TyRichFacingCell(ARows[gi].CellEdges, fmt.Row.LeftTwips, i,
           ARows[gi - 1].CellEdges, pfmt.Row.LeftTwips));
@@ -7975,7 +7978,7 @@ begin
       for i := 0 to rows[gi].CellCount - 1 do
       begin
         if rows[gi].FCells[i].Hidden or (i >= fmt.CellCount) or
-          (fmt.Cells[i].VMerge <> rcmContinue) then
+          not TyRichCellContinues(ARows[gi - 1], ARows[gi], i) then
           Continue;
         { (one that holds something - a file's - is a cell of its own, shown: the merge ends
           above it) }
@@ -8106,7 +8109,7 @@ function TTyRichLayouter.LayoutBlock(ADoc: TTyRichDocument; AIndex: Integer; AWi
 var
   L: TTyBlockLayout;
   cell, c: TTyRichCell;
-  row, r2: TTyRichRow;
+  row, r2, above: TTyRichRow;
   first, last, n, want, f2, l2: Integer;
   firsts, lasts: array of Integer;
   rws: array of TTyRichRow;
@@ -8192,10 +8195,12 @@ begin
     lasts := nil;
     r2 := row;
     f2 := first;
-    while RowContinues(r2) and (System.Length(rws) < CRichMaxSpanGroupRows) do
+    while System.Length(rws) < CRichMaxSpanGroupRows do
     begin
-      r2 := PrevRowOf(ADoc, f2, r2);
-      if r2 = nil then Break;
+      // (the row above, while this one continues a cell of it - the grid's rule)
+      above := PrevRowOf(ADoc, f2, r2);
+      if (above = nil) or not RowContinues(above, r2) then Break;
+      r2 := above;
       l2 := f2 - 1;
       f2 := RowStartBack(l2, r2);
       AddRow(f2, l2, r2);
@@ -8219,8 +8224,9 @@ begin
     l2 := last;
     while System.Length(rws) < CRichMaxSpanGroupRows do
     begin
+      above := r2;
       r2 := NextRowOf(ADoc, l2, r2);
-      if (r2 = nil) or not RowContinues(r2) then Break;
+      if (r2 = nil) or not RowContinues(above, r2) then Break;
       f2 := l2 + 1;
       l2 := RowEndOn(f2, r2);
       AddRow(f2, l2, r2);

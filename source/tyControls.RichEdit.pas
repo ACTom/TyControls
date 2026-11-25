@@ -5418,7 +5418,9 @@ begin
     // (a mark that continues nothing - the table's first row - is an ordinary cell)
     if not TyRichRowParas(FDoc, APara, f, l) or (f = 0) then Exit;
     p := FDoc.CellAt(f - 1);
-    Result := (p <> nil) and (p.Table = c.Table);
+    { (and only the cell above at its column, of its width, as the grid reads it: a mark under
+      a cell of another extent is a cell of its own) }
+    Result := (p <> nil) and (p.Table = c.Table) and TyRichCellContinues(p.Row, c.Row, c.Index);
   finally
     FDoc.EndRead;
   end;
@@ -17261,7 +17263,24 @@ begin
   if k0 < 0 then
   begin
     { Not in the view: above it, the blocks keep their places (the anchor holds); below it,
-      nothing on screen changes - but numbers after it may have. }
+      nothing on screen changes - but numbers after it may have. The changed paragraphs'
+      heights are estimates now (a row's: it sits on the row's first paragraph, which the
+      change need not have touched) - measured again when laid out, so the scroll range and
+      ContentHeight do not keep the height they had before. }
+    p := lo;
+    m := Math.Min(lo + Math.Max(AChange.NewParaCount, 1) - 1, FDoc.Text.ParaCount - 1);
+    // (a load's own slice changes no height: its paragraphs are new, unmeasured)
+    if (p >= 0) and (p <= m) and not ((FInStep and FDoc.Loading) or FInCancel) then
+    begin
+      FDoc.BeginRead;
+      try
+        if TyRichRowParas(FDoc, p, i, n) then p := i;
+        if TyRichRowParas(FDoc, m, i, n) then m := n;
+      finally
+        FDoc.EndRead;
+      end;
+      FDoc.Text.UnmeasureParas(p, m);
+    end;
     RelayStale;
     UpdateBars(False);
     Exit;
