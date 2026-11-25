@@ -54,6 +54,9 @@ type
     procedure TestTheHeightIndexFollowsASpansRows;
     procedure TestARowsEdgeIsNotInsideASpan;
     procedure TestUndoOfAMergeAndASplitGivesTheHeightsBack;
+    procedure TestALayoutAtAnotherScaleLeavesTheIndex;
+    procedure TestAnOffScreenEditInAPlainRowIsMeasured;
+    procedure TestUpAndAClickIntoAShortMergedCell;
   end;
 
   { A cell merged over rows laid out (TTyRichLayouter, the test device, no control): its
@@ -81,6 +84,8 @@ type
     procedure TestTheCoveredRowShowsTheRestOfTheContent;
     procedure TestALineTwoRowsShareIsDrawnOnce;
     procedure TestASpanOverMoreRowsThanAGroupKeepsItsLook;
+    procedure TestAMergedCellIsDrawnByItsFirstCell;
+    procedure TestAKeyInALongMergedCellLaysOutWhatChanged;
   end;
 
 { The listing of the grid of the table at ATablePos, in the form of
@@ -731,6 +736,109 @@ begin
     AssertEquals(Format('the split undone: paragraph %d', [i]), merged[i], now[i]);
 end;
 
+{ The heights of AFresh's document, laid out whole, against FRich's index: equal. }
+procedure CheckIndexAsFresh(const AWhat: string; ARich: TGridRich; ACtl: TTyStyleController);
+var
+  fresh: TGridRich;
+  st: TBytesStream;
+  k: Integer;
+begin
+  fresh := TGridRich.Create(nil);
+  try
+    fresh.Controller := ACtl;
+    fresh.Font.PixelsPerInch := 96;
+    fresh.SetBounds(0, 0, ARich.Width, ARich.Height);
+    st := TBytesStream.Create;
+    try
+      ARich.SaveToStream(st, rfRtf);
+      st.Position := 0;
+      fresh.LoadFromStream(st, rfRtf);
+    finally
+      st.Free;
+    end;
+    fresh.FinishLoading;
+    TAssert.AssertEquals(AWhat + ': the content''s height', fresh.ContentHeight, ARich.ContentHeight);
+    for k := 0 to fresh.Document.Text.ParaCount - 1 do
+      TAssert.AssertEquals(Format('%s: paragraph %d''s height', [AWhat, k]),
+        fresh.Document.Text.ParaHeight(k), ARich.Document.Text.ParaHeight(k));
+  finally
+    fresh.Free;
+  end;
+end;
+
+{ A layout of the view's rows made for another scale or width (an application's own, through
+  Layouter; a render at another PPI) never writes the view's height index. }
+procedure TTyRichGridControlTest.TestALayoutAtAnotherScaleLeavesTheIndex;
+var
+  b: TTyBlockLayout;
+  bmp: TBitmap;
+begin
+  FRich.SetBounds(0, 0, 600, 40);
+  Load(CThree);
+  FRich.ContentHeight;
+  b := FRich.Layouter.LayoutBlock(FRich.Document, 1, 300, 144, 1.0);
+  b.Release;
+  CheckIndexAsFresh('a layout at 144 PPI and 300 pixels', FRich, FCtl);
+  bmp := TBitmap.Create;
+  try
+    bmp.SetSize(900, 60);
+    FRich.RenderTo(bmp.Canvas, Rect(0, 0, 900, 60), 144);
+  finally
+    bmp.Free;
+  end;
+  // (the view back at its own PPI: the next paint's)
+  FRich.UpdateView;
+  CheckIndexAsFresh('a render at 144 PPI', FRich, FCtl);
+end;
+
+{ A line more in a plain row's cell far below the view (no merged cell in the table): the row's
+  height is right in the index once measured - as a fresh layout has it. }
+procedure TTyRichGridControlTest.TestAnOffScreenEditInAPlainRowIsMeasured;
+var
+  s: RawByteString;
+  i, p: Integer;
+begin
+  s := '{\rtf1\ansi{\fonttbl{\f0 Arial;}}\pard x\par';
+  for i := 0 to 29 do
+    s := s + '\trowd\cellx1500\cellx3000\pard\intbl a' + IntToStr(i) + '\cell b' + IntToStr(i) + '\cell\row';
+  FRich.SetBounds(0, 0, 600, 40);
+  Load(s + '\pard after\par}');
+  FRich.ContentHeight;
+  // row 25's second cell: paragraph 1 + 2 * 25 + 1
+  p := 52;
+  AssertTrue('typed', FRich.Document.Execute(TTyRichInsertText.Create(
+    FRich.Document.Text.ParaStart(p) + 1, DupeString(#10'more', 5))));
+  CheckIndexAsFresh('a plain row edited off screen', FRich, FCtl);
+end;
+
+{ A one-line merged cell over three rows: Up from the row below lands in it, and so does a
+  click on the places it covers (below its text). }
+procedure TTyRichGridControlTest.TestUpAndAClickIntoAShortMergedCell;
+const
+  Short = '{\rtf1\ansi{\fonttbl{\f0 Arial;}}\pard x\par' +
+    '\trowd\clvmgf\cellx1500\cellx3000\pard\intbl A\cell B\cell\row' +
+    '\trowd\clvmrg\cellx1500\cellx3000\pard\intbl\cell D\cell\row' +
+    '\trowd\clvmrg\cellx1500\cellx3000\pard\intbl\cell F\cell\row' +
+    '\trowd\cellx1500\cellx3000\pard\intbl G\cell H\cell\row\pard\par}';
+var
+  r: TRect;
+  x: Integer;
+begin
+  // x 0, A 1, B 2, covered 3, D 4, covered 5, F 6, G 7, H 8
+  Load(Short);
+  FRich.UpdateView;
+  FRich.SelStart := PS(FRich, 7);
+  FRich.Key(VK_UP);
+  AssertEquals('Up from below: the merged cell', 1, ParaOfCaret);
+  x := FRich.ParagraphRect(1).Left + 20;
+  r := FRich.ParagraphRect(6);
+  AssertEquals('a click on its last row''s place', 1, FRich.Document.Text.ParaOfPos(
+    FRich.PositionAtPoint(x, (r.Top + r.Bottom) div 2)));
+  r := FRich.ParagraphRect(4);
+  AssertEquals('a click on its middle row''s place', 1, FRich.Document.Text.ParaOfPos(
+    FRich.PositionAtPoint(x, (r.Top + r.Bottom) div 2)));
+end;
+
 { Word writes one line's cells up to 15 twips apart from row to row: one edge of the grid;
   16 apart, two. }
 procedure TTyRichGridTest.TestEdgesAFewTwipsApartAreOne;
@@ -1154,6 +1262,93 @@ begin
   AssertFalse('none over the second', rcsTop in r1.Cells[0].Sides);
   AssertEquals('its shading in the rows below', r0.Cells[0].Shading, r1.Cells[0].Shading);
   AssertTrue('shaded', r1.Cells[0].Shading <> clNone);
+end;
+
+{ A merged cell is drawn by its first cell: the covered cells' own shading and left line (a
+  file may give them others) are not shown - the first cell's are, in every row; its bottom
+  line is its last row's. By the box and by the pixel. }
+procedure TTyRichSpanLayoutTest.TestAMergedCellIsDrawnByItsFirstCell;
+var
+  r0, r1: TTyRowLayout;
+  bmp: TBGRABitmap;
+  px: TBGRAPixel;
+  x, y: Integer;
+begin
+  Open('{\rtf1\ansi{\fonttbl{\f0 Arial;}}{\colortbl;\red255\green230\blue180;\red200\green230\blue255;}' +
+    '\pard x\par' +
+    '\trowd\clvmgf\clcbpat1\clbrdrl\brdrdb\brdrw30\cellx1500\cellx3000\pard\intbl A\cell B\cell\row' +
+    '\trowd\clvmrg\clcbpat2\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw30\cellx1500\cellx3000' +
+    '\pard\intbl\cell D\cell\row\pard after\par}');
+  r0 := Row(1);
+  r1 := Row(4);
+  AssertTrue('covered', r1.Cells[0].Covered);
+  AssertEquals('the first cell''s shading', r0.Cells[0].Shading, r1.Cells[0].Shading);
+  AssertTrue('its left line', (rcsLeft in r1.Cells[0].Sides) and
+    (r1.Cells[0].LineStyle[rcsLeft] = rbsDouble));
+  AssertTrue('the last row''s own bottom', (rcsBottom in r1.Cells[0].Sides) and
+    (r1.Cells[0].LinePx[rcsBottom] = TyRichTwipsToPx(30, 96, 1.0)));
+  bmp := TBGRABitmap.Create(400, r1.Height + 20, BGRAWhite);
+  try
+    r1.Paint(bmp, 0, 10, Rect(0, 0, 400, r1.Height + 20), TyRichDefaultPaintStyle, 0, 0);
+    x := (r1.Cells[0].Left + r1.Cells[0].Right) div 2;
+    y := 10 + r1.Height div 2;
+    px := bmp.GetPixel(x, y);
+    AssertTrue(Format('the covered place in the first cell''s shading (%d, %d, %d)',
+      [px.red, px.green, px.blue]), (px.red = 255) and (px.green = 230) and (px.blue = 180));
+  finally
+    bmp.Free;
+  end;
+end;
+
+{ A cell merged over 1,000 rows beside cells of two paragraphs: a line typed in it lays out
+  the merged cell's paragraphs, not the rows' 2,000 others (they are kept across the group's
+  new layout); the rows come out as a fresh layout of the same document makes them. }
+procedure TTyRichSpanLayoutTest.TestAKeyInALongMergedCellLaysOutWhatChanged;
+var
+  s: RawByteString;
+  i, g: Integer;
+  n0: Int64;
+  fresh: TTyRichLayouter;
+  a, b: TTyBlockLayout;
+begin
+  s := '{\rtf1\ansi{\fonttbl{\f0 Arial;}}\pard x\par';
+  for i := 0 to 999 do
+  begin
+    s := s + '\trowd';
+    if i = 0 then s := s + '\clvmgf' else s := s + '\clvmrg';
+    s := s + '\cellx1500\cellx3000\pard\intbl';
+    if i = 0 then s := s + ' A';
+    s := s + '\cell b' + IntToStr(i) + '\par c\cell\row';
+  end;
+  Open(s + '\pard after\par}');
+  Row(1);
+  n0 := FLay.ParasBuilt;
+  AssertTrue('typed', FDoc.Execute(TTyRichInsertText.Create(FDoc.Text.ParaStart(1) + 1,
+    DupeString(#10'a', 40))));
+  Changed;
+  Row(1);
+  AssertTrue(Format('the merged cell''s paragraphs laid out, not the rows'' (%d)',
+    [FLay.ParasBuilt - n0]), FLay.ParasBuilt - n0 <= 45);
+  // the same as a fresh layout, row by row
+  fresh := TTyRichLayouter.Create(TTyRichTestDevice.Create, True);
+  try
+    g := 1;
+    while g < FDoc.Text.ParaCount - 1 do
+    begin
+      a := FLay.LayoutBlock(FDoc, g, 600, 96, 1.0);
+      b := fresh.LayoutBlock(FDoc, g, 600, 96, 1.0);
+      try
+        AssertEquals(Format('row at %d: its height', [g]), b.Height, a.Height);
+        AssertEquals(Format('row at %d: its last paragraph', [g]), b.LastPara, a.LastPara);
+        g := a.LastPara + 1;
+      finally
+        a.Release;
+        b.Release;
+      end;
+    end;
+  finally
+    fresh.Free;
+  end;
 end;
 
 initialization

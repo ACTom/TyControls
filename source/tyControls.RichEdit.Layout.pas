@@ -794,6 +794,16 @@ type
 
   TTyRowLayout = class;
 
+  { Where a covered cell's look comes from: the cell of the row a merged cell starts in that
+    is above it (Fmt nil: its own). A merged cell is drawn by its first cell - its shading,
+    padding, and its left and right lines in every row it covers; its bottom line is its last
+    row's. }
+  TTyRichCellFrom = record
+    Fmt: TTyRichRowFormat;
+    Cell: Integer;
+  end;
+  TTyRichCellFroms = array of TTyRichCellFrom;
+
   { The part of a merged cell's content that a row it covers shows: the row the merged cell
     starts in (its layout, held), the cell there, how far this row's top is below that row's
     (pixels) and how many characters that row and the ones between come before this one's
@@ -961,6 +971,12 @@ type
     FOnLinkField: TTyRichLinkFieldEvent;
     FOnSpanHeights: TTyRichSpanHeightsEvent;
     FOnSpanDropped: TTyRichSpanDroppedEvent;
+    { The cell paragraphs' layouts of the rows the last change made go, for the paragraphs it
+      did not touch (by their index after it): a row laid out again takes them instead of
+      laying them out again - a key in a cell merged over many rows lays out what changed.
+      Emptied by every other change. }
+    FReuse: specialize TDictionary<Integer, TTyParaLayout>;
+    FParasBuilt: Int64;
     // the layout cache: by first paragraph, LRU order, two bounds
     FCache: specialize TDictionary<Integer, TTyBlockLayout>;
     FLruFirst, FLruLast: TTyBlockLayout;
@@ -1014,6 +1030,9 @@ type
     { The cached block paragraph APara is in goes (Stale) - nothing else: no list number, no
       trust in the file's markers (a composition is no change of the document). }
     procedure DropBlockOf(APara: Integer);
+    procedure ClearReuse;
+    // the kept layout of paragraph AIndex for these values (taken out, its reference given), or nil
+    function Reused(AIndex, AWidth, APPI: Integer; AZoom: Single): TTyParaLayout;
     { The composition put into a paragraph's text and runs as BuildPara read them (a copy of
       the runs is made: they are the model's): its characters, 0 when its place is past what
       was read. }
@@ -1051,7 +1070,7 @@ type
     function BuildPara(ADoc: TTyRichDocument; AIndex, AWidth, APPI: Integer;
       AZoom: Single): TTyParaLayout;
     function BuildRow(ADoc: TTyRichDocument; AFirst, ALast: Integer; ARow: TTyRichRow;
-      AWidth, APPI: Integer; AZoom: Single): TTyRowLayout;
+      AWidth, APPI: Integer; AZoom: Single; const AFrom: TTyRichCellFroms): TTyRowLayout;
     { The rows AFirsts[g] .. ALasts[g] (ARows[g]), which cells merged over rows tie together,
       laid out as one: each row's height from its own cells (the ones that start and end in
       it) and its format, a merged cell's content placed in its rows' joint height - the last
@@ -1196,6 +1215,8 @@ type
     property OnSpanHeights: TTyRichSpanHeightsEvent read FOnSpanHeights write FOnSpanHeights;
     property OnSpanDropped: TTyRichSpanDroppedEvent read FOnSpanDropped write FOnSpanDropped;
     property CacheHits: Int64 read FHits;
+    { Paragraphs laid out (built, not found in a cache), for the tests that count them. }
+    property ParasBuilt: Int64 read FParasBuilt;
     property CacheMisses: Int64 read FMisses;
     function CachedCount: Integer;
     property CachedChars: Int64 read FCachedChars;
@@ -6531,6 +6552,7 @@ begin
   TyRichDefaultFallbackFonts(FFallbackFonts);
   FFallbackFonts.OnChange := @FallbackFontsChanged;
   FCache := specialize TDictionary<Integer, TTyBlockLayout>.Create;
+  FReuse := specialize TDictionary<Integer, TTyParaLayout>.Create;
   FMeasure := specialize TDictionary<string, Integer>.Create;
   FGlyphs := specialize TDictionary<Int64, Boolean>.Create;
   FFallback := specialize TDictionary<Int64, Integer>.Create;
@@ -6560,10 +6582,31 @@ begin
   FGlyphs.Free;
   FMeasureOld.Free;
   FMeasure.Free;
+  ClearReuse;
+  FReuse.Free;
   FCache.Free;
   FFallbackFonts.Free;
   if FOwnsDevice then FDevice.Free;
   inherited Destroy;
+end;
+
+procedure TTyRichLayouter.ClearReuse;
+var
+  P: TTyParaLayout;
+begin
+  if (FReuse = nil) or (FReuse.Count = 0) then Exit;
+  for P in FReuse.Values do P.Release;
+  FReuse.Clear;
+end;
+
+function TTyRichLayouter.Reused(AIndex, AWidth, APPI: Integer; AZoom: Single): TTyParaLayout;
+begin
+  Result := nil;
+  if (FReuse.Count = 0) or not FReuse.TryGetValue(AIndex, Result) then Exit(nil);
+  if (Result.FLayoutWidth <> AWidth) or (Result.FPPI <> APPI) or (Result.FZoom <> AZoom) then
+    Exit(nil);
+  // (its reference is the caller's now)
+  FReuse.Remove(AIndex);
 end;
 
 procedure TTyRichLayouter.SetDocument(AValue: TTyRichDocument);
@@ -6690,6 +6733,7 @@ end;
   font): what a change of the base font or of the fallback fonts clears. }
 procedure TTyRichLayouter.ClearLayouts;
 begin
+  ClearReuse;
   // what is held out of the cache cannot be found: it goes stale by the count
   Inc(FChangeGen);
   while FLruFirst <> nil do CacheDrop(FLruFirst, True);
@@ -6728,6 +6772,7 @@ var
   L, nx: TTyBlockLayout;
 begin
   if ACount <= 0 then Exit;
+  ClearReuse;
   Inc(FChangeGen);
   // the numbers from here on may count differently now
   DropNumbersFrom(AFirst);
@@ -6741,7 +6786,7 @@ begin
       (L.FNumbered and (L.FFirstPara >= AFirst)) or
       ((L is TTyRowLayout) and (L.DepLast = AFirst - 1)) then
     begin
-      if L.FDep and Assigned(FOnSpanDropped) then FOnSpanDropped(L.FDepFirst, L.FDepLast);
+      if L.FDep and Assigned(FOnSpanDropped) then FOnSpanDropped(L.DepFirst, L.DepLast);
       CacheDrop(L, True);
     end
     else
@@ -6755,6 +6800,7 @@ var
   L, nx: TTyBlockLayout;
 begin
   if APara < 0 then Exit;
+  ClearReuse;
   // a layout held out of the cache that shows it cannot be told: stale by the count
   Inc(FChangeGen);
   L := FLruFirst;
@@ -6878,7 +6924,8 @@ end;
 procedure TTyRichLayouter.DocumentChanged(const AChange: TTyRichChange; AFromLoad: Boolean);
 var
   L, nx: TTyBlockLayout;
-  first, oldEnd, delta, gLast: Integer;
+  P: TTyParaLayout;
+  first, oldEnd, delta, gLast, k: Integer;
   moved: array of TTyBlockLayout;
   n, i: Integer;
   numbering: Boolean;
@@ -6886,6 +6933,7 @@ begin
   { Any change: a layout held out of the cache (evicted while held) cannot follow, so it goes
     stale by the count; the cached ones that stay are vouched for below. }
   Inc(FChangeGen);
+  ClearReuse;
   first := AChange.FirstPara;
   oldEnd := first + Max(AChange.OldParaCount, 1);
   delta := AChange.NewParaCount - AChange.OldParaCount;
@@ -6916,10 +6964,29 @@ begin
         the document counts it after the change, the changed paragraphs taken in) }
       if L.FDep and Assigned(FOnSpanDropped) then
       begin
-        if L.FDepLast >= oldEnd then gLast := L.FDepLast + delta
-        else gLast := Max(L.FDepLast, first + Max(AChange.NewParaCount, 1) - 1);
-        FOnSpanDropped(Min(L.FDepFirst, first), gLast);
+        if L.DepLast >= oldEnd then gLast := L.DepLast + delta
+        else gLast := Max(L.DepLast, first + Max(AChange.NewParaCount, 1) - 1);
+        FOnSpanDropped(Min(L.DepFirst, first), gLast);
       end;
+      { its cells' paragraphs the change did not touch: kept for the row's next layout (by
+        their index after the change); a numbered one, a cut one, one showing a composition
+        is laid out again }
+      if (L is TTyRowLayout) and not AFromLoad then
+        for i := 0 to High(TTyRowLayout(L).FItems) do
+        begin
+          P := TTyRowLayout(L).FItems[i].Layout;
+          // (made or vouched for at the change before this one: the document's as it was)
+          if P.FNumbered or P.FTruncated or (P.FCompLen > 0) or (P.FGen <> FChangeGen - 1) then
+            Continue;
+          if P.FFirstPara < first then k := P.FFirstPara
+          else if P.FFirstPara >= oldEnd then k := P.FFirstPara + delta
+          else Continue;
+          if FReuse.ContainsKey(k) then Continue;
+          P.AddRef;
+          P.FFirstPara := k;
+          P.FLastPara := k;
+          FReuse.Add(k, P);
+        end;
       CacheDrop(L, True);
     end
     else if (L.FFirstPara >= oldEnd) and numbering and L.FNumbered then
@@ -7220,6 +7287,7 @@ var
   text: RawByteString;
   compLen: Integer;
 begin
+  Inc(FParasBuilt);
   Result := TTyParaLayout.Create(Self);
   b := TParaBuilder.Create;
   try
@@ -7344,7 +7412,7 @@ begin
 end;
 
 function TTyRichLayouter.BuildRow(ADoc: TTyRichDocument; AFirst, ALast: Integer;
-  ARow: TTyRichRow; AWidth, APPI: Integer; AZoom: Single): TTyRowLayout;
+  ARow: TTyRichRow; AWidth, APPI: Integer; AZoom: Single; const AFrom: TTyRichCellFroms): TTyRowLayout;
 var
   R: TTyRowLayout;
   tbl: TTyRichTable;
@@ -7367,6 +7435,21 @@ var
   function Px(ATwips: Int64): Integer;
   begin
     Result := TyRichTwipsToPx(ATwips, APPI, AZoom);
+  end;
+
+  // cell AIndex's own look, or the merged cell's it is covered by (AFrom)
+  function Covered(AIndex: Integer): Boolean;
+  begin
+    Result := (AIndex >= 0) and (AIndex < System.Length(AFrom)) and (AFrom[AIndex].Fmt <> nil);
+  end;
+
+  // a side of cell AIndex: its own, or for a covered cell's left and right the merged cell's
+  function Bd(AIndex: Integer; ASide: TTyRowCellSide): TTyRichBorder;
+  begin
+    if Covered(AIndex) and (ASide in [rcsLeft, rcsRight]) then
+      Result := CellBorder(AFrom[AIndex].Fmt, AFrom[AIndex].Cell, ASide)
+    else
+      Result := CellBorder(fmt, AIndex, ASide);
   end;
 
   function CellDisplay(const ADisp: TTyRowDisplay; AIndex: Integer): TTyRowCellDisplay;
@@ -7532,7 +7615,8 @@ begin
         bx^.LineStyle[s] := rbsNone;
         bx^.LineColor[s] := clDefault;
       end;
-      cp := TyRichEffectiveCellProps(fmt, i, 0);
+      if Covered(i) then cp := TyRichEffectiveCellProps(AFrom[i].Fmt, AFrom[i].Cell, 0)
+      else cp := TyRichEffectiveCellProps(fmt, i, 0);
       bx^.Shading := cp.Shading;
       for s := Low(TTyRowCellSide) to High(TTyRowCellSide) do pads[i][s] := Max(0, Px(cp.Pad[s]));
       if (cd.HMerge = rcmContinue) and (i > 0) then
@@ -7568,8 +7652,8 @@ begin
       if prevRow = nil then Include(bx^.Outer, rcsTop);
       if lastRow then Include(bx^.Outer, rcsBottom);
       // (the one that declares the winning line draws it: inside its own box)
-      own := CellBorder(fmt, i, rcsLeft);
-      if i > 0 then other := CellBorder(fmt, i - 1, rcsRight) else other := TyRichBorder(rbsNone, 0);
+      own := Bd(i, rcsLeft);
+      if i > 0 then other := Bd(i - 1, rcsRight) else other := TyRichBorder(rbsNone, 0);
       if not TyRichLaterLineWins(other, own) then Draw(R.FCells[i - 1].Owner, rcsRight, other)
       else if own.Style <> rbsNone then Draw(i, rcsLeft, own);
       // the box's right: the last cell merged into it
@@ -7578,7 +7662,7 @@ begin
       if j = nc - 1 then
       begin
         Include(bx^.Outer, rcsRight);
-        own := CellBorder(fmt, j, rcsRight);
+        own := Bd(j, rcsRight);
         if own.Style <> rbsNone then Draw(i, rcsRight, own);
       end;
       { top and bottom: by the parts of the edge the box shares with each box of the row
@@ -7650,7 +7734,13 @@ begin
       pl := Min(pads[o][rcsLeft], w div 2);
       pr := Min(pads[o][rcsRight], w div 2);
       room[ci] := w - pl - pr >= CRichMinCellTextPx;
-      if room[ci] then P := BuildPara(ADoc, k, w - pl - pr, APPI, AZoom)
+      // (a kept layout of this paragraph, the change having left it, for this width)
+      if room[ci] then P := Reused(k, w - pl - pr, APPI, AZoom)
+      else P := Reused(k, CRichNoWrap, APPI, AZoom);
+      if P <> nil then
+        // (the change may have moved it: at its index now)
+        P.FGen := FChangeGen
+      else if room[ci] then P := BuildPara(ADoc, k, w - pl - pr, APPI, AZoom)
       else P := BuildPara(ADoc, k, CRichNoWrap, APPI, AZoom);
       j := k - AFirst;
       R.FItems[j].Layout := P;
@@ -7794,13 +7884,75 @@ var
   fmt, pfmt: TTyRichRowFormat;
   bx: ^TTyRichCellBox;
   sl: TTyRichSpanSlice;
+  froms: array of TTyRichCellFroms;
+
+  // cell ACell of row AG holds one empty paragraph
+  function EmptyCell(AG, ACell: Integer): Boolean;
+  var
+    p, n: Integer;
+    c: TTyRichCell;
+  begin
+    n := 0;
+    Result := False;
+    for p := AFirsts[AG] to ALasts[AG] do
+    begin
+      c := ADoc.CellAt(p);
+      if (c = nil) or (c.Index <> ACell) then Continue;
+      Inc(n);
+      if (n > 1) or (ADoc.Text.ParaLength(p) <> 0) then Exit;
+    end;
+    Result := n = 1;
+  end;
+
 begin
   G := System.Length(ARows);
   rows := nil;
   SetLength(rows, G);
   try
+    { The covered cells' looks first (a merged cell is drawn by its first cell): the cell of
+      the row above each continuing cell faces (its rows' edges), or the cell that one
+      continues - an empty one only (one that holds something is a cell of its own) }
+    froms := nil;
+    SetLength(froms, G);
     for gi := 0 to G - 1 do
-      rows[gi] := BuildRow(ADoc, AFirsts[gi], ALasts[gi], ARows[gi], AWidth, APPI, AZoom);
+    begin
+      fmt := ARows[gi].Format;
+      SetLength(froms[gi], fmt.CellCount);
+      for i := 0 to fmt.CellCount - 1 do
+      begin
+        froms[gi][i].Fmt := nil;
+        froms[gi][i].Cell := -1;
+      end;
+      if gi = 0 then Continue;
+      pfmt := ARows[gi - 1].Format;
+      for i := 0 to fmt.CellCount - 1 do
+      begin
+        if (fmt.Cells[i].VMerge <> rcmContinue) or (fmt.Cells[i].HMerge = rcmContinue) then Continue;
+        if not EmptyCell(gi, i) then Continue;
+        o := BoxCellOf(pfmt, TyRichFacingCell(ARows[gi].CellEdges, fmt.Row.LeftTwips, i,
+          ARows[gi - 1].CellEdges, pfmt.Row.LeftTwips));
+        if (o < 0) or (o >= pfmt.CellCount) then Continue;
+        // (the cells merged across into it go with it, by their places)
+        k := 0;
+        while (i + k < fmt.CellCount) and ((k = 0) or (fmt.Cells[i + k].HMerge = rcmContinue)) do
+        begin
+          if froms[gi - 1][o].Fmt <> nil then
+          begin
+            if o + k < System.Length(froms[gi - 1]) then froms[gi][i + k] := froms[gi - 1][o + k]
+            else froms[gi][i + k] := froms[gi - 1][o];
+          end
+          else
+          begin
+            froms[gi][i + k].Fmt := pfmt;
+            froms[gi][i + k].Cell := Min(o + k, pfmt.CellCount - 1);
+          end;
+          Inc(k);
+        end;
+      end;
+    end;
+    for gi := 0 to G - 1 do
+      rows[gi] := BuildRow(ADoc, AFirsts[gi], ALasts[gi], ARows[gi], AWidth, APPI, AZoom,
+        froms[gi]);
     { Which merged cell each cell continues: the cell above it (by the rows' edges), or the
       one that one continues. }
     org := nil;
@@ -8075,7 +8227,7 @@ begin
     end;
     if (System.Length(rws) > 1) and (System.Length(rws) < CRichMaxSpanGroupRows) then
       Exit(BuildSpanGroup(ADoc, firsts, lasts, rws, want, AWidth, APPI, AZoom));
-    Result := BuildRow(ADoc, first, last, row, AWidth, APPI, AZoom);
+    Result := BuildRow(ADoc, first, last, row, AWidth, APPI, AZoom, nil);
     CacheInsert(Result);
     CacheTrim(Result);
     Result.AddRef;
