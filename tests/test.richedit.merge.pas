@@ -1772,7 +1772,7 @@ begin
   AssertTrue('every step undone: the first bytes', SaveRtf = first);
 end;
 
-{ ---- the fix round ---- }
+{ ---- a caret in a merged cell, what is refused, edges that meet ---- }
 
 // a document of its own made of RTF rows (ARows: \trowd ... \row each), 'after' below
 procedure TTyRichMergeTest.LoadRows(const ARows: RawByteString);
