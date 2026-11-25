@@ -1,27 +1,27 @@
 object SplitForm: TSplitForm
   Left = 0
-  Height = 190
+  Height = 236
   Top = 0
-  Width = 320
+  Width = 360
   BorderIcons = [biSystemMenu]
   Caption = 'Split Cells'
-  ClientHeight = 190
-  ClientWidth = 320
+  ClientHeight = 236
+  ClientWidth = 360
   Position = poOwnerFormCenter
   LCLVersion = '4.4.0.0'
   OnCreate = FormCreate
   TitleBar = Bar
   object Surface: TTyFormSurface
     Left = 0
-    Height = 190
+    Height = 236
     Top = 0
-    Width = 320
+    Width = 360
     Align = alClient
     object Bar: TTyTitleBar
       Left = 0
       Height = 34
       Top = 0
-      Width = 320
+      Width = 360
       Align = alTop
       Caption = 'Split Cells'
       ShowMinimize = False
@@ -31,12 +31,12 @@ object SplitForm: TSplitForm
       Left = 16
       Height = 20
       Top = 56
-      Width = 160
+      Width = 200
       Caption = 'Number of &columns:'
       FocusControl = SpnColumns
     end
     object SpnColumns: TTySpinEdit
-      Left = 192
+      Left = 232
       Height = 28
       Top = 52
       Width = 112
@@ -44,17 +44,18 @@ object SplitForm: TSplitForm
       MaxValue = 63
       Value = 2
       TabOrder = 0
+      OnChange = NumbersChanged
     end
     object LblRows: TTyLabel
       Left = 16
       Height = 20
       Top = 92
-      Width = 160
+      Width = 200
       Caption = 'Number of &rows:'
       FocusControl = SpnRows
     end
     object SpnRows: TTySpinEdit
-      Left = 192
+      Left = 232
       Height = 28
       Top = 88
       Width = 112
@@ -62,11 +63,21 @@ object SplitForm: TSplitForm
       MaxValue = 100
       Value = 1
       TabOrder = 1
+      OnChange = NumbersChanged
+    end
+    object LblHint: TTyLabel
+      Left = 16
+      Height = 40
+      Top = 126
+      Width = 328
+      AutoSize = False
+      Layout = tlTop
+      WordWrap = True
     end
     object BtnOk: TTyButton
-      Left = 112
+      Left = 152
       Height = 30
-      Top = 144
+      Top = 190
       Width = 92
       Anchors = [akRight, akBottom]
       Default = True
@@ -76,9 +87,9 @@ object SplitForm: TSplitForm
       TabOrder = 2
     end
     object BtnCancel: TTyButton
-      Left = 212
+      Left = 252
       Height = 30
-      Top = 144
+      Top = 190
       Width = 92
       Anchors = [akRight, akBottom]
       Cancel = True

@@ -58,8 +58,7 @@ uses
   tyControls.ComboBox, tyControls.FontComboBox, tyControls.FontSizeComboBox,
   tyControls.ColorButton, tyControls.StatusBar, tyControls.Dialogs, tyControls.Dialogs.Color,
   tyControls.Dialogs.FileDialog, tyControls.RichEdit.Model, tyControls.RichEdit.Attrs,
-  tyControls.RichEdit.Text, tyControls.RichEdit.Layout, tyControls.RichEdit.Grid,
-  tyControls.ImageCollection,
+  tyControls.RichEdit.Layout, tyControls.ImageCollection,
   tyControls.RichEdit, tyControls.RichEdit.Ruler, tyControls.RichEdit.Actions,
   ulinkform, ubookmarkform, uviewerform, upageform, utableform, utablesample, usplitform;
 
@@ -1093,13 +1092,13 @@ begin
   end;
 end;
 
-{ Split Cells asks here: the split form, starting from 2 x 1 - or, for a merged cell, from the
-  columns and rows it covers (the table's grid says), so OK splits it back. }
+{ Split Cells asks here: the split form, starting from the numbers the action hands over (what a
+  merged cell covers, else 2 x 1); for a cell over several rows it takes only numbers that
+  divide them. What the control still refuses goes to the status bar (EditorEditRefused). }
 procedure TMainForm.SplitChooseSize(Sender: TObject; ACellColumns, ACellRows: Integer;
   var AColumns, ARows: Integer; var ASplit: Boolean);
 begin
-  // (the action starts from what the cell covers when it is merged, else from 2 x 1)
-  ASplit := AskSplit(AColumns, ARows);
+  ASplit := AskSplit(ACellRows, AColumns, ARows);
 end;
 
 function TMainForm.MaySetAside: Boolean;

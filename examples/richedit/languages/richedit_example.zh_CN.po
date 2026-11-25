@@ -1410,3 +1410,25 @@ msgstr "确定"
 #: tsplitform.btncancel.caption
 msgid "Cancel"
 msgstr "取消"
+
+# --- resourcestrings (usplitform) ---
+
+#: usplitform.rsspcoversrows
+#, object-pascal-format
+msgid "The cell covers %d rows: the rows must divide them (%s)."
+msgstr "这一格跨 %d 行：行数必须能整除它(%s)。"
+
+#: usplitform.rsspbadcolumns
+#, object-pascal-format
+msgid "Give 1 to %d columns."
+msgstr "列数请填 1 到 %d。"
+
+#: usplitform.rsspbadrows
+#, object-pascal-format
+msgid "Give 1 to %d rows."
+msgstr "行数请填 1 到 %d。"
+
+#: usplitform.rsspnotdivide
+#, object-pascal-format
+msgid "%d does not divide the %d rows the cell covers: give %s."
+msgstr "%d 不能整除这一格跨的 %d 行：请填 %s。"
