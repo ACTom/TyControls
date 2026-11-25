@@ -33,6 +33,7 @@ end;
 | `Directory: string` | 当前目录。写它=重建下拉并选中当前目录行;**不触发** `OnSelectPath`。同一路径(含/不含尾分隔符)early-exit,防重入循环。留空时下拉里是各个根(盘符)。下拉的行由它生成,`Items` 不写进 `.lfm`,对象查看器里也不显示。 |
 | `SelectedPath: string` | 当前选中行的可导航路径(经 `Objects[]` 取模型),否则 `Directory`。 |
 | `ShowPlaces: Boolean` | **public(非 published)**,默认 `False`。打开后,下拉里在当前路径的各级之后、其他根之前,列出用户的常用文件夹(桌面、文档、下载、图片、音乐、视频),用文件夹图标;当前目录正好是其中一个时,字段显示它的名字(「文档」)。文件对话框会打开它。3.0.5 新增。 |
+| `SetPlaces(APlaces: TTyFilePlaces)` | **public**。下拉里在当前路径的各级之后列这张位置表(拷一份),取代常用文件夹和各个根;每行用位置自己的名字和图标,当前目录正好是其中一个时字段也显示它的名字和图标。`nil` = 回到原来的列法。文件对话框把自己左栏的那张表交给它。4.0 新增。 |
 | `OnSelectPath` | 用户点了某个 place(祖先目录或其它盘符)时触发;宿主据此 `List.LoadDirectory(SelectedPath)`。 |
 
 ## 纯函数 `TyLookInPlaces`

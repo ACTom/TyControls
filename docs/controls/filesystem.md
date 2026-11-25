@@ -35,7 +35,9 @@ TTyFsObjectType  = (fotFolders, fotFiles, fotHidden);
 TTyFsObjectTypes = set of TTyFsObjectType;
 TTyFsSortKey     = (fskName, fskSize, fskType, fskModified);
 TTyFsRootKind    = (rkDrive, rkRoot, rkHome, rkVolume, rkPlace);
-TTyFsRoot        = record Path, Display: string; Kind: TTyFsRootKind; end;
+TTyFsPlaceIcon   = (fpiByKind, fpiFolder, fpiDrive, fpiHome, fpiDesktop, fpiDocuments,
+                    fpiDownloads, fpiPictures, fpiMusic, fpiVideos);          // 4.0
+TTyFsRoot        = record Path, Display: string; Kind: TTyFsRootKind; Icon: TTyFsPlaceIcon; end;
 TTyFsRootArray   = array of TTyFsRoot;
 TTyFsFilterSpec  = record Caption, Patterns: string; end;
 TTyFsFilterSpecArray = array of TTyFsFilterSpec;
@@ -53,7 +55,11 @@ TTyFsFilterSpecArray = array of TTyFsFilterSpec;
 | `TyFsSortEntries(var entries, key, asc, foldersFirst)` | 就地稳定排序。 |
 | `TyFsRoots` | 可移植"位置"列表(Windows 盘符 / Unix `/`+home+挂载点)。至少一个根,不崩。 |
 | `TyFsKnownFolders` | 用户的**常用文件夹**:桌面、文档、下载、图片、音乐、视频,固定按这个顺序,只列存在的、每个只列一次。`Kind = rkPlace`,`Display` 是库自己的翻译名(`rsFdPlace*`),和磁盘上叫什么无关。可能为空,不抛异常。3.0.5 新增。 |
-| `TyFsPlaces` | `TyFsKnownFolders` 加 `TyFsRoots`:文件对话框提供的全部位置。 |
+| `TyFsPlaces` | `TyFsKnownFolders` 加 `TyFsRoots`:3.x 目录树顶层列的位置。4.0 文件对话框的位置表见 `tyControls.ShellPlaces`([文件对话框](filedialog.md)的「位置」)。 |
+| `TyFsPlaceIconOf(place)` | 一个位置用哪个图标(`TTyFsPlaceIcon`):`TTyFsRoot.Icon` 给了就用它(常用文件夹各有各的),没给(`fpiByKind`,零值)就按 `Kind`:主目录是房子,`rkPlace` 是文件夹,其余是磁盘。4.0 新增。 |
+| `TyRecentFolders: TStrings` | 文件对话框**最近去过的文件夹**,最新的在前:整个程序一张表,只在内存里。想跨启动保留,由程序自己读写(`LoadFromFile` / `SaveToFile` / `Text`)。4.0 新增。 |
+| `TyNoteRecentFolder(folder)` | 把一个文件夹放到 `TyRecentFolders` 的最前面(已经在表里就挪上来),超出 `TyRecentFoldersLimit` 的从末尾丢掉。对话框确定时调它;程序自己打开了文件也可以调。 |
+| `TyRecentFoldersLimit` | 变量,默认 5:这张表保留几个。0 = 不保留。 |
 | `TyFsParseUserDirs(text, home)` | 纯函数:解析 XDG 的 `user-dirs.dirs`(`XDG_DESKTOP_DIR="$HOME/桌面"` 这种行)。只认六个键、带引号的 `"$HOME/…"` 或绝对路径;指回主目录本身(`"$HOME/"`)表示这个文件夹被关掉,不列。路径一律用 `/` 拼,不查磁盘。 |
 | `TyFsExistingPlaces(candidates)` | 从候选里去掉不存在的文件夹和重复的,顺序不变,去掉末尾分隔符。 |
 | `TyFsParent(path)` | 父目录;根处稳定。 |

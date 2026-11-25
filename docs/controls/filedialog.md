@@ -3,10 +3,14 @@
 ## 概述
 
 主题化的自绘文件对话框。四个变体由**一个** `TTyFileDialogForm`(`TTyDialog` 子类)靠两个标志
-(`SaveMode` / `PreviewMode`)拼出:把已建的 shell 控件 —— 目录树([TTyShellTreeView](shelltreeview.md))
-+ 文件列表([TTyShellListView](shelllistview.md))+ 查找范围([TTyShellComboBox](shellcombobox.md))
+(`SaveMode` / `PreviewMode`)拼出:左栏的「位置」面板(`TTyShellPlacesView`)+ 文件列表
+([TTyShellListView](shelllistview.md))+ 查找范围([TTyShellComboBox](shellcombobox.md))
 + 类型过滤([TTyFilterComboBox](filtercombobox.md))—— 加文件名框 + 确定/取消组装进对话框。图片变体右侧
 多一个 [TTyImage](image.md) 预览窗格。**零新增主题 token**。
+
+左栏从 4.0 起是「位置」面板:常用文件夹、应用固定的文件夹、最近去过的文件夹、各个盘,点一下就到,
+和现在各平台自己的文件对话框一样。3.x 的目录树([TTyShellTreeView](shelltreeview.md))还在,
+把 `LeftPane` 设成 `fdpFolderTree` 就换回来。详见下文「位置」。
 
 三层 API 对齐 LCL 的 `TOpenDialog`/`TSaveDialog`/`TOpenPictureDialog`/`TSavePictureDialog`。
 
@@ -53,6 +57,10 @@ if Dlg.Execute then
 | `DefaultExt: string` | Save:文件名无扩展名时补它。 |
 | `Options: TOpenOptions` | LCL 的选项类型,默认 `[]`。每个选项做什么见下文「Options」。 |
 | `Title: string` | 标题栏文字。 |
+| `LeftPane` | 文件列表左边放什么:`fdpPlaces`「位置」面板(默认)、`fdpFolderTree` 目录树、`fdpNone` 不放。4.0 新增。 |
+| `PinnedFolders: TStrings` | 应用固定在「位置」里的文件夹,一行一个完整路径,列在「固定」下面。不存在的文件夹打开时不列。4.0 新增。 |
+| `ShowRecentFolders: Boolean` | 要不要列「最近」这一组,并在确定后把这次的文件夹记进去。默认 `True`。4.0 新增。 |
+| `OnPlaces` | 位置列好了、还没显示:应用可以往里加、删、调顺序。每次建对话框触发一次,`Sender` 是对话框组件。4.0 新增。 |
 | `OnShow`/`OnClose`/`OnCanClose` | 转发给内部表单。 |
 | `OnHelpClicked` | 点了「帮助」按钮(`ofShowHelp` 时才有),`Sender` 是对话框组件。 |
 | `BuildForm: TTyFileDialogForm` | `Execute` 要显示的那个窗体(已按属性设好、已加帮助按钮、事件已转发),不显示;调用方负责释放。 |
@@ -60,6 +68,76 @@ if Dlg.Execute then
 
 四个组件类:`TTyOpenDialog`(F/F)、`TTySaveDialog`(T/F)、`TTyOpenPictureDialog`(F/T)、
 `TTySavePictureDialog`(T/T),只覆写 `SaveMode`/`PreviewMode`/默认过滤器。
+
+## 位置
+
+左栏和查找范围的下拉用的是同一张位置表,分四组,空的组不显示:
+
+| 组 | 内容 |
+|---|---|
+| 常用 | 桌面、文档、下载、图片、音乐、视频(只列存在的);Linux 和 macOS 上前面多一个「主目录」。 |
+| 固定 | `PinnedFolders` 里的文件夹。 |
+| 最近 | 最近几次确定时所在的文件夹,最新的在前;上面几组里已经有的不重复列。 |
+| 设备 | Windows 的各个盘;Linux 的根目录和挂载点;macOS 的磁盘。 |
+
+设备排在最后:盘多的机器上,应用固定的和最近去过的文件夹不该被挤到要滚动才看得见的地方。
+
+点一下某个位置就进去;用方向键只移动高亮,按回车才进去。点组的标题可以把这一组收起来。
+当前文件夹正好是某个位置时,它在面板里高亮。
+
+查找范围的下拉:先是当前路径的各级,然后是同一张位置表。
+
+**固定自己的文件夹**
+
+```pascal
+OpenDialog1.PinnedFolders.Add(ProjectDir);
+OpenDialog1.PinnedFolders.Add(ProjectDir + PathDelim + 'templates');
+```
+
+**最近去过的文件夹**记在 `TyRecentFolders`(`tyControls.FileSystem`)里:整个程序一张表,所有文件对话框共用,
+只在内存里 —— 库自己不写配置文件。什么都不做,最近位置在这次运行期间有效;想下次启动还在,
+把这张表和程序的其他设置一起读、一起存:
+
+```pascal
+uses tyControls.FileSystem;
+
+// 启动时
+if FileExists(RecentFile) then TyRecentFolders.LoadFromFile(RecentFile);
+// 退出时
+TyRecentFolders.SaveToFile(RecentFile);
+```
+
+存在 ini、注册表或别的地方也一样,它就是一个 `TStrings`(`TyRecentFolders.Text`、`CommaText` 都能用)。
+`TyRecentFoldersLimit`(默认 5)是这张表保留几个、对话框列几个。表里已经不存在的文件夹不显示,
+但不会被删掉 —— 可能只是那个盘暂时没插上。某个对话框不想参与(比如选密钥文件的),
+把它的 `ShowRecentFolders` 设成 `False`:不列,确定后也不记。
+
+**自己增删位置**用 `OnPlaces`。表里每一项有四个字段:`Path`、`Caption`(显示的名字)、`Group`(组的标题)、
+`Icon`(图标)。`Group` 可以是库的四个标题(`rsFdGroupPlaces`、`rsFdGroupPinned`、`rsFdGroupRecent`、
+`rsFdGroupDevices`,在 `tyControls.StrConsts`),也可以是应用自己的文字,那就是一个新的组;
+组按第一次出现的先后排。
+
+```pascal
+uses tyControls.ShellPlaces, tyControls.FileSystem, tyControls.StrConsts;
+
+procedure TForm1.OpenDialog1Places(Sender: TObject; APlaces: TTyFilePlaces);
+var
+  i: Integer;
+begin
+  // 自己的一组,放在最前面
+  APlaces.Insert(0, ProjectDir, '项目', '当前项目');
+  APlaces.Insert(1, ProjectDir + PathDelim + 'assets', '项目', '素材', fpiPictures);
+  // 不要「音乐」和「视频」
+  for i := APlaces.Count - 1 downto 0 do
+    if APlaces[i].Icon in [fpiMusic, fpiVideos] then APlaces.Delete(i);
+end;
+```
+
+`TTyFilePlaces` 的方法:`Add`、`Insert`、`Delete`、`Move`、`Clear`、`IndexOf(路径)`、`Count`、`Items[]`。
+图标是 `TTyFsPlaceIcon`:`fpiFolder`、`fpiDrive`、`fpiHome`、`fpiDesktop`、`fpiDocuments`、`fpiDownloads`、
+`fpiPictures`、`fpiMusic`、`fpiVideos`;它们是库里画的,不依赖图标字体或图片文件。
+
+全局函数(`TyOpenDialog` 等)用的是默认设置:位置面板、没有固定的文件夹、列最近位置。
 
 ## Options
 
@@ -106,6 +184,9 @@ LCL 的默认值是 `[ofEnableSizing, ofViewDetail]`,这里仍是 `[]`:这两个
 
 ### 从 3.0 升级
 
+- **左栏默认不再是目录树,而是「位置」面板**(4.0)。想要原来的树,把对话框组件的 `LeftPane` 设成 `fdpFolderTree`;
+  用 `TyBuildFileDialog` 自己建窗体的,设窗体的 `LeftPane`。对话框默认高了 40 像素,让面板少滚动。
+  自己建窗体并用到 `ShellTree` 的代码注意:不是目录树模式时它返回 `nil`。
 - 3.0 的 `Options` 是自己的 `TTyFileDialogOptions`(`fdoOverwritePrompt`、`fdoFileMustExist`、`fdoPathMustExist`、`fdoAllowMultiSelect`)。**旧窗体不用改**:读窗体时这四个旧名字照样认,对应到 `of*`;在 IDE 里存一次就写成新名字。**旧代码照样能编**:`TTyFileDialogOptions` 和四个 `fdo*` 常量还在,标了 `deprecated`,编译时有警告,换成 `TOpenOptions` 和 `of*`(`uses Dialogs`)就没了。
 - 3.0.0 收下了 `fdoPathMustExist` 却从不检查,现在会检查。
 - `ofFileMustExist` 现在保存对话框也查(3.0.0 只查打开),多选时每个文件都查(3.0.0 只查一个)。
@@ -115,11 +196,12 @@ LCL 的默认值是 `[ofEnableSizing, ofViewDetail]`,这里仍是 `[]`:这两个
 ## 关键设计
 
 - **一个 form 两个标志 = 四变体**;`FBtnNewFolder` 仅 SaveMode 建,`FPreview` 仅 PreviewMode 建(标志 setter 懒建)。
-- **常用文件夹一点就到(#245,3.0.5)**:桌面、文档、下载、图片、音乐、视频列在目录树的顶部(盘符上面)和
-  查找范围下拉里(当前路径之后)。对话框只是打开了两个控件的 `ShowPlaces`;位置从哪来见
-  [filesystem.md](filesystem.md) 的 `TyFsKnownFolders`。名字走库的翻译,所以中文界面显示「文档」。
-  左栏仍然是树;换成「位置」面板、应用固定的文件夹和最近位置是 4.0 的事(#246)。
-- **四方联动**(树↔列表↔查找范围)靠一个 `FSyncing` 防回环;查找范围字段是纯显示同步(写 `Directory` 不触发事件)。
+- **左栏是「位置」面板(#246,4.0)**:窗体的 `RefreshPlaces` 列出位置(`TyFillFilePlaces`:这台机器的常用文件夹和根、
+  `PinnedFolders`、最近位置),交给 `OnPlaces`,再同时交给面板和查找范围的下拉,所以两处永远是同一张表。
+  位置从哪来见 [filesystem.md](filesystem.md) 的 `TyFsKnownFolders`;名字走库的翻译,所以中文界面显示「文档」。
+  面板和目录树只建用到的那一个;树只在它是当前左栏时才跟着列表走(隐藏的树不去读盘)。
+  目录树模式下,常用文件夹仍列在树的顶部(#245,3.0.5 起)。
+- **四方联动**(左栏↔列表↔查找范围)靠一个 `FSyncing` 防回环;查找范围字段是纯显示同步(写 `Directory` 不触发事件)。
   过滤下拉 `OnFilterChange` → `List.Mask`。选中文件 → 填文件名框(**只认选中,不认取消选中** ——
   列表的 `OnSelectItem` 现在也会报告刚被**离开**的那一行,拿它去填名字会写进一个用户已经不在的文件名,
   Save 模式下还会盖掉用户刚敲进去的名字);双击文件(Open)→ 直接接受。
@@ -128,7 +210,7 @@ LCL 的默认值是 `[ofEnableSizing, ofViewDetail]`,这里仍是 `[]`:这两个
   再由 `TyMessageDlg` 报错或提问;不通过返回 False 把对话框留住。
 - **Open 手敲优先**:文件名框非空时以它为准(带路径原样、裸名对当前目录展开),空框才回落到列表选中项。
 - **打开时焦点在文件名框**(打开和保存都是),可以直接输入文件名。Tab 按排布的顺序走:查找范围、视图、
-  目录树、文件列表、文件名、文件类型,最后才是按钮(#243,3.0.5;之前焦点在「打开」按钮上,文件类型排在文件名前面)。
+  左栏(位置面板或目录树)、文件列表、文件名、文件类型,最后才是按钮(#243,3.0.5;之前焦点在「打开」按钮上,文件类型排在文件名前面)。
 - **Save 存名解析**(`TyFileDialogResolveName` → `TyFsResolveSaveName`):裸名对当前目录展开,无扩展名补 `DefaultExt`,已有扩展名不动。
 - **图片预览**:选中图片时 `TTyImage.Picture.LoadFromFile`(`try/except`,读不了清空),`Proportional+Center` 缩放适配;
   跨平台(PNG/JPG/BMP/GIF)。
@@ -162,8 +244,23 @@ end;
 六个组件:普通 `TTyOpenDialog`/`TTySaveDialog`、图片 `TTyOpenPictureDialog`/`TTySavePictureDialog`
 (对齐 LCL)、通用预览 `TTyOpenPreviewDialog`/`TTySavePreviewDialog`(加值)。
 
+## 位置面板 TTyShellPlacesView
+
+`tyControls.ShellPlacesView`。文件对话框左栏用的控件,**不在组件面板上**,可以在代码里建。它是一个
+[TTyListView](listview.md):一列、每行一个图标、每组一个标题带,键盘、滚动条、主题都是列表的。
+
+| 成员 | 说明 |
+|---|---|
+| `SetPlaces(APlaces: TTyFilePlaces)` | 显示这张表(拷一份,按组归拢)。`nil` = 清空。 |
+| `CurrentPath: string` | 宿主当前所在的文件夹。它正好是某个位置时那一行高亮,否则都不高亮。写它不触发事件。 |
+| `SelectedPath: string` | 高亮的那个位置的文件夹;没有高亮时为空。 |
+| `OnSelectPath` | 用户选了一个位置(点击,或在高亮行上按回车),而且不是宿主已经在的文件夹:宿主去 `SelectedPath`。 |
+| `PlaceCount` / `PlaceAt(i)` | 按显示顺序读位置。 |
+| `PlaceImages` | 行图标用的图像列表(`tyControls.ShellIcons` 的 `TyAddPlaceIcons` 填的)。 |
+
 ## 待办 / 后续
 
+- 「位置」面板在 Linux 和 macOS 真机上没看过(常用文件夹的取法只在 Windows 上对照过系统);盘只显示盘符,不显示卷标。
 - 真机眼验(六变体组装/联动/Save 覆盖流/图片+文本预览/自定义 `OnPreview`)。
 - i18n 已完成:全部面向用户的文案(标题/按钮/"查找范围:"/过滤器名/"无法预览"等)走
   `tyControls.StrConsts` 的 `rsFd*` / `rsPv*` 资源串。

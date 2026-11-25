@@ -186,6 +186,7 @@ LV.SmallImages := ImgList;                                        // 或 LV.Head
 | `TTyListItem.GroupIndex` | 项属于哪个组(item index → 组序号);无效值归入末尾的**隐式桶**(无组头) |
 | `OnGetItemGroup` | 虚拟模式取组:`(Sender; AIndex; var AGroup)` |
 | `OnGroupCollapsed` | **点击组头**折叠 / 展开后触发(程序性 `Collapsed :=` 不触发) |
+| `GroupHeaderCaption(AGroup)` | protected 虚方法:组头上写什么,默认是「标题 (项数)」。后代可以覆写(文件对话框的位置面板只写标题)。4.0 新增。 |
 
 > **折叠一个组,里面的选中和勾选不丢。** 展开回来还在。因为选中态按 **item index** 存,而"可见顺序"
 > 只是折叠时把该组的项从显示序里抽走 —— 和排序不动数据是同一套机制。`SelectAll` 选中**全部**项(含

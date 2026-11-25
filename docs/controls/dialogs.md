@@ -343,6 +343,10 @@ if TySelectDirectory('选择输出目录', 'C:\Users', dir) then
   OutputDir := dir;
 ```
 
+没有指定 `Root` 时,树的顶层先是用户的常用文件夹(桌面、文档、下载、图片、音乐、视频;Linux 和 macOS 上前面多一个「主目录」),
+然后才是各个盘 —— 和文件对话框用同样的名字、同样的图标(4.0;之前只有盘符)。常用文件夹里面的文件夹显示在它下面,
+而不是盘符底下那条长路径上。窗体的 `TopPlaces` 是虚方法,后代可以换成自己的位置。
+
 **组件 `TTySelectPathDialog`**:`Caption`、`Root`、`Directory`(进出两用:先设好就预选,确定后是选中的文件夹),外加和 LCL `TSelectDirectoryDialog` 一样的 `Options: TOpenOptions`(默认 `[]`)和 `OnHelpClicked`。`BuildForm` 返回 `Execute` 要显示的窗体(不显示,调用方释放)。
 
 `Options` 里 LCL 的 25 个选项:
