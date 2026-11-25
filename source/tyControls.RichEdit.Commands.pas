@@ -401,7 +401,7 @@ type
     one: merged cells, rows of different cells. }
   TTyRichInsertGridColumn = class(TTyRichTableCommand)
   public
-    constructor Create(ATablePos: TTyRichPos; AX, AWidth: Integer);
+    constructor Create(ATablePos: TTyRichPos; AX, AWidth: Integer; ACount: Integer = 1);
     function Description: string; override;
   end;
 
@@ -463,6 +463,16 @@ type
   public
     constructor Create(ATablePos: TTyRichPos; ARow0, ACol0, ARow1, ACol1: Integer;
       const AProps: TTyRichCellProps);
+    function Description: string; override;
+  end;
+
+  { Several cells of the table ATablePos is in, each its own properties (ACells: the rows as
+    the table counts them; ARow0 .. ARow1 the rows they are in): each row with changes made
+    once, with all of them - an edit of many cells' sides costs a row's copy a row, not one a
+    cell. }
+  TTyRichSetCellsProps = class(TTyRichTablePropsCommand)
+  public
+    constructor Create(ATablePos: TTyRichPos; ARow0, ARow1: Integer; const ACells: TTyRichCellChanges);
     function Description: string; override;
   end;
 
@@ -1646,7 +1656,7 @@ var
 begin
   // its records (the old values and tables they keep), and the table it keeps for a redo
   Result := inherited MemSize + Length(FTables) * SizeOf(Pointer);
-  for i := 0 to High(FTables) do Inc(Result, FTables[i].MemSize);
+  for i := 0 to High(FTables) do Inc(Result, FTables[i].LiveBytes);
 end;
 
 constructor TTyRichInsertTable.Create(APos: TTyRichPos; ARows, ACols: Integer; AWidth: Integer);
@@ -1704,13 +1714,15 @@ begin
   Result := rsRichUndoDeleteColumn;
 end;
 
-constructor TTyRichInsertGridColumn.Create(ATablePos: TTyRichPos; AX, AWidth: Integer);
+constructor TTyRichInsertGridColumn.Create(ATablePos: TTyRichPos; AX, AWidth: Integer;
+  ACount: Integer);
 begin
   inherited Create;
   FEdit := TyRichTableEdit(rtkInsertGridColumn, ATablePos, 0);
   FEdit.X0 := AX;
   FEdit.X1 := AX;
   FEdit.Width := AWidth;
+  FEdit.Cols := ACount;
 end;
 
 function TTyRichInsertGridColumn.Description: string;
@@ -2530,6 +2542,25 @@ begin
 end;
 
 function TTyRichSetCellProps.Description: string;
+begin
+  Result := rsRichUndoCellProps;
+end;
+
+constructor TTyRichSetCellsProps.Create(ATablePos: TTyRichPos; ARow0, ARow1: Integer;
+  const ACells: TTyRichCellChanges);
+begin
+  inherited Create;
+  FEdit := Default(TTyRichPropEdit);
+  FEdit.Pos := ATablePos;
+  FEdit.Row0 := ARow0;
+  FEdit.Row1 := ARow1;
+  FEdit.Col0 := 0;
+  FEdit.Col1 := 0;
+  FEdit.OfRows := False;
+  FEdit.Cells := Copy(ACells);
+end;
+
+function TTyRichSetCellsProps.Description: string;
 begin
   Result := rsRichUndoCellProps;
 end;

@@ -95,6 +95,10 @@ type
     procedure TestACellForACoveredPlaceNamesTheMistake;
     procedure TestTheContinuationRuleIsOneFunction;
     procedure TestRowsAddedToAFilesTableWriteOneDefinitionEach;
+    procedure TestAnEditsUndoCostsWhatItTouched;
+    procedure TestABorderPassesACellNarrowerThanTheSlack;
+    procedure TestEdgesAMergeOrSplitMakesMeetHaveOneLine;
+    procedure TestTheAgreementMakesEachRowOnce;
     procedure TestTheContinuationRuleIsTheGridsInEveryFixture;
     procedure TestSelectColumnTakesASpanWhole;
     procedure TestEveryRewrittenCellSaysItsOwnWidth;
@@ -1579,6 +1583,63 @@ begin
   CheckWidths('a column deleted');
 end;
 
+{ Facing sides agree by the grid: two cells side by side in the grid over the same rows - the
+  right of the one and the left of the other -, and a cell over the one below it at the same
+  columns (the upper ending there): one line each. '' when they do, else where not. }
+function SidesDisagree(ADoc: TTyRichDocument; ATablePara: Integer): string;
+var
+  g: TTyRichGrid;
+  r, c: Integer;
+  a, b: TTyRichGridCell;
+  rows: TTyRichRowList;
+  first, n: Integer;
+
+  function Bd(const G: TTyRichGridCell; ASide: TTyRichCellSide): TTyRichBorder;
+  var
+    f: TTyRichRowFormat;
+  begin
+    f := rows[G.Row].Format;
+    if (G.Cell >= 0) and (G.Cell < f.CellCount) then Result := f.Cells[G.Cell].Props.Borders[ASide]
+    else Result := TyRichBorder(rbsNone, 0);
+  end;
+
+begin
+  Result := '';
+  g := TyRichTableGrid(ADoc, ADoc.Text.ParaStart(ATablePara));
+  if g = nil then Exit;
+  ADoc.BeginRead;
+  try
+    ADoc.TableRowsAt(ADoc.Text.ParaStart(ATablePara), 0, MaxInt div 2, rows, first, n);
+    for r := 0 to g.RowCount - 1 do
+      for c := 0 to g.ColCount - 2 do
+      begin
+        a := g.Cell(r, c);
+        b := g.Cell(r, c + 1);
+        if (a.Cell < 0) or (b.Cell < 0) or a.Covered or b.Covered then Continue;
+        if (a.Row = b.Row) and (a.Col = b.Col) then Continue;
+        if (a.Row <> b.Row) or (a.RowSpan <> b.RowSpan) or (a.Row <> r) then Continue;
+        if not TyRichSameBorder(Bd(a, rcsRight), Bd(b, rcsLeft)) then
+          Result := Result + Format(' across r%d c%d|%d;', [r, c, c + 1]);
+      end;
+    for r := 0 to g.RowCount - 2 do
+      for c := 0 to g.ColCount - 1 do
+      begin
+        a := g.Cell(r, c);
+        b := g.Cell(r + 1, c);
+        if (a.Cell < 0) or (b.Cell < 0) then Continue;
+        if (a.Row = b.Row) and (a.Col = b.Col) then Continue;
+        if b.Covered or (b.Row <> r + 1) or (a.Col <> b.Col) or (a.ColSpan <> b.ColSpan) or (b.Col <> c) then
+          Continue;
+        if (a.Row + a.RowSpan - 1 <> r) or (a.RowSpan > 1) then Continue;
+        if not TyRichSameBorder(Bd(a, rcsBottom), Bd(b, rcsTop)) then
+          Result := Result + Format(' down r%d/%d c%d;', [r, r + 1, c]);
+      end;
+  finally
+    ADoc.EndRead;
+    g.Free;
+  end;
+end;
+
 { Merges, splits, rows and columns in and out, undo and redo, at random (a fixed seed): the
   grid whole after every step, the file read back as the same grid every few steps, and every
   step undone: the first bytes. }
@@ -1613,7 +1674,7 @@ begin
   RandSeed := 20261125;
   for step := 1 to 300 do
   begin
-    op := Random(10);
+    op := Random(11);
     r0 := Random(Rows);
     c0 := Random(Math.Max(1, CellsOf(r0)));
     case op of
@@ -1653,6 +1714,15 @@ begin
         end;
       7: FRich.Undo;
       8: FRich.Redo;
+      10:
+        begin
+          // lines on some cells: what the facing sides must keep alike
+          r1 := Math.Min(Rows - 1, r0 + Random(2));
+          c1 := Math.Max(0, Math.Min(CellsOf(r1) - 1, c0 + Random(2)));
+          SelCells(r0, c0, r1, c1);
+          FRich.SetCellBorders(TTyRichBorderPreset(Random(10)),
+            TyRichBorder(TTyRichBorderStyle(1 + Random(4)), 5 + Random(50), clRed));
+        end;
     else
       begin
         // one row's edge moved on its own: rows of different edges (Word's irregular tables)
@@ -1665,6 +1735,8 @@ begin
     g := Grid;
     try
       AssertTrue(Format('step %d (%d): the grid whole', [step, op]), g.Consistent);
+      AssertEquals(Format('step %d (%d): facing sides alike', [step, op]), '',
+        SidesDisagree(FRich.Document, 1));
     finally
       g.Free;
     end;
@@ -2568,6 +2640,204 @@ begin
     end;
   end;
   AssertTrue(Format('cells compared: %d', [n]), n > 30);
+end;
+
+{ An edit's undo costs what it touched, whatever came before it: on a 40-row table, a column
+  put in, one deleted, a merge and a split cost after 200 other edits (borders, shadings,
+  columns in and out - row versions in the history) what they cost first, by the table's own
+  growth (its bytes); and columns put in beside a cell merged over four of them cost what one
+  column does - one edit, the rows read and written once. }
+procedure TTyRichMergeTest.TestAnEditsUndoCostsWhatItTouched;
+var
+  first, later: array[0..3] of Int64;
+  i, k, r: Integer;
+  len0, len1: Int64;
+  colors: array[0..2] of TColor;
+  one, four: Int64;
+
+  function Cost(AKind, ARow: Integer): Int64;
+  var
+    h: Int64;
+  begin
+    h := FRich.Document.HistoryBytes;
+    case AKind of
+      0:
+        begin
+          FRich.SelStart := CellStart(ARow, 1);
+          AssertTrue('a column', FRich.InsertColumn(True));
+        end;
+      1:
+        begin
+          FRich.SelStart := CellStart(ARow, 2);
+          AssertTrue('a column out', FRich.DeleteColumn);
+        end;
+      2:
+        begin
+          SelCells(ARow, 0, ARow + 1, 0);
+          AssertTrue('a merge', FRich.MergeCells);
+        end;
+    else
+      begin
+        FRich.SelStart := CellStart(ARow, 0);
+        AssertTrue('a split back', FRich.SplitCell(1, 2));
+      end;
+    end;
+    Result := FRich.Document.HistoryBytes - h;
+  end;
+
+begin
+  colors[0] := clYellow;
+  colors[1] := clAqua;
+  colors[2] := clNone;
+  MakeTable(40, 4);
+  // (once over first: the rows the history keeps from here on are the edits' own)
+  Cost(0, 10);
+  Cost(1, 10);
+  FRich.Document.ClearUndo;
+  len0 := Length(SaveRtf);
+  for k := 0 to 3 do first[k] := Cost(k, 10);
+  RandSeed := 20261126;
+  for i := 1 to 200 do
+  begin
+    r := Random(40);
+    case i mod 4 of
+      0:
+        begin
+          FRich.SelStart := CellStart(r, Random(4));
+          FRich.SetCellShading(colors[Random(3)]);
+        end;
+      1:
+        begin
+          FRich.SelStart := CellStart(r, Random(4));
+          FRich.SetCellBorders(TTyRichBorderPreset(Random(10)),
+            TyRichBorder(TTyRichBorderStyle(1 + Random(4)), 5 + Random(50), clRed));
+        end;
+      2:
+        begin
+          FRich.SelStart := CellStart(r, 1);
+          FRich.InsertColumn(True);
+        end;
+    else
+      begin
+        FRich.SelStart := CellStart(r, 2);
+        FRich.DeleteColumn;
+      end;
+    end;
+  end;
+  len1 := Length(SaveRtf);
+  for k := 0 to 3 do later[k] := Cost(k, 10);
+  for k := 0 to 3 do
+    AssertTrue(Format('edit %d: first %d bytes (the table %d bytes), after 200 edits %d (%d)',
+      [k, first[k], len0, later[k], len1]),
+      later[k] <= (first[k] * len1) div len0 + first[k] div 4 + 4096);
+  // all of it undoes to the table as it was
+  i := 0;
+  while FRich.Document.CanUndo and (i < 1000) do
+  begin
+    FRich.Undo;
+    Inc(i);
+  end;
+  AssertFalse(Format('every step undone (%d)', [i]), FRich.Document.CanUndo);
+  // four columns beside a cell over four: one edit's cost
+  MakeTable(40, 6);
+  SelCells(10, 1, 10, 4);
+  AssertTrue('a cell over four columns', FRich.MergeCells);
+  FRich.Document.ClearUndo;
+  one := Cost(0, 20);
+  FRich.Undo;
+  FRich.SelStart := CellStart(10, 1);
+  r := FRich.Document.HistoryBytes;
+  AssertTrue('four columns', FRich.InsertColumn(True));
+  four := FRich.Document.HistoryBytes - r;
+  AssertTrue(Format('four columns in %d bytes, one in %d', [four, one]), four <= one * 2);
+end;
+
+{ A border on a cell's side beside a cell narrower than the slack (no column of the grid's):
+  the cell the grid puts next to it takes the facing side, the thin cell both its sides. }
+procedure TTyRichMergeTest.TestABorderPassesACellNarrowerThanTheSlack;
+var
+  d: TTyRichDocument;
+  tp: TTyRichPos;
+begin
+  LoadRows('\trowd\trleft0\cellx2000\cellx2001\cellx4000\pard\intbl a\cell b\cell c\cell\row');
+  d := FRich.Document;
+  tp := 0;
+  FRich.SelStart := 0;
+  AssertTrue('a right line', FRich.SetCellBorders(rbpRight, TyRichBorder(rbsDouble, 30, clRed)));
+  AssertTrue('the thin cell''s left', d.CellProps(tp, 0, 1).Borders[rcsLeft].Style = rbsDouble);
+  AssertTrue('the thin cell''s right', d.CellProps(tp, 0, 1).Borders[rcsRight].Style = rbsDouble);
+  AssertTrue('the cell the grid puts beside it', d.CellProps(tp, 0, 2).Borders[rcsLeft].Style = rbsDouble);
+  AssertEquals('facing sides alike by the grid', '', SidesDisagree(d, 0));
+end;
+
+{ A merge or a split that makes two cells' edges meet that did not meet before leaves their
+  facing sides one line: a split back to the grid's columns under a cell with its own bottom,
+  a merge that comes to face a wide cell with its own bottom. }
+procedure TTyRichMergeTest.TestEdgesAMergeOrSplitMakesMeetHaveOneLine;
+var
+  d: TTyRichDocument;
+  tp: TTyRichPos;
+  p: TTyRichCellProps;
+begin
+  // the split: row 1 one wide cell over three, split back - its middle part faces r0c1
+  MakeTable(3, 3);
+  SelCells(1, 0, 1, 2);
+  AssertTrue('row 1 one cell', FRich.MergeCells);
+  d := FRich.Document;
+  tp := CellStart(0, 0);
+  p := Default(TTyRichCellProps);
+  p.Valid := [rcpBorderBottom];
+  p.Borders[rcsBottom] := TyRichBorder(rbsDouble, 30, clRed);
+  AssertTrue('r0c1''s own bottom', d.Execute(TTyRichSetCellProps.Create(tp, 0, 1, 0, 1, p)));
+  FRich.SelStart := CellStart(1, 0);
+  AssertTrue('split back into three', FRich.SplitCell(3, 1));
+  AssertEquals('the split: facing sides alike', '', SidesDisagree(d, 1));
+  AssertTrue('... the middle part''s top is r0c1''s bottom', d.CellProps(tp, 1, 1).Borders[rcsTop].Style = rbsDouble);
+  FRich.Undo;
+  AssertEquals('undone: as it was', 1, d.CellAt(d.Text.ParaOfPos(CellStart(1, 0))).Row.CellCount);
+  // the merge: row 0's cells 1 .. 2 one cell with its own bottom, row 1's merged to face it
+  MakeTable(3, 3);
+  SelCells(0, 1, 0, 2);
+  AssertTrue('r0c1 .. r0c2 one cell', FRich.MergeCells);
+  d := FRich.Document;
+  tp := CellStart(0, 0);
+  AssertTrue('its own bottom', d.Execute(TTyRichSetCellProps.Create(tp, 0, 1, 0, 1, p)));
+  SelCells(1, 1, 1, 2);
+  AssertTrue('r1c1 .. r1c2 one cell', FRich.MergeCells);
+  AssertEquals('the merge: facing sides alike', '', SidesDisagree(d, 1));
+end;
+
+{ The agreement of facing sides after an edit makes each row it changes once: four columns'
+  sides to agree in every one of 40 rows cost what one edit of all 40 rows does, not four. }
+procedure TTyRichMergeTest.TestTheAgreementMakesEachRowOnce;
+var
+  d: TTyRichDocument;
+  tp: TTyRichPos;
+  p: TTyRichCellProps;
+  h, one, agree: Int64;
+begin
+  MakeTable(40, 5);
+  d := FRich.Document;
+  tp := CellStart(0, 0);
+  // every row once: a shading of all its cells
+  p := Default(TTyRichCellProps);
+  p.Valid := [rcpShading];
+  p.Shading := clYellow;
+  h := d.HistoryBytes;
+  AssertTrue('all rows shaded', d.Execute(TTyRichSetCellProps.Create(tp, 0, 0, 39, 4, p)));
+  one := d.HistoryBytes - h;
+  // the right sides of columns 0 .. 3 red, the left sides beside them as they were
+  p := Default(TTyRichCellProps);
+  p.Valid := [rcpBorderRight];
+  p.Borders[rcsRight] := TyRichBorder(rbsDouble, 30, clRed);
+  AssertTrue('right sides', d.Execute(TTyRichSetCellProps.Create(tp, 0, 0, 39, 3, p)));
+  AssertTrue('they disagree', SidesDisagree(d, 1) <> '');
+  h := d.HistoryBytes;
+  AssertTrue('agreed', d.Execute(TTyRichAgreeEdges.Create(tp, 0, 39)));
+  agree := d.HistoryBytes - h;
+  AssertEquals('alike now', '', SidesDisagree(d, 1));
+  AssertTrue(Format('the agreement %d bytes, an edit of every row %d', [agree, one]),
+    agree <= one * 2 + 4096);
 end;
 
 initialization

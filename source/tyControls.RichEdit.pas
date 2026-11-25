@@ -2020,7 +2020,10 @@ type
     function EdgesOpen: Boolean;
     function EdgeAt(X, Y: Integer; out AKind, ABlock, AIndex: Integer): Boolean;
     function MinCellTwips(ARow: TTyRichRow; ACell: Integer): Integer;
-    procedure SharedEdgeLimits(ARow: TTyRichRow; var ALo, AHi, AShiftLo, AShiftHi: Integer);
+    // the rows an edge change of row ARow (paragraph APara) moves: read once
+    function EdgeMovedRows(ARow: TTyRichRow; APara: Integer): TTyRichRowList;
+    procedure SharedEdgeLimits(ARow: TTyRichRow; const ARows: TTyRichRowList; AEdgeTwips: Integer;
+      var ALo, AHi, AShiftLo, AShiftHi: Integer);
     procedure EdgeLimits(ARow: TTyRichRow; AIndex: Integer; out ALo, AHi, AShiftLo,
       AShiftHi: Integer);
     function EdgeRows(APara: Integer; AWhole: Boolean; out ATablePos: TTyRichPos;
@@ -12143,6 +12146,20 @@ var
     end;
   end;
 
+  // the caret's row with AX1 - AX0 more twips: wider than a table may be made
+  function TooWideWith(APara, AX0, AX1: Integer): Boolean;
+  var
+    rw: TTyRichRow;
+    ee: TTyRichEdges;
+  begin
+    Result := False;
+    if area.Range.InTable and area.AllCells then Exit;
+    rw := FDoc.CellAt(APara).Row;
+    ee := rw.CellEdges;
+    if Length(ee) = 0 then Exit;
+    Result := Int64(ee[High(ee)]) + (Int64(AX1) - AX0) - rw.Format.Row.LeftTwips > CRichMaxTableTwips;
+  end;
+
   // the row of table paragraph AP, counted from the caret's row (rows never cross objects)
   function RowOf(AP: Integer): Integer;
   var
@@ -12355,6 +12372,9 @@ begin
           // (told below, once the read scope is closed)
           if not (why in [rtrNone, rtrIrregularRows, rtrOutOfRange]) then
             reason := TableRefusalText(why, TyRichTableEdit(rtkInsertColumn, pos, 0))
+          else if TooWideWith(k, gx0, gx1) then
+            // (the new columns as wide as those they go beside: past the widest a table may be)
+            reason := Format(rsRichEditRefusedTableWidth, [CRichMaxTableTwips div 1440])
           else
           begin
             Result := GridColumnsEdit(t.ParaStart(info.First), gx0, gx1, True, FTableAfter, whole);
@@ -21948,6 +21968,9 @@ begin
     at := g.Cells[0].S;
     comp.Add(TTyRichMergeCells.Create(FDoc.Text.ParaStart(area.FirstPara), ed.Row0, ed.Row1,
       ed.X0, ed.X1));
+    { edges the merged cell now shares with its neighbours - one line each, as the row and
+      column doors leave them (the rows it covers and those beside them) }
+    comp.Add(TTyRichAgreeEdges.Create(FDoc.Text.ParaStart(area.FirstPara), ed.Row0 - 1, ed.Row1 + 1));
     place := Default(TTyRichEditPlace);
     place.Anchor := at;
     place.Caret := at;
@@ -22159,6 +22182,8 @@ end;
 
 function TTyCustomRichEdit.SplitCell(ACols, ARows: Integer): Boolean;
 var
+  comp: TTyRichCompositeCommand;
+  n: Integer;
   ed: TTyRichTableEdit;
   r: TTyRichTableRefusal;
   place: TTyRichEditPlace;
@@ -22190,8 +22215,14 @@ begin
   place := Default(TTyRichEditPlace);
   place.Anchor := at;
   place.Caret := at;
-  Result := RunMade(TTyRichSplitCell.Create(ed.Pos, ed.Row0, ed.Index, ed.SpanRows, ed.Cols,
-    ed.Rows, ed.SplitEdges), place, True);
+  { the parts' edges that now meet their neighbours' - one line each (the rows the split
+    covers, those it adds, and the rows beside them) }
+  comp := TTyRichCompositeCommand.Create(rsRichUndoSplitCell);
+  comp.Add(TTyRichSplitCell.Create(ed.Pos, ed.Row0, ed.Index, ed.SpanRows, ed.Cols,
+    ed.Rows, ed.SplitEdges));
+  if ed.SpanRows > 1 then n := ed.SpanRows else n := ed.Rows;
+  comp.Add(TTyRichAgreeEdges.Create(ed.Pos, ed.Row0 - 1, ed.Row0 + n));
+  Result := RunMade(comp, place, True);
 end;
 
 function TTyCustomRichEdit.SpanRowsDelete(ATablePos: TTyRichPos; AR1, AR2,
@@ -22343,9 +22374,8 @@ begin
       if AAfter and (Abs(g.Edge(c + 1) - x) <= CRichEdgeSlackTwips) then w := g.ColWidth(c)
       else if not AAfter and (Abs(g.Edge(c) - x) <= CRichEdgeSlackTwips) then w := g.ColWidth(c);
     if w <= 0 then w := 1440;
-    comp := TTyRichCompositeCommand.Create(rsRichUndoInsertColumn);
-    for i := 1 to n do comp.Add(TTyRichInsertGridColumn.Create(ATablePos, x, w));
-    Result := comp;
+    // (all of them in one edit: the table read and written once, whatever their number)
+    Result := TTyRichInsertGridColumn.Create(ATablePos, x, w, n);
   finally
     g.Free;
   end;
@@ -23322,15 +23352,14 @@ end;
   allows there (the selected cells' rows, else the table's): the edge moves by one amount in
   every row that has it, so no row's cell beside it goes below its narrowest while another
   row's could - the rows stay one table. }
-procedure TTyCustomRichEdit.SharedEdgeLimits(ARow: TTyRichRow; var ALo, AHi, AShiftLo,
-  AShiftHi: Integer);
+function TTyCustomRichEdit.EdgeMovedRows(ARow: TTyRichRow; APara: Integer): TTyRichRowList;
 var
   area: TTyRichCellArea;
-  rows: TTyRichRowList;
-  first, count, r0, r1, j, m: Integer;
-  e: TTyRichEdges;
-  lo, hi, slo, shi: Integer;
+  first, count, r0, r1: Integer;
+  t: TTyRichTable;
+  k: Integer;
 begin
+  Result := nil;
   r0 := 0;
   r1 := MaxInt;
   area := CellArea;
@@ -23339,15 +23368,50 @@ begin
     r0 := area.Range.Row0;
     r1 := area.Range.Row1;
   end;
-  if not FDoc.TableRowsAt(FDoc.Text.ParaStart(FEdgePara), r0, r1, rows, first, count) then Exit;
-  for j := 0 to High(rows) do
+  t := ARow.Table;
+  if not t.Cut and (ARow.Index >= 0) and (ARow.Index < t.RowCount) and (t.Rows[ARow.Index] = ARow) then
   begin
-    if rows[j] = ARow then Continue;
-    e := rows[j].CellEdges;
+    // (the table's rows as it knows them: no walk of its paragraphs)
+    if r1 > t.RowCount - 1 then r1 := t.RowCount - 1;
+    if r0 < 0 then r0 := 0;
+    if r1 < r0 then Exit;
+    SetLength(Result, r1 - r0 + 1);
+    for k := r0 to r1 do Result[k - r0] := t.Rows[k];
+    Exit;
+  end;
+  if not FDoc.TableRowsAt(FDoc.Text.ParaStart(APara), r0, r1, Result, first, count) then Result := nil;
+end;
+
+procedure TTyCustomRichEdit.SharedEdgeLimits(ARow: TTyRichRow; const ARows: TTyRichRowList;
+  AEdgeTwips: Integer; var ALo, AHi, AShiftLo, AShiftHi: Integer);
+var
+  j, m: Integer;
+  fmt: TTyRichRowFormat;
+  same: Boolean;
+  e: TTyRichEdges;
+  lo, hi, slo, shi: Integer;
+begin
+  fmt := ARow.Format;
+  for j := 0 to High(ARows) do
+  begin
+    if ARows[j] = ARow then Continue;
+    // (a row of the same format and edges as ARow's: its limits are ARow's)
+    if (ARows[j].Format = fmt) and (ARows[j].BoundaryCount = ARow.BoundaryCount) then
+    begin
+      same := True;
+      for m := 0 to ARow.BoundaryCount - 1 do
+        if ARows[j].Boundaries[m] <> ARow.Boundaries[m] then
+        begin
+          same := False;
+          Break;
+        end;
+      if same then Continue;
+    end;
+    e := ARows[j].CellEdges;
     for m := 0 to High(e) do
-      if Abs(e[m] - FEdgeTwips) <= CRichSharedEdgeTwips then
+      if Abs(e[m] - AEdgeTwips) <= CRichSharedEdgeTwips then
       begin
-        EdgeLimits(rows[j], m, lo, hi, slo, shi);
+        EdgeLimits(ARows[j], m, lo, hi, slo, shi);
         ALo := Math.Max(ALo, lo);
         AHi := Math.Min(AHi, hi);
         AShiftLo := Math.Max(AShiftLo, slo);
@@ -23363,14 +23427,17 @@ procedure TTyCustomRichEdit.EdgeLimits(ARow: TTyRichRow; AIndex: Integer; out AL
   AShiftLo, AShiftHi: Integer);
 var
   edges: TTyRichEdges;
-  lft, n, at: Integer;
+  lft, n, at, right: Integer;
 begin
   edges := ARow.CellEdges;
   lft := ARow.Format.Row.LeftTwips;
   n := Length(edges);
+  if n > 0 then right := edges[n - 1] else right := lft;
+  { (the table no wider than a table may be made - Word's 22 inches -, and no cell narrower
+    than its narrowest, the rest following or not) }
   if AIndex < 0 then
   begin
-    ALo := lft - CEdgeFar;
+    ALo := Math.Max(lft - CEdgeFar, right - CRichMaxTableTwips);
     if n > 0 then AHi := edges[0] - MinCellTwips(ARow, 0) else AHi := lft;
     AShiftLo := lft - CEdgeFar;
     AShiftHi := lft + CEdgeFar;
@@ -23380,10 +23447,11 @@ begin
   if AIndex = 0 then ALo := lft + MinCellTwips(ARow, 0)
   else ALo := edges[AIndex - 1] + MinCellTwips(ARow, AIndex);
   AShiftLo := ALo;
-  AShiftHi := at + CEdgeFar;
+  AShiftHi := at + Math.Max(0, lft + CRichMaxTableTwips - right);
   if AIndex < n - 1 then AHi := edges[AIndex + 1] - MinCellTwips(ARow, AIndex + 1)
-  else AHi := at + CEdgeFar;
+  else AHi := Math.Max(at, lft + CRichMaxTableTwips);
   if AHi < ALo then AHi := ALo;
+  if AShiftHi < AShiftLo then AShiftHi := AShiftLo;
 end;
 
 { The rows an edge change of the row paragraph APara is in takes: the selected cells' rows
@@ -23616,7 +23684,7 @@ begin
         FEdgeRaster := r.Cells[idx].Right;
       end;
       EdgeLimits(row, idx, lo, hi, slo, shi);
-      if idx >= 0 then SharedEdgeLimits(row, lo, hi, slo, shi);
+      if idx >= 0 then SharedEdgeLimits(row, EdgeMovedRows(row, FEdgePara), FEdgeTwips, lo, hi, slo, shi);
       FEdgeLo := FEdgeRaster + RasterOfTwips(Int64(lo) - FEdgeTwips);
       FEdgeHi := FEdgeRaster + RasterOfTwips(Int64(hi) - FEdgeTwips);
       FEdgeShiftLo := FEdgeRaster + RasterOfTwips(Int64(slo) - FEdgeTwips);
@@ -23950,6 +24018,7 @@ var
   first, count: Integer;
   info: TTyRichTableInfo;
   haveInfo: Boolean;
+  widest: Integer;
 
   { The leftmost the edge at AOld (as the rows had it) may go, moved by AShift already where
     the rows before it moved: the cell that ends there in each row r0 .. r1 that has it keeps
@@ -24012,6 +24081,10 @@ begin
     row := FDoc.CellAt(APara).Row;
     edges := row.CellEdges;
     if not FDoc.TableRowsAt(pos, r0, r1, rows, first, count) then rows := nil;
+    widest := 0;
+    for i := 0 to High(rows) do
+      if rows[i].CellCount > 0 then widest := Math.Max(widest, rows[i].CellEdges[rows[i].CellCount - 1]);
+    if widest = 0 then widest := edges[High(edges)];
     { each edge in turn, the rest of the row following it: an edge after one that moved has
       moved by as much (shift) }
     shift := 0;
@@ -24025,6 +24098,9 @@ begin
       nw := lft + w;
       // (one floor for every row that has the edge: they all move by as much)
       if Length(rows) > 0 then nw := Math.Max(nw, Floor(edges[c], shift));
+      // (and the widest row no wider than a table may be made: the rest follows)
+      if (widest > 0) and (widest + shift + (nw - old) > row.Format.Row.LeftTwips + CRichMaxTableTwips) then
+        nw := Math.Max(old, row.Format.Row.LeftTwips + CRichMaxTableTwips - widest - shift + old);
       if nw = old then Continue;
       SetLength(parts, Length(parts) + 1);
       parts[High(parts)] := TTyRichSetColumnEdge.Create(pos, old, nw, r0, r1, True);
@@ -24297,7 +24373,8 @@ end;
 function TTyCustomRichEdit.MoveCaretRowEdge(AIndex, AOffsetTwips: Integer; AShiftRest: Boolean): Boolean;
 var
   e: TTyRichColumnEdges;
-  i, v, r0, r1: Integer;
+  i, v, r0, r1, lo, hi, slo, shi: Integer;
+  row: TTyRichRow;
   pos: TTyRichPos;
   pv: TTyRichParaView;
 begin
@@ -24311,6 +24388,21 @@ begin
   for i := 0 to High(e) do
     if e[i].Index = AIndex then
     begin
+      { (the limits of every row the move takes, as a drag has them: the rows are read here,
+        for the one edge that moves - not for every edge CaretRowEdges gives) }
+      ParagraphView(pv);
+      FDoc.BeginRead;
+      try
+        row := FDoc.CellAt(pv.Para).Row;
+        EdgeLimits(row, AIndex, lo, hi, slo, shi);
+        if AIndex >= 0 then SharedEdgeLimits(row, EdgeMovedRows(row, pv.Para), e[i].Twips, lo, hi, slo, shi);
+      finally
+        FDoc.EndRead;
+      end;
+      e[i].MinOffset := Math.Max(e[i].MinOffset, e[i].Offset + (lo - e[i].Twips));
+      e[i].MaxOffset := Math.Min(e[i].MaxOffset, e[i].Offset + (hi - e[i].Twips));
+      e[i].ShiftMinOffset := Math.Max(e[i].ShiftMinOffset, e[i].Offset + (slo - e[i].Twips));
+      e[i].ShiftMaxOffset := Math.Min(e[i].ShiftMaxOffset, e[i].Offset + (shi - e[i].Twips));
       if AShiftRest then
         v := Math.Min(Math.Max(AOffsetTwips, e[i].ShiftMinOffset), e[i].ShiftMaxOffset)
       else

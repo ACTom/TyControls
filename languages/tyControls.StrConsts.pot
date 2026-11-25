@@ -1482,6 +1482,11 @@ msgstr ""
 msgid "A table can have 1 to %d rows and 1 to %d columns."
 msgstr ""
 
+#: tycontrols.strconsts.rsricheditrefusedtablewidth
+#, object-pascal-format
+msgid "A table can be at most %d inches wide: these columns would make it wider."
+msgstr ""
+
 #: tycontrols.strconsts.rsricheditreplaceinedit
 msgid "The document cannot be replaced between BeginEdit and EndEdit: the block is one undo step, and a new content has no undo."
 msgstr ""

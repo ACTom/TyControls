@@ -719,6 +719,10 @@ type
     function ColBoundaryCount: Integer;
     { Bytes the table, its rows, cells, formats and edges take. }
     function MemSize: Int64;
+    { ... of them, its rows as it has them now only - what a step that keeps the table
+      keeps (the other versions of its rows are the steps' and values' that hold them, and
+      counted there): no more than the table, whatever the history before it. }
+    function LiveBytes: Int64;
     property Rows[AIndex: Integer]: TTyRichRow read GetRow;
     property ColBoundaries[AIndex: Integer]: Integer read GetColBoundary;  // twips
     { Merged cells and the like, or a part of a table: shown and kept, but its structure
@@ -772,7 +776,8 @@ type
     { rtkInsertGridColumn: a column Width twips wide at X0 (twips; a grid edge): in a row with
       an edge there, a new cell (empty, as the cell beside it looks, merged with nothing); in a
       row whose cell reaches over X0 (a merged cell, a wide one), that cell Width wider; every
-      edge after it Width further right.
+      edge after it Width further right. Cols (1 when 0) such columns at once, one after the
+      other: Cols new cells, or the cell Cols x Width wider.
       rtkDeleteGridColumns: the grid's columns from X0 to X1 (twips): a cell wholly inside
       goes, one that reaches out of it keeps its content and is what is left of it wide;
       every edge after them that much further left. Both by the grid, for any table that holds
@@ -823,6 +828,14 @@ type
     rekFit         a row's widths in proportion, the row FitWidth twips wide. }
   TTyRichEdgeKind = (rekNone, rekMove, rekDistribute, rekFit);
 
+  { One cell's own properties in an edit of several cells (TTyRichPropEdit.Cells): row Row
+    (as the table's rows count), cell Cell, the fields of Props that its Valid names. }
+  TTyRichCellChange = record
+    Row, Cell: Integer;
+    Props: TTyRichCellProps;
+  end;
+  TTyRichCellChanges = array of TTyRichCellChange;
+
   TTyRichPropEdit = record
     Pos: TTyRichPos;
     Row0, Row1, Col0, Col1: Integer;
@@ -834,6 +847,9 @@ type
     EdgeKind: TTyRichEdgeKind;
     EdgeFrom, EdgeTo, FitWidth: Integer;
     EdgeShift: Boolean;
+    { a cell edit of several cells, each with its own properties (not Cell): each row of
+      Row0 .. Row1 that has changes is made once, with all of them }
+    Cells: TTyRichCellChanges;
   end;
 
   { Where a paragraph is in its table (TTyRichDocument.TableInfoAt): the table's paragraphs,
@@ -852,6 +868,8 @@ type
 const
   // the size of a table made here: Word's limits, 63 columns and 32767 rows
   CRichMaxTableCols = 63;
+  { The widest a table may be made (twips): Word's 22 inches. }
+  CRichMaxTableTwips = 31680;
   CRichMaxTableRows = 32767;
   { rtkInsertRow's Index for a row right above / below the row Pos is in: the edit finds that
     row in the read it makes anyway, so a caller that knows only the position reads nothing. }
@@ -4316,6 +4334,22 @@ begin
   end;
 end;
 
+function TTyRichTable.LiveBytes: Int64;
+var
+  i: Integer;
+  r: TTyRichRow;
+begin
+  Result := InstanceSize + Length(FRows) * SizeOf(Pointer) +
+    Length(FColBoundaries) * SizeOf(Integer);
+  for i := 0 to High(FRows) do
+  begin
+    r := FRows[i];
+    if r = nil then Continue;
+    Inc(Result, r.InstanceSize + Length(r.FRawFormat) + Length(r.FBoundaries) * SizeOf(Integer) +
+      Length(r.FCells) * (TTyRichCell.InstanceSize + SizeOf(Pointer)));
+  end;
+end;
+
 { ---- TTyRichUndoData ---- }
 
 destructor TTyRichUndoData.Destroy;
@@ -7758,7 +7792,8 @@ begin
            ((ACells[i] = nil) or (ACells[i].FRow.FTable <> d.FCell.FRow.FTable)) then
         begin
           met := d.FCell.FRow.FTable;
-          Inc(Result.FExtraBytes, met.MemSize);
+          // (its rows as they are: the versions other steps hold are theirs)
+          Inc(Result.FExtraBytes, met.LiveBytes);
         end;
         Doc.PutData(AFirst + i, d, Repointed(d, ACells[i]));
       end;
@@ -8579,7 +8614,7 @@ var
   perm: array of Integer;
   p, c: TTyRichRowFormat;
   changed, isNew: Boolean;
-  newAt: Integer;
+  newAt, cnt, tw: Integer;
 
   function Map(AX: Integer): Integer;
   begin
@@ -8592,6 +8627,9 @@ begin
   SetLength(Plan, Shape.RowCount);
   x := Edit.X0;
   w := Edit.Width;
+  // (Cols columns of that width at once - one step, the rows read and written once)
+  if Edit.Cols > 1 then cnt := Edit.Cols else cnt := 1;
+  tw := w * cnt;
   a := Edit.X0;
   bb := Edit.X1;
   d := bb - a;
@@ -8652,33 +8690,34 @@ begin
           for i := 0 to n - 1 do
           begin
             CellFrom[i] := i;
-            if i >= j then newEdges[i] := oldEdges[i] + w else newEdges[i] := oldEdges[i];
+            if i >= j then newEdges[i] := oldEdges[i] + tw else newEdges[i] := oldEdges[i];
           end;
           changed := True;
         end
         else
         begin
-          // a new cell after cell k (-1: before the first)
+          // cnt new cells after cell k (-1: before the first)
           newAt := k + 1;
           if k >= 0 then b := k else b := 0;
-          SetLength(newEdges, n + 1);
-          SetLength(CellFrom, n + 1);
-          for i := 0 to n do
+          SetLength(newEdges, n + cnt);
+          SetLength(CellFrom, n + cnt);
+          for i := 0 to n + cnt - 1 do
           begin
             if i < newAt then
             begin
               CellFrom[i] := i;
               newEdges[i] := oldEdges[i];
             end
-            else if i = newAt then
+            else if i < newAt + cnt then
             begin
               CellFrom[i] := -1;
-              if newAt > 0 then newEdges[i] := oldEdges[newAt - 1] + w else newEdges[i] := left + w;
+              if newAt > 0 then newEdges[i] := oldEdges[newAt - 1] + w * (i - newAt + 1)
+              else newEdges[i] := left + w * (i - newAt + 1);
             end
             else
             begin
-              CellFrom[i] := i - 1;
-              newEdges[i] := oldEdges[i - 1] + w;
+              CellFrom[i] := i - cnt;
+              newEdges[i] := oldEdges[i - cnt] + tw;
             end;
           end;
           changed := True;
@@ -9126,7 +9165,9 @@ begin
   begin
     if AEdit.Width < 1 then Exit;
     for r := 0 to S.RowCount - 1 do
-      if Length(S.Rows[r].Row.FCells) + 1 > CRichMaxTableCols then Exit;
+      if (Length(S.Rows[r].Row.FCells) + AEdit.Cols > CRichMaxTableCols) or
+         (Length(S.Rows[r].Row.FCells) + 1 > CRichMaxTableCols) then
+        Exit;
   end
   else
   begin
@@ -9812,6 +9853,7 @@ end;
 
 function SamePropEdit(const A, B: TTyRichPropEdit): Boolean;
 begin
+  // (Cells: the same array - one edit's own)
   Result := CompareByte(A, B, SizeOf(TTyRichPropEdit)) = 0;
 end;
 
@@ -10018,7 +10060,7 @@ var
   ed: TTyRichTableEditor;
   rr, k: Integer;
   row, nr: TTyRichRow;
-  f: TTyRichRowFormat;
+  f, nf: TTyRichRowFormat;
   edges, old: TTyRichEdges;
   cells: array of TTyRichCell;
   moved: Boolean;
@@ -10091,6 +10133,21 @@ begin
               f := row.Format;
               f.AddRef;
             end;
+          end
+          else if Length(AEdit.Cells) > 0 then
+          begin
+            // (every change of this row's cells at once: the row made once)
+            f := row.Format;
+            f.AddRef;
+            for k := 0 to High(AEdit.Cells) do
+              if AEdit.Cells[k].Row = rr + s.Base then
+              begin
+                nf := TyRichWithCellProps(f, AEdit.Cells[k].Cell, AEdit.Cells[k].Cell,
+                  AEdit.Cells[k].Props);
+                f.Release;
+                f := nf;
+              end;
+            edges := Copy(row.CellEdges);
           end
           else
           begin

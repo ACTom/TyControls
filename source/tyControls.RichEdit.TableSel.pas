@@ -439,7 +439,7 @@ procedure TTyRichBorderPlan.AddParts(AComp: TTyRichCompositeCommand; const ABord
   var ASkipped: Integer);
 var
   all: array of array of TTyRowCellSides;
-  i, c, a, b, j, lo, hi: Integer;
+  i, c, a, b, j, lo, hi, k: Integer;
   sd: TTyRichCellSide;
   pend: Boolean;
   pr0, pr1, pa, pb: Integer;
@@ -473,8 +473,30 @@ begin
   begin
     for c := 0 to CellCount(i) - 1 do
     begin
-      if (rcsLeft in FOwn[i][c]) and (c > 0) then Include(all[i][c - 1], rcsRight);
-      if (rcsRight in FOwn[i][c]) and (c < CellCount(i) - 1) then Include(all[i][c + 1], rcsLeft);
+      { the cell beside it - by the grid: past a cell narrower than the slack (no column of
+        the grid's), which takes the line on both its sides, to the cell the grid puts next }
+      if rcsLeft in FOwn[i][c] then
+      begin
+        k := c - 1;
+        while k >= 0 do
+        begin
+          Include(all[i][k], rcsRight);
+          if FEdges[i][k] - CellLeft(i, k) > CRichSharedEdgeTwips then Break;
+          Include(all[i][k], rcsLeft);
+          Dec(k);
+        end;
+      end;
+      if rcsRight in FOwn[i][c] then
+      begin
+        k := c + 1;
+        while k < CellCount(i) do
+        begin
+          Include(all[i][k], rcsLeft);
+          if FEdges[i][k] - CellLeft(i, k) > CRichSharedEdgeTwips then Break;
+          Include(all[i][k], rcsRight);
+          Inc(k);
+        end;
+      end;
     end;
     // between rows: by the span each run of marked cells covers
     for sd := rcsTop to rcsBottom do
@@ -618,8 +640,8 @@ var
   procedure Plan;
   var
     ea, eb: TTyRichEdges;
-    i, a, b, na, nb, k, m, j: Integer;
-    merged: Boolean;
+    i, a, b, na, nb, k, lo, hi: Integer;
+    list: TTyRichCellChanges;
   begin
     nch := 0;
     ch := nil;
@@ -639,39 +661,23 @@ var
         if b >= 0 then Agree(i, a, rcsBottom, i + 1, b, rcsTop);
       end;
     end;
-    { The parts: a change the same in the next row (the same cell, side and border) runs on
-      into it - a column put in a long table is one part. }
-    k := 0;
-    while k < nch do
+    { One part: every change, each row made once with all of its cells' changes (a part a
+      change would copy the row for each one - a column put in a long table changes a
+      side in every row) }
+    if nch = 0 then Exit;
+    list := nil;
+    SetLength(list, nch);
+    lo := MaxInt;
+    hi := -1;
+    for k := 0 to nch - 1 do
     begin
-      if ch[k].Row < 0 then
-      begin
-        Inc(k);
-        Continue;
-      end;
-      m := ch[k].Row;
-      j := k + 1;
-      repeat
-        merged := False;
-        while (j < nch) and (ch[j].Row <= m + 1) do
-        begin
-          if (ch[j].Row = m + 1) and (ch[j].Cell = ch[k].Cell) and (ch[j].Side = ch[k].Side) and
-             TyRichSameBorder(ch[j].Border, ch[k].Border) then
-          begin
-            ch[j].Row := -1;
-            Inc(m);
-            merged := True;
-            Inc(j);
-            Break;
-          end;
-          Inc(j);
-        end;
-      until not merged;
-      Add(TTyRichSetCellProps.Create(FPos, first + ch[k].Row, ch[k].Cell, first + m, ch[k].Cell,
-        SideProps(ch[k].Side, ch[k].Border)));
-      ch[k].Row := -1;
-      Inc(k);
+      list[k].Row := first + ch[k].Row;
+      list[k].Cell := ch[k].Cell;
+      list[k].Props := SideProps(ch[k].Side, ch[k].Border);
+      if ch[k].Row < lo then lo := ch[k].Row;
+      if ch[k].Row > hi then hi := ch[k].Row;
     end;
+    Add(TTyRichSetCellsProps.Create(FPos, first + lo, first + hi, list));
   end;
 
 begin

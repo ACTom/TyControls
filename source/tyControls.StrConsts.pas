@@ -399,6 +399,7 @@ resourcestring
   rsRichEditRefusedSelectNotWhole = 'This table is too large, or not complete in its file, for a whole column or the whole table to be selected.';
   rsRichEditRefusedResizeNotWhole = 'This table is too large, or not complete in its file, for a whole column to be resized.';
   rsRichEditRefusedResizeNested = 'This row holds a table inside one of its cells: its cells'' widths, its height and its look cannot be changed.';
+  rsRichEditRefusedTableWidth   = 'A table can be at most %d inches wide: these columns would make it wider.';
   rsRichEditRefusedNotRectangle = 'The selected cells do not form a rectangle: they cannot be merged into one cell.';
   rsRichEditRefusedMergeWhich    = 'Select two or more cells of one table to merge them.';
   rsRichEditRefusedMergeNested   = 'This table has a table inside one of its cells: its cells cannot be merged.';

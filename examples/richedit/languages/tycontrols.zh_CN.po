@@ -1171,6 +1171,10 @@ msgstr "这个表格太大，或者在文件里不完整，不能调整整列的
 msgid "This row holds a table inside one of its cells: its cells' widths, its height and its look cannot be changed."
 msgstr "这一行的单元格里有表格：不能改它的列宽、行高和格式。"
 
+#: tycontrols.strconsts.rsricheditrefusedtablewidth
+msgid "A table can be at most %d inches wide: these columns would make it wider."
+msgstr "表格最宽 %d 英寸，插入这些列会超出这个宽度。"
+
 #: tycontrols.strconsts.rsricheditrefusednotrectangle
 msgid "The selected cells do not form a rectangle: they cannot be merged into one cell."
 msgstr "选中的单元格不成矩形，不能合并成一个单元格。"

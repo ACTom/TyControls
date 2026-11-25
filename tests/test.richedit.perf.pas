@@ -2886,6 +2886,7 @@ var
   t: TTyRichText;
   k: Integer;
   t0, plainIns, plainDel, spanIns, spanDel: Double;
+  hb: Int64;
 begin
   bmp := TBitmap.Create;
   try
@@ -2898,10 +2899,13 @@ begin
     k := 1 + 3 * (Rows div 2);
     FRich.SelStart := t.ParaStart(k);
     TPerfRich(FRich).PaintInto(bmp);
+    hb := d.HistoryBytes;
     t0 := Clock;
     AssertTrue('plain: a column', FRich.InsertColumn(True));
     TPerfRich(FRich).PaintInto(bmp);
     plainIns := Clock - t0;
+    Report(Format('table of %d rows, no span: the undo bytes of a column put in: %d', [Rows,
+      d.HistoryBytes - hb]), 0);
     FRich.Undo;
     FRich.SelStart := t.ParaStart(k);
     t0 := Clock;
@@ -2917,10 +2921,12 @@ begin
     AssertTrue('a span', FRich.MergeCells);
     FRich.SelStart := t.ParaStart(k - 1);
     TPerfRich(FRich).PaintInto(bmp);
+    hb := d.HistoryBytes;
     t0 := Clock;
     AssertTrue('spans: a column', FRich.InsertColumn(True));
     TPerfRich(FRich).PaintInto(bmp);
     spanIns := Clock - t0;
+    Report(Format('table, with a span: the undo bytes of a column put in: %d', [d.HistoryBytes - hb]), 0);
     FRich.Undo;
     FRich.SelStart := t.ParaStart(k - 1);
     t0 := Clock;

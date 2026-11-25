@@ -93,6 +93,8 @@ type
     procedure TestADisplayPageAndAViewerOfferNothing;
     procedure TestADragOfAMergedCellsEdgeKeepsTheRowsTogether;
     procedure TestDistributeColumnsKeepsAMergedTableTogether;
+    procedure TestATableIsNoWiderThanWordsWidest;
+    procedure TestTheEdgeDoorIsLimitedByEveryRow;
   end;
 
 implementation
@@ -1311,6 +1313,73 @@ begin
   e := EdgesOf(0);
   AssertTrue('equal columns', Abs((e[1] - e[0]) - (e[3] - e[2])) <= 2);
   AssertTrue('the merged cell over two of them', Abs((EdgesOf(1)[1] - EdgesOf(1)[0]) - 2 * (e[1] - e[0])) <= 4);
+end;
+
+{ A table is no wider than Word's 22 inches (CRichMaxTableTwips) by any door, and an edge
+  moved with the rest following leaves no cell narrower than the plain move does: a shifted
+  move far right stops at the widest table, one far left at the cell's narrowest; a column's
+  width past it stops there; a column put in past it is refused, told in its own words. }
+procedure TTyRichTableResizeTest.TestATableIsNoWiderThanWordsWidest;
+var
+  e: TTyRichEdges;
+  r: Integer;
+  lft: Integer;
+begin
+  MakeTable(3, 3);
+  lft := RowAt(0).Format.Row.LeftTwips;
+  FRich.SelStart := CellStart(1, 1);
+  FRich.UpdateView;
+  // far right, the rest following
+  AssertTrue('moved', FRich.MoveCaretRowEdge(1, 10000000, True));
+  for r := 0 to 2 do
+  begin
+    e := EdgesOf(r);
+    AssertTrue(Format('row %d: no wider than the widest (%d)', [r, e[High(e)] - lft]),
+      e[High(e)] - lft <= CRichMaxTableTwips);
+  end;
+  FRich.Undo;
+  // far left, the rest following: the cell at its narrowest, as a plain move leaves it
+  FRich.SelStart := CellStart(1, 1);
+  FRich.UpdateView;
+  AssertTrue('moved left', FRich.MoveCaretRowEdge(1, -10000000, True));
+  e := EdgesOf(1);
+  AssertTrue(Format('the cell keeps a cell''s width (%d)', [e[1] - e[0]]), e[1] - e[0] >= 216);
+  FRich.Undo;
+  // a column's width past the widest: the table stops there
+  FRich.SelStart := CellStart(0, 0);
+  AssertTrue('a width', FRich.SetColumnWidth(40000));
+  e := EdgesOf(0);
+  AssertTrue(Format('SetColumnWidth: no wider than the widest (%d)', [e[High(e)] - lft]),
+    e[High(e)] - lft <= CRichMaxTableTwips);
+  // a column put in beside the widest column: refused, told
+  FRich.Refusals.Clear;
+  FRich.SelStart := CellStart(0, 0);
+  AssertFalse('no column past the widest', FRich.InsertColumn(True));
+  AssertEquals('told once', 1, FRich.Refusals.Count);
+  AssertEquals('in its words', Format(rsRichEditRefusedTableWidth, [CRichMaxTableTwips div 1440]),
+    FRich.Refusals[0]);
+end;
+
+{ The code door of an edge (MoveCaretRowEdge) is limited as the drag is, by every row that
+  has the edge: moved far left with the rest following, the edge stops where the other row's
+  cell before it is at its narrowest. }
+procedure TTyRichTableResizeTest.TestTheEdgeDoorIsLimitedByEveryRow;
+var
+  e0, e1: TTyRichEdges;
+begin
+  LoadRtf('{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}\pard top\par' +
+    '\trowd\trleft0\cellx3000\cellx6000\pard\intbl a\cell b\cell\row' +
+    '\trowd\trleft0\cellx2700\cellx3000\cellx6000\pard\intbl c\cell d\cell e\cell\row' +
+    '\pard after\par}');
+  FRich.SelStart := FRich.Document.Text.ParaStart(1);
+  FRich.UpdateView;
+  AssertTrue('moved', FRich.MoveCaretRowEdge(0, -1000000, True));
+  e0 := EdgesOf(0);
+  e1 := EdgesOf(1);
+  // (its narrowest: no padding in this file, a character's width - 120 twips)
+  AssertTrue(Format('the other row''s cell keeps a cell''s width (%d)', [e1[1] - e1[0]]),
+    e1[1] - e1[0] >= 120);
+  AssertEquals('the edge moved alike in both rows', e0[0], e1[1]);
 end;
 
 initialization
