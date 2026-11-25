@@ -93,6 +93,7 @@ type
     procedure TestTheSplitActionStartsFromTheCellColumnsFirst;
     procedure TestCopiedCellsTextGoesByTheGrid;
     procedure TestACellForACoveredPlaceNamesTheMistake;
+    procedure TestTheContinuationRuleIsOneFunction;
     procedure TestSelectColumnTakesASpanWhole;
     procedure TestEveryRewrittenCellSaysItsOwnWidth;
     procedure TestARandomWalkKeepsTheGridWhole;
@@ -975,7 +976,37 @@ begin
   FRich.SelStart := CellStart(2, 2);
   AssertTrue(FRich.SplitCell(2, 2));
   Keep('doors-split-inner-edges', 0);
-  AssertEquals('every case', 19, n);
+  // a row of a cell merged across in marks, a plain cell beside it split into two rows: the
+  // marks across get marks down beside them (the grid reads them as one cell)
+  LoadRows('\trowd\trleft0\clmgf\cellx2000\clmrg\cellx4000\cellx6000\pard\intbl r0c0\cell\cell r0c2\cell\row' +
+    '\trowd\trleft0\cellx2000\cellx4000\cellx6000\pard\intbl r1c0\cell r1c1\cell r1c2\cell\row');
+  FRich.SelStart := FRich.Document.Text.ParaStart(2);
+  AssertTrue(FRich.SplitCell(1, 2));
+  Keep('marks-across-beside-a-split', 0);
+  // (the same without the marks: a file's plain row, a cell split into two rows)
+  LoadRows('\trowd\trleft0\cellx2000\cellx4000\cellx6000\pard\intbl r0c0\cell r0c1\cell r0c2\cell\row' +
+    '\trowd\trleft0\cellx2000\cellx4000\cellx6000\pard\intbl r1c0\cell r1c1\cell r1c2\cell\row');
+  FRich.SelStart := FRich.Document.Text.ParaStart(2);
+  AssertTrue(FRich.SplitCell(1, 2));
+  Keep('plain-row-beside-a-split', 0);
+  // the same row, a column put in at the edge the merge across crosses
+  LoadRows('\trowd\trleft0\clmgf\cellx2000\clmrg\cellx4000\cellx6000\pard\intbl r0c0\cell\cell r0c2\cell\row' +
+    '\trowd\trleft0\cellx2000\cellx4000\cellx6000\pard\intbl r1c0\cell r1c1\cell r1c2\cell\row');
+  FRich.SelStart := FRich.Document.Text.ParaStart(3);
+  AssertTrue(FRich.InsertColumn(True));
+  Keep('marks-across-column-inserted', 0);
+  // a cell marked to continue the merge above at another width: a cell of its own; an edit in
+  // another row, then one in its own row
+  LoadRows('\trowd\trleft0\clvmgf\cellx2000\cellx4000\pard\intbl r0c0\cell r0c1\cell\row' +
+    '\trowd\trleft0\clvmrg\cellx1000\cellx4000\pard\intbl r1c0\cell r1c1\cell\row' +
+    '\trowd\trleft0\cellx2000\cellx4000\pard\intbl r2c0\cell r2c1\cell\row');
+  FRich.SelStart := FRich.Document.Text.ParaStart(5);
+  AssertTrue(FRich.SetCellShading(clYellow));
+  Keep('odd-continuation-other-row-edited', 0);
+  FRich.SelStart := FRich.Document.Text.ParaStart(3);
+  AssertTrue(FRich.SetCellShading(clYellow));
+  Keep('odd-continuation-own-row-edited', 0);
+  AssertEquals('every case', 24, n);
 end;
 
 { The command alone merges only cells that are empty but the first (the door moves their
@@ -2273,6 +2304,58 @@ begin
     AssertTrue('raised: ' + said, Pos('covered by a cell merged from above', said) > 0);
   finally
     B.Free;
+  end;
+end;
+
+{ TyRichCellContinuesAbove answers what the grid reads, cell by cell, without a grid: on
+  continuations of the same width, of another, at another column, under nothing, within the
+  slack, and on cells merged across in marks and down. }
+procedure TTyRichMergeTest.TestTheContinuationRuleIsOneFunction;
+const
+  Cases: array[0..5] of RawByteString = (
+    '\trowd\trleft0\clvmgf\cellx2000\cellx4000\pard\intbl a\cell b\cell\row' +
+    '\trowd\trleft0\clvmrg\cellx1000\cellx4000\pard\intbl c\cell d\cell\row' +
+    '\trowd\trleft0\clvmrg\cellx3000\cellx4000\pard\intbl e\cell f\cell\row',
+    '\trowd\trleft0\clvmgf\cellx3000\pard\intbl a\cell\row' +
+    '\trowd\trleft0\cellx1000\clvmrg\cellx3000\pard\intbl b\cell c\cell\row',
+    '\trowd\trleft0\clvmrg\cellx2000\cellx4000\pard\intbl a\cell b\cell\row' +
+    '\trowd\trleft0\cellx2000\cellx4000\pard\intbl c\cell d\cell\row',
+    '\trowd\trleft0\clvmgf\cellx2000\cellx4000\pard\intbl a\cell b\cell\row' +
+    '\trowd\trleft0\clvmrg\cellx2010\cellx4000\pard\intbl\cell d\cell\row' +
+    '\trowd\trleft0\clvmrg\cellx2000\clvmgf\cellx4000\pard\intbl\cell e\cell\row' +
+    '\trowd\trleft0\cellx2000\clvmrg\cellx4000\pard\intbl f\cell\cell\row',
+    '\trowd\trleft0\clmgf\clvmgf\cellx2000\clmrg\clvmgf\cellx4000\cellx6000\pard\intbl a\cell\cell c\cell\row' +
+    '\trowd\trleft0\clmgf\clvmrg\cellx2000\clmrg\clvmrg\cellx4000\cellx6000\pard\intbl\cell\cell f\cell\row',
+    '\trowd\trleft0\cellx2000\cellx4000\pard\intbl a\cell b\cell\row' +
+    '\trowd\trleft0\clvmrg\cellx4000\pard\intbl c\cell\row');
+var
+  k, r, c: Integer;
+  g: TTyRichGrid;
+  gc: TTyRichGridCell;
+  rows: TTyRichRowList;
+  first, count: Integer;
+  want: Boolean;
+begin
+  for k := 0 to High(Cases) do
+  begin
+    LoadRows(Cases[k]);
+    g := TyRichTableGrid(FRich.Document, 0);
+    try
+      AssertTrue(Format('case %d: rows', [k]), FRich.Document.TableRowsAt(0, 0, MaxInt, rows, first, count));
+      for r := 1 to High(rows) do
+        for c := 0 to rows[r].CellCount - 1 do
+        begin
+          if TyRichCellHMerge(rows[r], c) = rcmContinue then Continue;
+          gc := g.CellOf(r, c);
+          want := gc.Covered and (gc.Row < r);
+          AssertEquals(Format('case %d: row %d cell %d', [k, r, c]), want,
+            TyRichCellContinuesAbove(rows[r - 1], rows[r], c));
+        end;
+      AssertFalse(Format('case %d: the first row continues nothing', [k]),
+        TyRichCellContinuesAbove(nil, rows[0], 0));
+    finally
+      g.Free;
+    end;
   end;
 end;
 

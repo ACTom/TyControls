@@ -78,6 +78,14 @@ function TyRichGridBuildCount: Int64;
 function TyRichCellVMerge(ARow: TTyRichRow; ACell: Integer): TTyRowCellMerge;
 { ... and across: rcmNone, rcmFirst, or rcmContinue (it continues the cell before). }
 function TyRichCellHMerge(ARow: TTyRichRow; ACell: Integer): TTyRowCellMerge;
+{ Cell ACell of row ARow continues the cell above it (row AAbove, the row before it in the
+  table; nil: none) - the grid's rule, with no grid made: it is marked to continue a merge
+  down (rcmContinue), and AAbove has a cell at its extent - its left and right edges within
+  the slack (CRichEdgeSlackTwips), a cell merged across in marks taken at the extent of its
+  marks on either side. A cell marked so at another width, or under nothing, is a cell of
+  its own. A cell merged across in marks that continues ACell's merge across (rcmContinue
+  across) goes where the cell it continues goes: ask for the first of its marks. }
+function TyRichCellContinuesAbove(AAbove, ARow: TTyRichRow; ACell: Integer): Boolean;
 
 implementation
 
@@ -110,6 +118,45 @@ begin
   f := ARow.Format;
   if (ACell < 0) or (ACell >= f.CellCount) then Exit;
   Result := f.Cells[ACell].HMerge;
+end;
+
+// the extent of cell ACell of ARow (twips), over the cells its across-merge marks take on
+procedure MarkedExtent(ARow: TTyRichRow; ACell: Integer; out ALeft, ARight: Integer);
+var
+  e: TTyRichEdges;
+  m: Integer;
+begin
+  e := ARow.CellEdges;
+  if ACell = 0 then ALeft := ARow.Format.Row.LeftTwips else ALeft := e[ACell - 1];
+  ARight := e[ACell];
+  if TyRichCellHMerge(ARow, ACell) <> rcmFirst then Exit;
+  m := ACell + 1;
+  while (m <= High(e)) and (TyRichCellHMerge(ARow, m) = rcmContinue) do
+  begin
+    if e[m] > ARight then ARight := e[m];
+    Inc(m);
+  end;
+end;
+
+function TyRichCellContinuesAbove(AAbove, ARow: TTyRichRow; ACell: Integer): Boolean;
+var
+  e: TTyRichEdges;
+  l, r, al, ar, j: Integer;
+begin
+  Result := False;
+  if (AAbove = nil) or (ARow = nil) then Exit;
+  e := ARow.CellEdges;
+  if (ACell < 0) or (ACell > High(e)) then Exit;
+  if TyRichCellVMerge(ARow, ACell) <> rcmContinue then Exit;
+  MarkedExtent(ARow, ACell, l, r);
+  e := AAbove.CellEdges;
+  for j := 0 to High(e) do
+  begin
+    if TyRichCellHMerge(AAbove, j) = rcmContinue then Continue;
+    MarkedExtent(AAbove, j, al, ar);
+    if (Abs(al - l) <= CRichEdgeSlackTwips) and (Abs(ar - r) <= CRichEdgeSlackTwips) then Exit(True);
+    if al > l + CRichEdgeSlackTwips then Exit;
+  end;
 end;
 
 procedure SortInts(var A: array of Integer; ALo, AHi: Integer);

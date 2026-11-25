@@ -14,7 +14,8 @@ uses
   Classes, SysUtils, StrUtils, Types, Controls, Graphics, LCLType, fpcunit, testregistry, tyControls.Controller,
   tyControls.RichEdit.Text, tyControls.RichEdit.Model, tyControls.RichEdit.RtfRead,
   tyControls.RichEdit.RtfWrite, tyControls.RichEdit.Layout, tyControls.RichEdit.TableSel,
-  tyControls.RichEdit, tyControls.RichEdit.Grid, tyControls.RichEdit.Commands, BGRABitmap,
+  tyControls.RichEdit, tyControls.RichEdit.Grid, tyControls.RichEdit.RowFormat,
+  tyControls.RichEdit.Commands, BGRABitmap,
   BGRABitmapTypes, test.richedit.layoutdevice;
 
 type
@@ -214,6 +215,10 @@ begin
         if gc.ColSpan = 0 then Continue;
         // (merged across into the cell before: no cell of its own)
         if gc.Covered and (gc.Row = r) then Continue;
+        // (... and one merged across in marks inside a merge down: the first of its marks says it)
+        if gc.Covered and ADoc.TableCellParas(tp, r, i, f, l) and
+           (TyRichCellHMerge(ADoc.CellAt(f).Row, i) = rcmContinue) then
+          Continue;
         if gc.Covered then vm := 'cont'
         else if gc.RowSpan > 1 then vm := 'restart'
         else vm := '-';

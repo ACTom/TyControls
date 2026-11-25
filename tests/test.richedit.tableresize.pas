@@ -91,6 +91,8 @@ type
     procedure TestTheViewStaysWhereItWas;
     procedure TestAPageAsTallAsItsContentFollows;
     procedure TestADisplayPageAndAViewerOfferNothing;
+    procedure TestADragOfAMergedCellsEdgeKeepsTheRowsTogether;
+    procedure TestDistributeColumnsKeepsAMergedTableTogether;
   end;
 
 implementation
@@ -1248,6 +1250,67 @@ begin
   AssertFalse('a viewer: no drag', FRich.EdgeDragging);
   FRich.Release(b[1] + 30, y);
   AssertEquals('a viewer: nothing changed', 0, FRich.Document.UndoDepth);
+end;
+
+{ A drag of the edge a cell merged across ends at: the edge moves by one amount in every row
+  that has it - the table's right edge stays straight (Shift) or where it was, and no row's
+  cell beside it falls below its narrowest while another row's could go further. }
+procedure TTyRichTableResizeTest.TestADragOfAMergedCellsEdgeKeepsTheRowsTogether;
+var
+  b: TIntArray;
+  e: TTyRichEdges;
+  r, right, edge, k: Integer;
+begin
+  for k := 0 to 1 do
+  begin
+    MakeTable(3, 4);
+    Sel(CellStart(1, 1), CellEnd(1, 2));
+    AssertTrue('r1c1 and r1c2 merged', FRich.MergeCells);
+    FRich.Document.ClearUndo;
+    FRich.UpdateView;
+    b := Bands(RowY(1));
+    AssertEquals('row 1: four edges', 4, Length(b));
+    // the merged cell's right edge, far to the left (Shift: the rest follows)
+    if k = 0 then Drag(b[2], RowY(1), -150, 0, [ssShift]) else Drag(b[2], RowY(1), -150, 0);
+    AssertEquals('one step', 1, FRich.Document.UndoDepth);
+    right := EdgesOf(0)[3];
+    edge := EdgesOf(0)[2];
+    for r := 0 to 2 do
+    begin
+      e := EdgesOf(r);
+      AssertEquals(Format('%d: row %d''s right edge is the table''s', [k, r]), right, e[High(e)]);
+    end;
+    AssertTrue(Format('%d: the merged cell''s edge moved with the others', [k]),
+      Abs(EdgesOf(1)[1] - edge) <= 15);
+    // rows 0 and 2: the cell before the edge no narrower than a cell may be (its padding)
+    AssertTrue(Format('%d: r0c2 keeps a cell''s width (%d)', [k, EdgesOf(0)[2] - EdgesOf(0)[1]]),
+      EdgesOf(0)[2] - EdgesOf(0)[1] >= 216);
+  end;
+end;
+
+{ DistributeColumns on a table with a cell merged across and columns of different widths:
+  every row's right edge stays the table's, no cell at its narrowest. }
+procedure TTyRichTableResizeTest.TestDistributeColumnsKeepsAMergedTableTogether;
+var
+  e: TTyRichEdges;
+  r, right: Integer;
+begin
+  MakeTable(3, 4);
+  FRich.SelStart := CellStart(0, 0);
+  AssertTrue('column 0 wider', FRich.SetColumnWidth(3000));
+  Sel(CellStart(1, 1), CellEnd(1, 2));
+  AssertTrue('r1c1 and r1c2 merged', FRich.MergeCells);
+  FRich.SelStart := CellStart(0, 0);
+  AssertTrue('distributed', FRich.DistributeColumns);
+  right := EdgesOf(0)[3];
+  for r := 0 to 2 do
+  begin
+    e := EdgesOf(r);
+    AssertEquals(Format('row %d''s right edge is the table''s', [r]), right, e[High(e)]);
+  end;
+  e := EdgesOf(0);
+  AssertTrue('equal columns', Abs((e[1] - e[0]) - (e[3] - e[2])) <= 2);
+  AssertTrue('the merged cell over two of them', Abs((EdgesOf(1)[1] - EdgesOf(1)[0]) - 2 * (e[1] - e[0])) <= 4);
 end;
 
 initialization

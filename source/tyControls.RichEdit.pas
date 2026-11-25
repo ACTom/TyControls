@@ -2020,6 +2020,7 @@ type
     function EdgesOpen: Boolean;
     function EdgeAt(X, Y: Integer; out AKind, ABlock, AIndex: Integer): Boolean;
     function MinCellTwips(ARow: TTyRichRow; ACell: Integer): Integer;
+    procedure SharedEdgeLimits(ARow: TTyRichRow; var ALo, AHi, AShiftLo, AShiftHi: Integer);
     procedure EdgeLimits(ARow: TTyRichRow; AIndex: Integer; out ALo, AHi, AShiftLo,
       AShiftHi: Integer);
     function EdgeRows(APara: Integer; AWhole: Boolean; out ATablePos: TTyRichPos;
@@ -23298,6 +23299,47 @@ end;
 
 { The limits of row ARow's edge AIndex (-1 its left), in twips: kept as they are (ALo, AHi) and
   with the rest of the row following (AShiftLo, AShiftHi). }
+{ The limits of a drag of the edge at FEdgeTwips narrowed to what every row the drag moves
+  allows there (the selected cells' rows, else the table's): the edge moves by one amount in
+  every row that has it, so no row's cell beside it goes below its narrowest while another
+  row's could - the rows stay one table. }
+procedure TTyCustomRichEdit.SharedEdgeLimits(ARow: TTyRichRow; var ALo, AHi, AShiftLo,
+  AShiftHi: Integer);
+var
+  area: TTyRichCellArea;
+  rows: TTyRichRowList;
+  first, count, r0, r1, j, m: Integer;
+  e: TTyRichEdges;
+  lo, hi, slo, shi: Integer;
+begin
+  r0 := 0;
+  r1 := MaxInt;
+  area := CellArea;
+  if area.Range.InTable and (area.Table = ARow.Table) then
+  begin
+    r0 := area.Range.Row0;
+    r1 := area.Range.Row1;
+  end;
+  if not FDoc.TableRowsAt(FDoc.Text.ParaStart(FEdgePara), r0, r1, rows, first, count) then Exit;
+  for j := 0 to High(rows) do
+  begin
+    if rows[j] = ARow then Continue;
+    e := rows[j].CellEdges;
+    for m := 0 to High(e) do
+      if Abs(e[m] - FEdgeTwips) <= CRichSharedEdgeTwips then
+      begin
+        EdgeLimits(rows[j], m, lo, hi, slo, shi);
+        ALo := Math.Max(ALo, lo);
+        AHi := Math.Min(AHi, hi);
+        AShiftLo := Math.Max(AShiftLo, slo);
+        AShiftHi := Math.Min(AShiftHi, shi);
+        Break;
+      end;
+  end;
+  if AHi < ALo then AHi := ALo;
+  if AShiftHi < AShiftLo then AShiftHi := AShiftLo;
+end;
+
 procedure TTyCustomRichEdit.EdgeLimits(ARow: TTyRichRow; AIndex: Integer; out ALo, AHi,
   AShiftLo, AShiftHi: Integer);
 var
@@ -23555,6 +23597,7 @@ begin
         FEdgeRaster := r.Cells[idx].Right;
       end;
       EdgeLimits(row, idx, lo, hi, slo, shi);
+      if idx >= 0 then SharedEdgeLimits(row, lo, hi, slo, shi);
       FEdgeLo := FEdgeRaster + RasterOfTwips(Int64(lo) - FEdgeTwips);
       FEdgeHi := FEdgeRaster + RasterOfTwips(Int64(hi) - FEdgeTwips);
       FEdgeShiftLo := FEdgeRaster + RasterOfTwips(Int64(slo) - FEdgeTwips);
