@@ -148,7 +148,8 @@ end;
 procedure TTyFindForm.Build(AWithReplace: Boolean);
 var
   r: TRect;
-  x0, y, editX, editW: Integer;
+  x0, y, editX, editW, lblW: Integer;
+  lblFind, lblReplace: TTyLabel;
   b: TTyButton;
 
   function MkLabel(const ACaption: string; ALeft, ATop, AWidth: Integer): TTyLabel;
@@ -175,10 +176,22 @@ begin
   r := ContentRect;
   x0 := r.Left + Px(TyDlgPad);
   y := r.Top + Px(TyDlgPad);
-  editX := x0 + Px(100);
   editW := Px(TyDlgEditW);
 
-  MkLabel(rsDlgFindWhat, x0, y + Px(4), Px(96));
+  { #248: the two captions share one column, and it was 96 px wide whatever they said: at
+    modern density "Replace with:" lost its end under the edit box. The column is as wide as
+    the longer caption needs, 96 px at the least, and the edit boxes start 4 px after it --
+    100 px in, as before, wherever 96 is enough. }
+  lblFind := MkLabel(rsDlgFindWhat, x0, y + Px(4), Px(96));
+  lblW := WidthToShow(lblFind, 96);
+  lblReplace := nil;
+  if AWithReplace then
+  begin
+    lblReplace := MkLabel(rsDlgReplaceWith, x0, y + Px(4), Px(96));
+    if WidthToShow(lblReplace, 96) > lblW then lblW := WidthToShow(lblReplace, 96);
+  end;
+  lblFind.Width := lblW;
+  editX := x0 + lblW + Px(4);
   FFindEdit := TTyEdit.Create(Self);
   FFindEdit.Parent := Self;
   FFindEdit.SetBounds(editX, y, editW, Px(TyDlgEditH));
@@ -186,7 +199,7 @@ begin
 
   if AWithReplace then
   begin
-    MkLabel(rsDlgReplaceWith, x0, y + Px(4), Px(96));
+    lblReplace.SetBounds(x0, y + Px(4), lblW, Px(20));
     FReplaceEdit := TTyEdit.Create(Self);
     FReplaceEdit.Parent := Self;
     FReplaceEdit.SetBounds(editX, y, editW, Px(TyDlgEditH));

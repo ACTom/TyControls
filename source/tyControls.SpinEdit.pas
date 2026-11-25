@@ -152,6 +152,12 @@ type
       protected state no host could see. }
     function RealGetText: TCaption; override;
     procedure RealSetText(const AValue: TCaption); override;
+    { #248: the width at which the field shows AText whole and unscrolled -- both paddings,
+      the text at the field's font, the spin buttons. The inverse of the view RenderTo and
+      KeepCaretInView lay out, in physical px at the control's own PPI: one pixel narrower
+      and the number scrolls under the left edge. A layout whose box must show every value
+      of its range asks this for the longest one instead of typing a number. }
+    function FieldWidthFor(const AText: string): Integer;
     { AutoSize is republished on the base class already; without this it had nothing to
       ask. Height only -- the digits' height is a font/theme decision that a skin with a
       bigger font or fatter padding must be able to push out, while the width is the
@@ -743,6 +749,27 @@ begin
     answers the same way (TyFieldPreferredHeight, #114). }
   PreferredWidth := 0;
   PreferredHeight := TyFieldPreferredHeight(S, ResolveFontSize(S), ppi);
+end;
+
+function TTySpinEdit.FieldWidthFor(const AText: string): Integer;
+var
+  S: TTyStyleSet;
+  ppi, textW: Integer;
+begin
+  ppi := Font.PixelsPerInch;
+  if ppi <= 0 then ppi := 96;
+  S := CurrentStyle;
+  textW := 0;
+  if AText <> '' then
+  begin
+    if FMeasureBmp = nil then FMeasureBmp := TBGRABitmap.Create(1, 1);
+    TyConfigureTextFont(FMeasureBmp, S.FontName, ResolveFontSize(S), S.FontWeight, ppi);
+    textW := FMeasureBmp.TextSize(AText).cx;
+  end;
+  { KeepCaretInView's view, turned round: the number scrolls once it is wider than the
+    client width less both paddings and the buttons. }
+  Result := MulDiv(S.Padding.Left, ppi, 96) + textW + MulDiv(S.Padding.Right, ppi, 96)
+    + MulDiv(ActiveController.Metric('--field-button-width', TyFieldButtonWidth), ppi, 96);
 end;
 
 procedure TTySpinEdit.SetAlignment(const AValue: TAlignment);

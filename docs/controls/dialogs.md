@@ -76,6 +76,28 @@ procedure AutoSizeToContent(AContentW, AContentH: Integer);
 // 依据内容尺寸自动调整对话框大小，同时保证按钮条能容纳全部按钮
 ```
 
+**宽度跟着内容走（#248，3.0.5）。** 库里的对话框是手工排版的：数字是 96 PPI 下的设计值，用到的地方过一次 `Px`。其中「里面的字有多长」取决于主题字号和翻译的那些宽度，现在按内容取，设计值只当下限：
+
+| 对话框 | 按内容取宽度的地方 | 设计值（下限） |
+|---|---|---|
+| 打开 / 保存 | 「文件名」「文件类型」两个标签；视图下拉（按最长的视图名） | 64；120 |
+| 查找 / 替换 | 两个标题共用的那一列（按较长的一个） | 96 |
+| 颜色 | 通道字母；通道数字框（放得下任意三位数） | 14；56 |
+| 字体 | 字号框（放得下任意三位数） | 74 |
+| 树节点 / 列表分组 / 级联选项编辑器 | 右侧按钮列（按最宽的按钮） | 120 |
+
+之前这些宽度是写死的，现代密度（`Density = tdModern`，`--font-size-base` 是 14 而不是 9）下文字会被截：「File name:」少了结尾，「Large icons」被省略号截断，颜色通道的 255 显示成 55。经典密度下除颜色对话框宽了 4 px（三位数在 56 px 的框里原本就差 1 px）之外，各对话框一个像素都没动。
+
+派生自己的对话框时用同一套办法（都是 `protected`，返回设备像素，不要再过 `Px`）：
+
+```pascal
+function WidthToShow(AControl: TControl; ADesigned: Integer): Integer;
+// 标签、按钮、复选框显示自己的文字所需的宽度，不小于设计值 ADesigned（96 PPI 的数）
+
+function WidthForDigits(ABox: TTySpinEdit; ADigits, ADesigned: Integer): Integer;
+// 数字框完整显示任意 ADigits 位数所需的宽度，不小于设计值
+```
+
 ### 3.4 派生自定义对话框
 
 ```pascal

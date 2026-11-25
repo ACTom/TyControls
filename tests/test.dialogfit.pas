@@ -28,7 +28,18 @@ unit test.dialogfit;
   A row given 22 px at a scaling where its control's floor is 39 is this unit's defect exactly,
   so the second sweep asks the same two questions on a simulated 168-PPI desktop
   (ACTom/TyControls#2). tests/test.dpi.dialogs asks the other one, whether the dialog is its
-  96-PPI self times 1.75. }
+  96-PPI self times 1.75.
+
+  AND A THIRD QUESTION, ACROSS: IS EACH CONTROL AS WIDE AS WHAT IT SHOWS (#248). The same bet
+  was made on widths -- a label given 64 px, a view box 120, a colour channel 56 -- and lost
+  the same way at modern density, where --font-size-base is 14 instead of 9: "File name:" lost
+  its end, "Large icons" its last letters, and 255 read as 55. Height failures show as
+  overlaps, which the two questions above find; a width that is too small overlaps nothing,
+  it just cuts what the control shows, so it needs asking for itself. A label, a check box
+  and a button are asked for their preferred width; a pick-only combo and a spin edit for
+  the width their longest item or number needs (FieldWidthFor, itself held to the pixels by
+  tests/test.fieldwidth). Only a plain TTyComboBox is asked: the paths in a look-in box and
+  the filters an application supplies are not the library's words and can be any length. }
 
 {$mode objfpc}{$H+}
 interface
@@ -41,7 +52,9 @@ uses
   tyControls.Dialogs.SelectPath, tyControls.Dialogs.ImageCollectionEditor,
   tyControls.Dialogs.TreeNodesEditor,
   tyControls.Edit, tyControls.Memo, tyControls.ListBox,
-  tyControls.ImageCollection, tyControls.TreeView, tyControls.Painter;
+  tyControls.ImageCollection, tyControls.TreeView, tyControls.Painter,
+  tyControls.TyLabel, tyControls.CheckBox, tyControls.Button, tyControls.ComboBox,
+  tyControls.SpinEdit, tyControls.StrConsts;
 
 type
   TDialogFitTest = class(TTestCase)
@@ -50,10 +63,16 @@ type
     FDensity: TTyDensity;
     FFont: string;
     FFailures: TStringList;
+    FCut: TStringList;    // #248: what is wider than the control that shows it
     // Record rather than Fail() on the first hit: one run should report every bad
     // dialog, not send the reader back round the loop once per site.
     procedure Note(const AMsg: string);
     procedure ScanContainer(const AWhere: string; AParent: TWinControl; const ABand: TRect);
+    procedure ScanCaptions(const AWhere: string; AParent: TWinControl);
+    { The first visible unaligned child of AParent of exactly AClass -- and, when ACaption
+      is given, with that caption. }
+    function Child(AParent: TWinControl; AClass: TClass; const ACaption: string = ''): TControl;
+    procedure UseDefaultTheme(ADensity: TTyDensity);
     procedure ScanDialog(const AName: string; ADlg: TTyDialog);
     procedure SweepAt(ADensity: TTyDensity; const AThemeName, AExtraCss: string);
   protected
@@ -62,6 +81,11 @@ type
   published
     procedure TestEveryDialogFitsAtEveryDensity;
     procedure TestEveryDialogFitsAt175Percent;
+    procedure TestNothingADialogShowsIsCutAtEitherDensity;
+    procedure TestNothingADialogShowsIsCutAt175Percent;
+    procedure TestAtClassicDensityTheDesignedWidthsStand;
+    procedure TestTheButtonsOfAStructureEditorShareOneColumn;
+    procedure TestWithALargerFontEachCaptionGetsItsOwnWidth;
   end;
 
 implementation
@@ -69,6 +93,11 @@ implementation
 const
   { See the long note in TestEveryDialogFitsAtEveryDensity before switching this on. }
   cSweepRoomyThemes = False;
+
+type
+  TCtlAcc = class(TControl);
+  TComboAcc = class(TTyComboBox);
+  TSpinAcc = class(TTySpinEdit);
 
 function RectStr(const R: TRect): string;
 begin
@@ -95,14 +124,16 @@ begin
   FFont := TyFallbackFontName;
   TyFallbackFontName := 'Arial';
   FFailures := TStringList.Create;
+  FCut := TStringList.Create;
 end;
 
 procedure TDialogFitTest.TearDown;
 begin
-  TyDefaultController.Density := FDensity;
+  UseDefaultTheme(FDensity);   { drops whatever a test loaded on top of the theme }
   TyDefaultController.ThemeName := FTheme;
   TyFallbackFontName := FFont;
   FreeAndNil(FFailures);
+  FreeAndNil(FCut);
 end;
 
 procedure TDialogFitTest.Note(const AMsg: string);
@@ -154,10 +185,84 @@ begin
   end;
 end;
 
+{ The same walk as ScanContainer -- visible, unaligned, and into the containers among them --
+  asking each control whether what it shows fits across it. }
+procedure TDialogFitTest.ScanCaptions(const AWhere: string; AParent: TWinControl);
+var
+  i, j, pw, ph: Integer;
+  a: TControl;
+  sp: TTySpinEdit;
+
+  procedure Ask(const AShown: string; ANeed: Integer);
+  begin
+    if ANeed > a.Width then
+      FCut.Add(Format('%s: %s is %d wide and "%s" needs %d',
+        [AWhere, NameOf(a), a.Width, AShown, ANeed]));
+  end;
+
+begin
+  for i := 0 to AParent.ControlCount - 1 do
+  begin
+    a := AParent.Controls[i];
+    if (not a.Visible) or (a.Align <> alNone) then Continue;
+    if ((a is TTyLabel) and not TTyLabel(a).WordWrap) or (a is TTyCheckBox)
+       or (a is TTyRadioButton) or (a is TTyButton) then
+    begin
+      pw := 0; ph := 0;
+      a.GetPreferredSize(pw, ph, True);
+      Ask(TCtlAcc(a).Caption, pw);
+    end
+    else if (a.ClassType = TTyComboBox) and not TyComboStyleHasEditBox(TTyComboBox(a).Style) then
+    begin
+      for j := 0 to TTyComboBox(a).Items.Count - 1 do
+        Ask(TTyComboBox(a).Items[j], TComboAcc(a).FieldWidthFor(TTyComboBox(a).Items[j]));
+    end
+    else if a is TTySpinEdit then
+    begin
+      sp := TTySpinEdit(a);
+      Ask(sp.Text, TSpinAcc(sp).FieldWidthFor(sp.Text));
+      if sp.MaxValue > sp.MinValue then   { a range: both of its ends have to fit }
+      begin
+        Ask(sp.ValueToStr(sp.MaxValue), TSpinAcc(sp).FieldWidthFor(sp.ValueToStr(sp.MaxValue)));
+        Ask(sp.ValueToStr(sp.MinValue), TSpinAcc(sp).FieldWidthFor(sp.ValueToStr(sp.MinValue)));
+      end;
+    end;
+    if a is TWinControl then
+      ScanCaptions(AWhere + ' > ' + NameOf(a), TWinControl(a));
+  end;
+end;
+
+function TDialogFitTest.Child(AParent: TWinControl; AClass: TClass;
+  const ACaption: string): TControl;
+var
+  i: Integer;
+  a: TControl;
+begin
+  Result := nil;
+  for i := 0 to AParent.ControlCount - 1 do
+  begin
+    a := AParent.Controls[i];
+    if a.Visible and (a.Align = alNone) and (a.ClassType = AClass)
+       and ((ACaption = '') or (TCtlAcc(a).Caption = ACaption)) then Exit(a);
+  end;
+  Fail('no ' + AClass.ClassName + ' "' + ACaption + '" in ' + AParent.ClassName);
+end;
+
+procedure TDialogFitTest.UseDefaultTheme(ADensity: TTyDensity);
+begin
+  { By way of another theme: a controller that is given the name it already has does
+    nothing, and the rules a test added on top (LoadThemeCssAdditive) would stay loaded --
+    for this test and for every one that runs after it. }
+  TyDefaultController.ThemeName := 'showcase';
+  TyDefaultController.ThemeName := 'default';
+  TyDefaultController.Density := ADensity;
+end;
+
 procedure TDialogFitTest.ScanDialog(const AName: string; ADlg: TTyDialog);
 begin
   if ADlg = nil then Exit;
   ScanContainer(AName, ADlg, ADlg.ContentRect);
+  ScanCaptions(AName, ADlg);
 end;
 
 procedure TDialogFitTest.SweepAt(ADensity: TTyDensity; const AThemeName, AExtraCss: string);
@@ -303,6 +408,236 @@ begin
   if FFailures.Count > 0 then
     Fail(IntToStr(FFailures.Count) + ' dialog layout problem(s) at 168 PPI:' + LineEnding
       + FFailures.Text);
+end;
+
+procedure TDialogFitTest.TestNothingADialogShowsIsCutAtEitherDensity;
+begin
+  SweepAt(tdClassic, 'default', '');
+  SweepAt(tdModern, 'default', '');
+  SweepAt(tdClassic, 'showcase', '');
+  SweepAt(tdModern, 'showcase', '');
+  if FCut.Count > 0 then
+    Fail(IntToStr(FCut.Count) + ' text(s) wider than the control that shows them:' + LineEnding
+      + FCut.Text);
+end;
+
+procedure TDialogFitTest.TestNothingADialogShowsIsCutAt175Percent;
+var
+  saveScreen: Integer;
+  saveScaled: Boolean;
+begin
+  saveScreen := TyTestScreenPPI;
+  saveScaled := Application.Scaled;
+  Application.Scaled := False;   { as TestEveryDialogFitsAt175Percent, and for its reason }
+  TyTestSimulateScreen(168);
+  try
+    SweepAt(tdClassic, 'default', '');
+    SweepAt(tdModern, 'default', '');
+    SweepAt(tdClassic, 'showcase', '');
+    SweepAt(tdModern, 'showcase', '');
+  finally
+    TyTestSimulateScreen(saveScreen);
+    Application.Scaled := saveScaled;
+  end;
+  if FCut.Count > 0 then
+    Fail(IntToStr(FCut.Count) + ' text(s) wider than the control that shows them at 168 PPI:'
+      + LineEnding + FCut.Text);
+end;
+
+{ The other half of #248: a width follows what is shown only where the designed number is
+  too small. At classic density, with the default theme, every one of them is big enough,
+  so each control is exactly as wide as it always was -- the dialogs an application shows
+  today do not move by a pixel. }
+procedure TDialogFitTest.TestAtClassicDensityTheDesignedWidthsStand;
+var
+  d: TTyDialog;
+  find: TTyFindForm;
+  tree: TTyTreeView;
+  lbl: TControl;
+  i, n: Integer;
+begin
+  UseDefaultTheme(tdClassic);
+
+  d := TyBuildFileDialog(False, False, 'Open');
+  try
+    AssertEquals('file dialog: the File name label', 64, Child(d, TTyLabel, rsFdFileNameLbl).Width);
+    AssertEquals('file dialog: the File type label', 64, Child(d, TTyLabel, rsFdFileTypeLbl).Width);
+    AssertEquals('file dialog: the view box', 120, Child(d, TTyComboBox).Width);
+  finally d.Free; end;
+
+  find := TTyFindForm.CreateNew(nil, 0);
+  try
+    find.Build(True);
+    lbl := Child(find, TTyLabel, rsDlgReplaceWith);
+    AssertEquals('replace dialog: the Replace with label', 96, lbl.Width);
+    n := 0;
+    for i := 0 to find.ControlCount - 1 do
+      if find.Controls[i] is TTyEdit then
+      begin
+        Inc(n);
+        AssertEquals('replace dialog: an edit box starts 100 px after its label starts',
+          lbl.Left + 100, find.Controls[i].Left);
+      end;
+    AssertEquals('replace dialog: precondition -- two edit boxes were looked at', 2, n);
+  finally find.Free; end;
+
+  { A channel box holds three digits, and with the family pinned here they need 57 px at the
+    classic font -- one more than the designed 56, which the box now gives them. What is
+    asked here is the other side, that 56 stands when it is enough: so the boxes get a font
+    at which it is. }
+  TyDefaultController.LoadThemeCssAdditive('TySpinEdit { font-size: 7px; }');
+  d := TyBuildColorDialog('Colour', TyRGB($33, $66, $99));
+  try
+    n := 0;
+    for i := 0 to d.ControlCount - 1 do
+      if d.Controls[i] is TTySpinEdit then
+      begin
+        Inc(n);
+        AssertEquals('colour dialog: a channel box', 56, d.Controls[i].Width);
+      end;
+    AssertEquals('colour dialog: precondition -- R G B, C M Y K and alpha were looked at', 8, n);
+    AssertEquals('colour dialog: the label of a channel', 14, Child(d, TTyLabel, 'M').Width);
+  finally d.Free; end;
+  UseDefaultTheme(tdClassic);   { the overlay off again }
+
+  tree := TTyTreeView.Create(nil);
+  try
+    d := TyBuildTreeNodesEditor(tree);
+    try
+      n := 0;
+      for i := 0 to d.ControlCount - 1 do
+        if (d.Controls[i] is TTyButton) and (d.Controls[i].Align = alNone) then
+        begin
+          Inc(n);
+          AssertEquals('structure editor: a button of the column', 120, d.Controls[i].Width);
+        end;
+      AssertTrue('structure editor: precondition -- the column has buttons', n >= 3);
+    finally d.Free; end;
+  finally tree.Free; end;
+end;
+
+{ At modern density "Move Down" needs more than the 120 px of the column. LCL raised that
+  one button to its own floor, so it stood 10 px wider than the four above it and reached
+  into the dialog's right margin. The column is as wide as its widest button needs, all of
+  them are that wide, and the margin right of it is the one left of the tree.
+
+  How much a caption needs is the font's to say, and with the family this unit pins the
+  captions still fit at 14 px; the larger font here is what makes the widest of them need
+  more than the column on any machine. }
+procedure TDialogFitTest.TestTheButtonsOfAStructureEditorShareOneColumn;
+var
+  d: TTyDialog;
+  tree, view: TTyTreeView;
+  first, b: TControl;
+  i, n, margin: Integer;
+begin
+  UseDefaultTheme(tdModern);
+  TyDefaultController.LoadThemeCssAdditive('TyButton { font-size: 22px; }');
+  tree := TTyTreeView.Create(nil);
+  try
+    d := TyBuildTreeNodesEditor(tree);
+    try
+      view := Child(d, TTyTreeView) as TTyTreeView;
+      margin := view.Left - d.ContentRect.Left;
+      first := nil;
+      n := 0;
+      for i := 0 to d.ControlCount - 1 do
+      begin
+        b := d.Controls[i];
+        if not ((b is TTyButton) and (b.Align = alNone)) then Continue;
+        Inc(n);
+        if first = nil then first := b;
+        AssertEquals('"' + TCtlAcc(b).Caption + '" starts where the first button starts',
+          first.Left, b.Left);
+        AssertEquals('"' + TCtlAcc(b).Caption + '" is as wide as the first button',
+          first.Width, b.Width);
+        AssertEquals('"' + TCtlAcc(b).Caption + '" ends one margin short of the dialog''s edge',
+          d.ContentRect.Right - margin, b.Left + b.Width);
+        AssertTrue('"' + TCtlAcc(b).Caption + '" starts right of the tree',
+          b.Left > view.Left + view.Width);
+      end;
+      AssertTrue('precondition: the column has buttons', n >= 3);
+      AssertTrue('precondition: at this font the column is wider than the 120 px it was typed as',
+        first.Width > 120);
+    finally d.Free; end;
+  finally tree.Free; end;
+end;
+
+{ Which caption a width is taken from. At the font this unit pins and at modern density the
+  shorter captions still fit their floors -- "Find what:" in 96 px, "File type:" in what
+  "File name:" needs -- so a layout that measured the wrong label, or only one of two, would
+  cut nothing here and would on the first translation that is longer. With the label font
+  this large every caption needs more than its floor, and no two the same. }
+procedure TDialogFitTest.TestWithALargerFontEachCaptionGetsItsOwnWidth;
+var
+  d: TTyDialog;
+  find: TTyFindForm;
+  a, b: TControl;
+  i, n: Integer;
+
+  function Need(C: TControl): Integer;
+  var
+    w, h: Integer;
+  begin
+    w := 0; h := 0;
+    C.GetPreferredSize(w, h, True);
+    Result := w;
+  end;
+
+begin
+  UseDefaultTheme(tdClassic);
+  TyDefaultController.LoadThemeCssAdditive('TyLabel { font-size: 20px; }');
+
+  d := TyBuildFileDialog(False, False, 'Open');
+  try
+    a := Child(d, TTyLabel, rsFdFileNameLbl);
+    b := Child(d, TTyLabel, rsFdFileTypeLbl);
+    AssertTrue('precondition: both captions need more than their 64 px floor, and not the same',
+      (Need(a) > 64) and (Need(b) > 64) and (Need(a) <> Need(b)));
+    AssertEquals('file dialog: the File name label is as wide as its own caption needs',
+      Need(a), a.Width);
+    AssertEquals('file dialog: the File type label is as wide as its own caption needs',
+      Need(b), b.Width);
+  finally d.Free; end;
+
+  find := TTyFindForm.CreateNew(nil, 0);
+  try
+    find.Build(False);
+    a := Child(find, TTyLabel, rsDlgFindWhat);
+    AssertTrue('precondition: the find caption needs more than its 96 px floor', Need(a) > 96);
+    AssertEquals('find dialog: its one caption is as wide as it needs', Need(a), a.Width);
+    n := 0;
+    for i := 0 to find.ControlCount - 1 do
+      if find.Controls[i] is TTyEdit then
+      begin
+        Inc(n);
+        AssertEquals('find dialog: the edit box starts 4 px after the caption ends',
+          a.Left + a.Width + 4, find.Controls[i].Left);
+      end;
+    AssertEquals('find dialog: precondition -- one edit box was looked at', 1, n);
+  finally find.Free; end;
+
+  find := TTyFindForm.CreateNew(nil, 0);
+  try
+    find.Build(True);
+    a := Child(find, TTyLabel, rsDlgFindWhat);
+    b := Child(find, TTyLabel, rsDlgReplaceWith);
+    AssertTrue('precondition: the replace caption is the longer of the two', Need(b) > Need(a));
+    AssertEquals('replace dialog: the two captions share a column as wide as the longer needs',
+      Need(b), a.Width);
+    AssertEquals('replace dialog: and the longer one has that width too', Need(b), b.Width);
+    n := 0;
+    for i := 0 to find.ControlCount - 1 do
+      if find.Controls[i] is TTyEdit then
+      begin
+        Inc(n);
+        AssertEquals('replace dialog: an edit box starts 4 px after the column ends',
+          a.Left + Need(b) + 4, find.Controls[i].Left);
+      end;
+    AssertEquals('replace dialog: precondition -- two edit boxes were looked at', 2, n);
+  finally find.Free; end;
+
+  UseDefaultTheme(tdClassic);   { the larger font off again }
 end;
 
 initialization

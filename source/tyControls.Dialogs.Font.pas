@@ -102,7 +102,7 @@ const
   cCheckH     = 24;    // style-checkbox height
   cCheckStep  = 28;    // vertical stride between style checkboxes
   cSizeLblW   = 44;    // "Size" label width
-  cSizeSpinW  = 74;    // size spin-edit width
+  cSizeSpinW  = 74;    // size spin-edit width: floor only, see where it is used (#248)
   cBtnH       = 30;    // color-button height
   cSectionGap = 16;    // gap between logical groups in the right column
   cPreviewH   = 52;    // preview strip height
@@ -175,7 +175,10 @@ begin
   FSize.Parent := Self;
   FSize.MinValue := 1;
   FSize.MaxValue := 999;
-  FSize.SetBounds(colX + Px(cSizeLblW) + Px(8), y, Px(cSizeSpinW), Px(TyDlgEditH));
+  { #248: the box holds 1..999, and 74 px were drawn for the classic font. At modern density
+    a size of three digits scrolled under its left edge. As wide as three digits need. }
+  FSize.SetBounds(colX + Px(cSizeLblW) + Px(8), y, WidthForDigits(FSize, 3, cSizeSpinW),
+    Px(TyDlgEditH));
 
   // Right column, style group: four checks with an even vertical rhythm.
   Inc(y, Px(TyDlgEditH) + Px(cSectionGap));

@@ -883,19 +883,23 @@ end;
   Layout
   --------------------------------------------------------------------------- }
 
+type
+  TViewBoxAccess = class(TTyComboBox);
+
 procedure TTyFileDialogForm.LayoutContent;
 const
   RowH    = 30;    { floor only -- fieldH below raises it for density and for the theme }
   LblH    = 20;
-  LblW    = 64;
+  LblW    = 64;    { floor only -- a label is as wide as its caption needs (#248) }
   NavGap  = 3;     { gap between the three square nav icon buttons }
-  ViewW   = 120;   { fixed width of the view-switch combo on the right of the nav row }
+  ViewW   = 120;   { floor only -- the view box is as wide as its longest view name needs }
   FilterW = 180;   { fixed width of the file-type combo on the shared name row }
 var
   cr: TRect;
   pad, x0, w, y, lookInX: Integer;
   yRow, nameX, filterX, filterLblX, nameW, midTop, midH: Integer;
   fieldH, navX: Integer;
+  viewW2, nameLblW, filterLblW, i: Integer;
 begin
   if (FList = nil) or (FMidPanel = nil) then Exit;   { called during construction, before children exist }
   cr := ContentRect;
@@ -914,9 +918,16 @@ begin
   navX := TyRunItem(FBtnBack, x0, y, fieldH, fieldH, Px(NavGap));
   navX := TyRunItem(FBtnFwd, navX, y, fieldH, fieldH, Px(NavGap));
   navX := TyRunItem(FBtnUp, navX, y, fieldH, fieldH, Px(Gap));
-  FViewCombo.SetBounds((cr.Right - pad) - Px(ViewW), y, Px(ViewW), fieldH);   { view switch on the right }
+  { #248: 120 px and 64 px were drawn for the classic font. At modern density "Large icons"
+    lost its end to an ellipsis and "File name:" its last letters; so did "文件类型:". The
+    view box now takes the width its longest name needs, each label the width of its
+    caption, and the designed numbers are what they are never narrower than. }
+  viewW2 := Px(ViewW);
+  for i := 0 to FViewCombo.Items.Count - 1 do
+    viewW2 := Math.Max(viewW2, TViewBoxAccess(FViewCombo).FieldWidthFor(FViewCombo.Items[i]));
+  FViewCombo.SetBounds((cr.Right - pad) - viewW2, y, viewW2, fieldH);   { view switch on the right }
   lookInX := navX;
-  FLookIn.SetBounds(lookInX, y, ((cr.Right - pad) - Px(ViewW) - Px(Gap)) - lookInX, fieldH);
+  FLookIn.SetBounds(lookInX, y, ((cr.Right - pad) - viewW2 - Px(Gap)) - lookInX, fieldH);
 
   { Bottom row -- ONE row now (Windows Open/Save idiom): the file-name edit fills the left,
     the file-type combo is a fixed-width field to its RIGHT. Collapsing what used to be two
@@ -925,10 +936,12 @@ begin
   yRow := cr.Bottom - pad - fieldH;
   filterX := (cr.Right - pad) - Px(FilterW);
   FFilter.SetBounds(filterX, yRow, Px(FilterW), fieldH);
-  filterLblX := filterX - Px(Gap) - Px(LblW);
-  FLblFilter.SetBounds(filterLblX, yRow + (fieldH - Px(LblH)) div 2, Px(LblW), Px(LblH));
-  FLblName.SetBounds(x0, yRow + (fieldH - Px(LblH)) div 2, Px(LblW), Px(LblH));
-  nameX := x0 + Px(LblW) + Px(Gap);
+  nameLblW := WidthToShow(FLblName, LblW);
+  filterLblW := WidthToShow(FLblFilter, LblW);
+  filterLblX := filterX - Px(Gap) - filterLblW;
+  FLblFilter.SetBounds(filterLblX, yRow + (fieldH - Px(LblH)) div 2, filterLblW, Px(LblH));
+  FLblName.SetBounds(x0, yRow + (fieldH - Px(LblH)) div 2, nameLblW, Px(LblH));
+  nameX := x0 + nameLblW + Px(Gap);
   nameW := (filterLblX - Px(Gap)) - nameX;
   if nameW < Px(80) then nameW := Px(80);   { never collapse the name edit even on a very narrow dialog }
   FNameEdit.SetBounds(nameX, yRow, nameW, fieldH);

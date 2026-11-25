@@ -340,6 +340,14 @@ type
     { #161: room the field keeps before the edit box, in physical px for a field AFieldHeight
       tall at APPI -- TTyComboBoxEx's row image, which the edit box used to cover. 0 here. }
     function EditorLeadInset(AFieldHeight, APPI: Integer): Integer; virtual;
+    { #248: the width at which the closed field of a pick-only combo shows AText whole --
+      the left padding, the text at the field's font, the drop zone. The inverse of the
+      text zone RenderTo lays out, in physical px at the control's own PPI: one pixel
+      narrower and the text is cut with an ellipsis. A layout that must not cut an item
+      asks this for its widest one instead of typing a number. Not for the editable styles
+      (the edit box has margins of its own), nor for a field that draws more than its text
+      (a row image, a swatch). }
+    function FieldWidthFor(const AText: string): Integer;
     procedure Paint; override;
     procedure Resize; override;
     { After streaming: bounds are final only now, so the csSimple layout (field zone +
@@ -1943,6 +1951,22 @@ function TTyComboBox.ButtonWidthLogical: Integer;
 begin
   { The drop zone: the field's button column plus --field-drop-pad either side of the V. }
   Result := TyDropZoneWidth(ActiveController);
+end;
+
+function TTyComboBox.FieldWidthFor(const AText: string): Integer;
+var
+  S: TTyStyleSet;
+  ppi: Integer;
+begin
+  ppi := Font.PixelsPerInch;
+  if ppi <= 0 then ppi := 96;
+  S := CurrentStyle;
+  { What RenderTo adds up: its text zone starts one left padding in and ends where the drop
+    zone begins, and DrawText shortens a text that TextSize says is wider than the zone --
+    the TextSize TyMeasureRenderedTextWidth asks, with the same font. }
+  Result := MulDiv(S.Padding.Left, ppi, 96)
+    + TyMeasureRenderedTextWidth(AText, S.FontName, ResolveFontSize(S), S.FontWeight, ppi)
+    + MulDiv(ButtonWidthLogical, ppi, 96);
 end;
 
 procedure TTyComboBox.SelectItem(AIndex: Integer);
