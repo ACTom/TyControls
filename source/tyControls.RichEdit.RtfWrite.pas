@@ -362,6 +362,8 @@ type
     FCurPara: Integer;
     FCurInCell: Boolean;
     FWroteRow: Boolean;
+    // (a stretch that resumes the file's bytes leaves its last \row to RestoreAt)
+    FDeferRow, FRowPending: Boolean;
     FLastRowDef: RawByteString;
     // the last row whose colours Note took (a row's paragraphs come one after another)
     FNotedRow: TTyRichRow;
@@ -522,6 +524,7 @@ type
     procedure WritePicture(APic: TTyRichPicture);
     procedure RawPicture(APic: TTyRichPicture);
     procedure LeaveGroupsAt(APos: Int64);
+    function NextRowDefines(APos: Int64): Boolean;
     procedure RestoreAt(APos: Int64; ANext: Integer);
     procedure BalanceTrailer;
     procedure AddStretchInfo(AFirst, ACount: Integer; AOutStart: Int64);
@@ -2525,8 +2528,10 @@ begin
   FWroteRow := False;
   FCurRun := -1;
   if ACount = 0 then Exit;
-  // whatever \uc the file left in effect here: ours is one fallback character
-  if FLoad <> nil then Word('uc1');
+  { whatever \uc the file left in effect here: ours is one fallback character (a stretch of
+    rows under the file's \uc1 says nothing: nothing new between a \row and the \trowd of a
+    row written here) }
+  if (FLoad <> nil) and ((FUc <> 1) or (FDoc.CellAt(AFirst) = nil)) then Word('uc1');
   // (the stretch starts and ends between rows: the plan saw to that)
   FHavePrev := False;
   FPrevCell := nil;
@@ -2619,8 +2624,14 @@ begin
   begin
     // the cells after the row's last paragraph
     for k := ACell.Index + 1 to ACell.Row.CellCount - 1 do Word('cell');
-    Word('row');
-    NewLine;
+    // (the stretch's last row, where the file's bytes resume: RestoreAt ends it)
+    if (ANext = nil) and FDeferRow then
+      FRowPending := True
+    else
+    begin
+      Word('row');
+      NewLine;
+    end;
     // what follows a row starts from \pard
     FCurPara := -1;
   end
@@ -3702,6 +3713,21 @@ end;
 // effect. What belongs to tables (the row definition, "in a table") only before a paragraph
 // of a table: before any other it ends unused in the file too, and the system's RichEdit
 // drops a paragraph that follows a row definition or an \intbl with no cell.
+{ The file's bytes from APos open with a row's own definition (\trowd, after white space):
+  the row there defines itself - what was in effect before it is not needed for it. }
+function TRtfWriter.NextRowDefines(APos: Int64): Boolean;
+var
+  b: TBytes;
+  k: Int64;
+begin
+  Result := False;
+  b := FLoad.Bytes;
+  k := APos;
+  while (k < Length(b)) and (b[k] in [9, 10, 13, 32]) do Inc(k);
+  if (k + 6 > Length(b)) or not CompareMem(@b[k], PChar('\trowd'), 6) then Exit;
+  Result := (k + 6 >= Length(b)) or not (Chr(b[k + 6]) in ['a'..'z', 'A'..'Z']);
+end;
+
 procedure TRtfWriter.RestoreAt(APos: Int64; ANext: Integer);
 var
   st: TTyRtfState;
@@ -3712,6 +3738,26 @@ begin
   if not FLoad.StateAt(APos, st) then
     raise ETyRichRtfWrite.CreateFmt('RTF writer: no reader state at byte %d', [APos]);
   table := (ANext < FParaCount) and (FDoc.CellAt(ANext) <> nil);
+  if FRowPending then
+  begin
+    FRowPending := False;
+    if table and (st.Core.Depth = 1) and NextRowDefines(APos) then
+    begin
+      { The bytes that resume begin with the next row's own \trowd: the state they were read
+        with goes before the written row's \row - nothing goes between that \row and the next
+        \trowd (no definition of no cells, no words of no paragraph), as in the file. }
+      PutRaw(TyRtfStateWords(st, FLoad.Bytes, -1, table));
+      PutB(Ord(' '));
+      FNeedDelim := False;
+      Word('row');
+      NewLine;
+      FNeedDelim := False;
+      FRawOpen := False;
+      Exit;
+    end;
+    Word('row');
+    NewLine;
+  end;
   if table then
   begin
     { The row definition in effect: only when it is not the one the output already left.
@@ -3770,6 +3816,8 @@ var
   item: TPlanItem;
 begin
   PlanFile;
+  FDeferRow := False;
+  FRowPending := False;
   bytes := FLoad.Bytes;
   WriteHeaderOfFile;
   FInfo.HeaderStop := OutPos;
@@ -3780,8 +3828,21 @@ begin
     begin
       outStart := OutPos;
       LeaveGroupsAt(item.Start);
+      FDeferRow := item.Stop >= 0;
+      FRowPending := False;
       WriteStretch(item.First, item.Count);
-      if item.Stop >= 0 then RestoreAt(item.Stop, item.First + item.Count) else BalanceTrailer;
+      FDeferRow := False;
+      if item.Stop >= 0 then RestoreAt(item.Stop, item.First + item.Count)
+      else
+      begin
+        if FRowPending then
+        begin
+          Word('row');
+          NewLine;
+          FRowPending := False;
+        end;
+        BalanceTrailer;
+      end;
       AddStretchInfo(item.First, item.Count, outStart);
     end
     else

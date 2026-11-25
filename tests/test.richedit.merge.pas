@@ -10,7 +10,7 @@ unit test.richedit.merge;
 interface
 
 uses
-  Classes, SysUtils, Math, Graphics, LCLType, fpcunit, testregistry, tyControls.Controller,
+  Classes, SysUtils, StrUtils, Math, Graphics, LCLType, fpcunit, testregistry, tyControls.Controller,
   tyControls.RichEdit.Text, tyControls.RichEdit.Model, tyControls.RichEdit.Commands,
   tyControls.RichEdit.RtfRead, tyControls.RichEdit.RtfWrite, tyControls.RichEdit.Layout,
   tyControls.RichEdit.TableProps, tyControls.RichEdit.TableSel, tyControls.RichEdit,
@@ -94,6 +94,7 @@ type
     procedure TestCopiedCellsTextGoesByTheGrid;
     procedure TestACellForACoveredPlaceNamesTheMistake;
     procedure TestTheContinuationRuleIsOneFunction;
+    procedure TestRowsAddedToAFilesTableWriteOneDefinitionEach;
     procedure TestSelectColumnTakesASpanWhole;
     procedure TestEveryRewrittenCellSaysItsOwnWidth;
     procedure TestARandomWalkKeepsTheGridWhole;
@@ -2356,6 +2357,132 @@ begin
     finally
       g.Free;
     end;
+  end;
+end;
+
+{ Rows added to a table read from a file - a split into rows, InsertRow below and above, Tab
+  in the last cell, a paste of a row, a row put in inside a merge down - leave one \trowd a
+  row and nothing between a \row and the next \trowd; undone, the file's bytes. }
+procedure TTyRichMergeTest.TestRowsAddedToAFilesTableWriteOneDefinitionEach;
+const
+  Plain = '\trowd\trleft0\cellx2000\cellx4000\cellx6000\pard\intbl r0c0\cell r0c1\cell r0c2\cell\row' +
+    '\trowd\trleft0\cellx2000\cellx4000\cellx6000\pard\intbl r1c0\cell r1c1\cell r1c2\cell\row' +
+    '\trowd\trleft0\cellx2000\cellx4000\cellx6000\pard\intbl r2c0\cell r2c1\cell r2c2\cell\row';
+  Spanned = '\trowd\trleft0\clvmgf\cellx2000\cellx4000\pard\intbl r0c0\cell r0c1\cell\row' +
+    '\trowd\trleft0\clvmrg\cellx2000\cellx4000\pard\intbl\cell r1c1\cell\row' +
+    '\trowd\trleft0\cellx2000\cellx4000\pard\intbl r2c0\cell r2c1\cell\row';
+var
+  door: Integer;
+  first, saved: RawByteString;
+  st: TBytesStream;
+  s: RawByteString;
+  t: TTyRichText;
+
+  function Count(const AWord, AIn: RawByteString): Integer;
+  var
+    p: Integer;
+  begin
+    Result := 0;
+    p := Pos(AWord, AIn);
+    while p > 0 do
+    begin
+      // (a whole word: \row, not \rowd or the \row of \trowd)
+      if not ((p + Length(AWord) <= Length(AIn)) and (AIn[p + Length(AWord)] in ['a'..'z'])) and
+         not ((AWord = '\row') and (p > 1) and (AIn[p - 1] = 't')) then
+        Inc(Result);
+      p := PosEx(AWord, AIn, p + 1);
+    end;
+  end;
+
+  procedure Check(const AWhat: string);
+  var
+    p, q: Integer;
+  begin
+    saved := SaveRtf;
+    AssertEquals(AWhat + ': one \trowd a row', Count('\row', saved), Count('\trowd', saved));
+    // after each \row: the next row's \trowd, or what follows the table
+    p := Pos('\row', saved);
+    while p > 0 do
+    begin
+      if (p > 1) and (saved[p - 1] = 't') then
+      begin
+        p := PosEx('\row', saved, p + 1);
+        Continue;
+      end;
+      q := p + 4;
+      while (q <= Length(saved)) and (saved[q] in [#13, #10, ' ']) do Inc(q);
+      AssertTrue(AWhat + ': after a \row, a \trowd or the text after the table: ' + Copy(saved, q, 30),
+        (Copy(saved, q, 6) = '\trowd') or (Copy(saved, q, 5) = '\pard') and (Pos('\intbl', Copy(saved, q, 40)) = 0));
+      p := PosEx('\row', saved, p + 1);
+    end;
+  end;
+
+begin
+  for door := 0 to 5 do
+  begin
+    if door = 5 then s := Spanned else s := Plain;
+    s := '{\rtf1\ansi\deff0{\fonttbl{\f0 Arial;}}' + s + '\pard after\par}';
+    st := TBytesStream.Create;
+    try
+      st.WriteBuffer(s[1], Length(s));
+      st.Position := 0;
+      FRich.LoadFromStream(st, rfRtf);
+    finally
+      st.Free;
+    end;
+    FRich.FinishLoading;
+    first := SaveRtf;
+    AssertTrue(IntToStr(door) + ': read and saved as the file', first = s);
+    t := FRich.Document.Text;
+    case door of
+      0:
+        begin
+          FRich.SelStart := t.ParaStart(1);
+          AssertTrue('split into two rows', FRich.SplitCell(1, 2));
+          Check('a split');
+        end;
+      1:
+        begin
+          FRich.SelStart := t.ParaStart(4);
+          AssertTrue('a row below', FRich.InsertRow(True));
+          Check('a row below');
+        end;
+      2:
+        begin
+          FRich.SelStart := t.ParaStart(4);
+          AssertTrue('a row above', FRich.InsertRow(False));
+          Check('a row above');
+        end;
+      3:
+        begin
+          // (Tab moves between cells only when the control takes Tab)
+          FRich.WantTabs := True;
+          FRich.SelStart := t.ParaStart(8);
+          FRich.Key(VK_TAB);
+          FRich.WantTabs := False;
+          AssertEquals('Tab: a row', 13, t.ParaCount);
+          Check('Tab in the last cell');
+        end;
+      4:
+        begin
+          FRich.SelStart := t.ParaStart(0);
+          AssertTrue('the first row', FRich.SelectRow);
+          FRich.CopyToClipboard;
+          FRich.SelStart := t.ParaStart(3);
+          FRich.SelLength := 0;
+          FRich.ClipText := '';
+          FRich.PasteFromClipboard;
+          Check('a paste of a row');
+        end;
+    else
+      begin
+        FRich.SelStart := t.ParaStart(1);
+        AssertTrue('a row inside the merge down', FRich.InsertRow(True));
+        Check('a row inside a merge down');
+      end;
+    end;
+    while FRich.Document.CanUndo do FRich.Undo;
+    AssertTrue(IntToStr(door) + ': undone, the file''s bytes', SaveRtf = first);
   end;
 end;
 

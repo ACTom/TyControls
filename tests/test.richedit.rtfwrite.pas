@@ -3239,16 +3239,18 @@ const
 
 begin
   // paragraphs: 0 top, 1 a, 2 b, 3 c, 4 d, 5 e, 6 f, 7 bottom
+  // (the row the bytes after it resume from: the state they were read with before its \row -
+  // nothing between that \row and the next row's \trowd)
   Check('the middle cell', 2, 2, ['a', '', 'c', 'd', 'e', 'f'],
-    'a\cell\cell c\cell\row');
+    'a\cell\cell c\cell\pard\plain\uc1\intbl\f0\fs24 \row'#13#10'\trowd');
   Check('the first cell', 1, 1, ['', 'b', 'c', 'd', 'e', 'f'],
-    '\cellx3000 \pard\intbl\cell\pard\intbl\plain\f0\fs24 b\cell c\cell\row');
+    '\cellx3000 \pard\intbl\cell\pard\intbl\plain\f0\fs24 b\cell c\cell\pard\plain\uc1\intbl\f0\fs24 \row');
   Check('the last cell, another row after it', 3, 3, ['a', 'b', '', 'd', 'e', 'f'],
-    'a\cell b\cell\cell\row');
+    'a\cell b\cell\cell\pard\plain\uc1\intbl\f0\fs24 \row');
   Check('the last cell of the last row', 6, 6, ['a', 'b', 'c', 'd', 'e', ''],
     'd\cell e\cell\cell\row');
   Check('the first two cells', 1, 2, ['', '', 'c', 'd', 'e', 'f'],
-    '\cellx3000 \pard\intbl\cell\cell\pard\intbl\plain\f0\fs24 c\cell\row');
+    '\cellx3000 \pard\intbl\cell\cell\pard\intbl\plain\f0\fs24 c\cell\pard\plain\uc1\intbl\f0\fs24 \row');
   Check('the last two cells', 5, 6, ['a', 'b', 'c', 'd', '', ''],
     'd\cell\cell\cell\row');
   Check('the end of one row and the start of the next', 3, 4, ['a', 'b', '', '', 'e', 'f'],
