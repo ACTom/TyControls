@@ -166,6 +166,7 @@ uses
   test.dialogs.focus,
   test.shell.places,
   test.shell.i18n,
+  test.shell.rootname,
   test.fieldwidth,
   test.tabset,
   test.columns.compat,

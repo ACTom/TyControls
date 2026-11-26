@@ -355,6 +355,7 @@ end;
 ### 8.5 TySelectPathDialog — 文件夹选择器（可缩放）
 
 `TTySelectPathDialog` / 全局函数 `TySelectDirectory`（位于 `tyControls.Dialogs.SelectPath`）：懒加载目录树，仅显示目录、支持"新建文件夹"按钮，对话框可拖拽边框缩放。
+盘在树里显示成 `C:`，和文件对话框的目录树一样（#250，3.0.5；之前显示的是整个路径 `C:\`）；选中它得到的路径仍然是 `C:\`。
 
 ```pascal
 uses tyControls.Dialogs.SelectPath;

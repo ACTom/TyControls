@@ -51,7 +51,8 @@ TTyFsFilterSpecArray = array of TTyFsFilterSpec;
 | `TyFsFilterPatterns(filter, index)` | 1-based `FilterIndex` → 当前 pattern 串;越界钳到首/末段。 |
 | `TyFsCompareEntries(a, b, key, asc, foldersFirst)` | 比较两条目:目录永远排文件前(与升降序无关);再按 `key` 比**原始值**(Name 走 OS 大小写、Size:Int64、Modified:TDateTime、TypeName)。视图的 `OnCompare` 委托给它。 |
 | `TyFsSortEntries(var entries, key, asc, foldersFirst)` | 就地稳定排序。 |
-| `TyFsRoots` | 可移植"位置"列表(Windows 盘符 / Unix `/`+home+挂载点)。至少一个根,不崩。 |
+| `TyFsRoots` | 可移植"位置"列表(Windows 盘符 / Unix `/`+home+挂载点)。至少一个根,不崩。盘符的 `Path` 是 `C:\`,`Display` 是 `C:`。 |
+| `TyFsRootName(root)` | 根的**显示名**:去掉末尾分隔符的根,`C:\` → `C:`;只剩一个分隔符的根就是它自己(`/`)。只是名字——C 盘的路径仍然是 `C:\`,把 `C:` 当路径用指的是那个盘上的当前目录。`TyFsRoots` 里盘符的 `Display`、目录树、路径下拉、选择文件夹对话框显示一个盘都按它(#250,3.0.5;之前实际显示成 `C:\`,和文档写的不一样)。 |
 | `TyFsKnownFolders` | 用户的**常用文件夹**:桌面、文档、下载、图片、音乐、视频,固定按这个顺序,只列存在的、每个只列一次。`Kind = rkPlace`,`Display` 是库自己的翻译名(`rsFdPlace*`),和磁盘上叫什么无关。可能为空,不抛异常。3.0.5 新增。 |
 | `TyFsPlaces` | `TyFsKnownFolders` 加 `TyFsRoots`:文件对话框提供的全部位置。 |
 | `TyFsParseUserDirs(text, home)` | 纯函数:解析 XDG 的 `user-dirs.dirs`(`XDG_DESKTOP_DIR="$HOME/桌面"` 这种行)。只认六个键、带引号的 `"$HOME/…"` 或绝对路径;指回主目录本身(`"$HOME/"`)表示这个文件夹被关掉,不列。路径一律用 `/` 拼,不查磁盘。 |
