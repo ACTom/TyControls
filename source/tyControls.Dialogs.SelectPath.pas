@@ -465,7 +465,9 @@ begin
   end;
   p := NodePath(Node);
   AText := ExtractFileName(ExcludeTrailingPathDelimiter(p));
-  if AText = '' then AText := p;   // a drive root like 'C:\' collapses to '' above
+  { A root has no last part. It is shown by its name, 'C:' -- it was shown by its whole
+    path, 'C:\', where the folder tree of the file dialogs said 'C:' (#250). }
+  if AText = '' then AText := TyFsRootName(p);
 end;
 
 procedure TTySelectPathForm.TreeInitNode(Sender: TTyCustomTreeView;

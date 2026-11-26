@@ -3,7 +3,7 @@
 ## 概述
 
 `TTyShellTreeView` 是一个**文件系统后备**的 `TTyTreeView` —— 一棵目录树。
-根节点默认是 `tyControls.FileSystem` 的 `TyFsRoots`(Windows 各盘符;Unix 的 `/` + 主目录 + 挂载卷),
+根节点默认是 `tyControls.FileSystem` 的 `TyFsRoots`(Windows 各盘符,显示成 `C:`;Unix 的 `/` + 主目录 + 挂载卷),
 也可以用 `Root` 把整棵树**收窄到某一个目录**;每个目录的子节点在**展开时**才用
 `TyFsReadDirectory(path, '*', ObjectTypes)` 枚举 —— 懒加载,深目录树不会一次读满整块盘。
 默认只枚举文件夹,`ObjectTypes` 里加上 `fotFiles` 就是经典资源管理器左窗格(文件作为叶子出现)。

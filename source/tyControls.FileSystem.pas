@@ -187,6 +187,11 @@ function TyFsHasEntry(const APath: string; AOptions: TTyFsObjectTypes): Boolean;
   conditional platform branch. }
 function TyFsRoots: TTyFsRootArray;
 
+{ The name a root is shown under: the root without its trailing delimiter, 'C:' for 'C:\'.
+  A root that is nothing but its delimiter is its own name: '/'. Only the name -- the path
+  of drive C is 'C:\', and 'C:' used as a path is the current directory on that drive. }
+function TyFsRootName(const ARoot: string): string;
+
 { #245. The user's COMMON FOLDERS -- Desktop, Documents, Downloads, Pictures, Music, Videos,
   always in that order -- as rkPlace entries: only those that exist, each once. Display is
   the library's own (translated) name for the folder, whatever it is called on disk; Path
@@ -618,6 +623,12 @@ begin
   end;
 end;
 
+function TyFsRootName(const ARoot: string): string;
+begin
+  Result := ExcludeTrailingPathDelimiter(ARoot);
+  if Result = '' then Result := ARoot;   { '/' is all there is of that root }
+end;
+
 function TyFsRoots: TTyFsRootArray;
 {$IFDEF MSWINDOWS}
 var
@@ -638,7 +649,9 @@ begin
       drive := p;                     { copies up to the null: e.g. 'C:\' }
       SetLength(Result, n + 1);
       Result[n].Path    := drive;
-      Result[n].Display := ChompPathDelim(drive);   { 'C:' }
+      { #250: 'C:'. ChompPathDelim was used here and keeps the delimiter of a root, so the
+        name was 'C:\' like the path, against what this unit says of it above. }
+      Result[n].Display := TyFsRootName(drive);
       Result[n].Kind    := rkDrive;
       Inc(n);
       Inc(p, Length(drive) + 1);      { step past this entry and its null }

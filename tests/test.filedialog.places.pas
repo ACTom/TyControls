@@ -74,7 +74,7 @@ type
     procedure TearDown; override;
   published
     procedure APlaceIsListedUnderItsFoldersName;
-    procedure ARootIsListedUnderItsPath;
+    procedure ARootIsListedUnderItsName;
     procedure ACaptionOfItsOwnWins;
     procedure ATrailingDelimiterIsRemoved;
     procedure APlaceWithoutAPictureIsAFolder;
@@ -684,11 +684,13 @@ begin
   AssertEquals('under no heading unless told', '', FList[1].Group);
 end;
 
-procedure TFilePlacesListTest.ARootIsListedUnderItsPath;
+procedure TFilePlacesListTest.ARootIsListedUnderItsName;
 begin
+  { #250: a root has no last part to be listed as. It is listed under its name, 'C:', the
+    name the Devices group and the folder picker show it by -- not under its path. }
   {$IFDEF MSWINDOWS}
   FList.Add('C:\');
-  AssertEquals('C:\', FList[0].Caption);
+  AssertEquals('a drive: its name', 'C:', FList[0].Caption);
   AssertEquals('a root keeps its delimiter', 'C:\', FList[0].Path);
   {$ELSE}
   FList.Add('/');
@@ -2166,7 +2168,7 @@ begin
     for i := 1 to homes + Length(known) do
       n := d.Tree.GetNextSibling(n);
     AssertNotNull('the first drive', n);
-    AssertEquals(TyDriveRoots[0], d.NodeText(n));
+    AssertEquals('by its name (#250)', TyFsRootName(TyDriveRoots[0]), d.NodeText(n));
   finally
     d.Free;
   end;
@@ -2263,14 +2265,14 @@ begin
     AssertEquals('and a folder''s picture', TyPlaceIconIndex(fpiFolder), d.XImage(kid));
     drive := d.Tree.GetNextSibling(place);
     AssertNotNull('the drives follow', drive);
-    AssertEquals(TyDriveRoots[0], d.NodeText(drive));
+    AssertEquals('by its name (#250)', TyFsRootName(TyDriveRoots[0]), d.NodeText(drive));
     AssertEquals('a drive''s picture', TyPlaceIconIndex(fpiDrive), d.XImage(drive));
     d.Directory := FTemp + PathDelim + 'realname' + PathDelim + 'kid';
     AssertSame('a folder inside a place is shown under the place', kid, d.Tree.FocusedNode);
     { Populated again without the place, nothing of it is left: the first node is the drive. }
     d.Probe := nil;
     d.PopulateRoots;
-    AssertEquals(TyDriveRoots[0], d.NodeText(d.Tree.GetFirst));
+    AssertEquals(TyFsRootName(TyDriveRoots[0]), d.NodeText(d.Tree.GetFirst));
     AssertEquals(TyPlaceIconIndex(fpiDrive), d.XImage(d.Tree.GetFirst));
   finally
     d.Free;

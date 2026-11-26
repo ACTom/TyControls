@@ -65,8 +65,9 @@ type
     to change. Sender is the dialog component. }
   TTyFilePlacesEvent = procedure(Sender: TObject; APlaces: TTyFilePlaces) of object;
 
-{ What a place is listed as when nothing says otherwise: the folder's own name, and the path
-  itself where it has none (a root). }
+{ What a place is listed as when nothing says otherwise: the folder's own name, and for a
+  root, which has none, the root's name -- 'C:', as the Devices group lists it (TyFsRootName,
+  #250). It was the root's path, 'C:\'. }
 function TyFilePlaceCaption(const APath: string): string;
 
 { The places every dialog lists first, pure: the home folder -- each rkHome entry of ARoots,
@@ -100,7 +101,7 @@ implementation
 function TyFilePlaceCaption(const APath: string): string;
 begin
   Result := ExtractFileName(ChompPathDelim(APath));
-  if Result = '' then Result := APath;
+  if Result = '' then Result := TyFsRootName(APath);
 end;
 
 { TTyFilePlaces }

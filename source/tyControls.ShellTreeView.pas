@@ -856,7 +856,12 @@ begin
     its drive, and down there it keeps its own name. }
   if (Node <> nil) and (Node^.Parent = RootNode) then
     for i := 0 to High(FRoots) do
-      if SameFileName(ExcludeTrailingPathDelimiter(FRoots[i].Path), p) then
+      { Both without a trailing delimiter (#250). A drive's node keeps the path it was
+        listed with, 'C:\', and compared as it was against a root stripped to 'C:' it
+        matched none: a drive never got its Display here, it fell through to the path
+        below -- which read the same only while Display was 'C:\' too. }
+      if SameFileName(ExcludeTrailingPathDelimiter(FRoots[i].Path),
+           ExcludeTrailingPathDelimiter(p)) then
       begin
         AText := FRoots[i].Display;
         Break;
